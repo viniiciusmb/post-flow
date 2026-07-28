@@ -5,6 +5,12 @@ SaaS de postagem automatica de videos no TikTok a partir do Google Drive, para m
 Este repositorio esta na **Fase 0**: esqueleto do projeto, banco de dados e login funcionando.
 As integracoes com TikTok e Google Drive ainda nao existem — entram nas proximas fases.
 
+**Em producao em https://postflowtiktok.com**, rodando na VPS via EasyPanel (Docker + Traefik).
+Veja [docs/deployment-easypanel.md](docs/deployment-easypanel.md) para como esse deploy foi feito e
+como atualizar. O guia de PM2/Docker Compose "puro" em
+[docs/deployment-vps.md](docs/deployment-vps.md) continua valido como alternativa, mas nao e o que
+esta rodando hoje.
+
 ## Como o projeto e organizado
 
 - `src/web` — o servidor que serve os paineis (admin e cliente) e cuida do login.
