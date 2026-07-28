@@ -1,19 +1,18 @@
 'use strict';
 
 // Processo 2: tarefas em segundo plano (checar Drive, postar no TikTok).
-// Na Fase 0 isso e so um esqueleto que confirma a conexao com o banco -
-// os jobs de verdade (driveDiscoveryJob, postToTikTokJob) entram nas
-// Fases 2 e 3, registrados aqui em scheduler.js.
+// A fila (pg-boss) mantem o processo vivo sozinha - nao precisa de setInterval manual.
 const config = require('../config');
 const pool = require('../db/pool');
 const logger = require('../lib/logger');
+const queueService = require('../services/queueService');
+const scheduler = require('./scheduler');
 
 async function main() {
   await pool.query('SELECT 1');
-  logger.info(`Worker iniciado (env=${config.env}). Nenhum job agendado ainda (Fase 0).`);
-
-  // Mantem o processo vivo (PM2/Docker esperam um processo de longa duracao).
-  setInterval(() => {}, 1000 * 60 * 60);
+  const boss = await queueService.getBoss();
+  await scheduler.start(boss);
+  logger.info(`Worker iniciado (env=${config.env}).`);
 }
 
 main().catch((err) => {

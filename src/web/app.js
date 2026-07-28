@@ -13,6 +13,7 @@ const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const clientRoutes = require('./routes/clientRoutes');
 const tiktokRoutes = require('./routes/tiktokRoutes');
+const googleRoutes = require('./routes/googleRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -70,6 +71,7 @@ app.use('/', authRoutes);
 app.use('/admin', adminRoutes);
 app.use('/client', clientRoutes);
 app.use('/auth/tiktok', tiktokRoutes);
+app.use('/auth/google', googleRoutes);
 
 app.use((req, res) => {
   res.status(404).render('errors/generic', { title: 'Nao encontrado', message: 'Pagina nao encontrada.' });
