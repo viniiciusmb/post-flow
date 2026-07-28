@@ -1,6 +1,7 @@
 'use strict';
 
 const pool = require('../db/pool');
+const crypto = require('../lib/crypto');
 
 async function findActiveByClientId(clientUserId) {
   const { rows } = await pool.query(
@@ -37,9 +38,66 @@ async function setReceivesGeneralContent(id, receives) {
   return rows[0] || null;
 }
 
+// Substitui a conexao TikTok ativa do cliente (se houver) por uma nova.
+// Mantem a antiga no historico com is_active = false, respeitando a
+// restricao de "no maximo uma ativa por cliente" (uq_tiktok_accounts_one_active_per_client).
+async function upsertForClient({
+  clientUserId,
+  tiktokOpenId,
+  tiktokUnionId,
+  displayName,
+  avatarUrl,
+  accessToken,
+  refreshToken,
+  expiresIn,
+  scopes,
+}) {
+  const accessEnc = crypto.encrypt(accessToken);
+  const refreshEnc = crypto.encrypt(refreshToken);
+  const expiresAt = new Date(Date.now() + expiresIn * 1000);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      'UPDATE tiktok_accounts SET is_active = false, updated_at = now() WHERE client_user_id = $1 AND is_active = true',
+      [clientUserId]
+    );
+    const { rows } = await client.query(
+      `INSERT INTO tiktok_accounts (
+         client_user_id, tiktok_open_id, tiktok_union_id, display_name, avatar_url,
+         access_token_encrypted, access_token_iv, refresh_token_encrypted, refresh_token_iv,
+         token_expires_at, scopes
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING *`,
+      [
+        clientUserId,
+        tiktokOpenId,
+        tiktokUnionId,
+        displayName,
+        avatarUrl,
+        accessEnc.encrypted,
+        accessEnc.iv,
+        refreshEnc.encrypted,
+        refreshEnc.iv,
+        expiresAt,
+        scopes,
+      ]
+    );
+    await client.query('COMMIT');
+    return rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   findActiveByClientId,
   listActive,
   listReceivingGeneralContent,
   setReceivesGeneralContent,
+  upsertForClient,
 };

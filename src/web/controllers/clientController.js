@@ -15,6 +15,8 @@ async function dashboard(req, res) {
     title: 'Meu Painel',
     tiktokAccount,
     postings,
+    tiktokConnected: req.query.tiktok_connected === '1',
+    tiktokError: req.query.tiktok_error || null,
   });
 }
 
