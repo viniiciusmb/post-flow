@@ -1,0 +1,29 @@
+<%- include('../partials/header') %>
+
+<article style="max-width: 420px; margin: 3rem auto;">
+  <h1>Criar conta de cliente</h1>
+
+  <% if (error) { %>
+    <p style="color: var(--pico-del-color);"><%= error %></p>
+  <% } %>
+
+  <form method="post" action="/register">
+    <label>
+      Nome do negocio (opcional)
+      <input type="text" name="businessName">
+    </label>
+    <label>
+      E-mail
+      <input type="email" name="email" required>
+    </label>
+    <label>
+      Senha
+      <input type="password" name="password" required minlength="8">
+    </label>
+    <button type="submit">Criar conta</button>
+  </form>
+
+  <p>Ja tem conta? <a href="/login">Entrar</a></p>
+</article>
+
+<%- include('../partials/footer') %>

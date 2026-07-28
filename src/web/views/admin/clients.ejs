@@ -1,0 +1,27 @@
+<%- include('../partials/header') %>
+
+<h1>Clientes</h1>
+
+<% if (clients.length === 0) { %>
+  <p class="empty-state">Nenhum cliente cadastrado ainda. Clientes criam a propria conta em <a href="/register">/register</a>.</p>
+<% } else { %>
+  <figure>
+    <table>
+      <thead>
+        <tr><th>Nome</th><th>E-mail</th><th>Ativo</th><th>Criado em</th></tr>
+      </thead>
+      <tbody>
+        <% clients.forEach(function (c) { %>
+          <tr>
+            <td><%= c.business_name || '—' %></td>
+            <td><%= c.email %></td>
+            <td><%= c.is_active ? 'Sim' : 'Nao' %></td>
+            <td><%= new Date(c.created_at).toLocaleString('pt-BR') %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </figure>
+<% } %>
+
+<%- include('../partials/footer') %>

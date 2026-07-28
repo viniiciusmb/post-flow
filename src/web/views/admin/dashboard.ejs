@@ -1,0 +1,39 @@
+<%- include('../partials/header') %>
+
+<h1>Painel do Admin</h1>
+
+<div class="grid">
+  <article>
+    <h3><%= clients.length %></h3>
+    <p>Clientes cadastrados</p>
+  </article>
+  <article>
+    <h3><%= postings.length %></h3>
+    <p>Postagens registradas</p>
+  </article>
+</div>
+
+<h2>Postagens recentes</h2>
+<% if (postings.length === 0) { %>
+  <p class="empty-state">Nenhuma postagem ainda. Isso vai aparecer aqui assim que a integracao com Drive e TikTok estiver ativa.</p>
+<% } else { %>
+  <figure>
+    <table>
+      <thead>
+        <tr><th>Cliente</th><th>Video</th><th>Status</th><th>Criado em</th></tr>
+      </thead>
+      <tbody>
+        <% postings.forEach(function (p) { %>
+          <tr>
+            <td><%= p.client_business_name || p.client_email %></td>
+            <td><%= p.filename %></td>
+            <td><%- include('../partials/status-badge', { status: p.status }) %></td>
+            <td><%= new Date(p.created_at).toLocaleString('pt-BR') %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </figure>
+<% } %>
+
+<%- include('../partials/footer') %>

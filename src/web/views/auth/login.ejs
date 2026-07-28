@@ -1,0 +1,25 @@
+<%- include('../partials/header') %>
+
+<article style="max-width: 420px; margin: 3rem auto;">
+  <h1>Entrar</h1>
+
+  <% if (error) { %>
+    <p style="color: var(--pico-del-color);"><%= error %></p>
+  <% } %>
+
+  <form method="post" action="/login">
+    <label>
+      E-mail
+      <input type="email" name="email" required autofocus>
+    </label>
+    <label>
+      Senha
+      <input type="password" name="password" required>
+    </label>
+    <button type="submit">Entrar</button>
+  </form>
+
+  <p>Ainda nao tem conta de cliente? <a href="/register">Criar conta</a></p>
+</article>
+
+<%- include('../partials/footer') %>

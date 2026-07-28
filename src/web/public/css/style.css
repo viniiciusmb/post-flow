@@ -1,0 +1,22 @@
+/* Pequenos ajustes por cima do Pico.css (carregado via CDN no header). */
+
+.status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.status-pending { background: #8a8f98; }
+.status-queued { background: #3b82f6; }
+.status-processing { background: #f59e0b; }
+.status-posted { background: #16a34a; }
+.status-error { background: #dc2626; }
+
+.empty-state {
+  padding: 2rem;
+  text-align: center;
+  color: var(--pico-muted-color);
+}

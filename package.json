@@ -1,0 +1,32 @@
+{
+  "name": "post-flow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SaaS de postagem automatica de videos no TikTok a partir do Google Drive",
+  "main": "src/web/server.js",
+  "scripts": {
+    "dev": "node --watch src/web/server.js",
+    "dev:worker": "node --watch src/worker/index.js",
+    "start": "node src/web/server.js",
+    "start:worker": "node src/worker/index.js",
+    "migrate": "node scripts/migrate.js up",
+    "migrate:down": "node scripts/migrate.js down",
+    "seed:admin": "node scripts/seed-admin.js",
+    "test": "node --test tests/"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "connect-pg-simple": "^10.0.0",
+    "dotenv": "^16.4.5",
+    "ejs": "^6.0.1",
+    "express": "^4.21.1",
+    "express-rate-limit": "^7.4.1",
+    "express-session": "^1.18.1",
+    "helmet": "^8.0.0",
+    "pg": "^8.13.1",
+    "pg-boss": "^10.1.5"
+  }
+}

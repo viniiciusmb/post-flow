@@ -1,0 +1,40 @@
+# Caminho alternativo de deploy (em vez de PM2 direto na VPS).
+# Sobe 3 containers: banco de dados, servidor web e worker.
+# Uso: docker compose up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postflow
+      POSTGRES_PASSWORD: postflow
+      POSTGRES_DB: postflow
+    volumes:
+      - postflow_db_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+  web:
+    build: .
+    restart: unless-stopped
+    command: node src/web/server.js
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://postflow:postflow@db:5432/postflow
+    ports:
+      - '3000:3000'
+    depends_on:
+      - db
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: node src/worker/index.js
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://postflow:postflow@db:5432/postflow
+    depends_on:
+      - db
+
+volumes:
+  postflow_db_data:
