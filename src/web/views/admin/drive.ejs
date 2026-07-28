@@ -8,6 +8,14 @@
 <% if (googleError) { %>
   <p style="color: var(--pico-del-color);">Nao foi possivel conectar: <%= googleError %></p>
 <% } %>
+<% if (folderSaved === 'geral') { %>
+  <p style="color: var(--pico-ins-color);">Pasta Geral salva com sucesso!</p>
+<% } else if (folderSaved === 'cliente') { %>
+  <p style="color: var(--pico-ins-color);">Pasta do cliente salva com sucesso!</p>
+<% } %>
+<% if (folderError) { %>
+  <p style="color: var(--pico-del-color);"><%= folderError %></p>
+<% } %>
 
 <article>
   <h3>Conexao</h3>

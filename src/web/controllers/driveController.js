@@ -20,28 +20,32 @@ async function manage(req, res) {
     clients,
     googleConnected: req.query.google_connected === '1',
     googleError: req.query.google_error || null,
+    folderSaved: req.query.folder_saved || null,
+    folderError: req.query.folder_error || null,
   });
 }
 
 async function setGeneralFolder(req, res) {
   const driveFolderId = extractDriveFolderId(req.body.folderLink);
-  if (driveFolderId) {
-    await driveFoldersRepository.upsertGeneralFolder({ driveFolderId, folderName: req.body.folderName || null });
+  if (!driveFolderId) {
+    return res.redirect('/admin/drive?folder_error=Cole+o+link+ou+ID+da+pasta');
   }
-  res.redirect('/admin/drive');
+  await driveFoldersRepository.upsertGeneralFolder({ driveFolderId, folderName: req.body.folderName || null });
+  res.redirect('/admin/drive?folder_saved=geral');
 }
 
 async function setClientFolder(req, res) {
   const driveFolderId = extractDriveFolderId(req.body.folderLink);
   const clientUserId = Number(req.body.clientUserId);
-  if (driveFolderId && clientUserId) {
-    await driveFoldersRepository.upsertClientFolder({
-      clientUserId,
-      driveFolderId,
-      folderName: req.body.folderName || null,
-    });
+  if (!driveFolderId || !clientUserId) {
+    return res.redirect('/admin/drive?folder_error=Selecione+o+cliente+e+cole+o+link+da+pasta');
   }
-  res.redirect('/admin/drive');
+  await driveFoldersRepository.upsertClientFolder({
+    clientUserId,
+    driveFolderId,
+    folderName: req.body.folderName || null,
+  });
+  res.redirect('/admin/drive?folder_saved=cliente');
 }
 
 module.exports = { manage, setGeneralFolder, setClientFolder };
