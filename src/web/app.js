@@ -58,6 +58,14 @@ app.get('/', (req, res) => {
   res.redirect(req.session.user.role === 'admin' ? '/admin' : '/client');
 });
 
+const LEGAL_UPDATED_AT = '28/07/2026';
+app.get('/termos', (req, res) => {
+  res.render('legal/terms', { title: 'Termos de Servico', updatedAt: LEGAL_UPDATED_AT });
+});
+app.get('/privacidade', (req, res) => {
+  res.render('legal/privacy', { title: 'Politica de Privacidade', updatedAt: LEGAL_UPDATED_AT });
+});
+
 app.use('/', authRoutes);
 app.use('/admin', adminRoutes);
 app.use('/client', clientRoutes);
