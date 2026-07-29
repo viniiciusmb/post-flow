@@ -100,15 +100,17 @@ async function run(sourceVideoId) {
         const fileSizeBytes = fs.statSync(outputPath).size;
         await clipsRepository.saveRenderedFile(clip.id, outputPath);
 
-        // Sem conta TikTok conectada ainda: o corte fica pronto, so nao
-        // entra na fila de postagem (nao ha pra onde postar).
+        // Sem conta TikTok conectada, o corte fica pronto mas nao vira
+        // "video" postavel. Com conta conectada, sempre vira video - mas so
+        // entra na fila de postagem se o cliente tiver ligado "postar
+        // automaticamente" (auto_post_enabled, desligado por padrao).
         if (tiktokAccount) {
           const video = await videosRepository.createFromClip({
             clipId: clip.id,
             filename: clip.title,
             fileSizeBytes,
           });
-          if (video) {
+          if (video && tiktokAccount.auto_post_enabled) {
             await postingsRepository.createIfNotExists({ videoId: video.id, tiktokAccountId: tiktokAccount.id });
           }
         }

@@ -73,7 +73,7 @@ async function fanOut(video, folder) {
   }
 
   const account = await tiktokAccountsRepository.findActiveByClientId(folder.client_user_id);
-  if (account) {
+  if (account && account.auto_post_enabled) {
     await postingsRepository.createIfNotExists({ videoId: video.id, tiktokAccountId: account.id });
   }
 }

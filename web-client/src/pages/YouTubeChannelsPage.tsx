@@ -29,6 +29,7 @@ export function YouTubeChannelsPage() {
   const [channels, setChannels] = useState<YoutubeChannel[] | null>(null)
   const [channelUrl, setChannelUrl] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   async function load() {
@@ -43,10 +44,12 @@ export function YouTubeChannelsPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
+    setSuccess(null)
     setSubmitting(true)
     try {
       await api.post("/api/client/youtube-channels", { channelUrl })
       setChannelUrl("")
+      setSuccess('Canal adicionado, ainda "Pausado" — clique em ▶ na lista abaixo pra começar a cortar os vídeos novos dele.')
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Nao foi possivel adicionar o canal.")
@@ -82,6 +85,11 @@ export function YouTubeChannelsPage() {
                   {error}
                 </p>
               )}
+              {success && (
+                <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
+                  {success}
+                </p>
+              )}
               <Field>
                 <FieldLabel htmlFor="channelUrl">Link ou @handle do canal</FieldLabel>
                 <div className="flex gap-2">
@@ -96,6 +104,9 @@ export function YouTubeChannelsPage() {
                     {submitting ? "Adicionando..." : "Adicionar"}
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Só entram no corte automático os vídeos publicados depois de adicionar — o histórico do canal não é baixado.
+                </p>
               </Field>
             </FieldGroup>
           </form>

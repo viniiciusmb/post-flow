@@ -17,7 +17,14 @@ async function run(boss) {
       const videos = await ytDlpService.listChannelVideos(channel.channel_url, { limit: 15 });
       let newest = channel.last_video_published_at;
 
-      for (const video of videos) {
+      // So processa video publicado depois do "ponto de corte" do canal -
+      // sem isso, conectar um canal baixaria o historico inteiro (ate 15
+      // videos antigos) de uma vez.
+      const newVideos = channel.last_video_published_at
+        ? videos.filter((v) => v.publishedAt && v.publishedAt > channel.last_video_published_at)
+        : videos;
+
+      for (const video of newVideos) {
         const created = await sourceVideosRepository.createIfNotExists({
           youtubeChannelId: channel.id,
           youtubeVideoId: video.videoId,

@@ -132,7 +132,7 @@ export interface TikTokAccountStats {
 }
 
 export type TikTokAccountResponse =
-  | ({ connected: true; displayName: string; avatarUrl: string | null; connectedAt: string } & TikTokAccountStats)
+  | ({ connected: true; displayName: string; avatarUrl: string | null; connectedAt: string; autoPostEnabled: boolean } & TikTokAccountStats)
   | { connected: false }
 
 export interface ClientDashboardResponse {

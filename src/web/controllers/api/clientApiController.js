@@ -110,7 +110,18 @@ async function tiktokAccount(req, res) {
     likesCount: account.likes_count,
     videoCount: account.video_count,
     statsUpdatedAt: account.stats_updated_at,
+    autoPostEnabled: account.auto_post_enabled,
   });
+}
+
+// Desligado por padrao (ver migration 017) - o cliente precisa ligar de
+// proposito pra cortes prontos comecarem a entrar na fila de postagem.
+async function setAutoPost(req, res) {
+  const account = await tiktokAccountsRepository.findActiveByClientId(req.session.user.id);
+  if (!account) return res.status(404).json({ error: 'Nenhuma conta TikTok conectada.' });
+
+  const updated = await tiktokAccountsRepository.setAutoPostEnabled(account.id, Boolean(req.body.enabled));
+  res.json({ autoPostEnabled: updated.auto_post_enabled });
 }
 
 async function usage(req, res) {
@@ -132,4 +143,4 @@ async function usage(req, res) {
   });
 }
 
-module.exports = { dashboard, tiktokAccount, usage };
+module.exports = { dashboard, tiktokAccount, setAutoPost, usage };

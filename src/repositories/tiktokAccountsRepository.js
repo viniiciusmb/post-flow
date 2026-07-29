@@ -25,7 +25,7 @@ async function listActive() {
 async function listReceivingGeneralContent() {
   const { rows } = await pool.query(
     `SELECT * FROM tiktok_accounts
-     WHERE is_active = true AND receives_general_content = true`
+     WHERE is_active = true AND receives_general_content = true AND auto_post_enabled = true`
   );
   return rows;
 }
@@ -120,6 +120,14 @@ async function getValidAccessToken(tiktokService, account) {
   return tokens.access_token;
 }
 
+async function setAutoPostEnabled(id, enabled) {
+  const { rows } = await pool.query(
+    'UPDATE tiktok_accounts SET auto_post_enabled = $2, updated_at = now() WHERE id = $1 RETURNING *',
+    [id, enabled]
+  );
+  return rows[0] || null;
+}
+
 async function saveStats(id, { followerCount, followingCount, likesCount, videoCount }) {
   const { rows } = await pool.query(
     `UPDATE tiktok_accounts
@@ -139,4 +147,5 @@ module.exports = {
   upsertForClient,
   getValidAccessToken,
   saveStats,
+  setAutoPostEnabled,
 };

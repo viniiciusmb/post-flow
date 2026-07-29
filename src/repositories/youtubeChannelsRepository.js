@@ -20,10 +20,15 @@ async function findById(id) {
   return rows[0] || null;
 }
 
+// Comeca PAUSADO (is_active = false) - o cliente precisa ligar de proposito
+// (ver setActive) pra comecar o corte automatico, controle explicito em vez
+// de automatico assim que adiciona. last_video_published_at comeca em
+// "agora": quando ligado, so processa video publicado DEPOIS desse momento -
+// o historico do canal nunca entra no fluxo.
 async function create({ clientUserId, youtubeChannelId, channelName, channelUrl, avatarUrl }) {
   const { rows } = await pool.query(
-    `INSERT INTO youtube_channels (client_user_id, youtube_channel_id, channel_name, channel_url, avatar_url)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO youtube_channels (client_user_id, youtube_channel_id, channel_name, channel_url, avatar_url, is_active, last_video_published_at)
+     VALUES ($1, $2, $3, $4, $5, false, now())
      ON CONFLICT (client_user_id, youtube_channel_id) DO NOTHING
      RETURNING *`,
     [clientUserId, youtubeChannelId, channelName, channelUrl, avatarUrl]
