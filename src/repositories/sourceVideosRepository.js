@@ -40,11 +40,27 @@ async function saveDownload(id, localVideoPath) {
   );
 }
 
-async function saveTranscript(id, { transcriptText, transcriptWords }) {
+async function saveTranscript(id, { transcriptText, transcriptWords, whisperAudioSeconds = null, whisperCostUsd = null }) {
   await pool.query(
-    'UPDATE source_videos SET transcript_text = $2, transcript_words = $3, updated_at = now() WHERE id = $1',
-    [id, transcriptText, JSON.stringify(transcriptWords)]
+    `UPDATE source_videos
+     SET transcript_text = $2, transcript_words = $3,
+         whisper_audio_seconds = $4, whisper_cost_usd = $5, updated_at = now()
+     WHERE id = $1`,
+    [id, transcriptText, JSON.stringify(transcriptWords), whisperAudioSeconds, whisperCostUsd]
   );
+}
+
+async function saveClaudeUsage(id, { inputTokens, outputTokens, costUsd }) {
+  await pool.query(
+    `UPDATE source_videos
+     SET claude_input_tokens = $2, claude_output_tokens = $3, claude_cost_usd = $4, updated_at = now()
+     WHERE id = $1`,
+    [id, inputTokens, outputTokens, costUsd]
+  );
+}
+
+async function markProcessingStarted(id) {
+  await pool.query('UPDATE source_videos SET processing_started_at = now() WHERE id = $1', [id]);
 }
 
 // Lista videos-fonte de um cliente (via canal), com contagem de cortes - usada na tela "Videos & Cortes".
@@ -134,6 +150,8 @@ module.exports = {
   updateStatus,
   saveDownload,
   saveTranscript,
+  saveClaudeUsage,
+  markProcessingStarted,
   listForClient,
   countInProgress,
   countByClientSince,

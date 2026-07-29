@@ -1,6 +1,7 @@
 'use strict';
 
 const authService = require('../../../services/authService');
+const usersRepository = require('../../../repositories/usersRepository');
 
 const SEVEN_DAYS_MS = 1000 * 60 * 60 * 24 * 7;
 const THIRTY_DAYS_MS = 1000 * 60 * 60 * 24 * 30;
@@ -15,6 +16,7 @@ async function login(req, res) {
 
   req.session.user = { id: user.id, role: user.role, email: user.email };
   req.session.cookie.maxAge = rememberMe ? THIRTY_DAYS_MS : SEVEN_DAYS_MS;
+  await usersRepository.touchLastActive(user.id);
   res.json({ user: req.session.user });
 }
 

@@ -41,4 +41,37 @@ async function dashboard(req, res) {
   });
 }
 
-module.exports = { dashboard };
+async function postings(req, res) {
+  const rows = await postingsRepository.listAllWithDetails();
+  res.json({
+    postings: rows.map((p) => ({
+      id: p.id,
+      clientName: p.client_business_name || p.client_email,
+      filename: p.filename,
+      status: p.status,
+      origin: p.origin,
+      channelName: p.channel_name,
+      tiktokDisplayName: p.tiktok_display_name,
+      errorMessage: p.error_message,
+      createdAt: p.created_at,
+    })),
+  });
+}
+
+async function clients(req, res) {
+  const rows = await usersRepository.listClientsWithStats();
+  res.json({
+    clients: rows.map((c) => ({
+      id: c.id,
+      businessName: c.business_name,
+      email: c.email,
+      isActive: c.is_active,
+      createdAt: c.created_at,
+      channelCount: c.channel_count,
+      tiktokConnected: Boolean(c.tiktok_display_name),
+      tiktokDisplayName: c.tiktok_display_name,
+    })),
+  });
+}
+
+module.exports = { dashboard, postings, clients };

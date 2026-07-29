@@ -8,12 +8,14 @@ const config = require('../config');
 const pool = require('../db/pool');
 const logger = require('../lib/logger');
 const queueService = require('../services/queueService');
+const { startHeartbeat } = require('../lib/heartbeat');
 const videoScheduler = require('./videoScheduler');
 
 async function main() {
   await pool.query('SELECT 1');
   const boss = await queueService.getBoss();
   await videoScheduler.start(boss);
+  startHeartbeat('video-worker');
   logger.info(`Worker de video iniciado (env=${config.env}).`);
 }
 

@@ -6,6 +6,8 @@ import {
   IconBrandYoutube,
   IconScissors,
   IconListCheck,
+  IconBrandTiktok,
+  IconChartBar,
 } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
@@ -22,18 +24,33 @@ import {
 } from "@/components/ui/sidebar"
 import type { SessionUser } from "@/types/api"
 
-const ADMIN_NAV: NavItem[] = [
-  { title: "Painel", url: "/admin", icon: IconLayoutDashboard },
-  { title: "Clientes", url: "/admin/clients", icon: IconUsers },
-  { title: "Postagens", url: "/admin/postings", icon: IconListDetails },
-  { title: "Google Drive", url: "/admin/drive", icon: IconBrandGoogleDrive },
-  { title: "Fila de Processamento", url: "/admin/queue", icon: IconListCheck },
+const ADMIN_GROUPS: { label?: string; items: NavItem[] }[] = [
+  {
+    label: "Menu",
+    items: [{ title: "Painel", url: "/admin", icon: IconLayoutDashboard }],
+  },
+  {
+    label: "Gestão",
+    items: [
+      { title: "Clientes", url: "/admin/clients", icon: IconUsers },
+      { title: "Postagens", url: "/admin/postings", icon: IconListDetails },
+      { title: "Fila de Processamento", url: "/admin/queue", icon: IconListCheck },
+      { title: "Google Drive", url: "/admin/drive", icon: IconBrandGoogleDrive },
+      { title: "Métricas", url: "/admin/metrics", icon: IconChartBar },
+    ],
+  },
 ]
 
-const CLIENT_NAV: NavItem[] = [
-  { title: "Meu Painel", url: "/client", icon: IconLayoutDashboard },
-  { title: "Canais do YouTube", url: "/client/youtube-channels", icon: IconBrandYoutube },
-  { title: "Vídeos & Cortes", url: "/client/videos-clips", icon: IconScissors },
+const CLIENT_GROUPS: { label?: string; items: NavItem[] }[] = [
+  {
+    label: "Menu",
+    items: [
+      { title: "Visão geral", url: "/client", icon: IconLayoutDashboard },
+      { title: "Canais do YouTube", url: "/client/youtube-channels", icon: IconBrandYoutube },
+      { title: "Vídeos & Cortes", url: "/client/videos-clips", icon: IconScissors },
+      { title: "Conta TikTok", url: "/client/tiktok-account", icon: IconBrandTiktok },
+    ],
+  },
 ]
 
 export function AppSidebar({
@@ -44,7 +61,7 @@ export function AppSidebar({
   user: SessionUser
   onLogout: () => void
 }) {
-  const items = user.role === "admin" ? ADMIN_NAV : CLIENT_NAV
+  const groups = user.role === "admin" ? ADMIN_GROUPS : CLIENT_GROUPS
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -64,7 +81,7 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={items} />
+        <NavMain groups={groups} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} onLogout={onLogout} />

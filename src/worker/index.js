@@ -6,12 +6,16 @@ const config = require('../config');
 const pool = require('../db/pool');
 const logger = require('../lib/logger');
 const queueService = require('../services/queueService');
+const { startHeartbeat } = require('../lib/heartbeat');
 const scheduler = require('./scheduler');
+const metricsScheduler = require('./metricsScheduler');
 
 async function main() {
   await pool.query('SELECT 1');
   const boss = await queueService.getBoss();
   await scheduler.start(boss);
+  await metricsScheduler.start(boss);
+  startHeartbeat('worker');
   logger.info(`Worker iniciado (env=${config.env}).`);
 }
 

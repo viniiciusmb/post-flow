@@ -12,5 +12,7 @@ const router = express.Router();
 router.use(requireAuthApi, requireRoleApi(ROLES.CLIENT));
 
 router.get('/dashboard', asyncHandler(clientApiController.dashboard));
+router.get('/tiktok-account', asyncHandler(clientApiController.tiktokAccount));
+router.get('/usage', asyncHandler(clientApiController.usage));
 
 module.exports = router;

@@ -5,6 +5,7 @@ const postingsRepository = require('../../../repositories/postingsRepository');
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
+const metricsRepository = require('../../../repositories/metricsRepository');
 
 function startOfMonth() {
   const d = new Date();
@@ -42,9 +43,41 @@ async function dashboard(req, res) {
       filename: p.filename,
       status: p.status,
       origin: p.origin,
+      channelName: p.channel_name,
       updatedAt: p.updated_at,
     })),
   });
 }
 
-module.exports = { dashboard };
+async function tiktokAccount(req, res) {
+  const account = await tiktokAccountsRepository.findActiveByClientId(req.session.user.id);
+  res.json(
+    account
+      ? {
+          connected: true,
+          displayName: account.display_name || account.tiktok_open_id,
+          avatarUrl: account.avatar_url,
+          connectedAt: account.connected_at,
+        }
+      : { connected: false }
+  );
+}
+
+async function usage(req, res) {
+  const clientUserId = req.session.user.id;
+  const since30d = new Date();
+  since30d.setDate(since30d.getDate() - 30);
+
+  const [monthUsage, history] = await Promise.all([
+    metricsRepository.clientUsageSince(clientUserId, startOfMonth()),
+    metricsRepository.clientUsageHistory(clientUserId, since30d),
+  ]);
+
+  res.json({
+    videosThisMonth: monthUsage.videos_count,
+    minutesThisMonth: Math.round(monthUsage.total_duration_seconds / 60),
+    history: history.map((h) => ({ date: h.day, videosCount: h.videos_count })),
+  });
+}
+
+module.exports = { dashboard, tiktokAccount, usage };

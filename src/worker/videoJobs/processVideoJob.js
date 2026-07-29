@@ -25,6 +25,7 @@ async function run(sourceVideoId) {
   const workDir = path.join(config.videoProcessing.workDir, String(sourceVideo.id));
 
   try {
+    await sourceVideosRepository.markProcessingStarted(sourceVideo.id);
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
     const videoPath = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir);
     await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath);
@@ -36,11 +37,19 @@ async function run(sourceVideoId) {
     await sourceVideosRepository.saveTranscript(sourceVideo.id, {
       transcriptText: transcript.text,
       transcriptWords: transcript.words,
+      whisperAudioSeconds: transcript.durationSeconds,
+      whisperCostUsd: transcript.costUsd,
     });
     fs.unlinkSync(audioPath);
 
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'selecting_clips');
-    const selected = await claudeClipSelectionService.selectClips(transcript.words);
+    const selection = await claudeClipSelectionService.selectClips(transcript.words);
+    await sourceVideosRepository.saveClaudeUsage(sourceVideo.id, {
+      inputTokens: selection.inputTokens,
+      outputTokens: selection.outputTokens,
+      costUsd: selection.costUsd,
+    });
+    const selected = selection.clips;
     if (selected.length === 0) {
       await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', {
         errorMessage: 'A IA nao encontrou nenhum trecho adequado nesse video.',

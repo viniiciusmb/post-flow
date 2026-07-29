@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const { whisperCostUsd } = require('../lib/apiCost');
 
 const TRANSCRIPTION_URL = 'https://api.openai.com/v1/audio/transcriptions';
 
@@ -32,6 +33,8 @@ async function transcribeAudio(audioFilePath, { language } = {}) {
   return {
     text: data.text,
     words: (data.words || []).map((w) => ({ word: w.word, start: w.start, end: w.end })),
+    durationSeconds: data.duration || 0,
+    costUsd: whisperCostUsd(data.duration),
   };
 }
 

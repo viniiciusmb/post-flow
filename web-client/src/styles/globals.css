@@ -28,24 +28,25 @@
 
   /* Tema claro (padrao) */
   --background: #ffffff;
-  --foreground: #18181b;
+  --foreground: #0b0b14;
   --card: #ffffff;
-  --card-foreground: #18181b;
+  --card-foreground: #0b0b14;
   --popover: #ffffff;
-  --popover-foreground: #18181b;
-  --primary: #6366f1;
+  --popover-foreground: #0b0b14;
+  --primary: #4f46e5;
   --primary-foreground: #fafafa;
   --secondary: #f4f4f5;
   --secondary-foreground: #18181b;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --accent: #f4f4f5;
+  --muted: #fbfbfd;
+  --muted-foreground: #6b7280;
+  --accent: #f1f1f4;
   --accent-foreground: #18181b;
   --destructive: #dc2626;
   --destructive-foreground: #fafafa;
-  --border: #e4e4e7;
+  --border: #e7e8ec;
   --input: #e4e4e7;
-  --ring: rgba(99, 102, 241, 0.5);
+  --ring: rgba(79, 70, 229, 0.5);
+  --cyan: #06b6d4;
 
   /* cores de status - mesma paleta usada nas paginas EJS que ainda nao migraram */
   --status-pending: #8a8f98;
@@ -53,6 +54,21 @@
   --status-processing: #f59e0b;
   --status-posted: #16a34a;
   --status-error: #dc2626;
+
+  /* "tons" usados nos badges/pilulas (origem, plano, status de conta etc.) -
+     par wash (fundo) + ink (texto), igual ao design de referencia */
+  --tone-indigo-wash: #eef0ff;
+  --tone-indigo-ink: #4f46e5;
+  --tone-cyan-wash: #e7fbfd;
+  --tone-cyan-ink: #0891b2;
+  --tone-success-wash: #eafaf0;
+  --tone-success-ink: #16a34a;
+  --tone-danger-wash: #fdecec;
+  --tone-danger-ink: #dc2626;
+  --tone-violet-wash: #f2ecfe;
+  --tone-violet-ink: #7c3aed;
+  --tone-neutral-wash: #f1f1f4;
+  --tone-neutral-ink: #6b7280;
 
   --sidebar: hsl(0 0% 98%);
   --sidebar-foreground: hsl(240 5.3% 26.1%);
@@ -84,6 +100,20 @@
   --border: rgba(255, 255, 255, 0.08);
   --input: rgba(255, 255, 255, 0.12);
   --ring: rgba(99, 102, 241, 0.5);
+  --cyan: #22d3ee;
+
+  --tone-indigo-wash: rgba(129, 140, 248, 0.16);
+  --tone-indigo-ink: #a5b4fc;
+  --tone-cyan-wash: rgba(34, 211, 238, 0.14);
+  --tone-cyan-ink: #67e8f9;
+  --tone-success-wash: rgba(34, 197, 94, 0.16);
+  --tone-success-ink: #4ade80;
+  --tone-danger-wash: rgba(248, 113, 113, 0.16);
+  --tone-danger-ink: #f87171;
+  --tone-violet-wash: rgba(167, 139, 250, 0.16);
+  --tone-violet-ink: #c4b5fd;
+  --tone-neutral-wash: rgba(255, 255, 255, 0.08);
+  --tone-neutral-ink: #a1a1aa;
 
   --sidebar: hsl(240 5.9% 10%);
   --sidebar-foreground: hsl(240 4.8% 95.9%);
@@ -121,6 +151,20 @@
   --color-status-processing: var(--status-processing);
   --color-status-posted: var(--status-posted);
   --color-status-error: var(--status-error);
+  --color-cyan: var(--cyan);
+
+  --color-tone-indigo-wash: var(--tone-indigo-wash);
+  --color-tone-indigo-ink: var(--tone-indigo-ink);
+  --color-tone-cyan-wash: var(--tone-cyan-wash);
+  --color-tone-cyan-ink: var(--tone-cyan-ink);
+  --color-tone-success-wash: var(--tone-success-wash);
+  --color-tone-success-ink: var(--tone-success-ink);
+  --color-tone-danger-wash: var(--tone-danger-wash);
+  --color-tone-danger-ink: var(--tone-danger-ink);
+  --color-tone-violet-wash: var(--tone-violet-wash);
+  --color-tone-violet-ink: var(--tone-violet-ink);
+  --color-tone-neutral-wash: var(--tone-neutral-wash);
+  --color-tone-neutral-ink: var(--tone-neutral-ink);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

@@ -3,6 +3,7 @@ import type { Icon } from "@tabler/icons-react"
 import {
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -14,11 +15,12 @@ export interface NavItem {
   icon: Icon
 }
 
-export function NavMain({ items }: { items: NavItem[] }) {
+function NavGroup({ label, items }: { label?: string; items: NavItem[] }) {
   const currentPath = window.location.pathname
 
   return (
     <SidebarGroup>
+      {label && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
       <SidebarGroupContent className="flex flex-col gap-2">
         <SidebarMenu>
           {items.map((item) => (
@@ -39,4 +41,23 @@ export function NavMain({ items }: { items: NavItem[] }) {
       </SidebarGroupContent>
     </SidebarGroup>
   )
+}
+
+export function NavMain({
+  items,
+  groups,
+}: {
+  items?: NavItem[]
+  groups?: { label?: string; items: NavItem[] }[]
+}) {
+  if (groups) {
+    return (
+      <>
+        {groups.map((group) => (
+          <NavGroup key={group.label ?? "main"} label={group.label} items={group.items} />
+        ))}
+      </>
+    )
+  }
+  return <NavGroup items={items ?? []} />
 }

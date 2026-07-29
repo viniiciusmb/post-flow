@@ -23,12 +23,21 @@ const ORIGIN_CASE = `
   END AS origin
 `;
 
+// channel_name so existe pra postagens com origem youtube_clip (via
+// video -> clip -> source_video -> canal); fica NULL pras de Drive.
+const CHANNEL_JOIN = `
+  LEFT JOIN clips c ON c.id = v.clip_id
+  LEFT JOIN source_videos sv ON sv.id = c.source_video_id
+  LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+`;
+
 async function listForClient(clientUserId) {
   const { rows } = await pool.query(
-    `SELECT p.*, v.filename, v.discovered_at, ${ORIGIN_CASE}
+    `SELECT p.*, v.filename, v.discovered_at, yc.channel_name, ${ORIGIN_CASE}
      FROM postings p
      JOIN videos v ON v.id = p.video_id
      LEFT JOIN drive_folders df ON df.id = v.drive_folder_id
+     ${CHANNEL_JOIN}
      JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
      WHERE ta.client_user_id = $1
      ORDER BY p.created_at DESC`,
@@ -39,10 +48,12 @@ async function listForClient(clientUserId) {
 
 async function listAllWithDetails() {
   const { rows } = await pool.query(
-    `SELECT p.*, v.filename, u.email AS client_email, u.business_name AS client_business_name, ${ORIGIN_CASE}
+    `SELECT p.*, v.filename, u.email AS client_email, u.business_name AS client_business_name,
+            yc.channel_name, ta.display_name AS tiktok_display_name, ${ORIGIN_CASE}
      FROM postings p
      JOIN videos v ON v.id = p.video_id
      LEFT JOIN drive_folders df ON df.id = v.drive_folder_id
+     ${CHANNEL_JOIN}
      JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
      JOIN users u ON u.id = ta.client_user_id
      ORDER BY p.created_at DESC

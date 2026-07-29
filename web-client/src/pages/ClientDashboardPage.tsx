@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react"
+import { IconBrandYoutube, IconMovie, IconScissors, IconCircleCheck } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { TikTokConnectionCard } from "@/components/dashboard/TikTokConnectionCard"
 import { PostingsTable, type PostingRow } from "@/components/dashboard/PostingsTable"
 import { StatCard } from "@/components/dashboard/StatCard"
+import { UsageCard } from "@/components/dashboard/UsageCard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/hooks/useAuth"
 import { api } from "@/lib/api"
@@ -34,10 +36,12 @@ export function ClientDashboardPage() {
       filename: p.filename,
       status: p.status,
       date: p.updatedAt,
+      origin: p.origin,
+      channelName: p.channelName,
     })) ?? []
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Meu Painel">
+    <DashboardLayout user={user} onLogout={logout} title="Visão geral">
       {flash.connected && (
         <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
           Conta TikTok conectada com sucesso!
@@ -58,10 +62,34 @@ export function ClientDashboardPage() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {data ? (
           <>
-            <StatCard label="Canais monitorados" value={data.counts.youtubeChannels} />
-            <StatCard label="Vídeos este mês" value={data.counts.videosThisMonth} />
-            <StatCard label="Cortes este mês" value={data.counts.clipsThisMonth} />
-            <StatCard label="Cortes postados" value={data.counts.clipsPostedThisMonth} />
+            <StatCard
+              label="Canais monitorados"
+              value={data.counts.youtubeChannels}
+              icon={<IconBrandYoutube />}
+              tone="danger"
+              href="/client/youtube-channels"
+              hrefLabel="Ver canais"
+            />
+            <StatCard
+              label="Vídeos detectados no mês"
+              value={data.counts.videosThisMonth}
+              icon={<IconMovie />}
+              tone="cyan"
+            />
+            <StatCard
+              label="Cortes gerados no mês"
+              value={data.counts.clipsThisMonth}
+              icon={<IconScissors />}
+              tone="violet"
+            />
+            <StatCard
+              label="Cortes postados no mês"
+              value={data.counts.clipsPostedThisMonth}
+              icon={<IconCircleCheck />}
+              tone="success"
+              href="/client/videos-clips"
+              hrefLabel="Ver vídeos & cortes"
+            />
           </>
         ) : (
           <>
@@ -73,12 +101,16 @@ export function ClientDashboardPage() {
         )}
       </div>
 
+      <UsageCard />
+
       <div>
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">Meus vídeos</h2>
         {data ? (
           <PostingsTable
             rows={rows}
-            emptyMessage="Nenhum video seu foi processado ainda. Assim que a integracao com o Drive estiver ativa, eles vao aparecer aqui."
+            showOrigin
+            showChannel
+            emptyMessage="Nenhum video seu foi processado ainda. Cadastre um canal do YouTube ou aguarde a integracao com o Drive."
           />
         ) : (
           <Skeleton className="h-64" />

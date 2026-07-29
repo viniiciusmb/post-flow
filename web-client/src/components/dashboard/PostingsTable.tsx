@@ -7,7 +7,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { StatusBadge } from "@/components/dashboard/StatusBadge"
-import type { PostingStatus } from "@/types/api"
+import { OriginBadge } from "@/components/dashboard/OriginBadge"
+import type { PostingOrigin, PostingStatus } from "@/types/api"
 
 export interface PostingRow {
   id: number
@@ -15,6 +16,9 @@ export interface PostingRow {
   status: PostingStatus
   date: string
   clientName?: string
+  origin?: PostingOrigin
+  channelName?: string | null
+  tiktokDisplayName?: string | null
 }
 
 function formatDate(iso: string) {
@@ -24,10 +28,16 @@ function formatDate(iso: string) {
 export function PostingsTable({
   rows,
   showClient = false,
+  showOrigin = false,
+  showChannel = false,
+  showTiktokProfile = false,
   emptyMessage,
 }: {
   rows: PostingRow[]
   showClient?: boolean
+  showOrigin?: boolean
+  showChannel?: boolean
+  showTiktokProfile?: boolean
   emptyMessage: string
 }) {
   if (rows.length === 0) {
@@ -45,6 +55,9 @@ export function PostingsTable({
           <TableRow className="hover:bg-transparent">
             {showClient && <TableHead>Cliente</TableHead>}
             <TableHead>Vídeo</TableHead>
+            {showChannel && <TableHead>Canal</TableHead>}
+            {showOrigin && <TableHead>Origem</TableHead>}
+            {showTiktokProfile && <TableHead>Perfil TikTok</TableHead>}
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Data</TableHead>
           </TableRow>
@@ -55,7 +68,14 @@ export function PostingsTable({
               {showClient && (
                 <TableCell className="font-medium">{row.clientName}</TableCell>
               )}
-              <TableCell className="text-muted-foreground">{row.filename}</TableCell>
+              <TableCell className="max-w-70 truncate font-medium">{row.filename}</TableCell>
+              {showChannel && (
+                <TableCell className="text-muted-foreground">{row.channelName ?? "—"}</TableCell>
+              )}
+              {showOrigin && <TableCell>{row.origin && <OriginBadge origin={row.origin} />}</TableCell>}
+              {showTiktokProfile && (
+                <TableCell className="text-muted-foreground">{row.tiktokDisplayName ?? "—"}</TableCell>
+              )}
               <TableCell>
                 <StatusBadge status={row.status} />
               </TableCell>

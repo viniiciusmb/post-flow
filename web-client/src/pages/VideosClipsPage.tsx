@@ -3,20 +3,11 @@ import { IconChevronDown, IconChevronRight } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Badge } from "@/components/ui/badge"
+import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api } from "@/lib/api"
-import type { Clip, SourceVideo, SourceVideoStatus } from "@/types/api"
-
-const STATUS_LABEL: Record<SourceVideoStatus, string> = {
-  detected: "detectado",
-  downloading: "baixando",
-  transcribing: "transcrevendo",
-  selecting_clips: "selecionando cortes",
-  cutting: "cortando",
-  ready: "pronto",
-  error: "erro",
-}
+import { CLIP_STATUS_TONE, SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
+import type { Clip, SourceVideo } from "@/types/api"
 
 function formatDuration(seconds: number | null) {
   if (!seconds) return "—"
@@ -68,7 +59,9 @@ function VideoRow({ video }: { video: SourceVideo }) {
           </p>
         </div>
 
-        <Badge variant="outline">{STATUS_LABEL[video.status]}</Badge>
+        <TonePill tone={SOURCE_VIDEO_STATUS_TONE[video.status].tone} spin={SOURCE_VIDEO_STATUS_TONE[video.status].spin}>
+          {SOURCE_VIDEO_STATUS_TONE[video.status].label}
+        </TonePill>
       </button>
 
       {video.errorMessage && (
@@ -90,9 +83,9 @@ function VideoRow({ video }: { video: SourceVideo }) {
                     <span>
                       {formatDuration(clip.endSeconds - clip.startSeconds)}
                     </span>
-                    <Badge variant="outline" className="text-[10px]">
-                      {clip.status === "ready" ? "pronto" : clip.status === "error" ? "erro" : clip.status}
-                    </Badge>
+                    <TonePill tone={CLIP_STATUS_TONE[clip.status].tone} spin={CLIP_STATUS_TONE[clip.status].spin} className="px-2 py-0.5 text-[10px]">
+                      {CLIP_STATUS_TONE[clip.status].label}
+                    </TonePill>
                   </div>
                 </div>
               ))}

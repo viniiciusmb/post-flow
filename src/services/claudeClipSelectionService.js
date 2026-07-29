@@ -3,6 +3,7 @@
 'use strict';
 
 const config = require('../config');
+const { claudeCostUsd } = require('../lib/apiCost');
 
 const MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-5';
@@ -97,7 +98,15 @@ Escolha ate ${maxClips} trechos que funcionariam bem como cortes verticais pro T
     throw new Error('Claude nao retornou uma selecao de cortes valida.');
   }
 
-  return toolUse.input.clips;
+  const inputTokens = data.usage?.input_tokens || 0;
+  const outputTokens = data.usage?.output_tokens || 0;
+
+  return {
+    clips: toolUse.input.clips,
+    inputTokens,
+    outputTokens,
+    costUsd: claudeCostUsd(inputTokens, outputTokens),
+  };
 }
 
 module.exports = { selectClips, formatTranscriptForPrompt };

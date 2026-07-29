@@ -38,4 +38,25 @@ async function setActive(id, isActive) {
   return rows[0] || null;
 }
 
-module.exports = { findByEmail, findById, create, listByRole, setActive };
+async function touchLastActive(id) {
+  await pool.query('UPDATE users SET last_active_at = now() WHERE id = $1', [id]);
+}
+
+// Lista clientes com contagem de canais e status da conta TikTok - usada na
+// tela admin "Clientes".
+async function listClientsWithStats() {
+  const { rows } = await pool.query(
+    `SELECT u.*,
+            count(DISTINCT yc.id)::int AS channel_count,
+            ta.display_name AS tiktok_display_name
+     FROM users u
+     LEFT JOIN youtube_channels yc ON yc.client_user_id = u.id
+     LEFT JOIN tiktok_accounts ta ON ta.client_user_id = u.id AND ta.is_active = true
+     WHERE u.role = 'client'
+     GROUP BY u.id, ta.display_name
+     ORDER BY u.created_at DESC`
+  );
+  return rows;
+}
+
+module.exports = { findByEmail, findById, create, listByRole, setActive, touchLastActive, listClientsWithStats };

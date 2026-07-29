@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { TonePill } from "@/components/ui/tone-pill"
 import {
   Table,
   TableBody,
@@ -140,9 +141,9 @@ export function YouTubeChannelsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm text-muted-foreground">
+                      <TonePill tone={channel.isActive ? "success" : "neutral"}>
                         {channel.isActive ? "Ativo" : "Pausado"}
-                      </span>
+                      </TonePill>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {channel.lastPolledAt
