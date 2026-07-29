@@ -46,6 +46,10 @@ const config = {
     // Conteudo do cookies.txt (exportado de uma conta logada) em base64.
     // Sem isso o YouTube bloqueia listagem/download vindos da VPS.
     cookiesBase64: process.env.YOUTUBE_COOKIES_BASE64 || '',
+    // URL do servico bgutil-ytdlp-pot-provider (gera o "PO token" que o
+    // YouTube passou a exigir mesmo com cookie valido, pra IP de servidor).
+    // Vazio = roda sem POT provider (cookie sozinho pode nao bastar mais).
+    potProviderUrl: process.env.YTDLP_POT_PROVIDER_URL || '',
   },
 
   ytdlpPath: process.env.YTDLP_PATH || '/usr/local/bin/yt-dlp',

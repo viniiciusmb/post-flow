@@ -16,6 +16,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg ca-certificates curl && \
     curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp && \
     chmod a+rx /usr/local/bin/yt-dlp && \
+    mkdir -p /usr/local/bin/yt-dlp-plugins && \
+    curl -L https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases/latest/download/bgutil-ytdlp-pot-provider.zip -o /usr/local/bin/yt-dlp-plugins/bgutil-ytdlp-pot-provider.zip && \
     apt-get purge -y curl && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*

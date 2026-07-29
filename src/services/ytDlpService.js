@@ -1,7 +1,14 @@
-// Listagem e download de videos via yt-dlp. O YouTube bloqueia esse tipo de
-// acesso vindo de IP de VPS sem um cookie de conta logada - por isso o
-// cookies.txt (settings YOUTUBE_COOKIES_BASE64) e obrigatorio pra esse
-// modulo funcionar. Ver docs/setup-youtube-cookies.md.
+// Listagem e download de videos via yt-dlp.
+//
+// O YouTube bloqueia IP de servidor por padrao ("Sign in to confirm you're
+// not a bot"). A solucao que funciona hoje (testada manualmente, ver commit)
+// e o provedor de "PO token" bgutil-ytdlp-pot-provider (YTDLP_POT_PROVIDER_URL)
+// SEM cookie: com o token, o yt-dlp usa o cliente "android_vr" (que nao aceita
+// cookie) e recebe os formatos de video/audio reais. Cookie (YOUTUBE_COOKIES_BASE64)
+// vira contraproducente nesse modo: ele forca o yt-dlp a tentar os clientes
+// "web", que o YouTube atualmente trava via streaming SABR (so devolve
+// storyboard). Cookie so e usado como ultimo recurso quando NAO ha provedor
+// de PO token configurado.
 'use strict';
 
 const { spawn } = require('child_process');
@@ -22,14 +29,23 @@ function getCookiesFilePath() {
   return filePath;
 }
 
-function run(args, { timeoutMs = 5 * 60 * 1000 } = {}) {
+function runOnce(args, { timeoutMs = 5 * 60 * 1000 } = {}) {
   return new Promise((resolve, reject) => {
-    const cookies = getCookiesFilePath();
-    if (!cookies) {
-      return reject(new Error('YOUTUBE_COOKIES_BASE64 nao configurado - sem isso o YouTube bloqueia a VPS.'));
+    const authArgs = config.youtube.potProviderUrl
+      ? ['--extractor-args', `youtubepot-bgutilhttp:base_url=${config.youtube.potProviderUrl}`]
+      : [];
+
+    if (!config.youtube.potProviderUrl) {
+      const cookies = getCookiesFilePath();
+      if (!cookies) {
+        return reject(
+          new Error('Nem YTDLP_POT_PROVIDER_URL nem YOUTUBE_COOKIES_BASE64 configurados - sem isso o YouTube bloqueia a VPS.')
+        );
+      }
+      authArgs.push('--cookies', cookies);
     }
 
-    const child = spawn(config.ytdlpPath, ['--cookies', cookies, ...args]);
+    const child = spawn(config.ytdlpPath, [...authArgs, ...args]);
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => {
@@ -48,6 +64,16 @@ function run(args, { timeoutMs = 5 * 60 * 1000 } = {}) {
       resolve(stdout);
     });
   });
+}
+
+// As vezes o link de download que o YouTube devolve expira/falha na hora
+// (403 pontual) - uma segunda tentativa quase sempre resolve.
+async function run(args, opts) {
+  try {
+    return await runOnce(args, opts);
+  } catch {
+    return runOnce(args, opts);
+  }
 }
 
 function parseUploadDate(value) {
