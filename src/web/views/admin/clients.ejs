@@ -8,13 +8,14 @@
   <figure>
     <table>
       <thead>
-        <tr><th>Nome</th><th>E-mail</th><th>Ativo</th><th>Criado em</th></tr>
+        <tr><th>Nome</th><th>E-mail</th><th>Canais YouTube</th><th>Ativo</th><th>Criado em</th></tr>
       </thead>
       <tbody>
         <% clients.forEach(function (c) { %>
           <tr>
             <td><%= c.business_name || '—' %></td>
             <td><%= c.email %></td>
+            <td><%= c.channel_count %></td>
             <td><%= c.is_active ? 'Sim' : 'Nao' %></td>
             <td><%= new Date(c.created_at).toLocaleString('pt-BR') %></td>
           </tr>

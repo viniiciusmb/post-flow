@@ -17,6 +17,8 @@ const googleRoutes = require('./routes/googleRoutes');
 const authApiRoutes = require('./routes/api/authApiRoutes');
 const adminApiRoutes = require('./routes/api/adminApiRoutes');
 const clientApiRoutes = require('./routes/api/clientApiRoutes');
+const youtubeChannelsApiRoutes = require('./routes/api/youtubeChannelsApiRoutes');
+const sourceVideosApiRoutes = require('./routes/api/sourceVideosApiRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -86,6 +88,8 @@ app.use('/auth/google', googleRoutes);
 app.use('/api/auth', authApiRoutes);
 app.use('/api/admin', adminApiRoutes);
 app.use('/api/client', clientApiRoutes);
+app.use('/api/client/youtube-channels', youtubeChannelsApiRoutes);
+app.use('/api/client/source-videos', sourceVideosApiRoutes);
 app.use('/api', (req, res) => res.status(404).json({ error: 'Rota nao encontrada.' }));
 
 app.use((req, res) => {

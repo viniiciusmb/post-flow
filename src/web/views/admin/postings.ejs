@@ -8,13 +8,15 @@
   <figure>
     <table>
       <thead>
-        <tr><th>Cliente</th><th>Video</th><th>Status</th><th>Erro</th><th>Criado em</th></tr>
+        <tr><th>Cliente</th><th>Video</th><th>Origem</th><th>Status</th><th>Erro</th><th>Criado em</th></tr>
       </thead>
       <tbody>
+        <% var ORIGIN_LABEL = { drive_general: 'Drive Geral', drive_client: 'Drive do Cliente', youtube_clip: 'Corte de YouTube' }; %>
         <% postings.forEach(function (p) { %>
           <tr>
             <td><%= p.client_business_name || p.client_email %></td>
             <td><%= p.filename %></td>
+            <td><%= ORIGIN_LABEL[p.origin] || p.origin %></td>
             <td><%- include('../partials/status-badge', { status: p.status }) %></td>
             <td><%= p.error_message || '—' %></td>
             <td><%= new Date(p.created_at).toLocaleString('pt-BR') %></td>

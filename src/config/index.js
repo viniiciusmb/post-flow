@@ -33,6 +33,27 @@ const config = {
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     redirectUri: process.env.GOOGLE_REDIRECT_URI || '',
   },
+
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY || '',
+  },
+
+  anthropic: {
+    apiKey: process.env.ANTHROPIC_API_KEY || '',
+  },
+
+  youtube: {
+    // Conteudo do cookies.txt (exportado de uma conta logada) em base64.
+    // Sem isso o YouTube bloqueia listagem/download vindos da VPS.
+    cookiesBase64: process.env.YOUTUBE_COOKIES_BASE64 || '',
+  },
+
+  ytdlpPath: process.env.YTDLP_PATH || '/usr/local/bin/yt-dlp',
+
+  videoProcessing: {
+    // Onde os videos baixados e os cortes ficam em disco antes de postar.
+    workDir: process.env.VIDEO_WORK_DIR || '/tmp/post-flow-video',
+  },
 };
 
 module.exports = config;

@@ -6,9 +6,19 @@ RUN npm ci
 COPY web-client/ ./
 RUN npm run build
 
-# Etapa 2: runtime - servidor Express (igual antes, mais os assets buildados)
-FROM node:20-alpine
+# Etapa 2: runtime - servidor Express + workers (postagem e video).
+# Debian (nao Alpine) de proposito aqui: o binario standalone do yt-dlp e
+# compilado pra glibc e pode falhar em cima do musl do Alpine.
+FROM node:20-bookworm-slim
 WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg ca-certificates curl && \
+    curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp && \
+    chmod a+rx /usr/local/bin/yt-dlp && \
+    apt-get purge -y curl && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev

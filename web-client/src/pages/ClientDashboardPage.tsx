@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { TikTokConnectionCard } from "@/components/dashboard/TikTokConnectionCard"
 import { PostingsTable, type PostingRow } from "@/components/dashboard/PostingsTable"
+import { StatCard } from "@/components/dashboard/StatCard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/hooks/useAuth"
 import { api } from "@/lib/api"
@@ -53,6 +54,24 @@ export function ClientDashboardPage() {
       ) : (
         <Skeleton className="h-24" />
       )}
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {data ? (
+          <>
+            <StatCard label="Canais monitorados" value={data.counts.youtubeChannels} />
+            <StatCard label="Vídeos este mês" value={data.counts.videosThisMonth} />
+            <StatCard label="Cortes este mês" value={data.counts.clipsThisMonth} />
+            <StatCard label="Cortes postados" value={data.counts.clipsPostedThisMonth} />
+          </>
+        ) : (
+          <>
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </>
+        )}
+      </div>
 
       <div>
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">Meus vídeos</h2>

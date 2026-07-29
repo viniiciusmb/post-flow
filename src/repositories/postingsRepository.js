@@ -15,11 +15,20 @@ async function createIfNotExists({ videoId, tiktokAccountId }) {
   return rows[0] || null;
 }
 
+const ORIGIN_CASE = `
+  CASE
+    WHEN v.source_type = 'youtube_clip' THEN 'youtube_clip'
+    WHEN df.type = 'general' THEN 'drive_general'
+    ELSE 'drive_client'
+  END AS origin
+`;
+
 async function listForClient(clientUserId) {
   const { rows } = await pool.query(
-    `SELECT p.*, v.filename, v.discovered_at
+    `SELECT p.*, v.filename, v.discovered_at, ${ORIGIN_CASE}
      FROM postings p
      JOIN videos v ON v.id = p.video_id
+     LEFT JOIN drive_folders df ON df.id = v.drive_folder_id
      JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
      WHERE ta.client_user_id = $1
      ORDER BY p.created_at DESC`,
@@ -30,9 +39,10 @@ async function listForClient(clientUserId) {
 
 async function listAllWithDetails() {
   const { rows } = await pool.query(
-    `SELECT p.*, v.filename, u.email AS client_email, u.business_name AS client_business_name
+    `SELECT p.*, v.filename, u.email AS client_email, u.business_name AS client_business_name, ${ORIGIN_CASE}
      FROM postings p
      JOIN videos v ON v.id = p.video_id
+     LEFT JOIN drive_folders df ON df.id = v.drive_folder_id
      JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
      JOIN users u ON u.id = ta.client_user_id
      ORDER BY p.created_at DESC

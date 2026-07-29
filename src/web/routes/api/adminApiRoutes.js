@@ -2,6 +2,7 @@
 
 const express = require('express');
 const adminApiController = require('../../controllers/api/adminApiController');
+const adminQueueApiController = require('../../controllers/api/adminQueueApiController');
 const requireAuthApi = require('../../middleware/requireAuthApi');
 const requireRoleApi = require('../../middleware/requireRoleApi');
 const asyncHandler = require('../../lib/asyncHandler');
@@ -12,5 +13,7 @@ const router = express.Router();
 router.use(requireAuthApi, requireRoleApi(ROLES.ADMIN));
 
 router.get('/dashboard', asyncHandler(adminApiController.dashboard));
+router.get('/queue', asyncHandler(adminQueueApiController.overview));
+router.post('/queue/:id/retry', asyncHandler(adminQueueApiController.retry));
 
 module.exports = router;

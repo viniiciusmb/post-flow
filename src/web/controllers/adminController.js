@@ -2,6 +2,7 @@
 
 const usersRepository = require('../../repositories/usersRepository');
 const postingsRepository = require('../../repositories/postingsRepository');
+const pool = require('../../db/pool');
 const { ROLES } = require('../../config/constants');
 
 async function dashboard(req, res) {
@@ -19,7 +20,13 @@ async function dashboard(req, res) {
 
 async function listClients(req, res) {
   const clients = await usersRepository.listByRole(ROLES.CLIENT);
-  res.render('admin/clients', { title: 'Clientes', clients });
+  const { rows: counts } = await pool.query(
+    'SELECT client_user_id, count(*)::int AS count FROM youtube_channels GROUP BY client_user_id'
+  );
+  const countByClient = Object.fromEntries(counts.map((c) => [c.client_user_id, c.count]));
+  const clientsWithChannelCount = clients.map((c) => ({ ...c, channel_count: countByClient[c.id] || 0 }));
+
+  res.render('admin/clients', { title: 'Clientes', clients: clientsWithChannelCount });
 }
 
 async function listPostings(req, res) {

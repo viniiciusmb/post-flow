@@ -3,6 +3,9 @@ import {
   IconUsers,
   IconListDetails,
   IconBrandGoogleDrive,
+  IconBrandYoutube,
+  IconScissors,
+  IconListCheck,
 } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
@@ -24,10 +27,13 @@ const ADMIN_NAV: NavItem[] = [
   { title: "Clientes", url: "/admin/clients", icon: IconUsers },
   { title: "Postagens", url: "/admin/postings", icon: IconListDetails },
   { title: "Google Drive", url: "/admin/drive", icon: IconBrandGoogleDrive },
+  { title: "Fila de Processamento", url: "/admin/queue", icon: IconListCheck },
 ]
 
 const CLIENT_NAV: NavItem[] = [
   { title: "Meu Painel", url: "/client", icon: IconLayoutDashboard },
+  { title: "Canais do YouTube", url: "/client/youtube-channels", icon: IconBrandYoutube },
+  { title: "Vídeos & Cortes", url: "/client/videos-clips", icon: IconScissors },
 ]
 
 export function AppSidebar({

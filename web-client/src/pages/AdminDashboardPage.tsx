@@ -29,14 +29,20 @@ export function AdminDashboardPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Painel do Admin">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {data ? (
           <>
             <StatCard label="Clientes cadastrados" value={data.counts.clients} />
             <StatCard label="Postagens registradas" value={data.counts.postings} />
+            <StatCard label="Canais monitorados" value={data.counts.youtubeChannels} />
+            <StatCard label="Vídeos na fila" value={data.counts.videosInProgress} />
+            <StatCard label="Cortes gerados hoje" value={data.counts.clipsToday} />
           </>
         ) : (
           <>
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
             <Skeleton className="h-24" />
             <Skeleton className="h-24" />
           </>
