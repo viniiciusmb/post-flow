@@ -9,7 +9,7 @@ const { ROLES } = require('../../config/constants');
 
 const router = express.Router();
 
-router.use(requireAuth, requireRole(ROLES.CLIENT));
+router.use(requireAuth, requireRole([ROLES.CLIENT, ROLES.ADMIN]));
 
 router.get('/connect', tiktokController.connect);
 router.get('/callback', asyncHandler(tiktokController.callback));

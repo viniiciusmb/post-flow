@@ -8,7 +8,7 @@ const { ROLES } = require('../../config/constants');
 
 const router = express.Router();
 
-router.use(requireAuth, requireRole(ROLES.CLIENT));
+router.use(requireAuth, requireRole([ROLES.CLIENT, ROLES.ADMIN]));
 
 router.get('/', serveSpaPage('client'));
 router.get('/youtube-channels', serveSpaPage('youtube-channels'));

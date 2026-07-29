@@ -39,6 +39,14 @@ const ADMIN_GROUPS: { label?: string; items: NavItem[] }[] = [
       { title: "Métricas", url: "/admin/metrics", icon: IconChartBar },
     ],
   },
+  {
+    label: "Meu conteúdo",
+    items: [
+      { title: "Canais do YouTube", url: "/client/youtube-channels", icon: IconBrandYoutube },
+      { title: "Vídeos & Cortes", url: "/client/videos-clips", icon: IconScissors },
+      { title: "Conta TikTok", url: "/client/tiktok-account", icon: IconBrandTiktok },
+    ],
+  },
 ]
 
 const CLIENT_GROUPS: { label?: string; items: NavItem[] }[] = [

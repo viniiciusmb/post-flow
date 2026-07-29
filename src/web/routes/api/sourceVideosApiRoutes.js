@@ -9,7 +9,7 @@ const { ROLES } = require('../../../config/constants');
 
 const router = express.Router();
 
-router.use(requireAuthApi, requireRoleApi(ROLES.CLIENT));
+router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 
 router.get('/', asyncHandler(controller.list));
 router.get('/:id/clips', asyncHandler(controller.listClips));

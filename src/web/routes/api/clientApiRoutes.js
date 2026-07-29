@@ -9,7 +9,7 @@ const { ROLES } = require('../../../config/constants');
 
 const router = express.Router();
 
-router.use(requireAuthApi, requireRoleApi(ROLES.CLIENT));
+router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 
 router.get('/dashboard', asyncHandler(clientApiController.dashboard));
 router.get('/tiktok-account', asyncHandler(clientApiController.tiktokAccount));
