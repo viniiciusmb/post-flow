@@ -1,14 +1,17 @@
 // Listagem e download de videos via yt-dlp.
 //
 // O YouTube bloqueia IP de servidor por padrao ("Sign in to confirm you're
-// not a bot"). A solucao que funciona hoje (testada manualmente, ver commit)
-// e o provedor de "PO token" bgutil-ytdlp-pot-provider (YTDLP_POT_PROVIDER_URL)
-// SEM cookie: com o token, o yt-dlp usa o cliente "android_vr" (que nao aceita
-// cookie) e recebe os formatos de video/audio reais. Cookie (YOUTUBE_COOKIES_BASE64)
-// vira contraproducente nesse modo: ele forca o yt-dlp a tentar os clientes
-// "web", que o YouTube atualmente trava via streaming SABR (so devolve
-// storyboard). Cookie so e usado como ultimo recurso quando NAO ha provedor
-// de PO token configurado.
+// not a bot"). Testado manualmente (ver commits) contra videos reais:
+//   - So o provedor de PO token (bgutil-ytdlp-pot-provider) sem proxy: passa
+//     pra videos "de alta confianca" (muito populares), mas continua
+//     bloqueando video comum de canal pequeno/medio.
+//   - Um proxy residencial (YTDLP_PROXY_URL) resolve pra qualquer video -
+//     ataca a causa raiz (reputacao do IP), nao so o sintoma.
+// Cookie (YOUTUBE_COOKIES_BASE64) e contraproducente com qualquer um dos
+// dois: ele forca o yt-dlp a tentar os clientes "web", que o YouTube trava
+// via streaming SABR (so devolve storyboard, nenhum formato de video real).
+// So usamos cookie como ultimo recurso quando nem proxy nem POT provider
+// estao configurados.
 'use strict';
 
 const { spawn } = require('child_process');
@@ -31,15 +34,23 @@ function getCookiesFilePath() {
 
 function runOnce(args, { timeoutMs = 5 * 60 * 1000 } = {}) {
   return new Promise((resolve, reject) => {
-    const authArgs = config.youtube.potProviderUrl
-      ? ['--extractor-args', `youtubepot-bgutilhttp:base_url=${config.youtube.potProviderUrl}`]
-      : [];
+    const hasProxyOrPot = Boolean(config.youtube.proxyUrl || config.youtube.potProviderUrl);
+    const authArgs = [];
 
-    if (!config.youtube.potProviderUrl) {
+    if (config.youtube.proxyUrl) {
+      authArgs.push('--proxy', config.youtube.proxyUrl);
+    }
+    if (config.youtube.potProviderUrl) {
+      authArgs.push('--extractor-args', `youtubepot-bgutilhttp:base_url=${config.youtube.potProviderUrl}`);
+    }
+
+    if (!hasProxyOrPot) {
       const cookies = getCookiesFilePath();
       if (!cookies) {
         return reject(
-          new Error('Nem YTDLP_POT_PROVIDER_URL nem YOUTUBE_COOKIES_BASE64 configurados - sem isso o YouTube bloqueia a VPS.')
+          new Error(
+            'Nem YTDLP_PROXY_URL, nem YTDLP_POT_PROVIDER_URL, nem YOUTUBE_COOKIES_BASE64 configurados - sem isso o YouTube bloqueia a VPS.'
+          )
         );
       }
       authArgs.push('--cookies', cookies);

@@ -50,6 +50,11 @@ const config = {
     // YouTube passou a exigir mesmo com cookie valido, pra IP de servidor).
     // Vazio = roda sem POT provider (cookie sozinho pode nao bastar mais).
     potProviderUrl: process.env.YTDLP_POT_PROVIDER_URL || '',
+    // Proxy residencial (ex: http://usuario:senha@host:porta) - resolve de
+    // vez o bloqueio "Sign in to confirm you're not a bot" que a VPS toma
+    // por ser IP de datacenter, independente de cookie/token. Vazio = sem
+    // proxy (so o POT provider, que nao cobre todo tipo de video).
+    proxyUrl: process.env.YTDLP_PROXY_URL || '',
   },
 
   ytdlpPath: process.env.YTDLP_PATH || '/usr/local/bin/yt-dlp',
