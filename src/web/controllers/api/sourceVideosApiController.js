@@ -170,8 +170,8 @@ async function retry(req, res) {
   const id = Number(req.params.id);
   const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(id, req.session.user.id);
   if (!sourceVideo) return res.status(404).json({ error: 'Video nao encontrado.' });
-  if (sourceVideo.status !== 'error') {
-    return res.status(400).json({ error: 'Esse video nao esta com erro no momento.' });
+  if (!['error', 'cancelled'].includes(sourceVideo.status)) {
+    return res.status(400).json({ error: 'Esse video nao esta com erro nem cancelado no momento.' });
   }
 
   await clipsRepository.deleteBySourceVideoId(id);
@@ -182,6 +182,17 @@ async function retry(req, res) {
   await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: id });
 
   res.json({ id: updated.id, status: updated.status });
+}
+
+// Cancelamento cooperativo - so vale enquanto o video esta mesmo em
+// andamento (o repository ja filtra por status, aqui so trata "nao rolou").
+async function cancel(req, res) {
+  const id = Number(req.params.id);
+  const updated = await sourceVideosRepository.requestCancelByIdOwnedByClient(id, req.session.user.id);
+  if (!updated) {
+    return res.status(400).json({ error: 'Esse video nao esta em processamento no momento (ou nao existe).' });
+  }
+  res.json({ id: updated.id, cancelRequested: true });
 }
 
 // Remove o video e os cortes gerados a partir dele, inclusive os arquivos em
@@ -208,4 +219,4 @@ async function remove(req, res) {
   res.status(204).end();
 }
 
-module.exports = { list, listClips, downloadClip, clipThumbnail, createManual, uploadVideo, retry, remove };
+module.exports = { list, listClips, downloadClip, clipThumbnail, createManual, uploadVideo, retry, cancel, remove };

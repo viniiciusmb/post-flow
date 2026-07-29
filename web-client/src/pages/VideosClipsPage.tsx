@@ -10,6 +10,7 @@ import {
   IconDownload,
   IconTrash,
   IconUpload,
+  IconPlayerStop,
 } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Button } from "@/components/ui/button"
@@ -129,6 +130,7 @@ function VideoRow({
   const [open, setOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const clips = useClipsPolling(video.id, open, video.status)
 
   async function retry() {
@@ -138,6 +140,17 @@ function VideoRow({
       onRetried()
     } finally {
       setRetrying(false)
+    }
+  }
+
+  async function cancel() {
+    if (!confirm(`Cancelar o processamento de "${video.title}"?`)) return
+    setCancelling(true)
+    try {
+      await api.post(`/api/client/source-videos/${video.id}/cancel`, {})
+      onRetried()
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -199,14 +212,27 @@ function VideoRow({
           {SOURCE_VIDEO_STATUS_TONE[video.status].label}
         </TonePill>
 
+        {ACTIVE_STATUSES.includes(video.status) && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={cancel}
+            disabled={cancelling}
+            title="Cancelar processamento"
+          >
+            <IconPlayerStop className="size-4" />
+          </Button>
+        )}
         <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title="Remover vídeo">
           <IconTrash className="size-4" />
         </Button>
       </div>
 
-      {video.errorMessage && (
+      {(video.status === "error" || video.status === "cancelled") && (
         <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2">
-          <p className="text-xs text-destructive">{video.errorMessage}</p>
+          <p className="text-xs text-destructive">
+            {video.errorMessage || "Processamento cancelado."}
+          </p>
           <Button
             variant="outline"
             size="sm"

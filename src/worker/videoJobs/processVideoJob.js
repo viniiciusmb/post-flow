@@ -28,6 +28,19 @@ const CLIP_LENGTH_PRESETS = {
   long: { minDuration: 60, maxDuration: 180 },
 };
 
+class CancelledError extends Error {}
+
+// Cancelamento cooperativo: confere a flag entre as etapas principais (e a
+// cada corte do loop de renderizacao) e para no proximo checkpoint - nao
+// mata o yt-dlp/ffmpeg em andamento na hora, mas normalmente para em menos
+// de 1 minuto.
+async function checkCancelled(sourceVideoId) {
+  const current = await sourceVideosRepository.findById(sourceVideoId);
+  if (current && current.cancel_requested) {
+    throw new CancelledError('Cancelado pelo cliente.');
+  }
+}
+
 async function run(sourceVideoId) {
   const sourceVideo = await sourceVideosRepository.findById(sourceVideoId);
   if (!sourceVideo) return;
@@ -60,6 +73,7 @@ async function run(sourceVideoId) {
       await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath);
     }
 
+    await checkCancelled(sourceVideo.id);
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'transcribing');
     const audioPath = path.join(workDir, 'audio.mp3');
     await videoEditingService.extractAudio(videoPath, audioPath);
@@ -72,6 +86,7 @@ async function run(sourceVideoId) {
     });
     fs.unlinkSync(audioPath);
 
+    await checkCancelled(sourceVideo.id);
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'selecting_clips');
     const clipLengthPreset = CLIP_LENGTH_PRESETS[settings.clip_length] || CLIP_LENGTH_PRESETS.balanced;
 
@@ -127,10 +142,12 @@ async function run(sourceVideoId) {
       }))
     );
 
+    await checkCancelled(sourceVideo.id);
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'cutting');
     const tiktokAccount = await tiktokAccountsRepository.findActiveByClientId(clientUserId);
 
     for (const clip of clips) {
+      await checkCancelled(sourceVideo.id);
       try {
         await clipsRepository.updateStatus(clip.id, 'rendering');
         const outputPath = path.join(workDir, `clip-${clip.id}.mp4`);
@@ -166,7 +183,11 @@ async function run(sourceVideoId) {
             fileSizeBytes,
           });
           if (video && tiktokAccount.auto_post_enabled) {
-            await postingsRepository.createIfNotExists({ videoId: video.id, tiktokAccountId: tiktokAccount.id });
+            await postingsRepository.createIfNotExists({
+              videoId: video.id,
+              tiktokAccountId: tiktokAccount.id,
+              caption: clip.description,
+            });
           }
         }
       } catch (err) {
@@ -182,6 +203,12 @@ async function run(sourceVideoId) {
 
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'ready');
   } catch (err) {
+    if (err instanceof CancelledError) {
+      logger.info(`Processamento do video-fonte ${sourceVideo.id} cancelado.`);
+      await sourceVideosRepository.updateStatus(sourceVideo.id, 'cancelled');
+      if (fs.existsSync(workDir)) fs.rmSync(workDir, { recursive: true, force: true });
+      return;
+    }
     logger.error(`Falha ao processar o video-fonte ${sourceVideo.id}:`, err);
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', { errorMessage: err.message });
   }

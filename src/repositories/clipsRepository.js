@@ -64,6 +64,30 @@ async function deleteBySourceVideoId(sourceVideoId) {
   await pool.query('DELETE FROM clips WHERE source_video_id = $1', [sourceVideoId]);
 }
 
+// Usado pela limpeza automatica de retencao (job de fundo, sem dono pra
+// checar) - o video/posting ligados a esse corte caem em cascata.
+async function deleteById(id) {
+  await pool.query('DELETE FROM clips WHERE id = $1', [id]);
+}
+
+// Cortes prontos que ainda nao foram enviados pra pasta de destino do Drive
+// do cliente - usado pelo job de exportacao.
+async function listReadyNotExportedByClientId(clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT c.* FROM clips c
+     JOIN source_videos sv ON sv.id = c.source_video_id
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     WHERE coalesce(yc.client_user_id, sv.client_user_id) = $1
+       AND c.status = 'ready' AND c.exported_to_drive_at IS NULL AND c.local_clip_path IS NOT NULL`,
+    [clientUserId]
+  );
+  return rows;
+}
+
+async function markExportedToDrive(id) {
+  await pool.query('UPDATE clips SET exported_to_drive_at = now() WHERE id = $1', [id]);
+}
+
 async function countCreatedSince(since, until = new Date()) {
   const { rows } = await pool.query(
     'SELECT count(*)::int AS count FROM clips WHERE created_at >= $1 AND created_at <= $2',
@@ -108,6 +132,9 @@ module.exports = {
   updateRenderProgress,
   saveRenderedFile,
   deleteBySourceVideoId,
+  deleteById,
+  listReadyNotExportedByClientId,
+  markExportedToDrive,
   countCreatedSince,
   countByClientSince,
   countPostedByClientSince,

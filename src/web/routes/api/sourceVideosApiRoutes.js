@@ -39,6 +39,7 @@ router.post('/manual', asyncHandler(controller.createManual));
 router.post('/upload', upload.single('video'), asyncHandler(controller.uploadVideo));
 router.get('/:id/clips', asyncHandler(controller.listClips));
 router.post('/:id/retry', asyncHandler(controller.retry));
+router.post('/:id/cancel', asyncHandler(controller.cancel));
 router.delete('/:id', asyncHandler(controller.remove));
 router.get('/clips/:id/download', asyncHandler(controller.downloadClip));
 router.get('/clips/:id/thumbnail', asyncHandler(controller.clipThumbnail));

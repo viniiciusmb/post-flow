@@ -11,6 +11,11 @@ async function findActiveByClientId(clientUserId) {
   return rows[0] || null;
 }
 
+async function findById(id) {
+  const { rows } = await pool.query('SELECT * FROM tiktok_accounts WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
 async function listActive() {
   const { rows } = await pool.query(
     `SELECT ta.*, u.email, u.business_name
@@ -140,6 +145,7 @@ async function saveStats(id, { followerCount, followingCount, likesCount, videoC
 }
 
 module.exports = {
+  findById,
   findActiveByClientId,
   listActive,
   listReceivingGeneralContent,

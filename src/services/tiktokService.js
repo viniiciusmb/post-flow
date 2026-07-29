@@ -2,11 +2,21 @@
 // Referencia: https://developers.tiktok.com/doc/oauth-user-access-token-management
 'use strict';
 
+const fs = require('fs');
 const config = require('../config');
 
 const AUTHORIZE_URL = 'https://www.tiktok.com/v2/auth/authorize/';
 const TOKEN_URL = 'https://open.tiktokapis.com/v2/oauth/token/';
 const USER_INFO_URL = 'https://open.tiktokapis.com/v2/user/info/';
+const PUBLISH_INIT_URL = 'https://open.tiktokapis.com/v2/post/publish/inbox/video/init/';
+const PUBLISH_STATUS_URL = 'https://open.tiktokapis.com/v2/post/publish/status/fetch/';
+// Teto de tamanho de chunk da Content Posting API - qualquer corte nosso (15
+// a 180s, vertical) fica bem abaixo disso, entao na pratica e sempre 1 chunk so.
+const MAX_CHUNK_SIZE_BYTES = 64 * 1024 * 1024;
+// Status que a TikTok pode devolver enquanto ainda esta processando -
+// qualquer coisa fora dessas duas listas conta como "ainda processando".
+const PUBLISH_DONE_STATUSES = ['PUBLISH_COMPLETE', 'SEND_TO_USER_INBOX'];
+const PUBLISH_FAILED_STATUSES = ['FAILED'];
 
 // user.info.basic: nome/avatar pro painel. video.publish: necessario pra
 // Fase 3 (postar no TikTok). user.info.stats: seguidores/curtidas/videos pro
@@ -94,4 +104,98 @@ async function getUserStats(accessToken) {
   return data.data.user;
 }
 
-module.exports = { buildAuthorizeUrl, exchangeCodeForToken, refreshAccessToken, getUserInfo, getUserStats };
+// Inicia a publicacao em modo rascunho/inbox (o app ainda nao foi aprovado
+// pra "Direct Post" - ver migrations/006_create_postings.sql). A TikTok
+// devolve uma URL pra onde mandamos os bytes do video em seguida.
+async function initInboxVideo(accessToken, videoSizeBytes) {
+  const chunkSize = Math.min(videoSizeBytes, MAX_CHUNK_SIZE_BYTES);
+  const totalChunkCount = Math.max(1, Math.ceil(videoSizeBytes / chunkSize));
+
+  const response = await fetch(PUBLISH_INIT_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify({
+      source_info: {
+        source: 'FILE_UPLOAD',
+        video_size: videoSizeBytes,
+        chunk_size: chunkSize,
+        total_chunk_count: totalChunkCount,
+      },
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok || data.error?.code !== 'ok') {
+    throw new Error(`TikTok recusou iniciar a publicacao: ${data.error?.message || response.statusText}`);
+  }
+  return { publishId: data.data.publish_id, uploadUrl: data.data.upload_url, chunkSize, totalChunkCount };
+}
+
+// Envia os bytes do arquivo pra upload_url devolvida pelo init, em pedacos
+// (na pratica quase sempre 1 pedaco so, ver MAX_CHUNK_SIZE_BYTES acima).
+async function uploadVideoFile(uploadUrl, filePath, videoSizeBytes, chunkSize, totalChunkCount) {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    for (let i = 0; i < totalChunkCount; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, videoSizeBytes) - 1;
+      const length = end - start + 1;
+      const buffer = Buffer.alloc(length);
+      fs.readSync(fd, buffer, 0, length, start);
+
+      const response = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'video/mp4',
+          'Content-Range': `bytes ${start}-${end}/${videoSizeBytes}`,
+          'Content-Length': String(length),
+        },
+        body: buffer,
+      });
+      if (!response.ok && response.status !== 201) {
+        const text = await response.text().catch(() => '');
+        throw new Error(
+          `Falha ao enviar o video pro TikTok (pedaco ${i + 1}/${totalChunkCount}): HTTP ${response.status} ${text.slice(0, 300)}`
+        );
+      }
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// Consulta se a TikTok ja terminou de processar a publicacao. Devolve
+// { done, failed, raw } - "raw" fica disponivel pra log quando algo sair
+// diferente do esperado (a API pode ter mudado desde a ultima checagem).
+async function fetchPublishStatus(accessToken, publishId) {
+  const response = await fetch(PUBLISH_STATUS_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify({ publish_id: publishId }),
+  });
+
+  const data = await response.json();
+  if (!response.ok || data.error?.code !== 'ok') {
+    throw new Error(`Falha ao consultar status da publicacao no TikTok: ${data.error?.message || response.statusText}`);
+  }
+
+  const status = data.data?.status;
+  return {
+    done: PUBLISH_DONE_STATUSES.includes(status),
+    failed: PUBLISH_FAILED_STATUSES.includes(status),
+    failReason: data.data?.fail_reason || null,
+    postIds: data.data?.publicaly_available_post_id || null,
+    raw: data.data,
+  };
+}
+
+module.exports = {
+  buildAuthorizeUrl,
+  exchangeCodeForToken,
+  refreshAccessToken,
+  getUserInfo,
+  getUserStats,
+  initInboxVideo,
+  uploadVideoFile,
+  fetchPublishStatus,
+};

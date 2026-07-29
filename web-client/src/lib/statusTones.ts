@@ -7,6 +7,7 @@ export const POSTING_STATUS_TONE: Record<PostingStatus, { tone: Tone; label: str
   processing: { tone: "indigo", label: "Publicando", spin: true },
   posted: { tone: "success", label: "Postado" },
   error: { tone: "danger", label: "Erro" },
+  skipped: { tone: "neutral", label: "Não postado" },
 }
 
 export const SOURCE_VIDEO_STATUS_TONE: Record<SourceVideoStatus, { tone: Tone; label: string; spin?: boolean }> = {
@@ -17,6 +18,7 @@ export const SOURCE_VIDEO_STATUS_TONE: Record<SourceVideoStatus, { tone: Tone; l
   cutting: { tone: "violet", label: "Gerando cortes", spin: true },
   ready: { tone: "success", label: "Pronto" },
   error: { tone: "danger", label: "Erro" },
+  cancelled: { tone: "neutral", label: "Cancelado" },
 }
 
 export const CLIP_STATUS_TONE: Record<ClipStatus, { tone: Tone; label: string; spin?: boolean }> = {

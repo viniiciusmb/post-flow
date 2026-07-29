@@ -3,15 +3,24 @@
 //             https://developers.google.com/drive/api/reference/rest/v3/files/list
 'use strict';
 
+const fs = require('fs');
+const crypto = require('crypto');
 const config = require('../config');
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const FILES_URL = 'https://www.googleapis.com/drive/v3/files';
+const UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files';
 
-// drive.readonly (nao so metadata) porque a Fase 3 vai precisar baixar o
-// conteudo do video pra enviar ao TikTok, nao so listar nomes de arquivo.
-const SCOPES = ['https://www.googleapis.com/auth/drive.readonly', 'https://www.googleapis.com/auth/userinfo.email'];
+// drive.readonly cobre ler pastas de origem que o cliente aponta (video a
+// processar). drive.file cobre so os arquivos que o proprio Post Flow cria -
+// usado pra exportar os cortes prontos pra uma pasta de destino, sem pedir
+// acesso a arquivos do cliente que a gente nunca tocou.
+const SCOPES = [
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/userinfo.email',
+];
 
 function buildAuthorizeUrl(state) {
   const params = new URLSearchParams({
@@ -105,10 +114,42 @@ async function listVideosInFolder(accessToken, folderId) {
   return files;
 }
 
+// Sobe um corte pronto pra pasta de destino do cliente (multipart: metadata
+// JSON + bytes do arquivo numa unica requisicao - simples e suficiente pro
+// tamanho dos nossos cortes, sem precisar de upload resumivel em pedacos).
+async function uploadFile(accessToken, folderId, filePath, filename, mimeType) {
+  const boundary = `postflow-${crypto.randomBytes(8).toString('hex')}`;
+  const metadata = JSON.stringify({ name: filename, parents: [folderId] });
+  const fileBuffer = fs.readFileSync(filePath);
+
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`),
+    Buffer.from(`--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`),
+    fileBuffer,
+    Buffer.from(`\r\n--${boundary}--`),
+  ]);
+
+  const response = await fetch(`${UPLOAD_URL}?uploadType=multipart&fields=id`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': `multipart/related; boundary=${boundary}`,
+    },
+    body,
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(`Falha ao enviar arquivo pro Google Drive: ${data.error?.message || response.statusText}`);
+  }
+  return data;
+}
+
 module.exports = {
   buildAuthorizeUrl,
   exchangeCodeForToken,
   refreshAccessToken,
   getUserEmail,
   listVideosInFolder,
+  uploadFile,
 };

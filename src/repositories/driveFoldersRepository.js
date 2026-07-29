@@ -49,6 +49,33 @@ async function updateLastPolled(id) {
   await pool.query('UPDATE drive_folders SET last_polled_at = now() WHERE id = $1', [id]);
 }
 
+// Pasta de DESTINO do cliente (pra onde os cortes prontos sao enviados) -
+// separada da pasta de ORIGEM (findByClientId, videos a processar).
+async function findExportFolderByClientId(clientUserId) {
+  const { rows } = await pool.query(
+    "SELECT * FROM drive_folders WHERE type = 'client_export' AND client_user_id = $1",
+    [clientUserId]
+  );
+  return rows[0] || null;
+}
+
+async function upsertClientExportFolder({ clientUserId, driveFolderId, folderName, connectionId }) {
+  await pool.query("DELETE FROM drive_folders WHERE type = 'client_export' AND client_user_id = $1", [clientUserId]);
+  const { rows } = await pool.query(
+    `INSERT INTO drive_folders (type, client_user_id, drive_folder_id, folder_name, connection_id)
+     VALUES ('client_export', $1, $2, $3, $4) RETURNING *`,
+    [clientUserId, driveFolderId, folderName, connectionId]
+  );
+  return rows[0];
+}
+
+// Todos os clientes com pasta de destino configurada - usado pelo job de
+// exportacao pra saber pra quem vale a pena olhar cortes prontos.
+async function listExportFolders() {
+  const { rows } = await pool.query("SELECT * FROM drive_folders WHERE type = 'client_export'");
+  return rows;
+}
+
 module.exports = {
   listAll,
   findGeneralFolder,
@@ -56,4 +83,7 @@ module.exports = {
   upsertGeneralFolder,
   upsertClientFolder,
   updateLastPolled,
+  findExportFolderByClientId,
+  upsertClientExportFolder,
+  listExportFolders,
 };

@@ -2,12 +2,16 @@
 
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
 const postingsRepository = require('../../../repositories/postingsRepository');
+const postingScheduleSettingsRepository = require('../../../repositories/postingScheduleSettingsRepository');
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
 const metricsRepository = require('../../../repositories/metricsRepository');
 const tiktokService = require('../../../services/tiktokService');
 const { resolveRange } = require('../../../lib/dateRanges');
+
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const RETENTION_PRESETS = [24, 72, 168, 720]; // 1d, 3d, 7d, 30d
 
 function startOfMonth() {
   const d = new Date();
@@ -124,6 +128,68 @@ async function setAutoPost(req, res) {
   res.json({ autoPostEnabled: updated.auto_post_enabled });
 }
 
+function scheduleToApi(settings) {
+  return {
+    mode: settings.mode,
+    videosPerDay: settings.videos_per_day,
+    manualTimes: settings.manual_times,
+    timezone: settings.timezone,
+    autoDeleteAfterHours: settings.auto_delete_after_hours,
+    options: { retentionPresetsHours: RETENTION_PRESETS },
+  };
+}
+
+async function getSchedule(req, res) {
+  const account = await tiktokAccountsRepository.findActiveByClientId(req.session.user.id);
+  if (!account) return res.status(404).json({ error: 'Nenhuma conta TikTok conectada.' });
+
+  const settings = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(account.id);
+  res.json(scheduleToApi(settings));
+}
+
+async function setSchedule(req, res) {
+  const account = await tiktokAccountsRepository.findActiveByClientId(req.session.user.id);
+  if (!account) return res.status(404).json({ error: 'Nenhuma conta TikTok conectada.' });
+
+  const mode = req.body.mode;
+  if (!['auto', 'manual'].includes(mode)) {
+    return res.status(400).json({ error: 'Modo de agendamento invalido.' });
+  }
+
+  const videosPerDay = Number(req.body.videosPerDay);
+  if (!Number.isInteger(videosPerDay) || videosPerDay < 1 || videosPerDay > 20) {
+    return res.status(400).json({ error: 'Videos por dia precisa ser um numero entre 1 e 20.' });
+  }
+
+  const manualTimes = Array.isArray(req.body.manualTimes) ? req.body.manualTimes : [];
+  if (mode === 'manual') {
+    if (manualTimes.length === 0 || !manualTimes.every((t) => TIME_RE.test(t))) {
+      return res.status(400).json({ error: 'Informe pelo menos um horario valido (formato HH:MM).' });
+    }
+  }
+
+  const timezone = String(req.body.timezone || '').trim() || 'America/Sao_Paulo';
+
+  let autoDeleteAfterHours = req.body.autoDeleteAfterHours;
+  if (autoDeleteAfterHours !== null && autoDeleteAfterHours !== undefined) {
+    autoDeleteAfterHours = Number(autoDeleteAfterHours);
+    if (!Number.isInteger(autoDeleteAfterHours) || autoDeleteAfterHours < 1) {
+      return res.status(400).json({ error: 'Retencao invalida.' });
+    }
+  } else {
+    autoDeleteAfterHours = null;
+  }
+
+  const updated = await postingScheduleSettingsRepository.upsert(account.id, {
+    mode,
+    videosPerDay,
+    manualTimes: mode === 'manual' ? manualTimes : [],
+    timezone,
+    autoDeleteAfterHours,
+  });
+  res.json(scheduleToApi(updated));
+}
+
 async function usage(req, res) {
   const clientUserId = req.session.user.id;
   const { range, since, until } = resolveRange(req.query.range);
@@ -143,4 +209,4 @@ async function usage(req, res) {
   });
 }
 
-module.exports = { dashboard, tiktokAccount, setAutoPost, usage };
+module.exports = { dashboard, tiktokAccount, setAutoPost, getSchedule, setSchedule, usage };

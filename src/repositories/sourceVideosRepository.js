@@ -86,17 +86,85 @@ async function deleteByIdOwnedByClient(id, clientUserId) {
   return rowCount > 0;
 }
 
+// Retry manual (cliente ou admin clicou "tentar novamente") - so mexe se
+// estiver em 'error' ou 'cancelled', pra nunca reiniciar um video que ja
+// esta 'ready' ou em andamento (era isso que causava reprocessamento
+// duplicado quando o retry do admin nao tinha essa checagem). Zera o
+// contador de retry automatico, ja que essa foi uma tentativa manual.
+// Usado pela limpeza automatica de retencao (job de fundo, sem dono pra
+// checar) - so chamado depois que todos os cortes desse video ja foram
+// apagados (ver postingCleanupJob.js).
+async function deleteById(id) {
+  await pool.query('DELETE FROM source_videos WHERE id = $1', [id]);
+}
+
 async function resetForRetry(id) {
   const { rows } = await pool.query(
     `UPDATE source_videos
      SET status = 'detected', error_message = NULL, local_video_path = NULL,
          transcript_text = NULL, transcript_words = NULL, processing_started_at = NULL,
-         updated_at = now()
+         cancel_requested = false, auto_retry_count = 0, updated_at = now()
+     WHERE id = $1 AND status IN ('error', 'cancelled')
+     RETURNING *`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
+// Retry automatico (job de fundo) - mesma logica do manual, mas incrementa
+// o contador em vez de zerar, pra parar de tentar sozinho depois de um teto.
+async function resetForAutoRetry(id) {
+  const { rows } = await pool.query(
+    `UPDATE source_videos
+     SET status = 'detected', error_message = NULL, local_video_path = NULL,
+         transcript_text = NULL, transcript_words = NULL, processing_started_at = NULL,
+         cancel_requested = false, auto_retry_count = auto_retry_count + 1, updated_at = now()
      WHERE id = $1 AND status = 'error'
      RETURNING *`,
     [id]
   );
   return rows[0] || null;
+}
+
+// Pedido de cancelamento (cooperativo - o worker confere a flag entre
+// etapas). So permitido enquanto o video esta mesmo em andamento.
+const ACTIVE_STATUSES_FOR_CANCEL = ['downloading', 'transcribing', 'selecting_clips', 'cutting'];
+async function requestCancelByIdOwnedByClient(id, clientUserId) {
+  const { rows } = await pool.query(
+    `UPDATE source_videos
+     SET cancel_requested = true, updated_at = now()
+     WHERE id = $1 AND status = ANY($2)
+       AND id IN (
+         SELECT sv.id FROM source_videos sv
+         LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+         WHERE coalesce(yc.client_user_id, sv.client_user_id) = $3
+       )
+     RETURNING *`,
+    [id, ACTIVE_STATUSES_FOR_CANCEL, clientUserId]
+  );
+  return rows[0] || null;
+}
+
+// Erros que parecem transitorios (proxy/rede) e ainda nao esgotaram as
+// tentativas automaticas, parados ha tempo suficiente pra nao brigar com um
+// retry manual que o cliente acabou de disparar.
+async function findTransientErrorsForAutoRetry() {
+  const { rows } = await pool.query(
+    `SELECT * FROM source_videos
+     WHERE status = 'error' AND auto_retry_count < 3
+       AND updated_at < now() - interval '10 minutes'
+       AND error_message ~* 'proxy|tunnel|timeout|econnreset|network|407|502|503'`
+  );
+  return rows;
+}
+
+// Videos detectados que nunca chegaram a comecar (protecao pro caso raro do
+// enfileiramento falhar silenciosamente entre a deteccao e o processamento).
+async function findStuckDetected() {
+  const { rows } = await pool.query(
+    `SELECT * FROM source_videos WHERE status = 'detected' AND created_at < now() - interval '30 minutes'`
+  );
+  return rows;
 }
 
 async function updateStatus(id, status, { errorMessage = null } = {}) {
@@ -230,7 +298,12 @@ module.exports = {
   findById,
   findByIdOwnedByClient,
   deleteByIdOwnedByClient,
+  deleteById,
   resetForRetry,
+  resetForAutoRetry,
+  requestCancelByIdOwnedByClient,
+  findTransientErrorsForAutoRetry,
+  findStuckDetected,
   updateStatus,
   saveDownload,
   saveTranscript,

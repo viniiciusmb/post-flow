@@ -20,6 +20,7 @@ export type PostingStatus =
   | "processing"
   | "posted"
   | "error"
+  | "skipped"
 
 export type PostingOrigin = "drive_general" | "drive_client" | "youtube_clip"
 
@@ -135,6 +136,35 @@ export type TikTokAccountResponse =
   | ({ connected: true; displayName: string; avatarUrl: string | null; connectedAt: string; autoPostEnabled: boolean } & TikTokAccountStats)
   | { connected: false }
 
+export type PostingScheduleMode = "auto" | "manual"
+
+export interface PostingScheduleResponse {
+  mode: PostingScheduleMode
+  videosPerDay: number
+  manualTimes: string[]
+  timezone: string
+  autoDeleteAfterHours: number | null
+  options: { retentionPresetsHours: number[] }
+}
+
+export interface PostingQueueItem {
+  id: number
+  clipTitle: string
+  caption: string | null
+  thumbnailUrl: string | null
+  startSeconds: number
+  endSeconds: number
+  createdAt: string
+}
+
+export interface PostedItem {
+  id: number
+  clipTitle: string
+  thumbnailUrl: string | null
+  postedAt: string
+  tiktokPostId: string | null
+}
+
 export interface ClientDashboardResponse {
   range: RangeInfo
   tiktokAccount:
@@ -154,6 +184,7 @@ export interface DriveStatusResponse {
   connected: boolean
   googleAccountEmail: string | null
   folder: { id: string; name: string | null; lastPolledAt: string | null } | null
+  exportFolder: { id: string; name: string | null } | null
 }
 
 export type VideoAspectRatio = "9:16" | "1:1" | "16:9" | "4:5"
@@ -207,6 +238,7 @@ export type SourceVideoStatus =
   | "cutting"
   | "ready"
   | "error"
+  | "cancelled"
 
 export interface SourceVideo {
   id: number

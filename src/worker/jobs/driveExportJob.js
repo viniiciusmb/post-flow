@@ -1,0 +1,46 @@
+// Envia cortes prontos pra pasta de destino que o cliente configurou no
+// proprio Google Drive (copia de seguranca fora do Post Flow) - reaproveita
+// a mesma conexao OAuth que ja existe pra ler pastas de origem. Roda a cada
+// ~15 min (ver videoScheduler.js).
+'use strict';
+
+const fs = require('fs');
+const driveFoldersRepository = require('../../repositories/driveFoldersRepository');
+const driveConnectionsRepository = require('../../repositories/driveConnectionsRepository');
+const clipsRepository = require('../../repositories/clipsRepository');
+const googleService = require('../../services/googleService');
+const logger = require('../../lib/logger');
+
+async function run() {
+  const exportFolders = await driveFoldersRepository.listExportFolders();
+  for (const folder of exportFolders) {
+    try {
+      await exportForClient(folder);
+    } catch (err) {
+      logger.error(`Falha na exportacao pro Drive do cliente ${folder.client_user_id}:`, err);
+    }
+  }
+}
+
+async function exportForClient(folder) {
+  if (!folder.connection_id) return;
+  const connection = await driveConnectionsRepository.findById(folder.connection_id);
+  const accessToken = await driveConnectionsRepository.getValidAccessToken(googleService, connection);
+  if (!accessToken) return;
+
+  const clips = await clipsRepository.listReadyNotExportedByClientId(folder.client_user_id);
+  for (const clip of clips) {
+    if (!clip.local_clip_path || !fs.existsSync(clip.local_clip_path)) continue;
+
+    const filename = `${(clip.title || 'corte').replace(/[^\p{L}\p{N}\s-]/gu, '').trim()}.mp4`;
+    try {
+      await googleService.uploadFile(accessToken, folder.drive_folder_id, clip.local_clip_path, filename, 'video/mp4');
+      await clipsRepository.markExportedToDrive(clip.id);
+      logger.info(`Corte ${clip.id} exportado pro Drive do cliente ${folder.client_user_id}.`);
+    } catch (err) {
+      logger.error(`Falha ao exportar o corte ${clip.id} pro Drive:`, err);
+    }
+  }
+}
+
+module.exports = { run };

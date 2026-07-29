@@ -1,6 +1,7 @@
 'use strict';
 
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
+const clipsRepository = require('../../../repositories/clipsRepository');
 const queueService = require('../../../services/queueService');
 
 function summarize(row) {
@@ -30,11 +31,20 @@ async function overview(req, res) {
   });
 }
 
+// Mesma regra do retry do cliente: so em video 'error'/'cancelled', e sempre
+// apagando os cortes de uma tentativa anterior antes de reenfileirar - sem
+// isso, chamar retry num video 'ready' recomecava o pipeline do zero e
+// duplicava os cortes que ja estavam prontos.
 async function retry(req, res) {
   const sourceVideo = await sourceVideosRepository.findById(Number(req.params.id));
   if (!sourceVideo) return res.status(404).json({ error: 'Video nao encontrado.' });
+  if (!['error', 'cancelled'].includes(sourceVideo.status)) {
+    return res.status(400).json({ error: 'Esse video nao esta com erro nem cancelado no momento.' });
+  }
 
-  await sourceVideosRepository.updateStatus(sourceVideo.id, 'detected', { errorMessage: null });
+  await clipsRepository.deleteBySourceVideoId(sourceVideo.id);
+  const updated = await sourceVideosRepository.resetForRetry(sourceVideo.id);
+  if (!updated) return res.status(409).json({ error: 'Nao foi possivel reiniciar esse video agora, tente de novo.' });
 
   const boss = await queueService.getBoss();
   await boss.send('video-processing', { sourceVideoId: sourceVideo.id });

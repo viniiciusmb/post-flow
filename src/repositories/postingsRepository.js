@@ -4,13 +4,15 @@ const pool = require('../db/pool');
 
 // Usa ON CONFLICT DO NOTHING: a restricao UNIQUE(video_id, tiktok_account_id)
 // garante que o mesmo video nunca gera duas postagens para a mesma conta.
-async function createIfNotExists({ videoId, tiktokAccountId }) {
+// caption comeca igual a descricao do corte (quando ha uma), mas depois e
+// editavel a parte na fila sem afetar o corte original.
+async function createIfNotExists({ videoId, tiktokAccountId, caption = null }) {
   const { rows } = await pool.query(
-    `INSERT INTO postings (video_id, tiktok_account_id)
-     VALUES ($1, $2)
+    `INSERT INTO postings (video_id, tiktok_account_id, caption)
+     VALUES ($1, $2, $3)
      ON CONFLICT (video_id, tiktok_account_id) DO NOTHING
      RETURNING *`,
-    [videoId, tiktokAccountId]
+    [videoId, tiktokAccountId, caption]
   );
   return rows[0] || null;
 }
@@ -82,4 +84,152 @@ async function updateStatus(id, { status, errorMessage = null, tiktokPublishId =
   return rows[0] || null;
 }
 
-module.exports = { createIfNotExists, listForClient, listAllWithDetails, updateStatus };
+// So cortes gerados a partir do YouTube tem arquivo local pra publicar
+// (postagem vinda do Drive ainda nao tem esse caminho implementado) - por
+// isso o INNER JOIN ate clips exclui automaticamente as de origem Drive.
+const CLIP_FILE_JOIN = `
+  JOIN videos v ON v.id = p.video_id
+  JOIN clips c ON c.id = v.clip_id
+  JOIN source_videos sv ON sv.id = c.source_video_id
+`;
+
+// Postagem pendente mais antiga de uma conta - e o que o job de publicacao
+// pega quando ha espaco na cota do dia.
+async function findOldestPendingForAccount(tiktokAccountId) {
+  const { rows } = await pool.query(
+    `SELECT p.*, c.local_clip_path, c.title AS clip_title, v.file_size_bytes
+     FROM postings p
+     ${CLIP_FILE_JOIN}
+     WHERE p.tiktok_account_id = $1 AND p.status = 'pending'
+     ORDER BY p.created_at ASC
+     LIMIT 1`,
+    [tiktokAccountId]
+  );
+  return rows[0] || null;
+}
+
+// Quantas postagens ja saem hoje (no fuso da conta) - conta a partir do
+// momento em que a postagem comecou a sair de verdade (queued_at), nao da
+// criacao (que pode ser bem antes, quando o corte so ficou pronto).
+async function countTodayForAccount(tiktokAccountId, timezone) {
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS count
+     FROM postings
+     WHERE tiktok_account_id = $1
+       AND status IN ('queued', 'processing', 'posted')
+       AND (queued_at AT TIME ZONE $2)::date = (now() AT TIME ZONE $2)::date`,
+    [tiktokAccountId, timezone]
+  );
+  return rows[0].count;
+}
+
+// Ultima vez que essa conta mandou uma postagem pra fora (usado pelo modo
+// automatico pra espacar - null se a conta nunca postou nada ainda).
+async function mostRecentQueuedAt(tiktokAccountId) {
+  const { rows } = await pool.query('SELECT max(queued_at) AS last_queued_at FROM postings WHERE tiktok_account_id = $1', [
+    tiktokAccountId,
+  ]);
+  return rows[0].last_queued_at;
+}
+
+// Postagens em 'processing' ha um tempo - o job de publicacao revarre essas
+// pra fechar o status quando a TikTok ja tiver terminado de processar.
+async function listStaleProcessing() {
+  const { rows } = await pool.query(
+    `SELECT p.* FROM postings p
+     WHERE p.status = 'processing' AND p.started_at < now() - interval '1 minute'`
+  );
+  return rows;
+}
+
+// Postagens 'posted' mais velhas que a retencao configurada - usado pelo
+// job de limpeza automatica.
+async function listPostedOlderThan(tiktokAccountId, hours) {
+  const { rows } = await pool.query(
+    `SELECT p.*, c.id AS clip_id, c.local_clip_path, c.thumbnail_path, sv.id AS source_video_id
+     FROM postings p
+     ${CLIP_FILE_JOIN}
+     WHERE p.tiktok_account_id = $1 AND p.status = 'posted' AND p.posted_at < now() - ($2 || ' hours')::interval`,
+    [tiktokAccountId, hours]
+  );
+  return rows;
+}
+
+// Fila de prontos aguardando postar - pro cliente revisar/editar legenda
+// antes de sair.
+async function listQueueForClient(clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT p.*, c.title AS clip_title, c.description AS clip_description, c.thumbnail_path,
+            c.id AS clip_id, c.start_seconds, c.end_seconds
+     FROM postings p
+     ${CLIP_FILE_JOIN}
+     JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
+     WHERE ta.client_user_id = $1 AND p.status = 'pending'
+     ORDER BY p.created_at ASC`,
+    [clientUserId]
+  );
+  return rows;
+}
+
+async function listPostedForClient(clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT p.*, c.title AS clip_title, c.thumbnail_path, c.id AS clip_id
+     FROM postings p
+     ${CLIP_FILE_JOIN}
+     JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
+     WHERE ta.client_user_id = $1 AND p.status = 'posted'
+     ORDER BY p.posted_at DESC
+     LIMIT 100`,
+    [clientUserId]
+  );
+  return rows;
+}
+
+async function findByIdOwnedByClient(id, clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT p.* FROM postings p
+     JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
+     WHERE p.id = $1 AND ta.client_user_id = $2`,
+    [id, clientUserId]
+  );
+  return rows[0] || null;
+}
+
+async function updateCaptionOwnedByClient(id, clientUserId, caption) {
+  const { rows } = await pool.query(
+    `UPDATE postings SET caption = $3, updated_at = now()
+     WHERE id = $1 AND status = 'pending'
+       AND id IN (SELECT p.id FROM postings p JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id WHERE ta.client_user_id = $2)
+     RETURNING *`,
+    [id, clientUserId, caption]
+  );
+  return rows[0] || null;
+}
+
+async function skipOwnedByClient(id, clientUserId) {
+  const { rows } = await pool.query(
+    `UPDATE postings SET status = 'skipped', updated_at = now()
+     WHERE id = $1 AND status = 'pending'
+       AND id IN (SELECT p.id FROM postings p JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id WHERE ta.client_user_id = $2)
+     RETURNING *`,
+    [id, clientUserId]
+  );
+  return rows[0] || null;
+}
+
+module.exports = {
+  createIfNotExists,
+  listForClient,
+  listAllWithDetails,
+  updateStatus,
+  findOldestPendingForAccount,
+  countTodayForAccount,
+  mostRecentQueuedAt,
+  listStaleProcessing,
+  listPostedOlderThan,
+  listQueueForClient,
+  listPostedForClient,
+  findByIdOwnedByClient,
+  updateCaptionOwnedByClient,
+  skipOwnedByClient,
+};
