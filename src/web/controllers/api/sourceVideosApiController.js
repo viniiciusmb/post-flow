@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
 const ytDlpService = require('../../../services/ytDlpService');
@@ -41,7 +42,7 @@ async function list(req, res) {
 }
 
 async function listClips(req, res) {
-  const sourceVideo = await sourceVideosRepository.findById(Number(req.params.id));
+  const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(Number(req.params.id), req.session.user.id);
   if (!sourceVideo) return res.status(404).json({ error: 'Video nao encontrado.' });
 
   const clips = await clipsRepository.listBySourceVideoId(sourceVideo.id);
@@ -55,6 +56,25 @@ async function listClips(req, res) {
       errorMessage: c.error_message,
     })),
   });
+}
+
+// Serve o arquivo do corte pronto pra preview (<video>) ou download - o
+// mesmo endpoint funciona pros dois casos, o navegador decide com base em
+// como foi chamado (tag <video> vs clique num link "baixar").
+async function downloadClip(req, res) {
+  const clip = await clipsRepository.findByIdOwnedByClient(Number(req.params.id), req.session.user.id);
+  if (!clip || clip.status !== 'ready' || !clip.local_clip_path) {
+    return res.status(404).json({ error: 'Corte nao encontrado ou ainda nao esta pronto.' });
+  }
+  if (!fs.existsSync(clip.local_clip_path)) {
+    return res.status(410).json({
+      error: 'O arquivo desse corte nao esta mais no servidor (isso acontece se o servico foi reiniciado antes do download).',
+    });
+  }
+
+  const filename = `${clip.title.replace(/[^\p{L}\p{N}\s-]/gu, '').trim() || 'corte'}.mp4`;
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+  res.sendFile(clip.local_clip_path);
 }
 
 // Cliente cola o link de um video avulso do YouTube - sem depender de ter um
@@ -118,4 +138,4 @@ async function retry(req, res) {
   res.json({ id: updated.id, status: updated.status });
 }
 
-module.exports = { list, listClips, createManual, retry };
+module.exports = { list, listClips, downloadClip, createManual, retry };

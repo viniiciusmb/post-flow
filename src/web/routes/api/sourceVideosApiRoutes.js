@@ -15,5 +15,6 @@ router.get('/', asyncHandler(controller.list));
 router.post('/manual', asyncHandler(controller.createManual));
 router.get('/:id/clips', asyncHandler(controller.listClips));
 router.post('/:id/retry', asyncHandler(controller.retry));
+router.get('/clips/:id/download', asyncHandler(controller.downloadClip));
 
 module.exports = router;

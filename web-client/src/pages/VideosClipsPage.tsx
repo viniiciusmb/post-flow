@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { IconChevronDown, IconChevronRight, IconLink, IconClock, IconRefresh, IconAdjustmentsHorizontal } from "@tabler/icons-react"
+import { IconChevronDown, IconChevronRight, IconLink, IconClock, IconRefresh, IconAdjustmentsHorizontal, IconPlayerPlay, IconDownload } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,6 +19,53 @@ function formatDuration(seconds: number | null) {
   const m = Math.floor(seconds / 60)
   const s = Math.round(seconds % 60)
   return `${m}:${String(s).padStart(2, "0")}`
+}
+
+function ClipCard({ clip }: { clip: Clip }) {
+  const [playing, setPlaying] = useState(false)
+  const downloadUrl = `/api/client/source-videos/clips/${clip.id}/download`
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border">
+      {clip.status === "ready" && playing ? (
+        <video src={downloadUrl} controls autoPlay className="aspect-[9/16] w-full bg-black" />
+      ) : (
+        <div className="relative flex aspect-[9/16] w-full items-center justify-center bg-muted">
+          {clip.status === "ready" ? (
+            <button
+              type="button"
+              onClick={() => setPlaying(true)}
+              className="flex size-10 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
+              title="Assistir"
+            >
+              <IconPlayerPlay className="size-4" />
+            </button>
+          ) : (
+            <TonePill tone={CLIP_STATUS_TONE[clip.status].tone} spin={CLIP_STATUS_TONE[clip.status].spin} className="px-2 py-0.5 text-[10px]">
+              {CLIP_STATUS_TONE[clip.status].label}
+            </TonePill>
+          )}
+        </div>
+      )}
+      <div className="p-3">
+        <p className="mb-2 line-clamp-2 text-sm font-medium">{clip.title}</p>
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>{formatDuration(clip.endSeconds - clip.startSeconds)}</span>
+          {clip.status === "ready" && (
+            <a
+              href={downloadUrl}
+              download
+              className="flex items-center gap-1 font-semibold text-primary hover:underline"
+              title="Baixar corte"
+            >
+              <IconDownload className="size-3" />
+              Baixar
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function VideoRow({
@@ -124,17 +171,7 @@ function VideoRow({
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {clips.map((clip) => (
-                <div key={clip.id} className="rounded-lg border border-border p-3">
-                  <p className="mb-2 line-clamp-2 text-sm font-medium">{clip.title}</p>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      {formatDuration(clip.endSeconds - clip.startSeconds)}
-                    </span>
-                    <TonePill tone={CLIP_STATUS_TONE[clip.status].tone} spin={CLIP_STATUS_TONE[clip.status].spin} className="px-2 py-0.5 text-[10px]">
-                      {CLIP_STATUS_TONE[clip.status].label}
-                    </TonePill>
-                  </div>
-                </div>
+                <ClipCard key={clip.id} clip={clip} />
               ))}
             </div>
           )}

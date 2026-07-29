@@ -23,6 +23,20 @@ async function listBySourceVideoId(sourceVideoId) {
   return rows;
 }
 
+// Usado pra servir o arquivo do corte (preview/download) - confere que o
+// corte pertence mesmo ao cliente que esta pedindo (via canal ou video
+// manual), mesma logica de posse do sourceVideosRepository.
+async function findByIdOwnedByClient(id, clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT c.* FROM clips c
+     JOIN source_videos sv ON sv.id = c.source_video_id
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     WHERE c.id = $1 AND coalesce(yc.client_user_id, sv.client_user_id) = $2`,
+    [id, clientUserId]
+  );
+  return rows[0] || null;
+}
+
 async function updateStatus(id, status, { errorMessage = null } = {}) {
   await pool.query(
     'UPDATE clips SET status = $2, error_message = $3, updated_at = now() WHERE id = $1',
@@ -82,6 +96,7 @@ async function countPostedByClientSince(clientUserId, since, until = new Date())
 module.exports = {
   createMany,
   listBySourceVideoId,
+  findByIdOwnedByClient,
   updateStatus,
   saveRenderedFile,
   deleteBySourceVideoId,
