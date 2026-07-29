@@ -6,6 +6,14 @@ export interface SessionUser {
   role: UserRole
 }
 
+export type DateRangeKey = "today" | "yesterday" | "last7days" | "this_month" | "last_month"
+
+export interface RangeInfo {
+  key: DateRangeKey
+  since: string
+  until: string
+}
+
 export type PostingStatus =
   | "pending"
   | "queued"
@@ -28,17 +36,19 @@ export interface AdminPosting {
 }
 
 export interface AdminDashboardResponse {
+  range: RangeInfo
   counts: {
     clients: number
     postings: number
     youtubeChannels: number
     videosInProgress: number
-    clipsToday: number
+    clipsInRange: number
   }
   postings: AdminPosting[]
 }
 
 export interface AdminPostingsResponse {
+  range: RangeInfo
   postings: AdminPosting[]
 }
 
@@ -67,6 +77,7 @@ export interface ClientPosting {
 }
 
 export interface AdminMetricsResponse {
+  range: RangeInfo
   clients: { active: number; inactive: number }
   volume: {
     videosDetected7d: number
@@ -91,27 +102,83 @@ export interface AdminMetricsResponse {
     projectedMonthlyUsd: number
   }
   services: { name: string; lastHeartbeatAt: string; isUp: boolean }[]
+  selected: {
+    videosDetected: number
+    clipsGenerated: number
+    clipsPosted: number
+    aproveitamentoRate: number | null
+    errorRate: number
+    totalFinished: number
+    avgProcessingSeconds: number | null
+    totalCostUsd: number
+    avgCostPerVideo: number | null
+    ranking: { name: string; videosCount: number }[]
+  }
 }
 
 export interface ClientUsageResponse {
-  videosThisMonth: number
-  minutesThisMonth: number
+  range: RangeInfo
+  videosInRange: number
+  minutesInRange: number
   history: { date: string; videosCount: number }[]
 }
 
+export interface TikTokAccountStats {
+  followerCount: number | null
+  followingCount: number | null
+  likesCount: number | null
+  videoCount: number | null
+  statsUpdatedAt: string | null
+}
+
 export type TikTokAccountResponse =
-  | { connected: true; displayName: string; avatarUrl: string | null; connectedAt: string }
+  | ({ connected: true; displayName: string; avatarUrl: string | null; connectedAt: string } & TikTokAccountStats)
   | { connected: false }
 
 export interface ClientDashboardResponse {
-  tiktokAccount: { connected: true; displayName: string } | { connected: false }
+  range: RangeInfo
+  tiktokAccount:
+    | ({ connected: true; displayName: string; avatarUrl: string | null } & TikTokAccountStats)
+    | { connected: false }
   counts: {
     youtubeChannels: number
     videosThisMonth: number
-    clipsThisMonth: number
-    clipsPostedThisMonth: number
+    videosInRange: number
+    clipsInRange: number
+    clipsPostedInRange: number
   }
   postings: ClientPosting[]
+}
+
+export interface DriveStatusResponse {
+  connected: boolean
+  googleAccountEmail: string | null
+  folder: { id: string; name: string | null; lastPolledAt: string | null } | null
+}
+
+export type VideoAspectRatio = "9:16" | "1:1" | "16:9" | "4:5"
+export type VideoFraming = "crop" | "blur_pad"
+export type VideoQuality = "high" | "medium"
+export type VideoCaptionStyle = "classic" | "bold" | "minimal" | "none"
+export type VideoClipLength = "short" | "balanced" | "long"
+
+export interface ClientVideoSettings {
+  aspectRatio: VideoAspectRatio
+  framing: VideoFraming
+  quality: VideoQuality
+  captionStyle: VideoCaptionStyle
+  clipLength: VideoClipLength
+  maxClips: number
+}
+
+export interface ClientVideoSettingsResponse extends ClientVideoSettings {
+  options: {
+    aspectRatios: VideoAspectRatio[]
+    framings: VideoFraming[]
+    qualities: VideoQuality[]
+    captionStyles: VideoCaptionStyle[]
+    clipLengths: VideoClipLength[]
+  }
 }
 
 export interface YoutubeChannel {

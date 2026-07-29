@@ -8,6 +8,7 @@ import {
   IconListCheck,
   IconBrandTiktok,
   IconChartBar,
+  IconSettings,
 } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
@@ -45,6 +46,7 @@ const ADMIN_GROUPS: { label?: string; items: NavItem[] }[] = [
       { title: "Canais do YouTube", url: "/client/youtube-channels", icon: IconBrandYoutube },
       { title: "Vídeos & Cortes", url: "/client/videos-clips", icon: IconScissors },
       { title: "Conta TikTok", url: "/client/tiktok-account", icon: IconBrandTiktok },
+      { title: "Configurações", url: "/client/settings", icon: IconSettings },
     ],
   },
 ]
@@ -57,6 +59,7 @@ const CLIENT_GROUPS: { label?: string; items: NavItem[] }[] = [
       { title: "Canais do YouTube", url: "/client/youtube-channels", icon: IconBrandYoutube },
       { title: "Vídeos & Cortes", url: "/client/videos-clips", icon: IconScissors },
       { title: "Conta TikTok", url: "/client/tiktok-account", icon: IconBrandTiktok },
+      { title: "Configurações", url: "/client/settings", icon: IconSettings },
     ],
   },
 ]

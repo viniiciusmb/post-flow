@@ -94,10 +94,49 @@ async function upsertForClient({
   }
 }
 
+async function updateAccessToken(id, { accessToken, expiresIn }) {
+  const accessEnc = crypto.encrypt(accessToken);
+  const expiresAt = new Date(Date.now() + expiresIn * 1000);
+  await pool.query(
+    `UPDATE tiktok_accounts SET access_token_encrypted = $2, access_token_iv = $3, token_expires_at = $4, updated_at = now()
+     WHERE id = $1`,
+    [id, accessEnc.encrypted, accessEnc.iv, expiresAt]
+  );
+}
+
+// Retorna um access token valido, renovando via refresh token se estiver
+// perto de expirar (mesmo padrao do driveConnectionsRepository).
+async function getValidAccessToken(tiktokService, account) {
+  if (!account) return null;
+
+  const expiresInMs = new Date(account.token_expires_at).getTime() - Date.now();
+  if (expiresInMs > 60_000) {
+    return crypto.decrypt(account.access_token_encrypted, account.access_token_iv);
+  }
+
+  const refreshToken = crypto.decrypt(account.refresh_token_encrypted, account.refresh_token_iv);
+  const tokens = await tiktokService.refreshAccessToken(refreshToken);
+  await updateAccessToken(account.id, { accessToken: tokens.access_token, expiresIn: tokens.expires_in });
+  return tokens.access_token;
+}
+
+async function saveStats(id, { followerCount, followingCount, likesCount, videoCount }) {
+  const { rows } = await pool.query(
+    `UPDATE tiktok_accounts
+     SET follower_count = $2, following_count = $3, likes_count = $4, video_count = $5, stats_updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id, followerCount, followingCount, likesCount, videoCount]
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
   findActiveByClientId,
   listActive,
   listReceivingGeneralContent,
   setReceivesGeneralContent,
   upsertForClient,
+  getValidAccessToken,
+  saveStats,
 };

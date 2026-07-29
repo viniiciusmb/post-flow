@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react"
-import { IconChevronDown, IconChevronRight } from "@tabler/icons-react"
+import { useEffect, useState, type FormEvent } from "react"
+import { IconChevronDown, IconChevronRight, IconLink } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
-import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
-import { api } from "@/lib/api"
+import { api, ApiError } from "@/lib/api"
 import { CLIP_STATUS_TONE, SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
 import type { Clip, SourceVideo } from "@/types/api"
 
@@ -97,19 +100,92 @@ function VideoRow({ video }: { video: SourceVideo }) {
   )
 }
 
+function AddManualVideoCard({ onAdded }: { onAdded: () => void }) {
+  const [url, setUrl] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    setError(null)
+    setSuccess(null)
+    setSubmitting(true)
+    try {
+      const created = await api.post<{ id: number; title: string }>("/api/client/source-videos/manual", { url })
+      setUrl("")
+      setSuccess(`"${created.title}" adicionado — já entrou na fila de processamento.`)
+      onAdded()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível adicionar esse vídeo.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <IconLink className="size-4 text-muted-foreground" />
+          Adicionar vídeo por link
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit}>
+          <FieldGroup>
+            {error && (
+              <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            {success && (
+              <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
+                {success}
+              </p>
+            )}
+            <Field>
+              <FieldLabel htmlFor="videoUrl">Link do vídeo no YouTube</FieldLabel>
+              <div className="flex gap-2">
+                <Input
+                  id="videoUrl"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  required
+                />
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? "Adicionando..." : "Adicionar"}
+                </Button>
+              </div>
+            </Field>
+          </FieldGroup>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function VideosClipsPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const [videos, setVideos] = useState<SourceVideo[] | null>(null)
 
+  async function load() {
+    const data = await api.get<{ videos: SourceVideo[] }>("/api/client/source-videos")
+    setVideos(data.videos)
+  }
+
   useEffect(() => {
     if (!user) return
-    api.get<{ videos: SourceVideo[] }>("/api/client/source-videos").then((data) => setVideos(data.videos))
+    load()
   }, [user])
 
   if (authLoading || !user) return null
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Vídeos & Cortes">
+      <AddManualVideoCard onAdded={load} />
+
       {!videos ? (
         <div className="flex flex-col gap-3">
           <Skeleton className="h-20" />
@@ -118,7 +194,7 @@ export function VideosClipsPage() {
         </div>
       ) : videos.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-          Nenhum video detectado ainda. Cadastre um canal em "Canais do YouTube" pra comecar.
+          Nenhum vídeo detectado ainda. Cole um link acima, cadastre um canal em "Canais do YouTube" ou conecte sua pasta do Drive em "Configurações".
         </div>
       ) : (
         <div className="flex flex-col gap-3">

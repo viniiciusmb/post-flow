@@ -2,18 +2,18 @@ import { useEffect, useState } from "react"
 import { IconClock } from "@tabler/icons-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { api } from "@/lib/api"
-import type { ClientUsageResponse } from "@/types/api"
+import type { ClientUsageResponse, DateRangeKey } from "@/types/api"
 
 function formatDay(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
 }
 
-export function UsageCard() {
+export function UsageCard({ range }: { range: DateRangeKey }) {
   const [data, setData] = useState<ClientUsageResponse | null>(null)
 
   useEffect(() => {
-    api.get<ClientUsageResponse>("/api/client/usage").then(setData)
-  }, [])
+    api.get<ClientUsageResponse>(`/api/client/usage?range=${range}`).then(setData)
+  }, [range])
 
   if (!data) return null
 
@@ -30,12 +30,12 @@ export function UsageCard() {
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex gap-8">
           <div>
-            <div className="font-heading text-2xl font-semibold tabular-nums">{data.minutesThisMonth}</div>
-            <div className="text-xs text-muted-foreground">minutos de vídeo processados este mês</div>
+            <div className="font-heading text-2xl font-semibold tabular-nums">{data.minutesInRange}</div>
+            <div className="text-xs text-muted-foreground">minutos de vídeo processados no período</div>
           </div>
           <div>
-            <div className="font-heading text-2xl font-semibold tabular-nums">{data.videosThisMonth}</div>
-            <div className="text-xs text-muted-foreground">vídeos detectados este mês</div>
+            <div className="font-heading text-2xl font-semibold tabular-nums">{data.videosInRange}</div>
+            <div className="text-xs text-muted-foreground">vídeos detectados no período</div>
           </div>
         </div>
 

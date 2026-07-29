@@ -14,5 +14,6 @@ router.get('/', serveSpaPage('client'));
 router.get('/youtube-channels', serveSpaPage('youtube-channels'));
 router.get('/videos-clips', serveSpaPage('videos-clips'));
 router.get('/tiktok-account', serveSpaPage('tiktok-account'));
+router.get('/settings', serveSpaPage('client-settings'));
 
 module.exports = router;

@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const controller = require('../../controllers/api/sourceVideosApiController');
+const controller = require('../../controllers/api/clientDriveApiController');
 const requireAuthApi = require('../../middleware/requireAuthApi');
 const requireRoleApi = require('../../middleware/requireRoleApi');
 const asyncHandler = require('../../lib/asyncHandler');
@@ -11,8 +11,7 @@ const router = express.Router();
 
 router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 
-router.get('/', asyncHandler(controller.list));
-router.post('/manual', asyncHandler(controller.createManual));
-router.get('/:id/clips', asyncHandler(controller.listClips));
+router.get('/', asyncHandler(controller.status));
+router.post('/folder', asyncHandler(controller.setFolder));
 
 module.exports = router;

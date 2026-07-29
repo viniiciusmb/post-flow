@@ -8,7 +8,7 @@ const { ROLES } = require('../../config/constants');
 
 async function manage(req, res) {
   const [connection, folders, clients] = await Promise.all([
-    driveConnectionsRepository.find(),
+    driveConnectionsRepository.findByOwnerId(req.session.user.id),
     driveFoldersRepository.listAll(),
     usersRepository.listByRole(ROLES.CLIENT),
   ]);
@@ -30,7 +30,15 @@ async function setGeneralFolder(req, res) {
   if (!driveFolderId) {
     return res.redirect('/admin/drive?folder_error=Cole+o+link+ou+ID+da+pasta');
   }
-  await driveFoldersRepository.upsertGeneralFolder({ driveFolderId, folderName: req.body.folderName || null });
+  const connection = await driveConnectionsRepository.findByOwnerId(req.session.user.id);
+  if (!connection) {
+    return res.redirect('/admin/drive?folder_error=Conecte+o+Google+Drive+primeiro');
+  }
+  await driveFoldersRepository.upsertGeneralFolder({
+    driveFolderId,
+    folderName: req.body.folderName || null,
+    connectionId: connection.id,
+  });
   res.redirect('/admin/drive?folder_saved=geral');
 }
 
@@ -40,10 +48,15 @@ async function setClientFolder(req, res) {
   if (!driveFolderId || !clientUserId) {
     return res.redirect('/admin/drive?folder_error=Selecione+o+cliente+e+cole+o+link+da+pasta');
   }
+  const connection = await driveConnectionsRepository.findByOwnerId(req.session.user.id);
+  if (!connection) {
+    return res.redirect('/admin/drive?folder_error=Conecte+o+Google+Drive+primeiro');
+  }
   await driveFoldersRepository.upsertClientFolder({
     clientUserId,
     driveFolderId,
     folderName: req.body.folderName || null,
+    connectionId: connection.id,
   });
   res.redirect('/admin/drive?folder_saved=cliente');
 }

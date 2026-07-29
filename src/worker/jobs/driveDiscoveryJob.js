@@ -12,19 +12,28 @@ const logger = require('../../lib/logger');
 const { DRIVE_FOLDER_TYPE } = require('../../config/constants');
 
 async function run() {
-  const accessToken = await driveConnectionsRepository.getValidAccessToken(googleService);
-  if (!accessToken) {
-    logger.info('Drive discovery: nenhuma conta Google conectada ainda, pulando checagem.');
-    return;
-  }
-
   const folders = await driveFoldersRepository.listAll();
   for (const folder of folders) {
-    await processFolder(folder, accessToken);
+    await processFolder(folder);
   }
 }
 
-async function processFolder(folder, accessToken) {
+// Cada pasta guarda qual conexao Google usar (a do admin pra "Geral" e pras
+// pastas de cliente cadastradas por ele, ou a do proprio cliente quando ele
+// conectou o Drive dele mesmo) - assim cada dono usa so o token dele.
+async function processFolder(folder) {
+  if (!folder.connection_id) {
+    logger.info(`Drive discovery: pasta "${folder.folder_name || folder.drive_folder_id}" sem conexao Google associada, pulando.`);
+    return;
+  }
+
+  const connection = await driveConnectionsRepository.findById(folder.connection_id);
+  const accessToken = await driveConnectionsRepository.getValidAccessToken(googleService, connection);
+  if (!accessToken) {
+    logger.info(`Drive discovery: conexao da pasta "${folder.folder_name || folder.drive_folder_id}" nao esta mais valida, pulando.`);
+    return;
+  }
+
   let files;
   try {
     files = await googleService.listVideosInFolder(accessToken, folder.drive_folder_id);

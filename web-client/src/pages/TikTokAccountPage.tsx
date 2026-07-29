@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { IconBrandTiktok } from "@tabler/icons-react"
+import { IconBrandTiktok, IconHeart, IconUsers, IconMovie } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -31,35 +31,57 @@ export function TikTokAccountPage() {
         <Skeleton className="h-28" />
       ) : (
         <Card>
-          <CardContent className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <Avatar className="size-11 bg-foreground text-background">
-                {data.connected && data.avatarUrl && <AvatarImage src={data.avatarUrl} alt="" />}
-                <AvatarFallback className="bg-foreground text-background">
-                  <IconBrandTiktok className="size-5" />
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">
-                    {data.connected ? data.displayName : "Nenhuma conta conectada"}
-                  </span>
-                  <TonePill tone={data.connected ? "success" : "neutral"}>
-                    {data.connected ? "Conectada" : "Desconectada"}
-                  </TonePill>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-4">
+                <Avatar className="size-11 bg-foreground text-background">
+                  {data.connected && data.avatarUrl && <AvatarImage src={data.avatarUrl} alt="" />}
+                  <AvatarFallback className="bg-foreground text-background">
+                    <IconBrandTiktok className="size-5" />
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">
+                      {data.connected ? data.displayName : "Nenhuma conta conectada"}
+                    </span>
+                    <TonePill tone={data.connected ? "success" : "neutral"}>
+                      {data.connected ? "Conectada" : "Desconectada"}
+                    </TonePill>
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {data.connected
+                      ? `Conectada em ${new Date(data.connectedAt).toLocaleDateString("pt-BR")} — as postagens são feitas automaticamente neste perfil.`
+                      : "Conecte uma conta TikTok pra que os cortes gerados possam ser publicados."}
+                  </p>
                 </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {data.connected
-                    ? `Conectada em ${new Date(data.connectedAt).toLocaleDateString("pt-BR")} — as postagens são feitas automaticamente neste perfil.`
-                    : "Conecte uma conta TikTok pra que os cortes gerados possam ser publicados."}
-                </p>
               </div>
+              <Button asChild variant={data.connected ? "outline" : "default"}>
+                <a href="/auth/tiktok/connect">
+                  {data.connected ? "Reconectar / trocar de conta" : "Conectar TikTok"}
+                </a>
+              </Button>
             </div>
-            <Button asChild variant={data.connected ? "outline" : "default"}>
-              <a href="/auth/tiktok/connect">
-                {data.connected ? "Reconectar / trocar de conta" : "Conectar TikTok"}
-              </a>
-            </Button>
+
+            {data.connected && data.followerCount !== null && (
+              <div className="flex flex-wrap items-center gap-6 border-t border-border pt-4 text-sm">
+                <span className="flex items-center gap-1.5 tabular-nums">
+                  <IconUsers className="size-4 text-muted-foreground" />
+                  <span className="font-semibold">{data.followerCount}</span>
+                  <span className="text-muted-foreground">seguidores</span>
+                </span>
+                <span className="flex items-center gap-1.5 tabular-nums">
+                  <IconHeart className="size-4 text-muted-foreground" />
+                  <span className="font-semibold">{data.likesCount}</span>
+                  <span className="text-muted-foreground">curtidas</span>
+                </span>
+                <span className="flex items-center gap-1.5 tabular-nums">
+                  <IconMovie className="size-4 text-muted-foreground" />
+                  <span className="font-semibold">{data.videoCount}</span>
+                  <span className="text-muted-foreground">vídeos no perfil</span>
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

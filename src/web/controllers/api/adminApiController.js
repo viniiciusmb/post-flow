@@ -6,31 +6,34 @@ const youtubeChannelsRepository = require('../../../repositories/youtubeChannels
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
 const { ROLES } = require('../../../config/constants');
-
-function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
+const { resolveRange } = require('../../../lib/dateRanges');
 
 async function dashboard(req, res) {
-  const [clients, postings, channels, videosInProgress, clipsToday] = await Promise.all([
+  const { range, since, until } = resolveRange(req.query.range);
+
+  const [clients, postings, channels, videosInProgress, clipsInRange] = await Promise.all([
     usersRepository.listByRole(ROLES.CLIENT),
     postingsRepository.listAllWithDetails(),
     youtubeChannelsRepository.listActive(),
     sourceVideosRepository.countInProgress(),
-    clipsRepository.countCreatedSince(startOfToday()),
+    clipsRepository.countCreatedSince(since, until),
   ]);
 
+  const postingsInRange = postings.filter((p) => {
+    const t = new Date(p.created_at).getTime();
+    return t >= since.getTime() && t <= until.getTime();
+  });
+
   res.json({
+    range: { key: range, since, until },
     counts: {
       clients: clients.length,
       postings: postings.length,
       youtubeChannels: channels.length,
       videosInProgress,
-      clipsToday,
+      clipsInRange,
     },
-    postings: postings.map((p) => ({
+    postings: postingsInRange.map((p) => ({
       id: p.id,
       clientName: p.client_business_name || p.client_email,
       filename: p.filename,
@@ -42,9 +45,16 @@ async function dashboard(req, res) {
 }
 
 async function postings(req, res) {
+  const { range, since, until } = resolveRange(req.query.range);
   const rows = await postingsRepository.listAllWithDetails();
+  const rowsInRange = rows.filter((p) => {
+    const t = new Date(p.created_at).getTime();
+    return t >= since.getTime() && t <= until.getTime();
+  });
+
   res.json({
-    postings: rows.map((p) => ({
+    range: { key: range, since, until },
+    postings: rowsInRange.map((p) => ({
       id: p.id,
       clientName: p.client_business_name || p.client_email,
       filename: p.filename,

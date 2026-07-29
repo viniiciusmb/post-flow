@@ -13,6 +13,24 @@ async function createIfNotExists({ youtubeChannelId, youtubeVideoId, title, thum
   return rows[0] || null;
 }
 
+// Video colado manualmente pelo cliente (input_type = 'manual') - nao tem
+// canal, pertence direto ao cliente que colou o link.
+async function createManual({ clientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds }) {
+  const { rows } = await pool.query(
+    `INSERT INTO source_videos (client_user_id, input_type, youtube_video_id, title, thumbnail_url, published_at, duration_seconds)
+     VALUES ($1, 'manual', $2, $3, $4, $5, $6)
+     ON CONFLICT (youtube_video_id) DO NOTHING
+     RETURNING *`,
+    [clientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds]
+  );
+  return rows[0] || null;
+}
+
+async function findByYoutubeVideoId(youtubeVideoId) {
+  const { rows } = await pool.query('SELECT * FROM source_videos WHERE youtube_video_id = $1', [youtubeVideoId]);
+  return rows[0] || null;
+}
+
 async function findNextDetected() {
   const { rows } = await pool.query(
     "SELECT * FROM source_videos WHERE status = 'detected' ORDER BY created_at ASC LIMIT 1"
@@ -63,14 +81,16 @@ async function markProcessingStarted(id) {
   await pool.query('UPDATE source_videos SET processing_started_at = now() WHERE id = $1', [id]);
 }
 
-// Lista videos-fonte de um cliente (via canal), com contagem de cortes - usada na tela "Videos & Cortes".
+// Lista videos-fonte de um cliente (via canal ou colados manualmente), com
+// contagem de cortes - usada na tela "Videos & Cortes". LEFT JOIN porque
+// video manual nao tem canal (yc.client_user_id seria NULL nesse caso).
 async function listForClient(clientUserId, { youtubeChannelId = null } = {}) {
   const { rows } = await pool.query(
     `SELECT sv.*, yc.channel_name,
             (SELECT count(*) FROM clips c WHERE c.source_video_id = sv.id) AS clip_count
      FROM source_videos sv
-     JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
-     WHERE yc.client_user_id = $1
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     WHERE coalesce(yc.client_user_id, sv.client_user_id) = $1
        AND ($2::bigint IS NULL OR yc.id = $2)
      ORDER BY sv.created_at DESC
      LIMIT 100`,
@@ -90,13 +110,14 @@ async function countInProgress() {
   return rows[0].count;
 }
 
-async function countByClientSince(clientUserId, since) {
+async function countByClientSince(clientUserId, since, until = new Date()) {
   const { rows } = await pool.query(
     `SELECT count(*)::int AS count
      FROM source_videos sv
-     JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
-     WHERE yc.client_user_id = $1 AND sv.created_at >= $2`,
-    [clientUserId, since]
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     WHERE coalesce(yc.client_user_id, sv.client_user_id) = $1
+       AND sv.created_at >= $2 AND sv.created_at <= $3`,
+    [clientUserId, since, until]
   );
   return rows[0].count;
 }
@@ -145,6 +166,8 @@ async function listRecentHistory({ limit = 20 } = {}) {
 
 module.exports = {
   createIfNotExists,
+  createManual,
+  findByYoutubeVideoId,
   findNextDetected,
   findById,
   updateStatus,

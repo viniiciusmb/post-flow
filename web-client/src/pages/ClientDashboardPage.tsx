@@ -5,28 +5,34 @@ import { TikTokConnectionCard } from "@/components/dashboard/TikTokConnectionCar
 import { PostingsTable, type PostingRow } from "@/components/dashboard/PostingsTable"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { UsageCard } from "@/components/dashboard/UsageCard"
+import { DateRangeFilter } from "@/components/dashboard/DateRangeFilter"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/hooks/useAuth"
+import { useDateRange } from "@/hooks/useDateRange"
 import { api } from "@/lib/api"
 import type { ClientDashboardResponse } from "@/types/api"
 
 function useFlashFromQuery() {
   const params = new URLSearchParams(window.location.search)
   return {
-    connected: params.get("tiktok_connected") === "1",
-    error: params.get("tiktok_error"),
+    tiktokConnected: params.get("tiktok_connected") === "1",
+    tiktokError: params.get("tiktok_error"),
+    driveConnected: params.get("google_connected") === "1",
+    driveError: params.get("google_error"),
   }
 }
 
 export function ClientDashboardPage() {
   const { user, loading: authLoading, logout } = useAuth()
+  const { range, setRange } = useDateRange()
   const [data, setData] = useState<ClientDashboardResponse | null>(null)
   const [flash] = useState(useFlashFromQuery)
 
   useEffect(() => {
     if (!user) return
-    api.get<ClientDashboardResponse>("/api/client/dashboard").then(setData)
-  }, [user])
+    setData(null)
+    api.get<ClientDashboardResponse>(`/api/client/dashboard?range=${range}`).then(setData)
+  }, [user, range])
 
   if (authLoading || !user) return null
 
@@ -42,16 +48,35 @@ export function ClientDashboardPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Visão geral">
-      {flash.connected && (
+      {flash.tiktokConnected && (
         <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
           Conta TikTok conectada com sucesso!
         </p>
       )}
-      {flash.error && (
+      {flash.tiktokError && (
         <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          Nao foi possivel conectar: {flash.error}
+          Não foi possível conectar o TikTok: {flash.tiktokError}
         </p>
       )}
+      {flash.driveConnected && (
+        <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
+          Google Drive conectado! Agora aponte sua pasta em{" "}
+          <a href="/client/settings" className="font-medium underline">
+            Configurações
+          </a>
+          .
+        </p>
+      )}
+      {flash.driveError && (
+        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Não foi possível conectar o Drive: {flash.driveError}
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-sm font-medium text-muted-foreground">Período</h2>
+        <DateRangeFilter value={range} onChange={setRange} />
+      </div>
 
       {data ? (
         <TikTokConnectionCard account={data.tiktokAccount} />
@@ -71,20 +96,20 @@ export function ClientDashboardPage() {
               hrefLabel="Ver canais"
             />
             <StatCard
-              label="Vídeos detectados no mês"
-              value={data.counts.videosThisMonth}
+              label="Vídeos detectados no período"
+              value={data.counts.videosInRange}
               icon={<IconMovie />}
               tone="cyan"
             />
             <StatCard
-              label="Cortes gerados no mês"
-              value={data.counts.clipsThisMonth}
+              label="Cortes gerados no período"
+              value={data.counts.clipsInRange}
               icon={<IconScissors />}
               tone="violet"
             />
             <StatCard
-              label="Cortes postados no mês"
-              value={data.counts.clipsPostedThisMonth}
+              label="Cortes postados no período"
+              value={data.counts.clipsPostedInRange}
               icon={<IconCircleCheck />}
               tone="success"
               href="/client/videos-clips"
@@ -101,16 +126,16 @@ export function ClientDashboardPage() {
         )}
       </div>
 
-      <UsageCard />
+      <UsageCard range={range} />
 
       <div>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Meus vídeos</h2>
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Meus vídeos no período</h2>
         {data ? (
           <PostingsTable
             rows={rows}
             showOrigin
             showChannel
-            emptyMessage="Nenhum video seu foi processado ainda. Cadastre um canal do YouTube ou aguarde a integracao com o Drive."
+            emptyMessage="Nenhum vídeo seu foi processado nesse período. Cadastre um canal do YouTube, cole um link manualmente ou conecte sua pasta do Drive em Vídeos & Cortes."
           />
         ) : (
           <Skeleton className="h-64" />

@@ -13,16 +13,32 @@ const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRep
 const videosRepository = require('../../repositories/videosRepository');
 const postingsRepository = require('../../repositories/postingsRepository');
 const tiktokAccountsRepository = require('../../repositories/tiktokAccountsRepository');
+const clientVideoSettingsRepository = require('../../repositories/clientVideoSettingsRepository');
 const ytDlpService = require('../../services/ytDlpService');
 const videoEditingService = require('../../services/videoEditingService');
 const openaiTranscriptionService = require('../../services/openaiTranscriptionService');
 const claudeClipSelectionService = require('../../services/claudeClipSelectionService');
+
+// "Estilo do corte" escolhido pelo cliente vira duracao min/max pro Claude
+// escolher os trechos - ver clientVideoSettingsRepository.
+const CLIP_LENGTH_PRESETS = {
+  short: { minDuration: 15, maxDuration: 40 },
+  balanced: { minDuration: 25, maxDuration: 90 },
+  long: { minDuration: 60, maxDuration: 180 },
+};
 
 async function run(sourceVideoId) {
   const sourceVideo = await sourceVideosRepository.findById(sourceVideoId);
   if (!sourceVideo) return;
 
   const workDir = path.join(config.videoProcessing.workDir, String(sourceVideo.id));
+
+  // Video de canal pertence ao cliente dono do canal; video colado manualmente
+  // (input_type = 'manual') ja guarda o cliente direto na propria linha.
+  const clientUserId = sourceVideo.youtube_channel_id
+    ? (await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id)).client_user_id
+    : sourceVideo.client_user_id;
+  const settings = await clientVideoSettingsRepository.findByClientId(clientUserId);
 
   try {
     await sourceVideosRepository.markProcessingStarted(sourceVideo.id);
@@ -43,7 +59,12 @@ async function run(sourceVideoId) {
     fs.unlinkSync(audioPath);
 
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'selecting_clips');
-    const selection = await claudeClipSelectionService.selectClips(transcript.words);
+    const clipLengthPreset = CLIP_LENGTH_PRESETS[settings.clip_length] || CLIP_LENGTH_PRESETS.balanced;
+    const selection = await claudeClipSelectionService.selectClips(transcript.words, {
+      maxClips: settings.max_clips,
+      minDuration: clipLengthPreset.minDuration,
+      maxDuration: clipLengthPreset.maxDuration,
+    });
     await sourceVideosRepository.saveClaudeUsage(sourceVideo.id, {
       inputTokens: selection.inputTokens,
       outputTokens: selection.outputTokens,
@@ -62,8 +83,7 @@ async function run(sourceVideoId) {
     );
 
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'cutting');
-    const channel = await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id);
-    const tiktokAccount = await tiktokAccountsRepository.findActiveByClientId(channel.client_user_id);
+    const tiktokAccount = await tiktokAccountsRepository.findActiveByClientId(clientUserId);
 
     for (const clip of clips) {
       try {
@@ -75,6 +95,7 @@ async function run(sourceVideoId) {
           endSeconds: Number(clip.end_seconds),
           words: transcript.words,
           outputPath,
+          settings,
         });
         const fileSizeBytes = fs.statSync(outputPath).size;
         await clipsRepository.saveRenderedFile(clip.id, outputPath);

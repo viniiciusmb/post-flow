@@ -26,6 +26,7 @@ export default defineConfig({
         client: path.resolve(__dirname, 'client.html'),
         'youtube-channels': path.resolve(__dirname, 'youtube-channels.html'),
         'videos-clips': path.resolve(__dirname, 'videos-clips.html'),
+        'client-settings': path.resolve(__dirname, 'client-settings.html'),
         'admin-clients': path.resolve(__dirname, 'admin-clients.html'),
         'admin-postings': path.resolve(__dirname, 'admin-postings.html'),
         'admin-queue': path.resolve(__dirname, 'admin-queue.html'),

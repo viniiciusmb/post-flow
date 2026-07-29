@@ -3,19 +3,23 @@ import { IconUsers, IconListDetails, IconBrandYoutube, IconClockHour4, IconSciss
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { PostingsTable, type PostingRow } from "@/components/dashboard/PostingsTable"
+import { DateRangeFilter } from "@/components/dashboard/DateRangeFilter"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/hooks/useAuth"
+import { useDateRange } from "@/hooks/useDateRange"
 import { api } from "@/lib/api"
 import type { AdminDashboardResponse } from "@/types/api"
 
 export function AdminDashboardPage() {
   const { user, loading: authLoading, logout } = useAuth()
+  const { range, setRange } = useDateRange()
   const [data, setData] = useState<AdminDashboardResponse | null>(null)
 
   useEffect(() => {
     if (!user) return
-    api.get<AdminDashboardResponse>("/api/admin/dashboard").then(setData)
-  }, [user])
+    setData(null)
+    api.get<AdminDashboardResponse>(`/api/admin/dashboard?range=${range}`).then(setData)
+  }, [user, range])
 
   if (authLoading || !user) return null
 
@@ -31,6 +35,11 @@ export function AdminDashboardPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Painel do Admin">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-sm font-medium text-muted-foreground">Período</h2>
+        <DateRangeFilter value={range} onChange={setRange} />
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {data ? (
           <>
@@ -65,8 +74,8 @@ export function AdminDashboardPage() {
               hrefLabel="Ver fila"
             />
             <StatCard
-              label="Cortes gerados hoje"
-              value={data.counts.clipsToday}
+              label="Cortes gerados no período"
+              value={data.counts.clipsInRange}
               icon={<IconScissors />}
               tone="success"
             />
@@ -83,13 +92,13 @@ export function AdminDashboardPage() {
       </div>
 
       <div>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Postagens recentes</h2>
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Postagens no período</h2>
         {data ? (
           <PostingsTable
             rows={rows}
             showClient
             showOrigin
-            emptyMessage="Nenhuma postagem ainda. Isso vai aparecer aqui assim que a integracao com Drive e TikTok estiver ativa."
+            emptyMessage="Nenhuma postagem nesse período."
           />
         ) : (
           <Skeleton className="h-64" />

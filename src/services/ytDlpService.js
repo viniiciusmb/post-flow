@@ -79,6 +79,26 @@ async function listChannelVideos(channelUrl, { limit = 15 } = {}) {
     }));
 }
 
+// Aceita watch?v=, youtu.be/, /shorts/ - o que o cliente for colar.
+function extractVideoId(url) {
+  const match = String(url || '').match(/(?:v=|youtu\.be\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : null;
+}
+
+// Busca so os metadados de um video avulso (sem baixar) - usado quando o
+// cliente cola o link manualmente em vez de vir da checagem de um canal.
+async function getVideoMetadata(url) {
+  const stdout = await run(['--dump-json', '--no-warnings', '--no-playlist', '--skip-download', url]);
+  const entry = JSON.parse(stdout.trim().split('\n')[0]);
+  return {
+    videoId: entry.id,
+    title: entry.title,
+    thumbnailUrl: entry.thumbnails?.at(-1)?.url || null,
+    publishedAt: parseUploadDate(entry.upload_date),
+    durationSeconds: entry.duration || null,
+  };
+}
+
 // Baixa video+audio pro disco (mp4, ate 1080p) e devolve o caminho do arquivo.
 async function downloadVideo(videoId, outputDir) {
   fs.mkdirSync(outputDir, { recursive: true });
@@ -102,4 +122,4 @@ async function downloadVideo(videoId, outputDir) {
   return filePath;
 }
 
-module.exports = { listChannelVideos, downloadVideo };
+module.exports = { listChannelVideos, downloadVideo, extractVideoId, getVideoMetadata };

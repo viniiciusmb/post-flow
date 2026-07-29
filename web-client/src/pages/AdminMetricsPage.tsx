@@ -2,9 +2,11 @@ import { useEffect, useState } from "react"
 import { IconAlertTriangle, IconCircleCheck, IconCircleX } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { DateRangeFilter } from "@/components/dashboard/DateRangeFilter"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
+import { useDateRange } from "@/hooks/useDateRange"
 import { api } from "@/lib/api"
 import type { AdminMetricsResponse } from "@/types/api"
 
@@ -50,12 +52,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function AdminMetricsPage() {
   const { user, loading: authLoading, logout } = useAuth()
+  const { range, setRange } = useDateRange()
   const [data, setData] = useState<AdminMetricsResponse | null>(null)
 
   useEffect(() => {
     if (!user) return
-    api.get<AdminMetricsResponse>("/api/admin/metrics").then(setData)
-  }, [user])
+    api.get<AdminMetricsResponse>(`/api/admin/metrics?range=${range}`).then(setData)
+  }, [user, range])
 
   if (authLoading || !user) return null
 
@@ -75,6 +78,11 @@ export function AdminMetricsPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Métricas">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-sm font-medium text-muted-foreground">Período</h2>
+        <DateRangeFilter value={range} onChange={setRange} />
+      </div>
+
       {!data ? (
         <div className="grid gap-4">
           <Skeleton className="h-32" />
@@ -93,6 +101,17 @@ export function AdminMetricsPage() {
               ))}
             </div>
           )}
+
+          <Section title="Período selecionado">
+            <Metric label="Vídeos detectados" value={data.selected.videosDetected} />
+            <Metric label="Cortes gerados" value={data.selected.clipsGenerated} />
+            <Metric label="Cortes postados" value={data.selected.clipsPosted} />
+            <Metric label="Taxa de aproveitamento" value={pct(data.selected.aproveitamentoRate)} />
+            <Metric label="Taxa de erro" value={pct(data.selected.errorRate)} sub={`${data.selected.totalFinished} vídeos concluídos`} />
+            <Metric label="Tempo médio de processamento" value={minutes(data.selected.avgProcessingSeconds)} />
+            <Metric label="Custo total" value={usd(data.selected.totalCostUsd)} />
+            <Metric label="Custo médio por vídeo" value={usd(data.selected.avgCostPerVideo)} />
+          </Section>
 
           <Section title="Clientes e volume">
             <Metric label="Clientes ativos (30d)" value={data.clients.active} />

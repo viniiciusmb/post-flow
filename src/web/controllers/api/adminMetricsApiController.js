@@ -1,6 +1,7 @@
 'use strict';
 
 const metricsRepository = require('../../../repositories/metricsRepository');
+const { resolveRange } = require('../../../lib/dateRanges');
 
 function daysAgo(n) {
   const d = new Date();
@@ -11,8 +12,23 @@ function daysAgo(n) {
 async function overview(req, res) {
   const since7d = daysAgo(7);
   const since30d = daysAgo(30);
+  const { range, since, until } = resolveRange(req.query.range);
 
-  const [clients, volume30d, videos7d, ranking, pipeline, cost7d, cost30d, queueDepth, services] = await Promise.all([
+  const [
+    clients,
+    volume30d,
+    videos7d,
+    ranking,
+    pipeline,
+    cost7d,
+    cost30d,
+    queueDepth,
+    services,
+    volumeSelected,
+    pipelineSelected,
+    costSelected,
+    rankingSelected,
+  ] = await Promise.all([
     metricsRepository.clientActivity(since30d),
     metricsRepository.volumeSince(since30d),
     metricsRepository.volumeSince(since7d),
@@ -22,13 +38,22 @@ async function overview(req, res) {
     metricsRepository.costSince(since30d),
     metricsRepository.queueDepth(),
     metricsRepository.listServiceStatus(),
+    metricsRepository.volumeSince(since, until),
+    metricsRepository.pipelineHealthSince(since, until),
+    metricsRepository.costSince(since, until),
+    metricsRepository.clientRanking({ since, until, limit: 5 }),
   ]);
 
   const aproveitamentoRate = volume30d.clipsGenerated > 0 ? volume30d.clipsPosted / volume30d.clipsGenerated : null;
   const avgCostPerVideo = cost30d.videosWithCost > 0 ? cost30d.totalCostUsd / cost30d.videosWithCost : null;
   const projectedMonthlyUsd = (cost7d.totalCostUsd / 7) * 30;
+  const aproveitamentoRateSelected =
+    volumeSelected.clipsGenerated > 0 ? volumeSelected.clipsPosted / volumeSelected.clipsGenerated : null;
+  const avgCostPerVideoSelected =
+    costSelected.videosWithCost > 0 ? costSelected.totalCostUsd / costSelected.videosWithCost : null;
 
   res.json({
+    range: { key: range, since, until },
     clients: { active: clients.active, inactive: clients.inactive },
     volume: {
       videosDetected7d: videos7d.videosDetected,
@@ -57,6 +82,20 @@ async function overview(req, res) {
       lastHeartbeatAt: s.last_heartbeat_at,
       isUp: s.is_up,
     })),
+    // Numeros recalculados so pro periodo escolhido no filtro (Hoje/Ontem/etc) -
+    // os blocos acima continuam fixos em 7d/30d como referencia de tendencia.
+    selected: {
+      videosDetected: volumeSelected.videosDetected,
+      clipsGenerated: volumeSelected.clipsGenerated,
+      clipsPosted: volumeSelected.clipsPosted,
+      aproveitamentoRate: aproveitamentoRateSelected,
+      errorRate: pipelineSelected.errorRate,
+      totalFinished: pipelineSelected.totalFinished,
+      avgProcessingSeconds: pipelineSelected.avgProcessingSeconds,
+      totalCostUsd: costSelected.totalCostUsd,
+      avgCostPerVideo: avgCostPerVideoSelected,
+      ranking: rankingSelected.map((r) => ({ name: r.business_name || r.email, videosCount: r.videos_count })),
+    },
   });
 }
 

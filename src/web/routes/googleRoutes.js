@@ -9,7 +9,7 @@ const { ROLES } = require('../../config/constants');
 
 const router = express.Router();
 
-router.use(requireAuth, requireRole(ROLES.ADMIN));
+router.use(requireAuth, requireRole([ROLES.ADMIN, ROLES.CLIENT]));
 
 router.get('/connect', googleController.connect);
 router.get('/callback', asyncHandler(googleController.callback));

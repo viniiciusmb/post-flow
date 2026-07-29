@@ -15,32 +15,32 @@ async function clientActivity(sinceActive) {
   return rows[0];
 }
 
-async function clientRanking({ since, limit = 5 }) {
+async function clientRanking({ since, until = new Date(), limit = 5 }) {
   const { rows } = await pool.query(
     `SELECT u.id, u.business_name, u.email, count(sv.id)::int AS videos_count
      FROM users u
      JOIN youtube_channels yc ON yc.client_user_id = u.id
-     JOIN source_videos sv ON sv.youtube_channel_id = yc.id AND sv.created_at >= $1
+     JOIN source_videos sv ON sv.youtube_channel_id = yc.id AND sv.created_at >= $1 AND sv.created_at <= $2
      WHERE u.role = 'client'
      GROUP BY u.id
      ORDER BY videos_count DESC
-     LIMIT $2`,
-    [since, limit]
+     LIMIT $3`,
+    [since, until, limit]
   );
   return rows;
 }
 
 // ---------- volume / aproveitamento ----------
 
-async function volumeSince(since) {
+async function volumeSince(since, until = new Date()) {
   const [videos, clips, posted] = await Promise.all([
-    pool.query('SELECT count(*)::int AS count FROM source_videos WHERE created_at >= $1', [since]),
-    pool.query('SELECT count(*)::int AS count FROM clips WHERE created_at >= $1', [since]),
+    pool.query('SELECT count(*)::int AS count FROM source_videos WHERE created_at >= $1 AND created_at <= $2', [since, until]),
+    pool.query('SELECT count(*)::int AS count FROM clips WHERE created_at >= $1 AND created_at <= $2', [since, until]),
     pool.query(
       `SELECT count(*)::int AS count FROM postings p
        JOIN videos v ON v.id = p.video_id
-       WHERE v.source_type = 'youtube_clip' AND p.status = 'posted' AND p.created_at >= $1`,
-      [since]
+       WHERE v.source_type = 'youtube_clip' AND p.status = 'posted' AND p.created_at >= $1 AND p.created_at <= $2`,
+      [since, until]
     ),
   ]);
   return {
@@ -52,7 +52,7 @@ async function volumeSince(since) {
 
 // ---------- pipeline (saude, fila, tempos) ----------
 
-async function pipelineHealthSince(since) {
+async function pipelineHealthSince(since, until = new Date()) {
   const { rows } = await pool.query(
     `SELECT
        count(*) FILTER (WHERE status = 'ready')::int AS ready,
@@ -60,8 +60,8 @@ async function pipelineHealthSince(since) {
        avg(EXTRACT(EPOCH FROM (updated_at - processing_started_at))) FILTER (WHERE status = 'ready' AND processing_started_at IS NOT NULL) AS avg_processing_seconds,
        avg(EXTRACT(EPOCH FROM (processing_started_at - created_at))) FILTER (WHERE processing_started_at IS NOT NULL) AS avg_queue_wait_seconds
      FROM source_videos
-     WHERE created_at >= $1 AND status IN ('ready', 'error')`,
-    [since]
+     WHERE created_at >= $1 AND created_at <= $2 AND status IN ('ready', 'error')`,
+    [since, until]
   );
   const row = rows[0];
   const total = row.ready + row.errors;
@@ -80,14 +80,14 @@ async function queueDepth() {
 
 // ---------- custo ----------
 
-async function costSince(since) {
+async function costSince(since, until = new Date()) {
   const { rows } = await pool.query(
     `SELECT
        coalesce(sum(whisper_cost_usd), 0) AS whisper_cost_usd,
        coalesce(sum(claude_cost_usd), 0) AS claude_cost_usd,
        count(*) FILTER (WHERE whisper_cost_usd IS NOT NULL OR claude_cost_usd IS NOT NULL)::int AS videos_with_cost
-     FROM source_videos WHERE created_at >= $1`,
-    [since]
+     FROM source_videos WHERE created_at >= $1 AND created_at <= $2`,
+    [since, until]
   );
   const row = rows[0];
   const whisperCostUsd = Number(row.whisper_cost_usd);
@@ -122,13 +122,13 @@ async function listServiceStatus() {
 
 // ---------- uso do cliente ----------
 
-async function clientUsageSince(clientUserId, since) {
+async function clientUsageSince(clientUserId, since, until = new Date()) {
   const { rows } = await pool.query(
     `SELECT count(sv.id)::int AS videos_count, coalesce(sum(sv.duration_seconds), 0)::int AS total_duration_seconds
      FROM source_videos sv
-     JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
-     WHERE yc.client_user_id = $1 AND sv.created_at >= $2`,
-    [clientUserId, since]
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     WHERE coalesce(yc.client_user_id, sv.client_user_id) = $1 AND sv.created_at >= $2 AND sv.created_at <= $3`,
+    [clientUserId, since, until]
   );
   return rows[0];
 }
@@ -137,8 +137,8 @@ async function clientUsageHistory(clientUserId, since) {
   const { rows } = await pool.query(
     `SELECT date_trunc('day', sv.created_at)::date AS day, count(*)::int AS videos_count
      FROM source_videos sv
-     JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
-     WHERE yc.client_user_id = $1 AND sv.created_at >= $2
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     WHERE coalesce(yc.client_user_id, sv.client_user_id) = $1 AND sv.created_at >= $2
      GROUP BY day
      ORDER BY day DESC`,
     [clientUserId, since]
