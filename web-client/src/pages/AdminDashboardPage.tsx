@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { AppShell } from "@/components/shell/AppShell"
+import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { PostingsTable, type PostingRow } from "@/components/dashboard/PostingsTable"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -16,7 +16,7 @@ export function AdminDashboardPage() {
     api.get<AdminDashboardResponse>("/api/admin/dashboard").then(setData)
   }, [user])
 
-  if (authLoading) return null
+  if (authLoading || !user) return null
 
   const rows: PostingRow[] =
     data?.postings.map((p) => ({
@@ -28,8 +28,8 @@ export function AdminDashboardPage() {
     })) ?? []
 
   return (
-    <AppShell user={user} onLogout={logout} title="Painel do Admin">
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <DashboardLayout user={user} onLogout={logout} title="Painel do Admin">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {data ? (
           <>
             <StatCard label="Clientes cadastrados" value={data.counts.clients} />
@@ -43,16 +43,18 @@ export function AdminDashboardPage() {
         )}
       </div>
 
-      <h2 className="mb-3 text-sm font-medium text-muted-foreground">Postagens recentes</h2>
-      {data ? (
-        <PostingsTable
-          rows={rows}
-          showClient
-          emptyMessage="Nenhuma postagem ainda. Isso vai aparecer aqui assim que a integracao com Drive e TikTok estiver ativa."
-        />
-      ) : (
-        <Skeleton className="h-64" />
-      )}
-    </AppShell>
+      <div>
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Postagens recentes</h2>
+        {data ? (
+          <PostingsTable
+            rows={rows}
+            showClient
+            emptyMessage="Nenhuma postagem ainda. Isso vai aparecer aqui assim que a integracao com Drive e TikTok estiver ativa."
+          />
+        ) : (
+          <Skeleton className="h-64" />
+        )}
+      </div>
+    </DashboardLayout>
   )
 }

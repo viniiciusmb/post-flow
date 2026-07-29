@@ -1,13 +1,6 @@
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { PostingStatus } from "@/types/api"
-
-const STATUS_LABEL: Record<PostingStatus, string> = {
-  pending: "pending",
-  queued: "queued",
-  processing: "processing",
-  posted: "posted",
-  error: "error",
-}
 
 const STATUS_DOT: Record<PostingStatus, string> = {
   pending: "bg-status-pending",
@@ -19,9 +12,9 @@ const STATUS_DOT: Record<PostingStatus, string> = {
 
 export function StatusBadge({ status }: { status: PostingStatus }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">
+    <Badge variant="outline" className="gap-1.5">
       <span className={cn("size-1.5 rounded-full", STATUS_DOT[status])} />
-      {STATUS_LABEL[status]}
-    </span>
+      {status}
+    </Badge>
   )
 }

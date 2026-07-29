@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { api, ApiError } from "@/lib/api"
 import type { SessionUser } from "@/types/api"
 
@@ -30,53 +30,52 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6">
-      <Card className="w-full max-w-sm border-border bg-card">
-        <CardHeader className="space-y-1">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted/40 px-6">
+      <Card className="w-full max-w-sm">
+        <CardHeader className="text-center">
           <CardTitle className="text-xl">Entrar no Post Flow</CardTitle>
-          <CardDescription>Use seu e-mail e senha cadastrados.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
-              </p>
-            )}
+          <form onSubmit={handleSubmit}>
+            <FieldGroup>
+              {error && (
+                <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </p>
+              )}
 
-            <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                autoFocus
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+              <Field>
+                <FieldLabel htmlFor="email">E-mail</FieldLabel>
+                <Input
+                  id="email"
+                  type="email"
+                  autoFocus
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+              <Field>
+                <FieldLabel htmlFor="password">Senha</FieldLabel>
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </Field>
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Entrando..." : "Entrar"}
-            </Button>
-
-            <p className="text-center text-sm text-muted-foreground">
-              Ainda nao tem conta de cliente?{" "}
-              <a href="/register" className="text-primary hover:underline">
-                Criar conta
-              </a>
-            </p>
+              <Field>
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Entrando..." : "Entrar"}
+                </Button>
+                <FieldDescription className="text-center">
+                  Ainda nao tem conta de cliente? <a href="/register">Criar conta</a>
+                </FieldDescription>
+              </Field>
+            </FieldGroup>
           </form>
         </CardContent>
       </Card>
