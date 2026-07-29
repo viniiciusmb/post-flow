@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { IconChevronDown, IconChevronRight, IconLink, IconClock, IconRefresh } from "@tabler/icons-react"
+import { IconChevronDown, IconChevronRight, IconLink, IconClock, IconRefresh, IconAdjustmentsHorizontal } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -7,6 +7,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TonePill } from "@/components/ui/tone-pill"
+import { VideoSettingsCard } from "@/components/dashboard/VideoSettingsCard"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { CLIP_STATUS_TONE, SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
@@ -215,10 +216,14 @@ export function VideosClipsPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const [videos, setVideos] = useState<SourceVideo[] | null>(null)
   const [avgProcessingSeconds, setAvgProcessingSeconds] = useState(480)
+  const [showSettings, setShowSettings] = useState(false)
   const [, setTick] = useState(0)
+  const channelIdFilter = new URLSearchParams(window.location.search).get("channelId")
+  const filteredChannelName = videos?.find((v) => String(v.channelId) === channelIdFilter)?.channelName
 
   async function load() {
-    const data = await api.get<{ videos: SourceVideo[]; avgProcessingSeconds: number }>("/api/client/source-videos")
+    const query = channelIdFilter ? `?channelId=${channelIdFilter}` : ""
+    const data = await api.get<{ videos: SourceVideo[]; avgProcessingSeconds: number }>(`/api/client/source-videos${query}`)
     setVideos(data.videos)
     setAvgProcessingSeconds(data.avgProcessingSeconds)
   }
@@ -248,6 +253,32 @@ export function VideosClipsPage() {
   return (
     <DashboardLayout user={user} onLogout={logout} title="Vídeos & Cortes">
       <AddManualVideoCard onAdded={load} />
+
+      <div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowSettings((v) => !v)}
+          className="gap-2"
+        >
+          <IconAdjustmentsHorizontal className="size-4" />
+          {showSettings ? "Ocultar configurações de corte" : "Configurar qualidade e estilo dos cortes"}
+        </Button>
+        {showSettings && (
+          <div className="mt-3">
+            <VideoSettingsCard />
+          </div>
+        )}
+      </div>
+
+      {channelIdFilter && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          Mostrando só vídeos de <span className="font-medium text-foreground">{filteredChannelName ?? "canal selecionado"}</span>
+          <a href="/client/videos-clips" className="font-semibold text-primary hover:underline">
+            limpar filtro
+          </a>
+        </div>
+      )}
 
       {!videos ? (
         <div className="flex flex-col gap-3">

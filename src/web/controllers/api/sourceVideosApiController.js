@@ -28,6 +28,7 @@ async function list(req, res) {
       id: v.id,
       title: v.title,
       thumbnailUrl: v.thumbnail_url,
+      channelId: v.youtube_channel_id,
       channelName: v.channel_name,
       publishedAt: v.published_at,
       durationSeconds: v.duration_seconds,

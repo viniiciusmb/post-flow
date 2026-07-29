@@ -60,17 +60,33 @@ async function run(sourceVideoId) {
 
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'selecting_clips');
     const clipLengthPreset = CLIP_LENGTH_PRESETS[settings.clip_length] || CLIP_LENGTH_PRESETS.balanced;
-    const selection = await claudeClipSelectionService.selectClips(transcript.words, {
-      maxClips: settings.max_clips,
-      minDuration: clipLengthPreset.minDuration,
-      maxDuration: clipLengthPreset.maxDuration,
-    });
-    await sourceVideosRepository.saveClaudeUsage(sourceVideo.id, {
-      inputTokens: selection.inputTokens,
-      outputTokens: selection.outputTokens,
-      costUsd: selection.costUsd,
-    });
-    const selected = selection.clips;
+
+    let selected;
+    if (settings.clip_mode === 'full_video') {
+      // Video inteiro vira um unico corte - sem IA escolhendo trecho, sem
+      // custo de Claude.
+      selected = [{ title: sourceVideo.title, startSeconds: 0, endSeconds: transcript.durationSeconds }];
+    } else {
+      // 'unlimited': sem teto fixo, so limitado pelo quanto de corte cabe no
+      // video (duracao do video / duracao minima de cada corte).
+      const maxClips =
+        settings.clip_mode === 'unlimited'
+          ? Math.max(1, Math.min(30, Math.floor(transcript.durationSeconds / clipLengthPreset.minDuration)))
+          : settings.max_clips;
+
+      const selection = await claudeClipSelectionService.selectClips(transcript.words, {
+        maxClips,
+        minDuration: clipLengthPreset.minDuration,
+        maxDuration: clipLengthPreset.maxDuration,
+      });
+      await sourceVideosRepository.saveClaudeUsage(sourceVideo.id, {
+        inputTokens: selection.inputTokens,
+        outputTokens: selection.outputTokens,
+        costUsd: selection.costUsd,
+      });
+      selected = selection.clips;
+    }
+
     if (selected.length === 0) {
       await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', {
         errorMessage: 'A IA nao encontrou nenhum trecho adequado nesse video.',

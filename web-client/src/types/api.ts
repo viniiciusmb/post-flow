@@ -161,6 +161,7 @@ export type VideoFraming = "crop" | "blur_pad"
 export type VideoQuality = "high" | "medium"
 export type VideoCaptionStyle = "classic" | "bold" | "minimal" | "none"
 export type VideoClipLength = "short" | "balanced" | "long"
+export type VideoClipMode = "best_parts" | "full_video" | "unlimited"
 
 export interface ClientVideoSettings {
   aspectRatio: VideoAspectRatio
@@ -168,6 +169,7 @@ export interface ClientVideoSettings {
   quality: VideoQuality
   captionStyle: VideoCaptionStyle
   clipLength: VideoClipLength
+  clipMode: VideoClipMode
   maxClips: number
 }
 
@@ -178,6 +180,7 @@ export interface ClientVideoSettingsResponse extends ClientVideoSettings {
     qualities: VideoQuality[]
     captionStyles: VideoCaptionStyle[]
     clipLengths: VideoClipLength[]
+    clipModes: VideoClipMode[]
   }
 }
 
@@ -203,6 +206,7 @@ export interface SourceVideo {
   id: number
   title: string
   thumbnailUrl: string | null
+  channelId: number | null
   channelName: string | null
   publishedAt: string | null
   durationSeconds: number | null
