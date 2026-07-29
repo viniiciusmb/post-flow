@@ -50,11 +50,16 @@ const config = {
     // YouTube passou a exigir mesmo com cookie valido, pra IP de servidor).
     // Vazio = roda sem POT provider (cookie sozinho pode nao bastar mais).
     potProviderUrl: process.env.YTDLP_POT_PROVIDER_URL || '',
-    // Proxy residencial (ex: http://usuario:senha@host:porta) - resolve de
-    // vez o bloqueio "Sign in to confirm you're not a bot" que a VPS toma
-    // por ser IP de datacenter, independente de cookie/token. Vazio = sem
-    // proxy (so o POT provider, que nao cobre todo tipo de video).
+    // Proxy residencial pago (ex: http://usuario:senha@host:porta) - resolve
+    // de vez o bloqueio "Sign in to confirm you're not a bot" que a VPS toma
+    // por ser IP de datacenter, independente de cookie/token. Usado como
+    // reserva quando o rele Tailscale (abaixo) nao esta disponivel.
     proxyUrl: process.env.YTDLP_PROXY_URL || '',
+    // Rele Tailscale (SOCKS5, ex: socks5://postflow-tailscale:1080) - mesma
+    // ideia do proxy pago, mas de graca: sai pela internet de um aparelho
+    // (do admin ou de um cliente) que autorizou ser usado como saida. Tem
+    // prioridade sobre o proxy pago quando configurado.
+    tailscaleProxyUrl: process.env.YTDLP_TAILSCALE_PROXY_URL || '',
   },
 
   ytdlpPath: process.env.YTDLP_PATH || '/usr/local/bin/yt-dlp',

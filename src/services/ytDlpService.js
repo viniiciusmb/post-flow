@@ -5,13 +5,16 @@
 //   - So o provedor de PO token (bgutil-ytdlp-pot-provider) sem proxy: passa
 //     pra videos "de alta confianca" (muito populares), mas continua
 //     bloqueando video comum de canal pequeno/medio.
-//   - Um proxy residencial (YTDLP_PROXY_URL) resolve pra qualquer video -
-//     ataca a causa raiz (reputacao do IP), nao so o sintoma.
-// Cookie (YOUTUBE_COOKIES_BASE64) e contraproducente com qualquer um dos
-// dois: ele forca o yt-dlp a tentar os clientes "web", que o YouTube trava
-// via streaming SABR (so devolve storyboard, nenhum formato de video real).
-// So usamos cookie como ultimo recurso quando nem proxy nem POT provider
-// estao configurados.
+//   - Um proxy residencial pago (YTDLP_PROXY_URL) resolve pra qualquer video.
+//   - O rele Tailscale (YTDLP_TAILSCALE_PROXY_URL) resolve igual, de graca,
+//     saindo pela internet de um aparelho autorizado (do admin ou de um
+//     cliente) em vez de pagar por banda - so funciona quando esse aparelho
+//     esta ligado/conectado, por isso e tentado primeiro e cai pro proxy
+//     pago se estiver indisponivel.
+// Cookie (YOUTUBE_COOKIES_BASE64) e contraproducente com qualquer proxy: ele
+// forca o yt-dlp a tentar os clientes "web", que o YouTube trava via
+// streaming SABR (so devolve storyboard, nenhum formato de video real). So
+// usamos cookie como ultimo recurso quando nenhum proxy/POT esta configurado.
 'use strict';
 
 const { spawn } = require('child_process');
@@ -32,13 +35,20 @@ function getCookiesFilePath() {
   return filePath;
 }
 
-function runOnce(args, { timeoutMs = 5 * 60 * 1000 } = {}) {
+// Rele Tailscale primeiro (de graca, quando o aparelho autorizado esta
+// online), proxy pago como reserva. Se nenhum dos dois estiver configurado,
+// tenta so o POT provider; sem nada disso, cai pro cookie.
+function getProxyCandidates() {
+  return [config.youtube.tailscaleProxyUrl, config.youtube.proxyUrl].filter(Boolean);
+}
+
+function runOnce(args, { timeoutMs = 5 * 60 * 1000, proxyUrl = null } = {}) {
   return new Promise((resolve, reject) => {
-    const hasProxyOrPot = Boolean(config.youtube.proxyUrl || config.youtube.potProviderUrl);
+    const hasProxyOrPot = Boolean(proxyUrl || config.youtube.potProviderUrl);
     const authArgs = [];
 
-    if (config.youtube.proxyUrl) {
-      authArgs.push('--proxy', config.youtube.proxyUrl);
+    if (proxyUrl) {
+      authArgs.push('--proxy', proxyUrl);
     }
     if (config.youtube.potProviderUrl) {
       authArgs.push('--extractor-args', `youtubepot-bgutilhttp:base_url=${config.youtube.potProviderUrl}`);
@@ -49,7 +59,7 @@ function runOnce(args, { timeoutMs = 5 * 60 * 1000 } = {}) {
       if (!cookies) {
         return reject(
           new Error(
-            'Nem YTDLP_PROXY_URL, nem YTDLP_POT_PROVIDER_URL, nem YOUTUBE_COOKIES_BASE64 configurados - sem isso o YouTube bloqueia a VPS.'
+            'Nenhum proxy (Tailscale/pago), POT provider nem cookie configurados - sem isso o YouTube bloqueia a VPS.'
           )
         );
       }
@@ -77,14 +87,24 @@ function runOnce(args, { timeoutMs = 5 * 60 * 1000 } = {}) {
   });
 }
 
-// As vezes o link de download que o YouTube devolve expira/falha na hora
-// (403 pontual) - uma segunda tentativa quase sempre resolve.
+// Tenta cada proxy candidato em ordem (Tailscale de graca antes do pago); se
+// todos falharem (ex: link expirado, 403 pontual), tenta a rodada inteira
+// de novo uma vez antes de desistir.
 async function run(args, opts) {
-  try {
-    return await runOnce(args, opts);
-  } catch {
-    return runOnce(args, opts);
+  const candidates = getProxyCandidates();
+  const proxiesToTry = candidates.length ? candidates : [null];
+
+  let lastErr;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    for (const proxyUrl of proxiesToTry) {
+      try {
+        return await runOnce(args, { ...opts, proxyUrl });
+      } catch (err) {
+        lastErr = err;
+      }
+    }
   }
+  throw lastErr;
 }
 
 function parseUploadDate(value) {
