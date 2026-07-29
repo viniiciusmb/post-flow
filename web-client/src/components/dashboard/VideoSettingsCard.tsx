@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { IconVideo } from "@tabler/icons-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -34,14 +35,19 @@ const CLIP_LENGTH_LABELS: Record<string, string> = {
   long: "Longos (60–180s)",
 }
 const CLIP_MODE_LABELS: Record<string, string> = {
-  best_parts: "Melhores partes",
+  ai_choice: "Melhores partes",
   full_video: "Vídeo inteiro",
-  unlimited: "Sem limite de cortes",
+  fixed_count: "Escolher quantidade",
 }
 const CLIP_MODE_DESCRIPTIONS: Record<string, string> = {
-  best_parts: "A IA escolhe os melhores trechos, até o número de cortes definido abaixo.",
+  ai_choice: "A IA decide quantos cortes fazem sentido para esse vídeo, sem número fixo.",
   full_video: "O vídeo inteiro vira um único corte vertical, sem a IA escolher trecho.",
-  unlimited: "A IA escolhe quantos trechos bons couberem no vídeo — sem limite fixo, só o que a duração permitir.",
+  fixed_count: "Você escolhe exatamente quantos cortes quer, e a IA escolhe os melhores trechos até esse número.",
+}
+const DESCRIPTION_MODE_LABELS: Record<string, string> = {
+  auto: "IA escreve",
+  fixed: "Sempre a mesma",
+  none: "Sem descrição",
 }
 
 function OptionRow({
@@ -79,11 +85,15 @@ function OptionRow({
 
 export function VideoSettingsCard() {
   const [settings, setSettings] = useState<ClientVideoSettingsResponse | null>(null)
+  const [descriptionDraft, setDescriptionDraft] = useState("")
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
 
   useEffect(() => {
-    api.get<ClientVideoSettingsResponse>("/api/client/video-settings").then(setSettings)
+    api.get<ClientVideoSettingsResponse>("/api/client/video-settings").then((data) => {
+      setSettings(data)
+      setDescriptionDraft(data.descriptionTemplate ?? "")
+    })
   }, [])
 
   async function save(next: ClientVideoSettingsResponse) {
@@ -132,6 +142,21 @@ export function VideoSettingsCard() {
             <p className="text-xs text-muted-foreground">{CLIP_MODE_DESCRIPTIONS[settings.clipMode]}</p>
           </Field>
 
+          {settings.clipMode === "fixed_count" && (
+            <Field>
+              <FieldLabel htmlFor="maxClips">Quantidade de cortes (1 a 30)</FieldLabel>
+              <Input
+                id="maxClips"
+                type="number"
+                min={1}
+                max={30}
+                className="w-24"
+                value={settings.maxClips}
+                onChange={(e) => save({ ...settings, maxClips: Number(e.target.value) })}
+              />
+            </Field>
+          )}
+
           <OptionRow
             label="Proporção"
             value={settings.aspectRatio}
@@ -162,29 +187,75 @@ export function VideoSettingsCard() {
           />
 
           {settings.clipMode !== "full_video" && (
-            <>
-              <OptionRow
-                label="Duração de cada corte"
-                value={settings.clipLength}
-                options={settings.options.clipLengths}
-                labels={CLIP_LENGTH_LABELS}
-                onChange={(v) => save({ ...settings, clipLength: v as never })}
+            <OptionRow
+              label="Duração de cada corte"
+              value={settings.clipLength}
+              options={settings.options.clipLengths}
+              labels={CLIP_LENGTH_LABELS}
+              onChange={(v) => save({ ...settings, clipLength: v as never })}
+            />
+          )}
+
+          <Field orientation="horizontal">
+            <Checkbox
+              id="showTitle"
+              checked={settings.showTitle}
+              onCheckedChange={(checked) => save({ ...settings, showTitle: checked === true })}
+            />
+            <FieldLabel htmlFor="showTitle" className="font-normal">
+              Mostrar o título no começo do vídeo
+            </FieldLabel>
+          </Field>
+          {settings.showTitle && (
+            <Field>
+              <FieldLabel htmlFor="titleSeconds">Por quantos segundos (1 a 15)</FieldLabel>
+              <Input
+                id="titleSeconds"
+                type="number"
+                min={1}
+                max={15}
+                className="w-24"
+                value={settings.titleSeconds}
+                onChange={(e) => save({ ...settings, titleSeconds: Number(e.target.value) })}
               />
-              {settings.clipMode === "best_parts" && (
-                <Field>
-                  <FieldLabel htmlFor="maxClips">Cortes por vídeo (1 a 30)</FieldLabel>
-                  <Input
-                    id="maxClips"
-                    type="number"
-                    min={1}
-                    max={30}
-                    className="w-24"
-                    value={settings.maxClips}
-                    onChange={(e) => save({ ...settings, maxClips: Number(e.target.value) })}
-                  />
-                </Field>
-              )}
-            </>
+            </Field>
+          )}
+
+          <Field>
+            <FieldLabel>Descrição do corte</FieldLabel>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              value={settings.descriptionMode}
+              onValueChange={(next) => next && save({ ...settings, descriptionMode: next as never })}
+              className="flex-wrap"
+            >
+              {settings.options.descriptionModes.map((m) => (
+                <ToggleGroupItem key={m} value={m} className="text-xs">
+                  {DESCRIPTION_MODE_LABELS[m] ?? m}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </Field>
+          {settings.descriptionMode === "fixed" && (
+            <Field>
+              <FieldLabel htmlFor="descriptionTemplate">Texto fixo (usado em todos os cortes)</FieldLabel>
+              <div className="flex gap-2">
+                <Input
+                  id="descriptionTemplate"
+                  value={descriptionDraft}
+                  onChange={(e) => setDescriptionDraft(e.target.value)}
+                  placeholder="Ex: Segue a gente pra mais! #viral"
+                />
+                <button
+                  type="button"
+                  onClick={() => save({ ...settings, descriptionTemplate: descriptionDraft })}
+                  className="shrink-0 rounded-md border border-input px-3 text-sm font-medium hover:bg-accent"
+                >
+                  Salvar
+                </button>
+              </div>
+            </Field>
           )}
 
           <p className="text-xs text-muted-foreground">

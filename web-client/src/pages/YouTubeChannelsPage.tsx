@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { IconTrash, IconPlayerPause, IconPlayerPlay, IconArrowRight, IconMovie } from "@tabler/icons-react"
+import { IconTrash, IconArrowRight, IconMovie } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -11,7 +12,7 @@ import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
-import type { SourceVideo, YoutubeChannel } from "@/types/api"
+import type { SourceVideo, TikTokAccountResponse, YoutubeChannel } from "@/types/api"
 
 function initials(name: string) {
   return name.slice(0, 2).toUpperCase()
@@ -50,12 +51,18 @@ function ChannelVideoThumb({ video }: { video: SourceVideo }) {
 function ChannelCard({
   channel,
   videos,
+  autoPostEnabled,
+  hasTiktokAccount,
   onToggleActive,
+  onToggleAutoPost,
   onRemove,
 }: {
   channel: YoutubeChannel
   videos: SourceVideo[]
-  onToggleActive: () => void
+  autoPostEnabled: boolean
+  hasTiktokAccount: boolean
+  onToggleActive: (checked: boolean) => void
+  onToggleAutoPost: (checked: boolean) => void
   onRemove: () => void
 }) {
   const recent = videos.slice(0, 6)
@@ -82,17 +89,33 @@ function ChannelCard({
               {channel.lastPolledAt && ` · checado ${new Date(channel.lastPolledAt).toLocaleString("pt-BR")}`}
             </p>
           </div>
-          <TonePill tone={channel.isActive ? "success" : "neutral"}>
-            {channel.isActive ? "Ativo" : "Pausado"}
-          </TonePill>
-          <div className="flex shrink-0 gap-1">
-            <Button variant="ghost" size="icon-sm" onClick={onToggleActive} title={channel.isActive ? "Pausar" : "Ativar"}>
-              {channel.isActive ? <IconPlayerPause /> : <IconPlayerPlay />}
-            </Button>
-            <Button variant="ghost" size="icon-sm" onClick={onRemove} title="Remover canal">
-              <IconTrash />
-            </Button>
-          </div>
+          <Button variant="ghost" size="icon-sm" onClick={onRemove} title="Remover canal">
+            <IconTrash />
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap gap-4 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <Checkbox checked={channel.isActive} onCheckedChange={(c) => onToggleActive(c === true)} />
+            Baixar e cortar automaticamente
+          </label>
+          <label className={`flex items-center gap-2 text-sm ${hasTiktokAccount ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}>
+            <Checkbox
+              checked={autoPostEnabled}
+              disabled={!hasTiktokAccount}
+              onCheckedChange={(c) => onToggleAutoPost(c === true)}
+            />
+            Postar automaticamente no TikTok
+          </label>
+          {!hasTiktokAccount && (
+            <span className="text-xs text-muted-foreground">
+              (conecte a{" "}
+              <a href="/client/tiktok-account" className="text-primary hover:underline">
+                conta TikTok
+              </a>{" "}
+              pra habilitar)
+            </span>
+          )}
         </div>
 
         {recent.length > 0 && (
@@ -119,18 +142,21 @@ export function YouTubeChannelsPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const [channels, setChannels] = useState<YoutubeChannel[] | null>(null)
   const [videos, setVideos] = useState<SourceVideo[]>([])
+  const [tiktokAccount, setTiktokAccount] = useState<TikTokAccountResponse | null>(null)
   const [channelUrl, setChannelUrl] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   async function load() {
-    const [channelsData, videosData] = await Promise.all([
+    const [channelsData, videosData, tiktokData] = await Promise.all([
       api.get<{ channels: YoutubeChannel[] }>("/api/client/youtube-channels"),
       api.get<{ videos: SourceVideo[] }>("/api/client/source-videos"),
+      api.get<TikTokAccountResponse>("/api/client/tiktok-account"),
     ])
     setChannels(channelsData.channels)
     setVideos(videosData.videos)
+    setTiktokAccount(tiktokData)
   }
 
   useEffect(() => {
@@ -145,7 +171,7 @@ export function YouTubeChannelsPage() {
     try {
       await api.post("/api/client/youtube-channels", { channelUrl })
       setChannelUrl("")
-      setSuccess('Canal adicionado, ainda "Pausado" — clique em ▶ na lista abaixo pra começar a cortar os vídeos novos dele.')
+      setSuccess('Canal adicionado, ainda "Pausado" — marque "Baixar e cortar automaticamente" abaixo pra ativar.')
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Nao foi possivel adicionar o canal.")
@@ -154,8 +180,13 @@ export function YouTubeChannelsPage() {
     }
   }
 
-  async function toggleActive(channel: YoutubeChannel) {
-    await api.post(`/api/client/youtube-channels/${channel.id}/active`, { isActive: !channel.isActive })
+  async function toggleActive(channel: YoutubeChannel, checked: boolean) {
+    await api.post(`/api/client/youtube-channels/${channel.id}/active`, { isActive: checked })
+    await load()
+  }
+
+  async function toggleAutoPost(checked: boolean) {
+    await api.put("/api/client/tiktok-account/auto-post", { enabled: checked })
     await load()
   }
 
@@ -166,6 +197,9 @@ export function YouTubeChannelsPage() {
   }
 
   if (authLoading || !user) return null
+
+  const hasTiktokAccount = tiktokAccount?.connected === true
+  const autoPostEnabled = tiktokAccount?.connected === true && tiktokAccount.autoPostEnabled
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Canais do YouTube">
@@ -227,7 +261,10 @@ export function YouTubeChannelsPage() {
                 key={channel.id}
                 channel={channel}
                 videos={videos.filter((v) => v.channelId === channel.id)}
-                onToggleActive={() => toggleActive(channel)}
+                autoPostEnabled={autoPostEnabled}
+                hasTiktokAccount={hasTiktokAccount}
+                onToggleActive={(checked) => toggleActive(channel, checked)}
+                onToggleAutoPost={toggleAutoPost}
                 onRemove={() => removeChannel(channel)}
               />
             ))}

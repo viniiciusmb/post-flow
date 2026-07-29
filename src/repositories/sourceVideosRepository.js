@@ -26,6 +26,18 @@ async function createManual({ clientUserId, youtubeVideoId, title, thumbnailUrl,
   return rows[0] || null;
 }
 
+// Video enviado por upload direto (input_type = 'upload') - sem
+// youtube_video_id nenhum, pertence direto ao cliente que enviou.
+async function createUpload({ clientUserId, title, localVideoPath, durationSeconds }) {
+  const { rows } = await pool.query(
+    `INSERT INTO source_videos (client_user_id, input_type, title, local_video_path, duration_seconds, status)
+     VALUES ($1, 'upload', $2, $3, $4, 'detected')
+     RETURNING *`,
+    [clientUserId, title, localVideoPath, durationSeconds]
+  );
+  return rows[0];
+}
+
 async function findByYoutubeVideoId(youtubeVideoId) {
   const { rows } = await pool.query('SELECT * FROM source_videos WHERE youtube_video_id = $1', [youtubeVideoId]);
   return rows[0] || null;
@@ -58,6 +70,22 @@ async function findByIdOwnedByClient(id, clientUserId) {
 // Reinicia um video que ficou em erro (ex: bloqueio do YouTube que ja foi
 // corrigido) - so mexe se ainda estiver em 'error', pra nao interferir com
 // um processamento em andamento.
+// Remove o video-fonte (cortes/videos/postagens ligados caem em cascata).
+// So mexe se pertencer mesmo ao cliente pedindo.
+async function deleteByIdOwnedByClient(id, clientUserId) {
+  const { rowCount } = await pool.query(
+    `DELETE FROM source_videos
+     WHERE id = $1
+       AND id IN (
+         SELECT sv.id FROM source_videos sv
+         LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+         WHERE coalesce(yc.client_user_id, sv.client_user_id) = $2
+       )`,
+    [id, clientUserId]
+  );
+  return rowCount > 0;
+}
+
 async function resetForRetry(id) {
   const { rows } = await pool.query(
     `UPDATE source_videos
@@ -196,10 +224,12 @@ async function listRecentHistory({ limit = 20 } = {}) {
 module.exports = {
   createIfNotExists,
   createManual,
+  createUpload,
   findByYoutubeVideoId,
   findNextDetected,
   findById,
   findByIdOwnedByClient,
+  deleteByIdOwnedByClient,
   resetForRetry,
   updateStatus,
   saveDownload,

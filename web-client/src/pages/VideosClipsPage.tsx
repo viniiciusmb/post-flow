@@ -1,5 +1,16 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { IconChevronDown, IconChevronRight, IconLink, IconClock, IconRefresh, IconAdjustmentsHorizontal, IconPlayerPlay, IconDownload } from "@tabler/icons-react"
+import {
+  IconChevronDown,
+  IconChevronRight,
+  IconLink,
+  IconClock,
+  IconRefresh,
+  IconAdjustmentsHorizontal,
+  IconPlayerPlay,
+  IconDownload,
+  IconTrash,
+  IconUpload,
+} from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +23,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { CLIP_STATUS_TONE, SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
 import { ACTIVE_STATUSES, computeVideoProgress, formatEta } from "@/lib/videoProgress"
-import type { Clip, SourceVideo } from "@/types/api"
+import type { Clip, SourceVideo, SourceVideoStatus } from "@/types/api"
 
 function formatDuration(seconds: number | null) {
   if (!seconds) return "—"
@@ -28,20 +39,33 @@ function ClipCard({ clip }: { clip: Clip }) {
   return (
     <div className="overflow-hidden rounded-lg border border-border">
       {clip.status === "ready" && playing ? (
-        <video src={downloadUrl} controls autoPlay className="aspect-[9/16] w-full bg-black" />
+        <video src={downloadUrl} poster={clip.thumbnailUrl ?? undefined} controls autoPlay className="aspect-[9/16] w-full bg-black" />
       ) : (
         <div className="relative flex aspect-[9/16] w-full items-center justify-center bg-muted">
+          {clip.thumbnailUrl && (
+            <img src={clip.thumbnailUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          )}
           {clip.status === "ready" ? (
             <button
               type="button"
               onClick={() => setPlaying(true)}
-              className="flex size-10 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
+              className="relative flex size-10 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
               title="Assistir"
             >
               <IconPlayerPlay className="size-4" />
             </button>
+          ) : clip.status === "rendering" ? (
+            <div className="relative flex w-full flex-col items-center gap-1.5 px-4">
+              <span className="text-xs font-semibold text-white drop-shadow">{clip.renderProgressPercent}%</span>
+              <div className="h-1 w-full overflow-hidden rounded-full bg-white/30">
+                <div
+                  className="h-full rounded-full bg-emerald-400 transition-all"
+                  style={{ width: `${clip.renderProgressPercent}%` }}
+                />
+              </div>
+            </div>
           ) : (
-            <TonePill tone={CLIP_STATUS_TONE[clip.status].tone} spin={CLIP_STATUS_TONE[clip.status].spin} className="px-2 py-0.5 text-[10px]">
+            <TonePill tone={CLIP_STATUS_TONE[clip.status].tone} spin={CLIP_STATUS_TONE[clip.status].spin} className="relative px-2 py-0.5 text-[10px]">
               {CLIP_STATUS_TONE[clip.status].label}
             </TonePill>
           )}
@@ -68,27 +92,44 @@ function ClipCard({ clip }: { clip: Clip }) {
   )
 }
 
+// Enquanto o corte esta rendering/pending, o progresso do video-fonte fica
+// "cutting" - poll dos clips a cada poucos segundos pra % andar na tela sem
+// precisar reabrir o card.
+function useClipsPolling(videoId: number, open: boolean, videoStatus: SourceVideoStatus) {
+  const [clips, setClips] = useState<Clip[] | null>(null)
+
+  async function load() {
+    const data = await api.get<{ clips: Clip[] }>(`/api/client/source-videos/${videoId}/clips`)
+    setClips(data.clips)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    load()
+    if (videoStatus !== "cutting") return
+    const interval = setInterval(load, 4000)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, videoStatus])
+
+  return clips
+}
+
 function VideoRow({
   video,
   avgProcessingSeconds,
   onRetried,
+  onDeleted,
 }: {
   video: SourceVideo
   avgProcessingSeconds: number
   onRetried: () => void
+  onDeleted: () => void
 }) {
   const [open, setOpen] = useState(false)
-  const [clips, setClips] = useState<Clip[] | null>(null)
   const [retrying, setRetrying] = useState(false)
-
-  async function toggle() {
-    const next = !open
-    setOpen(next)
-    if (next && !clips) {
-      const data = await api.get<{ clips: Clip[] }>(`/api/client/source-videos/${video.id}/clips`)
-      setClips(data.clips)
-    }
-  }
+  const [deleting, setDeleting] = useState(false)
+  const clips = useClipsPolling(video.id, open, video.status)
 
   async function retry() {
     setRetrying(true)
@@ -100,42 +141,55 @@ function VideoRow({
     }
   }
 
+  async function remove() {
+    if (!confirm(`Remover "${video.title}" e todos os cortes gerados dele? Essa ação não pode ser desfeita.`)) return
+    setDeleting(true)
+    try {
+      await api.delete(`/api/client/source-videos/${video.id}`)
+      onDeleted()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const progress = computeVideoProgress(video.status, video.processingStartedAt, avgProcessingSeconds)
 
   return (
     <Card>
-      <button
-        type="button"
-        onClick={toggle}
-        className="flex w-full items-center gap-4 p-4 text-left"
-        disabled={video.clipCount === 0 && video.status !== "ready"}
-      >
-        {video.clipCount > 0 || video.status === "ready" ? (
-          open ? (
-            <IconChevronDown className="size-4 shrink-0 text-muted-foreground" />
+      <div className="flex w-full items-center gap-4 p-4">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-4 text-left"
+          disabled={video.clipCount === 0 && video.status !== "ready"}
+        >
+          {video.clipCount > 0 || video.status === "ready" ? (
+            open ? (
+              <IconChevronDown className="size-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <IconChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            )
           ) : (
-            <IconChevronRight className="size-4 shrink-0 text-muted-foreground" />
-          )
-        ) : (
-          <span className="size-4 shrink-0" />
-        )}
+            <span className="size-4 shrink-0" />
+          )}
 
-        {video.thumbnailUrl && (
-          <div className="relative h-12 w-20 shrink-0">
-            <img src={video.thumbnailUrl} alt="" className="h-12 w-20 rounded-md object-cover" />
-            {progress && (
-              <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 rounded-b-md bg-black/75 px-1 py-0.5 text-[9px] font-semibold text-emerald-400">
-                <IconClock className="size-2.5" />
-                {progress.percent}%
-              </div>
-            )}
-          </div>
-        )}
+          {video.thumbnailUrl && (
+            <div className="relative h-12 w-20 shrink-0">
+              <img src={video.thumbnailUrl} alt="" className="h-12 w-20 rounded-md object-cover" />
+              {progress && (
+                <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 rounded-b-md bg-black/75 px-1 py-0.5 text-[9px] font-semibold text-emerald-400">
+                  <IconClock className="size-2.5" />
+                  {progress.percent}%
+                </div>
+              )}
+            </div>
+          )}
+        </button>
 
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{video.title}</p>
           <p className="text-xs text-muted-foreground">
-            {video.channelName ?? "Link avulso"} · {formatDuration(video.durationSeconds)}
+            {video.channelName ?? "Link avulso / upload"} · {formatDuration(video.durationSeconds)}
             {video.publishedAt && ` · ${new Date(video.publishedAt).toLocaleDateString("pt-BR")}`}
             {progress && progress.etaSeconds !== null && ` · faltam ~${formatEta(progress.etaSeconds)}`}
           </p>
@@ -144,7 +198,11 @@ function VideoRow({
         <TonePill tone={SOURCE_VIDEO_STATUS_TONE[video.status].tone} spin={SOURCE_VIDEO_STATUS_TONE[video.status].spin}>
           {SOURCE_VIDEO_STATUS_TONE[video.status].label}
         </TonePill>
-      </button>
+
+        <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title="Remover vídeo">
+          <IconTrash className="size-4" />
+        </Button>
+      </div>
 
       {video.errorMessage && (
         <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2">
@@ -247,13 +305,120 @@ function AddManualVideoCard({ onAdded }: { onAdded: () => void }) {
   )
 }
 
+function UploadVideoCard({ onAdded }: { onAdded: () => void }) {
+  const [file, setFile] = useState<File | null>(null)
+  const [title, setTitle] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (!file) return
+    setError(null)
+    setSuccess(null)
+    setUploading(true)
+    setProgress(0)
+
+    const formData = new FormData()
+    formData.append("video", file)
+    if (title.trim()) formData.append("title", title.trim())
+
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", "/api/client/source-videos/upload")
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onload = () => {
+      setUploading(false)
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const data = JSON.parse(xhr.responseText)
+        setFile(null)
+        setTitle("")
+        setSuccess(`"${data.title}" enviado — entrou na fila de corte.`)
+        onAdded()
+      } else {
+        try {
+          setError(JSON.parse(xhr.responseText).error || "Não foi possível enviar o vídeo.")
+        } catch {
+          setError("Não foi possível enviar o vídeo.")
+        }
+      }
+    }
+    xhr.onerror = () => {
+      setUploading(false)
+      setError("Falha de conexão ao enviar o vídeo.")
+    }
+    xhr.send(formData)
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <IconUpload className="size-4 text-muted-foreground" />
+          Enviar vídeo do computador/celular
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit}>
+          <FieldGroup>
+            {error && (
+              <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            {success && (
+              <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
+                {success}
+              </p>
+            )}
+            <Field>
+              <FieldLabel htmlFor="videoFile">Arquivo de vídeo</FieldLabel>
+              <Input
+                id="videoFile"
+                type="file"
+                accept="video/*"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="videoTitle">Título (opcional)</FieldLabel>
+              <div className="flex gap-2">
+                <Input
+                  id="videoTitle"
+                  placeholder="Ex: Live de sábado"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+                <Button type="submit" disabled={!file || uploading}>
+                  {uploading ? `Enviando... ${progress}%` : "Enviar e cortar"}
+                </Button>
+              </div>
+            </Field>
+          </FieldGroup>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
 const PENDING_STATUSES = ["detected", ...ACTIVE_STATUSES]
+const STAGE_PRIORITY: Record<string, number> = {
+  cutting: 0,
+  selecting_clips: 1,
+  transcribing: 2,
+  downloading: 3,
+  detected: 4,
+}
 
 export function VideosClipsPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const [videos, setVideos] = useState<SourceVideo[] | null>(null)
   const [avgProcessingSeconds, setAvgProcessingSeconds] = useState(480)
   const [showSettings, setShowSettings] = useState(false)
+  const [showUpload, setShowUpload] = useState(false)
   const [, setTick] = useState(0)
   const channelIdFilter = new URLSearchParams(window.location.search).get("channelId")
   const filteredChannelName = videos?.find((v) => String(v.channelId) === channelIdFilter)?.channelName
@@ -268,6 +433,7 @@ export function VideosClipsPage() {
   useEffect(() => {
     if (!user) return
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   const hasPending = videos?.some((v) => PENDING_STATUSES.includes(v.status)) ?? false
@@ -283,30 +449,32 @@ export function VideosClipsPage() {
       clearInterval(refetch)
       clearInterval(tick)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasPending])
 
   if (authLoading || !user) return null
+
+  const inProgress = (videos ?? [])
+    .filter((v) => PENDING_STATUSES.includes(v.status))
+    .sort((a, b) => (STAGE_PRIORITY[a.status] ?? 9) - (STAGE_PRIORITY[b.status] ?? 9))
+  const finished = (videos ?? []).filter((v) => !PENDING_STATUSES.includes(v.status))
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Vídeos & Cortes">
       <AddManualVideoCard onAdded={load} />
 
-      <div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowSettings((v) => !v)}
-          className="gap-2"
-        >
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={() => setShowUpload((v) => !v)} className="gap-2">
+          <IconUpload className="size-4" />
+          {showUpload ? "Ocultar envio de arquivo" : "Enviar vídeo por arquivo"}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setShowSettings((v) => !v)} className="gap-2">
           <IconAdjustmentsHorizontal className="size-4" />
           {showSettings ? "Ocultar configurações de corte" : "Configurar qualidade e estilo dos cortes"}
         </Button>
-        {showSettings && (
-          <div className="mt-3">
-            <VideoSettingsCard />
-          </div>
-        )}
       </div>
+      {showUpload && <UploadVideoCard onAdded={load} />}
+      {showSettings && <VideoSettingsCard />}
 
       {channelIdFilter && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -325,14 +493,31 @@ export function VideosClipsPage() {
         </div>
       ) : videos.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-          Nenhum vídeo detectado ainda. Cole um link acima, cadastre um canal em "Canais do YouTube" ou conecte sua pasta do Drive em "Configurações".
+          Nenhum vídeo detectado ainda. Cole um link, envie um arquivo, cadastre um canal em "Canais do YouTube" ou conecte sua pasta do Drive em "Configurações".
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {videos.map((video) => (
-            <VideoRow key={video.id} video={video} avgProcessingSeconds={avgProcessingSeconds} onRetried={load} />
-          ))}
-        </div>
+        <>
+          {inProgress.length > 0 && (
+            <div>
+              <h2 className="mb-3 text-sm font-medium text-muted-foreground">Em andamento</h2>
+              <div className="flex flex-col gap-3">
+                {inProgress.map((video) => (
+                  <VideoRow key={video.id} video={video} avgProcessingSeconds={avgProcessingSeconds} onRetried={load} onDeleted={load} />
+                ))}
+              </div>
+            </div>
+          )}
+          {finished.length > 0 && (
+            <div>
+              <h2 className="mb-3 text-sm font-medium text-muted-foreground">Prontos</h2>
+              <div className="flex flex-col gap-3">
+                {finished.map((video) => (
+                  <VideoRow key={video.id} video={video} avgProcessingSeconds={avgProcessingSeconds} onRetried={load} onDeleted={load} />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </DashboardLayout>
   )

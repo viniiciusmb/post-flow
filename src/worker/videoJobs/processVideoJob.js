@@ -1,6 +1,7 @@
-// O pipeline inteiro de um video-fonte: baixar, transcrever, a IA escolher
-// os cortes, cortar/reenquadrar/legendar cada um, e deixar pronto pra fila
-// de postagem existente. Roda um video por vez (ver videoScheduler.js).
+// O pipeline inteiro de um video-fonte: baixar (ou usar o arquivo enviado
+// por upload), transcrever, a IA escolher os cortes, cortar/reenquadrar/
+// legendar cada um, e deixar pronto pra fila de postagem existente. Roda um
+// video por vez (ver videoScheduler.js).
 'use strict';
 
 const path = require('path');
@@ -33,8 +34,9 @@ async function run(sourceVideoId) {
 
   const workDir = path.join(config.videoProcessing.workDir, String(sourceVideo.id));
 
-  // Video de canal pertence ao cliente dono do canal; video colado manualmente
-  // (input_type = 'manual') ja guarda o cliente direto na propria linha.
+  // Video de canal pertence ao cliente dono do canal; video colado
+  // manualmente ou enviado por upload ja guarda o cliente direto na propria
+  // linha (input_type 'manual'/'upload').
   const clientUserId = sourceVideo.youtube_channel_id
     ? (await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id)).client_user_id
     : sourceVideo.client_user_id;
@@ -42,9 +44,21 @@ async function run(sourceVideoId) {
 
   try {
     await sourceVideosRepository.markProcessingStarted(sourceVideo.id);
-    await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
-    const videoPath = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir);
-    await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath);
+
+    let videoPath;
+    if (sourceVideo.input_type === 'upload') {
+      // Arquivo ja esta em disco (upload direto) - so confirma que ainda
+      // existe (pasta compartilhada, mas por seguranca).
+      videoPath = sourceVideo.local_video_path;
+      if (!videoPath || !fs.existsSync(videoPath)) {
+        throw new Error('Arquivo enviado nao foi encontrado no servidor.');
+      }
+      fs.mkdirSync(workDir, { recursive: true });
+    } else {
+      await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
+      videoPath = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir);
+      await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath);
+    }
 
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'transcribing');
     const audioPath = path.join(workDir, 'audio.mp3');
@@ -65,12 +79,13 @@ async function run(sourceVideoId) {
     if (settings.clip_mode === 'full_video') {
       // Video inteiro vira um unico corte - sem IA escolhendo trecho, sem
       // custo de Claude.
-      selected = [{ title: sourceVideo.title, startSeconds: 0, endSeconds: transcript.durationSeconds }];
+      selected = [{ title: sourceVideo.title, description: null, startSeconds: 0, endSeconds: transcript.durationSeconds }];
     } else {
-      // 'unlimited': sem teto fixo, so limitado pelo quanto de corte cabe no
-      // video (duracao do video / duracao minima de cada corte).
+      // 'ai_choice': sem numero fixo, so um teto de seguranca (duracao do
+      // video / duracao minima de cada corte). 'fixed_count': exatamente
+      // settings.max_clips.
       const maxClips =
-        settings.clip_mode === 'unlimited'
+        settings.clip_mode === 'ai_choice'
           ? Math.max(1, Math.min(30, Math.floor(transcript.durationSeconds / clipLengthPreset.minDuration)))
           : settings.max_clips;
 
@@ -78,6 +93,7 @@ async function run(sourceVideoId) {
         maxClips,
         minDuration: clipLengthPreset.minDuration,
         maxDuration: clipLengthPreset.maxDuration,
+        exact: settings.clip_mode === 'fixed_count',
       });
       await sourceVideosRepository.saveClaudeUsage(sourceVideo.id, {
         inputTokens: selection.inputTokens,
@@ -93,9 +109,22 @@ async function run(sourceVideoId) {
       });
       return;
     }
+
+    // Descricao: 'auto' usa a que a IA ja sugeriu por corte, 'fixed' troca
+    // todas pelo mesmo texto do cliente, 'none' deixa em branco.
     const clips = await clipsRepository.createMany(
       sourceVideo.id,
-      selected.map((c) => ({ title: c.title, startSeconds: c.startSeconds, endSeconds: c.endSeconds }))
+      selected.map((c) => ({
+        title: c.title,
+        startSeconds: c.startSeconds,
+        endSeconds: c.endSeconds,
+        description:
+          settings.description_mode === 'fixed'
+            ? settings.description_template
+            : settings.description_mode === 'none'
+              ? null
+              : c.description || null,
+      }))
     );
 
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'cutting');
@@ -110,11 +139,21 @@ async function run(sourceVideoId) {
           startSeconds: Number(clip.start_seconds),
           endSeconds: Number(clip.end_seconds),
           words: transcript.words,
+          title: clip.title,
           outputPath,
           settings,
+          onProgress: (percent) => clipsRepository.updateRenderProgress(clip.id, percent),
         });
+
+        const thumbnailPath = outputPath.replace(/\.mp4$/, '.jpg');
+        try {
+          await videoEditingService.extractThumbnail(outputPath, thumbnailPath);
+        } catch (thumbErr) {
+          logger.error(`Falha ao gerar capa do corte ${clip.id} (seguindo sem capa):`, thumbErr);
+        }
+
         const fileSizeBytes = fs.statSync(outputPath).size;
-        await clipsRepository.saveRenderedFile(clip.id, outputPath);
+        await clipsRepository.saveRenderedFile(clip.id, outputPath, fs.existsSync(thumbnailPath) ? thumbnailPath : null);
 
         // Sem conta TikTok conectada, o corte fica pronto mas nao vira
         // "video" postavel. Com conta conectada, sempre vira video - mas so
@@ -139,7 +178,7 @@ async function run(sourceVideoId) {
     // O video original baixado nao e mais necessario - os cortes ja existem
     // em arquivos proprios. Mantem os cortes em disco (a postagem de verdade
     // ainda vai precisar deles).
-    fs.unlinkSync(videoPath);
+    if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
 
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'ready');
   } catch (err) {

@@ -1,11 +1,14 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
 const ytDlpService = require('../../../services/ytDlpService');
+const videoEditingService = require('../../../services/videoEditingService');
 const queueService = require('../../../services/queueService');
 const metricsRepository = require('../../../repositories/metricsRepository');
+const config = require('../../../config');
 const logger = require('../../../lib/logger');
 
 const QUEUE_VIDEO_PROCESSING = 'video-processing';
@@ -50,10 +53,13 @@ async function listClips(req, res) {
     clips: clips.map((c) => ({
       id: c.id,
       title: c.title,
+      description: c.description,
       startSeconds: Number(c.start_seconds),
       endSeconds: Number(c.end_seconds),
       status: c.status,
       errorMessage: c.error_message,
+      renderProgressPercent: c.render_progress_percent,
+      thumbnailUrl: c.thumbnail_path ? `/api/client/source-videos/clips/${c.id}/thumbnail` : null,
     })),
   });
 }
@@ -75,6 +81,15 @@ async function downloadClip(req, res) {
   const filename = `${clip.title.replace(/[^\p{L}\p{N}\s-]/gu, '').trim() || 'corte'}.mp4`;
   res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
   res.sendFile(clip.local_clip_path);
+}
+
+// Capa do corte (frame extraido na hora que o corte terminou de renderizar).
+async function clipThumbnail(req, res) {
+  const clip = await clipsRepository.findByIdOwnedByClient(Number(req.params.id), req.session.user.id);
+  if (!clip || !clip.thumbnail_path || !fs.existsSync(clip.thumbnail_path)) {
+    return res.status(404).json({ error: 'Capa nao encontrada.' });
+  }
+  res.sendFile(clip.thumbnail_path);
 }
 
 // Cliente cola o link de um video avulso do YouTube - sem depender de ter um
@@ -118,6 +133,37 @@ async function createManual(req, res) {
   res.status(201).json({ id: sourceVideo.id, title: sourceVideo.title, status: sourceVideo.status });
 }
 
+// Cliente envia o arquivo de video direto do computador/celular - sem passar
+// pelo YouTube. O arquivo ja fica salvo em disco pelo multer (ver rotas);
+// aqui so confere a duracao e entra na mesma fila de processamento.
+async function uploadVideo(req, res) {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+  }
+
+  let durationSeconds;
+  try {
+    durationSeconds = Math.round(await videoEditingService.probeDuration(req.file.path));
+  } catch {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: 'Nao foi possivel ler esse arquivo de video.' });
+  }
+
+  const title = String(req.body.title || '').trim() || path.parse(req.file.originalname).name;
+
+  const sourceVideo = await sourceVideosRepository.createUpload({
+    clientUserId: req.session.user.id,
+    title,
+    localVideoPath: req.file.path,
+    durationSeconds,
+  });
+
+  const boss = await queueService.getBoss();
+  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: sourceVideo.id });
+
+  res.status(201).json({ id: sourceVideo.id, title: sourceVideo.title, status: sourceVideo.status });
+}
+
 // Reinicia um video que ficou em erro - ex: video que falhou por causa do
 // bloqueio de bot do YouTube, ja resolvido.
 async function retry(req, res) {
@@ -138,4 +184,28 @@ async function retry(req, res) {
   res.json({ id: updated.id, status: updated.status });
 }
 
-module.exports = { list, listClips, downloadClip, createManual, retry };
+// Remove o video e os cortes gerados a partir dele, inclusive os arquivos em
+// disco (best-effort - se o arquivo ja nao existir mais, so ignora).
+async function remove(req, res) {
+  const id = Number(req.params.id);
+  const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(id, req.session.user.id);
+  if (!sourceVideo) return res.status(404).json({ error: 'Video nao encontrado.' });
+
+  const clips = await clipsRepository.listBySourceVideoId(id);
+  const filesToRemove = [
+    sourceVideo.local_video_path,
+    ...clips.flatMap((c) => [c.local_clip_path, c.thumbnail_path]),
+  ].filter(Boolean);
+
+  const deleted = await sourceVideosRepository.deleteByIdOwnedByClient(id, req.session.user.id);
+  if (!deleted) return res.status(404).json({ error: 'Video nao encontrado.' });
+
+  for (const filePath of filesToRemove) {
+    fs.rm(filePath, { force: true }, () => {});
+  }
+  fs.rm(path.join(config.videoProcessing.workDir, String(id)), { recursive: true, force: true }, () => {});
+
+  res.status(204).end();
+}
+
+module.exports = { list, listClips, downloadClip, clipThumbnail, createManual, uploadVideo, retry, remove };

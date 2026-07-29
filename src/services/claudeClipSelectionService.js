@@ -49,10 +49,11 @@ const SELECT_CLIPS_TOOL = {
           type: 'object',
           properties: {
             title: { type: 'string', description: 'Titulo curto e chamativo pro corte, estilo TikTok.' },
+            description: { type: 'string', description: 'Legenda curta pra usar na postagem (1-2 frases), com 2-4 hashtags relevantes ao final.' },
             startSeconds: { type: 'number' },
             endSeconds: { type: 'number' },
           },
-          required: ['title', 'startSeconds', 'endSeconds'],
+          required: ['title', 'description', 'startSeconds', 'endSeconds'],
         },
       },
     },
@@ -60,17 +61,24 @@ const SELECT_CLIPS_TOOL = {
   },
 };
 
-async function selectClips(transcriptWords, { maxClips = 4, minDuration = 25, maxDuration = 90 } = {}) {
+// exact=true (modo "escolher quantidade"): pede exatamente maxClips trechos.
+// exact=false (modo "IA decide"): maxClips vira so um teto de seguranca, o
+// prompt deixa claro que e a IA quem decide quantos fazem sentido.
+async function selectClips(transcriptWords, { maxClips = 4, minDuration = 25, maxDuration = 90, exact = false } = {}) {
   const transcript = formatTranscriptForPrompt(transcriptWords);
   if (!transcript) {
     throw new Error('Transcricao vazia - nao ha o que analisar.');
   }
 
+  const countInstruction = exact
+    ? `Escolha exatamente ${maxClips} trechos`
+    : `Escolha quantos trechos bons voce encontrar (sem numero fixo - nao force conteudo fraco so pra preencher, mas tambem nao deixe passar um momento forte). No maximo ${maxClips}`;
+
   const prompt = `Aqui esta a transcricao de um video do YouTube, com marcacoes de tempo a cada poucos segundos:
 
 ${transcript}
 
-Escolha ate ${maxClips} trechos que funcionariam bem como cortes verticais pro TikTok: momentos com potencial viral, respostas completas, historias com gancho, ou insights fortes - cada um durando entre ${minDuration} e ${maxDuration} segundos. Cada corte precisa comecar e terminar em um ponto que faca sentido sozinho (nunca no meio de uma frase). Sugira um titulo curto e chamativo pra cada um. Use a ferramenta select_clips pra registrar sua escolha.`;
+${countInstruction} que funcionariam bem como cortes verticais pro TikTok: momentos com potencial viral, respostas completas, historias com gancho, ou insights fortes - cada um durando entre ${minDuration} e ${maxDuration} segundos. Cada corte precisa comecar e terminar em um ponto que faca sentido sozinho (nunca no meio de uma frase). Sugira um titulo curto e chamativo, e uma legenda pronta pra postar (com hashtags) pra cada um. Use a ferramenta select_clips pra registrar sua escolha.`;
 
   const response = await fetch(MESSAGES_URL, {
     method: 'POST',

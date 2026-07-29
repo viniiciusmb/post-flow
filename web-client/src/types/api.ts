@@ -161,7 +161,8 @@ export type VideoFraming = "crop" | "blur_pad"
 export type VideoQuality = "high" | "medium"
 export type VideoCaptionStyle = "classic" | "bold" | "minimal" | "none"
 export type VideoClipLength = "short" | "balanced" | "long"
-export type VideoClipMode = "best_parts" | "full_video" | "unlimited"
+export type VideoClipMode = "ai_choice" | "full_video" | "fixed_count"
+export type VideoDescriptionMode = "auto" | "fixed" | "none"
 
 export interface ClientVideoSettings {
   aspectRatio: VideoAspectRatio
@@ -171,6 +172,10 @@ export interface ClientVideoSettings {
   clipLength: VideoClipLength
   clipMode: VideoClipMode
   maxClips: number
+  showTitle: boolean
+  titleSeconds: number
+  descriptionMode: VideoDescriptionMode
+  descriptionTemplate: string | null
 }
 
 export interface ClientVideoSettingsResponse extends ClientVideoSettings {
@@ -181,6 +186,7 @@ export interface ClientVideoSettingsResponse extends ClientVideoSettings {
     captionStyles: VideoCaptionStyle[]
     clipLengths: VideoClipLength[]
     clipModes: VideoClipMode[]
+    descriptionModes: VideoDescriptionMode[]
   }
 }
 
@@ -226,8 +232,11 @@ export type ClipStatus = "pending" | "rendering" | "ready" | "error"
 export interface Clip {
   id: number
   title: string
+  description: string | null
   startSeconds: number
   endSeconds: number
   status: ClipStatus
   errorMessage: string | null
+  renderProgressPercent: number
+  thumbnailUrl: string | null
 }
