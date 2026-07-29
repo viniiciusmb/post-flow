@@ -7,6 +7,7 @@ import {
 
 import { NavMain, type NavItem } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
+import { BrandMark } from "@/components/brand-mark"
 import {
   Sidebar,
   SidebarContent,
@@ -49,10 +50,8 @@ export function AppSidebar({
               className="data-[slot=sidebar-menu-button]:p-1.5!"
             >
               <a href={user.role === "admin" ? "/admin" : "/client"}>
-                <span className="flex size-6 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
-                  P
-                </span>
-                <span className="text-base font-semibold">Post Flow</span>
+                <BrandMark className="size-6" />
+                <span className="font-heading text-base font-semibold">Post Flow</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>

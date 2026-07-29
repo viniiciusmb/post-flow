@@ -9,6 +9,12 @@
 @import "@fontsource/inter/latin-ext-600.css";
 @import "@fontsource/inter/latin-700.css";
 @import "@fontsource/inter/latin-ext-700.css";
+@import "@fontsource/space-grotesk/latin-500.css";
+@import "@fontsource/space-grotesk/latin-ext-500.css";
+@import "@fontsource/space-grotesk/latin-600.css";
+@import "@fontsource/space-grotesk/latin-ext-600.css";
+@import "@fontsource/space-grotesk/latin-700.css";
+@import "@fontsource/space-grotesk/latin-ext-700.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -16,6 +22,7 @@
   --radius: 0.625rem;
   --font-sans:
     "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-heading: "Space Grotesk", var(--font-sans);
   --font-mono:
     ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
@@ -121,6 +128,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   --font-sans: var(--font-sans);
+  --font-heading: var(--font-heading);
   --font-mono: var(--font-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
