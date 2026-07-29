@@ -14,6 +14,9 @@ const adminRoutes = require('./routes/adminRoutes');
 const clientRoutes = require('./routes/clientRoutes');
 const tiktokRoutes = require('./routes/tiktokRoutes');
 const googleRoutes = require('./routes/googleRoutes');
+const authApiRoutes = require('./routes/api/authApiRoutes');
+const adminApiRoutes = require('./routes/api/adminApiRoutes');
+const clientApiRoutes = require('./routes/api/clientApiRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -29,7 +32,15 @@ app.set('views', path.join(__dirname, 'views'));
 
 app.use(helmet());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(
+  '/assets',
+  express.static(path.join(__dirname, '../../web-client/dist/assets'), {
+    maxAge: '1y',
+    immutable: true,
+  })
+);
 
 app.use(
   session({
@@ -52,7 +63,7 @@ app.use((req, res, next) => {
 });
 
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
-app.use(['/login', '/register'], loginLimiter);
+app.use(['/login', '/register', '/api/auth/login'], loginLimiter);
 
 app.get('/', (req, res) => {
   if (!req.session.user) return res.redirect('/login');
@@ -72,6 +83,10 @@ app.use('/admin', adminRoutes);
 app.use('/client', clientRoutes);
 app.use('/auth/tiktok', tiktokRoutes);
 app.use('/auth/google', googleRoutes);
+app.use('/api/auth', authApiRoutes);
+app.use('/api/admin', adminApiRoutes);
+app.use('/api/client', clientApiRoutes);
+app.use('/api', (req, res) => res.status(404).json({ error: 'Rota nao encontrada.' }));
 
 app.use((req, res) => {
   res.status(404).render('errors/generic', { title: 'Nao encontrado', message: 'Pagina nao encontrada.' });
