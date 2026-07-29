@@ -14,5 +14,6 @@ router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 router.get('/', asyncHandler(controller.list));
 router.post('/manual', asyncHandler(controller.createManual));
 router.get('/:id/clips', asyncHandler(controller.listClips));
+router.post('/:id/retry', asyncHandler(controller.retry));
 
 module.exports = router;

@@ -43,6 +43,34 @@ async function findById(id) {
   return rows[0] || null;
 }
 
+// Mesma logica de posse do listForClient (canal ou dono direto pra video
+// manual) - usado pra garantir que o cliente so mexe nos proprios videos.
+async function findByIdOwnedByClient(id, clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT sv.* FROM source_videos sv
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     WHERE sv.id = $1 AND coalesce(yc.client_user_id, sv.client_user_id) = $2`,
+    [id, clientUserId]
+  );
+  return rows[0] || null;
+}
+
+// Reinicia um video que ficou em erro (ex: bloqueio do YouTube que ja foi
+// corrigido) - so mexe se ainda estiver em 'error', pra nao interferir com
+// um processamento em andamento.
+async function resetForRetry(id) {
+  const { rows } = await pool.query(
+    `UPDATE source_videos
+     SET status = 'detected', error_message = NULL, local_video_path = NULL,
+         transcript_text = NULL, transcript_words = NULL, processing_started_at = NULL,
+         updated_at = now()
+     WHERE id = $1 AND status = 'error'
+     RETURNING *`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
 async function updateStatus(id, status, { errorMessage = null } = {}) {
   const { rows } = await pool.query(
     `UPDATE source_videos SET status = $2, error_message = $3, updated_at = now() WHERE id = $1 RETURNING *`,
@@ -123,13 +151,14 @@ async function countByClientSince(clientUserId, since, until = new Date()) {
 }
 
 // O video que esta sendo processado agora (se algum) - pro card de destaque
-// da tela "Fila de Processamento" do admin.
+// da tela "Fila de Processamento" do admin. LEFT JOIN pra cobrir video
+// manual tambem (sem canal).
 async function findCurrentlyProcessing() {
   const { rows } = await pool.query(
     `SELECT sv.*, yc.channel_name, u.email AS client_email, u.business_name AS client_business_name
      FROM source_videos sv
-     JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
-     JOIN users u ON u.id = yc.client_user_id
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     JOIN users u ON u.id = coalesce(yc.client_user_id, sv.client_user_id)
      WHERE sv.status = ANY($1)
      ORDER BY sv.updated_at ASC
      LIMIT 1`,
@@ -142,8 +171,8 @@ async function listWaiting() {
   const { rows } = await pool.query(
     `SELECT sv.*, yc.channel_name, u.email AS client_email, u.business_name AS client_business_name
      FROM source_videos sv
-     JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
-     JOIN users u ON u.id = yc.client_user_id
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     JOIN users u ON u.id = coalesce(yc.client_user_id, sv.client_user_id)
      WHERE sv.status = 'detected'
      ORDER BY sv.created_at ASC`
   );
@@ -154,8 +183,8 @@ async function listRecentHistory({ limit = 20 } = {}) {
   const { rows } = await pool.query(
     `SELECT sv.*, yc.channel_name, u.email AS client_email, u.business_name AS client_business_name
      FROM source_videos sv
-     JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
-     JOIN users u ON u.id = yc.client_user_id
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     JOIN users u ON u.id = coalesce(yc.client_user_id, sv.client_user_id)
      WHERE sv.status IN ('ready', 'error')
      ORDER BY sv.updated_at DESC
      LIMIT $1`,
@@ -170,6 +199,8 @@ module.exports = {
   findByYoutubeVideoId,
   findNextDetected,
   findById,
+  findByIdOwnedByClient,
+  resetForRetry,
   updateStatus,
   saveDownload,
   saveTranscript,

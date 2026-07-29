@@ -209,6 +209,12 @@ export interface SourceVideo {
   status: SourceVideoStatus
   errorMessage: string | null
   clipCount: number
+  processingStartedAt: string | null
+}
+
+export interface SourceVideosResponse {
+  avgProcessingSeconds: number
+  videos: SourceVideo[]
 }
 
 export type ClipStatus = "pending" | "rendering" | "ready" | "error"

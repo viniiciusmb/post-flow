@@ -4,13 +4,26 @@ const sourceVideosRepository = require('../../../repositories/sourceVideosReposi
 const clipsRepository = require('../../../repositories/clipsRepository');
 const ytDlpService = require('../../../services/ytDlpService');
 const queueService = require('../../../services/queueService');
+const metricsRepository = require('../../../repositories/metricsRepository');
+const logger = require('../../../lib/logger');
 
 const QUEUE_VIDEO_PROCESSING = 'video-processing';
+// Usado quando ainda nao ha historico suficiente de processamento pra
+// calcular uma media real (video tipico: download + transcricao + IA + corte).
+const DEFAULT_AVG_PROCESSING_SECONDS = 480;
 
 async function list(req, res) {
   const channelId = req.query.channelId ? Number(req.query.channelId) : null;
-  const videos = await sourceVideosRepository.listForClient(req.session.user.id, { youtubeChannelId: channelId });
+  const since90d = new Date();
+  since90d.setDate(since90d.getDate() - 90);
+
+  const [videos, pipelineHealth] = await Promise.all([
+    sourceVideosRepository.listForClient(req.session.user.id, { youtubeChannelId: channelId }),
+    metricsRepository.pipelineHealthSince(since90d),
+  ]);
+
   res.json({
+    avgProcessingSeconds: pipelineHealth.avgProcessingSeconds || DEFAULT_AVG_PROCESSING_SECONDS,
     videos: videos.map((v) => ({
       id: v.id,
       title: v.title,
@@ -21,6 +34,7 @@ async function list(req, res) {
       status: v.status,
       errorMessage: v.error_message,
       clipCount: v.clip_count,
+      processingStartedAt: v.processing_started_at,
     })),
   });
 }
@@ -61,6 +75,7 @@ async function createManual(req, res) {
   try {
     metadata = await ytDlpService.getVideoMetadata(`https://www.youtube.com/watch?v=${videoId}`);
   } catch (err) {
+    logger.error(`Falha ao adicionar video manual (${videoId}) pro cliente ${req.session.user.id}:`, err);
     return res.status(502).json({ error: `Nao foi possivel ler os dados desse video: ${err.message}` });
   }
 
@@ -82,4 +97,24 @@ async function createManual(req, res) {
   res.status(201).json({ id: sourceVideo.id, title: sourceVideo.title, status: sourceVideo.status });
 }
 
-module.exports = { list, listClips, createManual };
+// Reinicia um video que ficou em erro - ex: video que falhou por causa do
+// bloqueio de bot do YouTube, ja resolvido.
+async function retry(req, res) {
+  const id = Number(req.params.id);
+  const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(id, req.session.user.id);
+  if (!sourceVideo) return res.status(404).json({ error: 'Video nao encontrado.' });
+  if (sourceVideo.status !== 'error') {
+    return res.status(400).json({ error: 'Esse video nao esta com erro no momento.' });
+  }
+
+  await clipsRepository.deleteBySourceVideoId(id);
+  const updated = await sourceVideosRepository.resetForRetry(id);
+  if (!updated) return res.status(409).json({ error: 'Nao foi possivel reiniciar esse video agora, tente de novo.' });
+
+  const boss = await queueService.getBoss();
+  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: id });
+
+  res.json({ id: updated.id, status: updated.status });
+}
+
+module.exports = { list, listClips, createManual, retry };

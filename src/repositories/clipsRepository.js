@@ -37,6 +37,12 @@ async function saveRenderedFile(id, localClipPath) {
   );
 }
 
+// Usado antes de reiniciar um video que falhou - limpa cortes de uma
+// tentativa anterior (videos/postings ligados a eles caem em cascata).
+async function deleteBySourceVideoId(sourceVideoId) {
+  await pool.query('DELETE FROM clips WHERE source_video_id = $1', [sourceVideoId]);
+}
+
 async function countCreatedSince(since, until = new Date()) {
   const { rows } = await pool.query(
     'SELECT count(*)::int AS count FROM clips WHERE created_at >= $1 AND created_at <= $2',
@@ -78,6 +84,7 @@ module.exports = {
   listBySourceVideoId,
   updateStatus,
   saveRenderedFile,
+  deleteBySourceVideoId,
   countCreatedSince,
   countByClientSince,
   countPostedByClientSince,

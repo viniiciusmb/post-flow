@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { IconChevronDown, IconChevronRight, IconLink } from "@tabler/icons-react"
+import { IconChevronDown, IconChevronRight, IconLink, IconClock, IconRefresh } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,6 +10,7 @@ import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { CLIP_STATUS_TONE, SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
+import { ACTIVE_STATUSES, computeVideoProgress, formatEta } from "@/lib/videoProgress"
 import type { Clip, SourceVideo } from "@/types/api"
 
 function formatDuration(seconds: number | null) {
@@ -19,9 +20,18 @@ function formatDuration(seconds: number | null) {
   return `${m}:${String(s).padStart(2, "0")}`
 }
 
-function VideoRow({ video }: { video: SourceVideo }) {
+function VideoRow({
+  video,
+  avgProcessingSeconds,
+  onRetried,
+}: {
+  video: SourceVideo
+  avgProcessingSeconds: number
+  onRetried: () => void
+}) {
   const [open, setOpen] = useState(false)
   const [clips, setClips] = useState<Clip[] | null>(null)
+  const [retrying, setRetrying] = useState(false)
 
   async function toggle() {
     const next = !open
@@ -31,6 +41,18 @@ function VideoRow({ video }: { video: SourceVideo }) {
       setClips(data.clips)
     }
   }
+
+  async function retry() {
+    setRetrying(true)
+    try {
+      await api.post(`/api/client/source-videos/${video.id}/retry`, {})
+      onRetried()
+    } finally {
+      setRetrying(false)
+    }
+  }
+
+  const progress = computeVideoProgress(video.status, video.processingStartedAt, avgProcessingSeconds)
 
   return (
     <Card>
@@ -51,14 +73,23 @@ function VideoRow({ video }: { video: SourceVideo }) {
         )}
 
         {video.thumbnailUrl && (
-          <img src={video.thumbnailUrl} alt="" className="h-12 w-20 shrink-0 rounded-md object-cover" />
+          <div className="relative h-12 w-20 shrink-0">
+            <img src={video.thumbnailUrl} alt="" className="h-12 w-20 rounded-md object-cover" />
+            {progress && (
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 rounded-b-md bg-black/75 px-1 py-0.5 text-[9px] font-semibold text-emerald-400">
+                <IconClock className="size-2.5" />
+                {progress.percent}%
+              </div>
+            )}
+          </div>
         )}
 
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{video.title}</p>
           <p className="text-xs text-muted-foreground">
-            {video.channelName} · {formatDuration(video.durationSeconds)}
+            {video.channelName ?? "Link avulso"} · {formatDuration(video.durationSeconds)}
             {video.publishedAt && ` · ${new Date(video.publishedAt).toLocaleDateString("pt-BR")}`}
+            {progress && progress.etaSeconds !== null && ` · faltam ~${formatEta(progress.etaSeconds)}`}
           </p>
         </div>
 
@@ -68,7 +99,19 @@ function VideoRow({ video }: { video: SourceVideo }) {
       </button>
 
       {video.errorMessage && (
-        <p className="border-t border-border px-4 py-2 text-xs text-destructive">{video.errorMessage}</p>
+        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2">
+          <p className="text-xs text-destructive">{video.errorMessage}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={retry}
+            disabled={retrying}
+            className="h-7 shrink-0 gap-1 text-xs"
+          >
+            <IconRefresh className="size-3" />
+            {retrying ? "Reiniciando..." : "Tentar novamente"}
+          </Button>
+        </div>
       )}
 
       {open && (
@@ -114,10 +157,10 @@ function AddManualVideoCard({ onAdded }: { onAdded: () => void }) {
     try {
       const created = await api.post<{ id: number; title: string }>("/api/client/source-videos/manual", { url })
       setUrl("")
-      setSuccess(`"${created.title}" adicionado — já entrou na fila de processamento.`)
+      setSuccess(`"${created.title}" entrou na fila — acompanhe o progresso na lista abaixo.`)
       onAdded()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível adicionar esse vídeo.")
+      setError(err instanceof ApiError ? err.message : "Não foi possível cortar esse vídeo.")
     } finally {
       setSubmitting(false)
     }
@@ -128,7 +171,7 @@ function AddManualVideoCard({ onAdded }: { onAdded: () => void }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <IconLink className="size-4 text-muted-foreground" />
-          Adicionar vídeo por link
+          Cortar vídeo por link
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -155,7 +198,7 @@ function AddManualVideoCard({ onAdded }: { onAdded: () => void }) {
                   required
                 />
                 <Button type="submit" disabled={submitting}>
-                  {submitting ? "Adicionando..." : "Adicionar"}
+                  {submitting ? "Cortando..." : "Cortar"}
                 </Button>
               </div>
             </Field>
@@ -166,19 +209,39 @@ function AddManualVideoCard({ onAdded }: { onAdded: () => void }) {
   )
 }
 
+const PENDING_STATUSES = ["detected", ...ACTIVE_STATUSES]
+
 export function VideosClipsPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const [videos, setVideos] = useState<SourceVideo[] | null>(null)
+  const [avgProcessingSeconds, setAvgProcessingSeconds] = useState(480)
+  const [, setTick] = useState(0)
 
   async function load() {
-    const data = await api.get<{ videos: SourceVideo[] }>("/api/client/source-videos")
+    const data = await api.get<{ videos: SourceVideo[]; avgProcessingSeconds: number }>("/api/client/source-videos")
     setVideos(data.videos)
+    setAvgProcessingSeconds(data.avgProcessingSeconds)
   }
 
   useEffect(() => {
     if (!user) return
     load()
   }, [user])
+
+  const hasPending = videos?.some((v) => PENDING_STATUSES.includes(v.status)) ?? false
+
+  // Enquanto tiver video em andamento: busca o status real do servidor a
+  // cada 8s, e forca um re-render a cada 1s so pra % e ETA (calculados
+  // localmente a partir de processingStartedAt) andarem na tela.
+  useEffect(() => {
+    if (!hasPending) return
+    const refetch = setInterval(load, 8000)
+    const tick = setInterval(() => setTick((t) => t + 1), 1000)
+    return () => {
+      clearInterval(refetch)
+      clearInterval(tick)
+    }
+  }, [hasPending])
 
   if (authLoading || !user) return null
 
@@ -199,7 +262,7 @@ export function VideosClipsPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {videos.map((video) => (
-            <VideoRow key={video.id} video={video} />
+            <VideoRow key={video.id} video={video} avgProcessingSeconds={avgProcessingSeconds} onRetried={load} />
           ))}
         </div>
       )}
