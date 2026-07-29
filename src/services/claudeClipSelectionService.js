@@ -89,7 +89,7 @@ ${countInstruction} que funcionariam bem como cortes verticais pro TikTok: momen
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 2048,
+      max_tokens: 4096,
       tools: [SELECT_CLIPS_TOOL],
       tool_choice: { type: 'tool', name: 'select_clips' },
       messages: [{ role: 'user', content: prompt }],
@@ -104,6 +104,12 @@ ${countInstruction} que funcionariam bem como cortes verticais pro TikTok: momen
   const toolUse = data.content.find((block) => block.type === 'tool_use');
   if (!toolUse) {
     throw new Error('Claude nao retornou uma selecao de cortes valida.');
+  }
+  if (data.stop_reason === 'max_tokens') {
+    throw new Error('A resposta da IA foi cortada antes de terminar (video com muitos cortes selecionados) - tente de novo.');
+  }
+  if (!Array.isArray(toolUse.input.clips)) {
+    throw new Error('Claude retornou uma selecao de cortes incompleta ou invalida.');
   }
 
   const inputTokens = data.usage?.input_tokens || 0;

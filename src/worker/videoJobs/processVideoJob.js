@@ -45,6 +45,19 @@ async function run(sourceVideoId) {
   const sourceVideo = await sourceVideosRepository.findById(sourceVideoId);
   if (!sourceVideo) return;
 
+  // Protecao contra job redelivered pelo pg-boss (ex: o worker caiu/foi
+  // reiniciado no meio do processamento, e o pg-boss reenfileira o mesmo
+  // job pra tentar de novo) - "detected" e o unico status valido pra COMECAR
+  // um processamento do zero. Qualquer outro status aqui significa que esse
+  // video ja esta em andamento (ou ja terminou) numa execucao anterior -
+  // continuar reprocessaria tudo de novo e duplicaria os cortes ja criados.
+  if (sourceVideo.status !== 'detected') {
+    logger.info(
+      `Video-fonte ${sourceVideo.id} recebeu um job redelivered pelo pg-boss mas ja esta em status "${sourceVideo.status}" - ignorando pra nao duplicar.`
+    );
+    return;
+  }
+
   const workDir = path.join(config.videoProcessing.workDir, String(sourceVideo.id));
 
   // Video de canal pertence ao cliente dono do canal; video colado

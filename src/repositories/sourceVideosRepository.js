@@ -2,11 +2,15 @@
 
 const pool = require('../db/pool');
 
+// ON CONFLICT precisa citar o mesmo predicado WHERE do indice parcial
+// (uq_source_videos_youtube_video_id, migrations/021) - sem isso o Postgres
+// nao consegue inferir qual indice usar e a insercao falha com "there is no
+// unique or exclusion constraint matching the ON CONFLICT specification".
 async function createIfNotExists({ youtubeChannelId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds }) {
   const { rows } = await pool.query(
     `INSERT INTO source_videos (youtube_channel_id, youtube_video_id, title, thumbnail_url, published_at, duration_seconds)
      VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (youtube_video_id) DO NOTHING
+     ON CONFLICT (youtube_video_id) WHERE youtube_video_id IS NOT NULL DO NOTHING
      RETURNING *`,
     [youtubeChannelId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds]
   );
@@ -19,7 +23,7 @@ async function createManual({ clientUserId, youtubeVideoId, title, thumbnailUrl,
   const { rows } = await pool.query(
     `INSERT INTO source_videos (client_user_id, input_type, youtube_video_id, title, thumbnail_url, published_at, duration_seconds)
      VALUES ($1, 'manual', $2, $3, $4, $5, $6)
-     ON CONFLICT (youtube_video_id) DO NOTHING
+     ON CONFLICT (youtube_video_id) WHERE youtube_video_id IS NOT NULL DO NOTHING
      RETURNING *`,
     [clientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds]
   );
