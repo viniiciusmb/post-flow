@@ -13,6 +13,5 @@ router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 
 router.get('/', asyncHandler(controller.status));
 router.post('/folder', asyncHandler(controller.setFolder));
-router.post('/export-folder', asyncHandler(controller.setExportFolder));
 
 module.exports = router;

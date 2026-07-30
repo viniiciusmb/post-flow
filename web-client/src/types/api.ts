@@ -184,7 +184,6 @@ export interface DriveStatusResponse {
   connected: boolean
   googleAccountEmail: string | null
   folder: { id: string; name: string | null; lastPolledAt: string | null } | null
-  exportFolder: { id: string; name: string | null } | null
 }
 
 export type VideoAspectRatio = "9:16" | "1:1" | "16:9" | "4:5"
@@ -228,6 +227,7 @@ export interface YoutubeChannel {
   avatarUrl: string | null
   isActive: boolean
   lastPolledAt: string | null
+  exportFolder: { id: string; name: string | null } | null
 }
 
 export type SourceVideoStatus =

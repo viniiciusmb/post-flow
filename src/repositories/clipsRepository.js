@@ -71,15 +71,14 @@ async function deleteById(id) {
 }
 
 // Cortes prontos que ainda nao foram enviados pra pasta de destino do Drive
-// do cliente - usado pelo job de exportacao.
-async function listReadyNotExportedByClientId(clientUserId) {
+// de um canal especifico - usado pelo job de exportacao.
+async function listReadyNotExportedByChannelId(youtubeChannelId) {
   const { rows } = await pool.query(
     `SELECT c.* FROM clips c
      JOIN source_videos sv ON sv.id = c.source_video_id
-     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
-     WHERE coalesce(yc.client_user_id, sv.client_user_id) = $1
+     WHERE sv.youtube_channel_id = $1
        AND c.status = 'ready' AND c.exported_to_drive_at IS NULL AND c.local_clip_path IS NOT NULL`,
-    [clientUserId]
+    [youtubeChannelId]
   );
   return rows;
 }
@@ -133,7 +132,7 @@ module.exports = {
   saveRenderedFile,
   deleteBySourceVideoId,
   deleteById,
-  listReadyNotExportedByClientId,
+  listReadyNotExportedByChannelId,
   markExportedToDrive,
   countCreatedSince,
   countByClientSince,

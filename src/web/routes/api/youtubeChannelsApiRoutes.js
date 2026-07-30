@@ -14,6 +14,7 @@ router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 router.get('/', asyncHandler(controller.list));
 router.post('/', asyncHandler(controller.create));
 router.post('/:id/active', asyncHandler(controller.setActive));
+router.post('/:id/export-folder', asyncHandler(controller.setExportFolder));
 router.delete('/:id', asyncHandler(controller.remove));
 
 module.exports = router;

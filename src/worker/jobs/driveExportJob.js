@@ -15,20 +15,20 @@ async function run() {
   const exportFolders = await driveFoldersRepository.listExportFolders();
   for (const folder of exportFolders) {
     try {
-      await exportForClient(folder);
+      await exportForChannel(folder);
     } catch (err) {
-      logger.error(`Falha na exportacao pro Drive do cliente ${folder.client_user_id}:`, err);
+      logger.error(`Falha na exportacao pro Drive do canal ${folder.youtube_channel_id}:`, err);
     }
   }
 }
 
-async function exportForClient(folder) {
+async function exportForChannel(folder) {
   if (!folder.connection_id) return;
   const connection = await driveConnectionsRepository.findById(folder.connection_id);
   const accessToken = await driveConnectionsRepository.getValidAccessToken(googleService, connection);
   if (!accessToken) return;
 
-  const clips = await clipsRepository.listReadyNotExportedByClientId(folder.client_user_id);
+  const clips = await clipsRepository.listReadyNotExportedByChannelId(folder.youtube_channel_id);
   for (const clip of clips) {
     if (!clip.local_clip_path || !fs.existsSync(clip.local_clip_path)) continue;
 
@@ -36,7 +36,7 @@ async function exportForClient(folder) {
     try {
       await googleService.uploadFile(accessToken, folder.drive_folder_id, clip.local_clip_path, filename, 'video/mp4');
       await clipsRepository.markExportedToDrive(clip.id);
-      logger.info(`Corte ${clip.id} exportado pro Drive do cliente ${folder.client_user_id}.`);
+      logger.info(`Corte ${clip.id} exportado pro Drive do canal ${folder.youtube_channel_id}.`);
     } catch (err) {
       logger.error(`Falha ao exportar o corte ${clip.id} pro Drive:`, err);
     }

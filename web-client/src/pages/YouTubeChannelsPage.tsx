@@ -1,10 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { IconTrash, IconArrowRight, IconMovie } from "@tabler/icons-react"
+import { IconTrash, IconArrowRight, IconMovie, IconBrandGoogleDrive } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -12,7 +11,7 @@ import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
-import type { SourceVideo, TikTokAccountResponse, YoutubeChannel } from "@/types/api"
+import type { DriveStatusResponse, SourceVideo, TikTokAccountResponse, YoutubeChannel } from "@/types/api"
 
 function initials(name: string) {
   return name.slice(0, 2).toUpperCase()
@@ -53,19 +52,67 @@ function ChannelCard({
   videos,
   autoPostEnabled,
   hasTiktokAccount,
+  hasDriveConnection,
   onToggleActive,
   onToggleAutoPost,
+  onSetExportFolder,
   onRemove,
 }: {
   channel: YoutubeChannel
   videos: SourceVideo[]
   autoPostEnabled: boolean
   hasTiktokAccount: boolean
-  onToggleActive: (checked: boolean) => void
-  onToggleAutoPost: (checked: boolean) => void
+  hasDriveConnection: boolean
+  onToggleActive: (checked: boolean) => Promise<void>
+  onToggleAutoPost: (checked: boolean) => Promise<void>
+  onSetExportFolder: (folderLink: string) => Promise<void>
   onRemove: () => void
 }) {
   const recent = videos.slice(0, 6)
+  const [savingActive, setSavingActive] = useState(false)
+  const [savingAutoPost, setSavingAutoPost] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [exportFolderLink, setExportFolderLink] = useState("")
+  const [savingExportFolder, setSavingExportFolder] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
+  async function handleToggleActive() {
+    setError(null)
+    setSavingActive(true)
+    try {
+      await onToggleActive(!channel.isActive)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível salvar. Tente de novo.")
+    } finally {
+      setSavingActive(false)
+    }
+  }
+
+  async function handleToggleAutoPost() {
+    setError(null)
+    setSavingAutoPost(true)
+    try {
+      await onToggleAutoPost(!autoPostEnabled)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível salvar. Tente de novo.")
+    } finally {
+      setSavingAutoPost(false)
+    }
+  }
+
+  async function handleSetExportFolder(event: FormEvent) {
+    event.preventDefault()
+    setExportError(null)
+    setSavingExportFolder(true)
+    try {
+      await onSetExportFolder(exportFolderLink)
+      setExportFolderLink("")
+    } catch (err) {
+      setExportError(err instanceof ApiError ? err.message : "Não foi possível salvar a pasta.")
+    } finally {
+      setSavingExportFolder(false)
+    }
+  }
 
   return (
     <Card>
@@ -94,27 +141,102 @@ function ChannelCard({
           </Button>
         </div>
 
-        <div className="flex flex-wrap gap-4 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <Checkbox checked={channel.isActive} onCheckedChange={(c) => onToggleActive(c === true)} />
-            Baixar e cortar automaticamente
-          </label>
-          <label className={`flex items-center gap-2 text-sm ${hasTiktokAccount ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}>
-            <Checkbox
-              checked={autoPostEnabled}
-              disabled={!hasTiktokAccount}
-              onCheckedChange={(c) => onToggleAutoPost(c === true)}
-            />
-            Postar automaticamente no TikTok
-          </label>
-          {!hasTiktokAccount && (
-            <span className="text-xs text-muted-foreground">
-              (conecte a{" "}
-              <a href="/client/tiktok-account" className="text-primary hover:underline">
-                conta TikTok
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 px-3 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">
+                {channel.isActive ? "Baixando e cortando automaticamente" : "Automação pausada"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {channel.isActive
+                  ? "Vídeos novos deste canal entram na fila de corte assim que são detectados."
+                  : "Vídeos novos deste canal não são baixados nem cortados até você retomar."}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant={channel.isActive ? "outline" : "default"}
+              onClick={handleToggleActive}
+              disabled={savingActive}
+              className="shrink-0"
+            >
+              {savingActive ? "Salvando..." : channel.isActive ? "Pausar" : "Retomar"}
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">
+                {!hasTiktokAccount
+                  ? "Postagem automática no TikTok"
+                  : autoPostEnabled
+                    ? "Postando automaticamente no TikTok"
+                    : "Postagem automática pausada"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {!hasTiktokAccount ? (
+                  <>
+                    Conecte a{" "}
+                    <a href="/client/tiktok-account" className="text-primary hover:underline">
+                      conta TikTok
+                    </a>{" "}
+                    pra habilitar (vale pra todos os canais).
+                  </>
+                ) : autoPostEnabled ? (
+                  "Cortes prontos de qualquer canal entram na fila de postagem do TikTok."
+                ) : (
+                  "Cortes ficam prontos, mas não são enviados pro TikTok até você ligar isso."
+                )}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant={autoPostEnabled ? "outline" : "default"}
+              onClick={handleToggleAutoPost}
+              disabled={savingAutoPost || !hasTiktokAccount}
+              className="shrink-0"
+            >
+              {savingAutoPost ? "Salvando..." : autoPostEnabled ? "Pausar" : "Ligar"}
+            </Button>
+          </div>
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-lg border border-border px-3 py-3">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <IconBrandGoogleDrive className="size-4 text-muted-foreground" />
+            Enviar cortes prontos deste canal pro Google Drive
+          </div>
+          {!hasDriveConnection ? (
+            <p className="text-xs text-muted-foreground">
+              Conecte seu{" "}
+              <a href="/client/settings" className="text-primary hover:underline">
+                Google Drive
               </a>{" "}
-              pra habilitar)
-            </span>
+              em Configurações pra habilitar.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                {channel.exportFolder
+                  ? `Pasta atual: ${channel.exportFolder.name ?? channel.exportFolder.id}`
+                  : "Opcional — cada corte pronto gerado desse canal é enviado automaticamente pra essa pasta."}
+              </p>
+              <form onSubmit={handleSetExportFolder} className="flex gap-2">
+                <Input
+                  placeholder="Link ou ID da pasta do Drive"
+                  value={exportFolderLink}
+                  onChange={(e) => setExportFolderLink(e.target.value)}
+                  required
+                  className="h-8 text-xs"
+                />
+                <Button type="submit" size="sm" disabled={savingExportFolder} className="shrink-0">
+                  {savingExportFolder ? "Salvando..." : channel.exportFolder ? "Trocar" : "Salvar"}
+                </Button>
+              </form>
+              {exportError && <p className="text-xs text-destructive">{exportError}</p>}
+            </>
           )}
         </div>
 
@@ -143,20 +265,23 @@ export function YouTubeChannelsPage() {
   const [channels, setChannels] = useState<YoutubeChannel[] | null>(null)
   const [videos, setVideos] = useState<SourceVideo[]>([])
   const [tiktokAccount, setTiktokAccount] = useState<TikTokAccountResponse | null>(null)
+  const [driveStatus, setDriveStatus] = useState<DriveStatusResponse | null>(null)
   const [channelUrl, setChannelUrl] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   async function load() {
-    const [channelsData, videosData, tiktokData] = await Promise.all([
+    const [channelsData, videosData, tiktokData, driveData] = await Promise.all([
       api.get<{ channels: YoutubeChannel[] }>("/api/client/youtube-channels"),
       api.get<{ videos: SourceVideo[] }>("/api/client/source-videos"),
       api.get<TikTokAccountResponse>("/api/client/tiktok-account"),
+      api.get<DriveStatusResponse>("/api/client/drive"),
     ])
     setChannels(channelsData.channels)
     setVideos(videosData.videos)
     setTiktokAccount(tiktokData)
+    setDriveStatus(driveData)
   }
 
   useEffect(() => {
@@ -190,6 +315,11 @@ export function YouTubeChannelsPage() {
     await load()
   }
 
+  async function setExportFolder(channel: YoutubeChannel, folderLink: string) {
+    await api.post(`/api/client/youtube-channels/${channel.id}/export-folder`, { folderLink })
+    await load()
+  }
+
   async function removeChannel(channel: YoutubeChannel) {
     if (!confirm(`Remover o canal "${channel.channelName}"? Isso nao apaga os cortes ja gerados.`)) return
     await api.delete(`/api/client/youtube-channels/${channel.id}`)
@@ -200,6 +330,7 @@ export function YouTubeChannelsPage() {
 
   const hasTiktokAccount = tiktokAccount?.connected === true
   const autoPostEnabled = tiktokAccount?.connected === true && tiktokAccount.autoPostEnabled
+  const hasDriveConnection = driveStatus?.connected === true
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Canais do YouTube">
@@ -263,8 +394,10 @@ export function YouTubeChannelsPage() {
                 videos={videos.filter((v) => v.channelId === channel.id)}
                 autoPostEnabled={autoPostEnabled}
                 hasTiktokAccount={hasTiktokAccount}
+                hasDriveConnection={hasDriveConnection}
                 onToggleActive={(checked) => toggleActive(channel, checked)}
                 onToggleAutoPost={toggleAutoPost}
+                onSetExportFolder={(folderLink) => setExportFolder(channel, folderLink)}
                 onRemove={() => removeChannel(channel)}
               />
             ))}

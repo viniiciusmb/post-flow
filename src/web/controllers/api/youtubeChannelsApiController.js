@@ -2,18 +2,28 @@
 
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const youtubeChannelService = require('../../../services/youtubeChannelService');
+const driveConnectionsRepository = require('../../../repositories/driveConnectionsRepository');
+const driveFoldersRepository = require('../../../repositories/driveFoldersRepository');
+const { extractDriveFolderId } = require('../../../lib/driveFolderId');
 
 async function list(req, res) {
   const channels = await youtubeChannelsRepository.listByClientId(req.session.user.id);
+  const exportFolders = await driveFoldersRepository.findExportFoldersByChannelIds(channels.map((c) => c.id));
+  const exportFolderByChannel = new Map(exportFolders.map((f) => [f.youtube_channel_id, f]));
+
   res.json({
-    channels: channels.map((c) => ({
-      id: c.id,
-      channelName: c.channel_name,
-      channelUrl: c.channel_url,
-      avatarUrl: c.avatar_url,
-      isActive: c.is_active,
-      lastPolledAt: c.last_polled_at,
-    })),
+    channels: channels.map((c) => {
+      const exportFolder = exportFolderByChannel.get(c.id);
+      return {
+        id: c.id,
+        channelName: c.channel_name,
+        channelUrl: c.channel_url,
+        avatarUrl: c.avatar_url,
+        isActive: c.is_active,
+        lastPolledAt: c.last_polled_at,
+        exportFolder: exportFolder ? { id: exportFolder.drive_folder_id, name: exportFolder.folder_name } : null,
+      };
+    }),
   });
 }
 
@@ -50,6 +60,7 @@ async function create(req, res) {
       avatarUrl: channel.avatar_url,
       isActive: channel.is_active,
       lastPolledAt: channel.last_polled_at,
+      exportFolder: null,
     },
   });
 }
@@ -69,4 +80,32 @@ async function remove(req, res) {
   res.status(204).end();
 }
 
-module.exports = { list, create, setActive, remove };
+// Pasta de destino no Drive - pra onde os cortes gerados a partir desse
+// canal sao enviados automaticamente (copia de seguranca). Precisa da
+// conexao Google do proprio cliente ja existente (ver clientDriveApiController).
+async function setExportFolder(req, res) {
+  const channel = await youtubeChannelsRepository.findById(Number(req.params.id));
+  if (!channel || channel.client_user_id !== req.session.user.id) {
+    return res.status(404).json({ error: 'Canal nao encontrado.' });
+  }
+
+  const driveFolderId = extractDriveFolderId(req.body.folderLink);
+  if (!driveFolderId) {
+    return res.status(400).json({ error: 'Cole o link ou ID da pasta do Drive.' });
+  }
+
+  const connection = await driveConnectionsRepository.findByOwnerId(req.session.user.id);
+  if (!connection) {
+    return res.status(400).json({ error: 'Conecte o Google Drive primeiro, em Configurações.' });
+  }
+
+  const folder = await driveFoldersRepository.upsertChannelExportFolder({
+    youtubeChannelId: channel.id,
+    driveFolderId,
+    folderName: req.body.folderName || null,
+    connectionId: connection.id,
+  });
+  res.json({ exportFolder: { id: folder.drive_folder_id, name: folder.folder_name } });
+}
+
+module.exports = { list, create, setActive, remove, setExportFolder };
