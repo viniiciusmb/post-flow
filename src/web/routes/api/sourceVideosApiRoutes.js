@@ -42,6 +42,7 @@ router.post('/:id/retry', asyncHandler(controller.retry));
 router.post('/:id/pause', asyncHandler(controller.pause));
 router.post('/:id/resume', asyncHandler(controller.resume));
 router.delete('/:id', asyncHandler(controller.remove));
+router.post('/bulk-delete', asyncHandler(controller.bulkRemove));
 router.get('/clips/:id/download', asyncHandler(controller.downloadClip));
 router.get('/clips/:id/thumbnail', asyncHandler(controller.clipThumbnail));
 router.post('/clips/:id/export-to-drive', asyncHandler(controller.exportClipToDrive));

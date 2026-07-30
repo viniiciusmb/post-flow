@@ -7,10 +7,11 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const { whisperCostUsd } = require('../lib/apiCost');
+const { PausedError } = require('../lib/errors');
 
 const TRANSCRIPTION_URL = 'https://api.openai.com/v1/audio/transcriptions';
 
-async function transcribeAudio(audioFilePath, { language } = {}) {
+async function transcribeAudio(audioFilePath, { language, checkCancelled } = {}) {
   const fileBuffer = fs.readFileSync(audioFilePath);
   const form = new FormData();
   form.append('file', new Blob([fileBuffer]), path.basename(audioFilePath));
@@ -19,11 +20,33 @@ async function transcribeAudio(audioFilePath, { language } = {}) {
   form.append('timestamp_granularities[]', 'word');
   if (language) form.append('language', language);
 
-  const response = await fetch(TRANSCRIPTION_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${config.openai.apiKey}` },
-    body: form,
-  });
+  // Confere pausa a cada 2s enquanto espera a OpenAI responder - sem isso,
+  // pausar so tinha efeito depois que a transcricao inteira terminasse.
+  const controller = new AbortController();
+  let cancelled = false;
+  const cancelPoll = checkCancelled
+    ? setInterval(async () => {
+        if (await checkCancelled()) {
+          cancelled = true;
+          controller.abort();
+        }
+      }, 2000)
+    : null;
+
+  let response;
+  try {
+    response = await fetch(TRANSCRIPTION_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.openai.apiKey}` },
+      body: form,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (cancelled) throw new PausedError('Transcricao interrompida pelo cliente.');
+    throw err;
+  } finally {
+    if (cancelPoll) clearInterval(cancelPoll);
+  }
 
   const data = await response.json();
   if (!response.ok) {

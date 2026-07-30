@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const config = require('../../config');
 const logger = require('../../lib/logger');
+const { PausedError } = require('../../lib/errors');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../repositories/clipsRepository');
 const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRepository');
@@ -29,16 +30,21 @@ const CLIP_LENGTH_PRESETS = {
   long: { minDuration: 60, maxDuration: 180 },
 };
 
-class PausedError extends Error {}
-
 // Pausa cooperativa: confere a flag entre as etapas principais (e a cada
-// corte do loop de renderizacao) e para no proximo checkpoint - nao mata o
-// yt-dlp/ffmpeg em andamento na hora, mas normalmente para em menos de 1
-// minuto. O trabalho ja feito ate ali (download, transcricao, cortes ja
-// renderizados) fica salvo pra retomar depois sem refazer.
-async function checkPaused(sourceVideoId) {
+// corte do loop de renderizacao) e para no proximo checkpoint. Alem disso,
+// download/transcricao/renderizacao (as 3 etapas longas) recebem esse mesmo
+// checker via callback e conferem a flag periodicamente ENQUANTO rodam
+// (matam o processo yt-dlp/ffmpeg ou abortam a chamada da OpenAI na hora) -
+// sem isso, pausar so tinha efeito depois que a etapa inteira terminasse
+// (podia levar minutos). O trabalho ja feito ate ali (download, transcricao,
+// cortes ja renderizados) fica salvo pra retomar depois sem refazer.
+async function isCancelRequested(sourceVideoId) {
   const current = await sourceVideosRepository.findById(sourceVideoId);
-  if (current && current.cancel_requested) {
+  return Boolean(current && current.cancel_requested);
+}
+
+async function checkPaused(sourceVideoId) {
+  if (await isCancelRequested(sourceVideoId)) {
     throw new PausedError('Pausado pelo cliente.');
   }
 }
@@ -69,6 +75,7 @@ async function run(sourceVideoId) {
     ? (await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id)).client_user_id
     : sourceVideo.client_user_id;
   const settings = await clientVideoSettingsRepository.findByClientId(clientUserId);
+  const checkCancelled = () => isCancelRequested(sourceVideo.id);
 
   try {
     await sourceVideosRepository.markProcessingStarted(sourceVideo.id);
@@ -86,7 +93,7 @@ async function run(sourceVideoId) {
       // download de novo.
     } else {
       await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
-      videoPath = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir);
+      videoPath = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir, { checkCancelled });
       await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath);
     }
 
@@ -104,7 +111,7 @@ async function run(sourceVideoId) {
       await sourceVideosRepository.updateStatus(sourceVideo.id, 'transcribing');
       const audioPath = path.join(workDir, 'audio.mp3');
       await videoEditingService.extractAudio(videoPath, audioPath);
-      transcript = await openaiTranscriptionService.transcribeAudio(audioPath);
+      transcript = await openaiTranscriptionService.transcribeAudio(audioPath, { checkCancelled });
       await sourceVideosRepository.saveTranscript(sourceVideo.id, {
         transcriptText: transcript.text,
         transcriptWords: transcript.words,
@@ -204,7 +211,15 @@ async function run(sourceVideoId) {
           title: clip.title,
           outputPath,
           settings,
-          onProgress: (percent) => clipsRepository.updateRenderProgress(clip.id, percent),
+          checkCancelled,
+          // Fogo-e-esqueça de proposito (nao pode travar o poll do ffmpeg
+          // esperando o banco) - mas com .catch, senao um erro transitorio de
+          // escrita vira unhandled rejection e derruba o video-worker inteiro.
+          onProgress: (percent) => {
+            clipsRepository.updateRenderProgress(clip.id, percent).catch((err) => {
+              logger.error(`Falha ao salvar progresso do corte ${clip.id} (seguindo o render):`, err);
+            });
+          },
         });
 
         const thumbnailPath = outputPath.replace(/\.mp4$/, '.jpg');
@@ -239,6 +254,11 @@ async function run(sourceVideoId) {
           }
         }
       } catch (err) {
+        // Corte interrompido por pausa (nao e falha de verdade) - deixa o
+        // status como estava (ainda 'rendering'/'pending') e propaga pro
+        // catch de fora, que trata a pausa do video inteiro. Sem esse
+        // desvio, toda pausa durante o render marcava o corte como erro.
+        if (err instanceof PausedError) throw err;
         logger.error(`Falha ao renderizar o corte ${clip.id}:`, err);
         await clipsRepository.updateStatus(clip.id, 'error', { errorMessage: err.message });
       }

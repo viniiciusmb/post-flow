@@ -330,6 +330,40 @@ async function exportClipToDrive(req, res) {
   res.json({ id: clip.id, exported: true });
 }
 
+// Exclusao em lote (tela "Vídeos & Cortes", selecionar varios de uma vez) -
+// mesma logica do remove() de um so, so que em loop. Ids que nao existem ou
+// nao pertencem ao cliente sao ignorados silenciosamente (deleteByIdOwnedByClient
+// ja filtra por dono).
+async function bulkRemove(req, res) {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.map(Number).filter((n) => Number.isInteger(n)) : [];
+  if (ids.length === 0) {
+    return res.status(400).json({ error: 'Nenhum video selecionado.' });
+  }
+
+  let deletedCount = 0;
+  for (const id of ids) {
+    const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(id, req.session.user.id);
+    if (!sourceVideo) continue;
+
+    const clips = await clipsRepository.listBySourceVideoId(id);
+    const filesToRemove = [
+      sourceVideo.local_video_path,
+      ...clips.flatMap((c) => [c.local_clip_path, c.thumbnail_path]),
+    ].filter(Boolean);
+
+    const deleted = await sourceVideosRepository.deleteByIdOwnedByClient(id, req.session.user.id);
+    if (!deleted) continue;
+    deletedCount += 1;
+
+    for (const filePath of filesToRemove) {
+      fs.rm(filePath, { force: true }, () => {});
+    }
+    fs.rm(path.join(config.videoProcessing.workDir, String(id)), { recursive: true, force: true }, () => {});
+  }
+
+  res.json({ deletedCount });
+}
+
 module.exports = {
   list,
   listClips,
@@ -341,5 +375,6 @@ module.exports = {
   pause,
   resume,
   remove,
+  bulkRemove,
   exportClipToDrive,
 };

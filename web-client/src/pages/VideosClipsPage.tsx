@@ -254,12 +254,18 @@ function VideoRow({
   channel,
   onChanged,
   onDeleted,
+  selectionMode,
+  selected,
+  onToggleSelect,
 }: {
   video: SourceVideo
   avgProcessingSeconds: number
   channel: YoutubeChannel | null
   onChanged: () => void
   onDeleted: () => void
+  selectionMode: boolean
+  selected: boolean
+  onToggleSelect: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
@@ -316,11 +322,14 @@ function VideoRow({
   return (
     <Card>
       <div className="flex w-full items-center gap-4 p-4">
+        {selectionMode && (
+          <Checkbox checked={selected} onCheckedChange={onToggleSelect} className="shrink-0" />
+        )}
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => (selectionMode ? onToggleSelect() : setOpen((v) => !v))}
           className="flex items-center gap-4 text-left"
-          disabled={video.clipCount === 0 && video.status !== "ready"}
+          disabled={!selectionMode && video.clipCount === 0 && video.status !== "ready"}
         >
           {video.clipCount > 0 || video.status === "ready" ? (
             open ? (
@@ -367,21 +376,25 @@ function VideoRow({
           {SOURCE_VIDEO_STATUS_TONE[video.status].label}
         </TonePill>
 
-        {isActive && (
-          <Button size="sm" variant="outline" onClick={pause} disabled={pausing} className="h-7 shrink-0 gap-1 text-xs">
-            <IconPlayerPause className="size-3" />
-            {pausing ? "Pausando..." : "Pausar"}
-          </Button>
+        {!selectionMode && (
+          <>
+            {isActive && (
+              <Button size="sm" variant="outline" onClick={pause} disabled={pausing} className="h-7 shrink-0 gap-1 text-xs">
+                <IconPlayerPause className="size-3" />
+                {pausing ? "Pausando..." : "Pausar"}
+              </Button>
+            )}
+            {isPaused && (
+              <Button size="sm" onClick={resume} disabled={resuming} className="h-7 shrink-0 gap-1 text-xs">
+                <IconPlayerPlay className="size-3" />
+                {resuming ? "Retomando..." : "Retomar"}
+              </Button>
+            )}
+            <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title="Remover vídeo">
+              <IconTrash className="size-4" />
+            </Button>
+          </>
         )}
-        {isPaused && (
-          <Button size="sm" onClick={resume} disabled={resuming} className="h-7 shrink-0 gap-1 text-xs">
-            <IconPlayerPlay className="size-3" />
-            {resuming ? "Retomando..." : "Retomar"}
-          </Button>
-        )}
-        <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title="Remover vídeo">
-          <IconTrash className="size-4" />
-        </Button>
       </div>
 
       {(video.status === "error" || video.status === "cancelled") && (
@@ -624,6 +637,10 @@ export function VideosClipsPage() {
   const [showSettings, setShowSettings] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [, setTick] = useState(0)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
   const channelIdFilter = new URLSearchParams(window.location.search).get("channelId")
   const filteredChannelName = videos?.find((v) => String(v.channelId) === channelIdFilter)?.channelName
   const channelById = new Map(channels.map((c) => [c.id, c]))
@@ -646,6 +663,42 @@ export function VideosClipsPage() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
+
+  function toggleSelectionMode() {
+    setSelectionMode((v) => !v)
+    setSelectedIds(new Set())
+    setConfirmingBulkDelete(false)
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  // Sem popup nativo: primeiro clique so arma a confirmação (o botão muda
+  // de texto por alguns segundos), segundo clique dentro da janela exclui
+  // de verdade.
+  async function handleBulkDeleteClick() {
+    if (!confirmingBulkDelete) {
+      setConfirmingBulkDelete(true)
+      setTimeout(() => setConfirmingBulkDelete(false), 4000)
+      return
+    }
+    setConfirmingBulkDelete(false)
+    setBulkDeleting(true)
+    try {
+      await api.post("/api/client/source-videos/bulk-delete", { ids: [...selectedIds] })
+      setSelectionMode(false)
+      setSelectedIds(new Set())
+      await load()
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
 
   const hasPending = videos?.some((v) => PENDING_STATUSES.includes(v.status)) ?? false
 
@@ -683,9 +736,34 @@ export function VideosClipsPage() {
           <IconAdjustmentsHorizontal className="size-4" />
           {showSettings ? "Ocultar configurações de corte" : "Configurar qualidade e estilo dos cortes"}
         </Button>
+        <Button variant={selectionMode ? "default" : "outline"} size="sm" onClick={toggleSelectionMode} className="gap-2">
+          {selectionMode ? "Cancelar seleção" : "Selecionar vídeos"}
+        </Button>
       </div>
       {showUpload && <UploadVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} />}
       {showSettings && <VideoSettingsCard />}
+
+      {selectionMode && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
+          <span className="text-sm text-muted-foreground">
+            {selectedIds.size === 0 ? "Nenhum vídeo selecionado" : `${selectedIds.size} selecionado${selectedIds.size > 1 ? "s" : ""}`}
+          </span>
+          <Button
+            size="sm"
+            variant={confirmingBulkDelete ? "destructive" : "outline"}
+            disabled={selectedIds.size === 0 || bulkDeleting}
+            onClick={handleBulkDeleteClick}
+            className="ml-auto gap-1.5"
+          >
+            <IconTrash className="size-3.5" />
+            {bulkDeleting
+              ? "Excluindo..."
+              : confirmingBulkDelete
+                ? `Confirmar exclusão de ${selectedIds.size}?`
+                : "Excluir selecionados"}
+          </Button>
+        </div>
+      )}
 
       {channelIdFilter && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -720,6 +798,9 @@ export function VideosClipsPage() {
                     channel={video.channelId ? (channelById.get(video.channelId) ?? null) : null}
                     onChanged={load}
                     onDeleted={load}
+                    selectionMode={selectionMode}
+                    selected={selectedIds.has(video.id)}
+                    onToggleSelect={() => toggleSelect(video.id)}
                   />
                 ))}
               </div>
@@ -737,6 +818,9 @@ export function VideosClipsPage() {
                     channel={video.channelId ? (channelById.get(video.channelId) ?? null) : null}
                     onChanged={load}
                     onDeleted={load}
+                    selectionMode={selectionMode}
+                    selected={selectedIds.has(video.id)}
+                    onToggleSelect={() => toggleSelect(video.id)}
                   />
                 ))}
               </div>

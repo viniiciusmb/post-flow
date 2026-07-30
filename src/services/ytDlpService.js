@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const config = require('../config');
+const { PausedError } = require('../lib/errors');
 
 let cookiesFilePathCache = null;
 
@@ -42,7 +43,7 @@ function getProxyCandidates() {
   return [config.youtube.tailscaleProxyUrl, config.youtube.proxyUrl].filter(Boolean);
 }
 
-function runOnce(args, { timeoutMs = 5 * 60 * 1000, proxyUrl = null } = {}) {
+function runOnce(args, { timeoutMs = 5 * 60 * 1000, proxyUrl = null, checkCancelled = null } = {}) {
   return new Promise((resolve, reject) => {
     const hasProxyOrPot = Boolean(proxyUrl || config.youtube.potProviderUrl);
     const authArgs = [];
@@ -66,19 +67,55 @@ function runOnce(args, { timeoutMs = 5 * 60 * 1000, proxyUrl = null } = {}) {
       authArgs.push('--cookies', cookies);
     }
 
-    const child = spawn(config.ytdlpPath, [...authArgs, ...args]);
+    // detached:true poe o yt-dlp num grupo de processos proprio - importante
+    // porque yt-dlp as vezes chama ffmpeg internamente (pra juntar
+    // video+audio, --merge-output-format). Matando so o yt-dlp direto
+    // (child.kill), esse ffmpeg filho vira orfao e continua rodando sozinho -
+    // e o 'close' do child so dispara quando TODOS os descritores herdados
+    // fecham, entao o processo parecia "nao morrer" ate o ffmpeg orfao
+    // terminar sozinho. killGroup mata o grupo inteiro de uma vez.
+    const child = spawn(config.ytdlpPath, [...authArgs, ...args], { detached: true });
+    function killGroup() {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        // grupo ja morreu - ignora
+      }
+    }
     let stdout = '';
     let stderr = '';
+    let cancelled = false;
     const timer = setTimeout(() => {
-      child.kill('SIGKILL');
+      killGroup();
       reject(new Error(`yt-dlp excedeu o tempo limite (${timeoutMs / 1000}s).`));
     }, timeoutMs);
 
+    // Confere pausa a cada 2s enquanto o download roda - sem isso, pausar so
+    // tinha efeito depois que o yt-dlp inteiro terminasse (podia levar
+    // minutos num video longo).
+    const cancelPoll = checkCancelled
+      ? setInterval(async () => {
+          if (cancelled) return;
+          if (await checkCancelled()) {
+            cancelled = true;
+            killGroup();
+          }
+        }, 2000)
+      : null;
+
     child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
-    child.on('error', (err) => { clearTimeout(timer); reject(err); });
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      if (cancelPoll) clearInterval(cancelPoll);
+      reject(err);
+    });
     child.on('close', (code) => {
       clearTimeout(timer);
+      if (cancelPoll) clearInterval(cancelPoll);
+      if (cancelled) {
+        return reject(new PausedError('Download interrompido pelo cliente.'));
+      }
       if (code !== 0) {
         return reject(new Error(`yt-dlp saiu com codigo ${code}: ${stderr.slice(-800)}`));
       }
@@ -161,7 +198,7 @@ async function getVideoMetadata(url) {
 // mais estreito que a largura do video original, entao 1080p de origem nao
 // da nitidez extra perceptivel no resultado - so custa ~2.5x mais banda
 // (importa de verdade com proxy residencial, que e cobrado por GB).
-async function downloadVideo(videoId, outputDir) {
+async function downloadVideo(videoId, outputDir, { checkCancelled } = {}) {
   fs.mkdirSync(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, '%(id)s.%(ext)s');
 
@@ -173,7 +210,7 @@ async function downloadVideo(videoId, outputDir) {
       '-o', outputTemplate,
       `https://www.youtube.com/watch?v=${videoId}`,
     ],
-    { timeoutMs: 20 * 60 * 1000 }
+    { timeoutMs: 20 * 60 * 1000, checkCancelled }
   );
 
   const filePath = path.join(outputDir, `${videoId}.mp4`);

@@ -36,9 +36,17 @@ async function create({ clientUserId, youtubeChannelId, channelName, channelUrl,
   return rows[0] || null;
 }
 
+// Ao RETOMAR (isActive=true), avanca last_video_published_at pra agora -
+// senao todo video publicado durante o tempo em que o canal ficou pausado
+// entra de uma vez como "novo" no proximo poll (era exatamente esse o bug:
+// canal pausado por um tempo, ao retomar uma leva inteira de videos antigos
+// caia na fila). Ao pausar (isActive=false) nao mexe em nada.
 async function setActive(id, clientUserId, isActive) {
   const { rows } = await pool.query(
-    'UPDATE youtube_channels SET is_active = $3 WHERE id = $1 AND client_user_id = $2 RETURNING *',
+    `UPDATE youtube_channels
+     SET is_active = $3, last_video_published_at = CASE WHEN $3 THEN now() ELSE last_video_published_at END
+     WHERE id = $1 AND client_user_id = $2
+     RETURNING *`,
     [id, clientUserId, isActive]
   );
   return rows[0] || null;

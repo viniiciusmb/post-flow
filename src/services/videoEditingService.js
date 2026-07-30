@@ -8,6 +8,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { PausedError } = require('../lib/errors');
 
 const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
 const FFPROBE_PATH = process.env.FFPROBE_PATH || 'ffprobe';
@@ -50,19 +51,44 @@ function runFfmpeg(args) {
 
 // Igual runFfmpeg, mas acompanha o progresso (via -progress) e chama
 // onProgress(percent) periodicamente enquanto roda - usado pra mostrar a
-// barra de "% concluido" de cada corte na tela.
-function runFfmpegWithProgress(args, totalDurationSeconds, onProgress) {
+// barra de "% concluido" de cada corte na tela. Se checkCancelled for
+// passado, confere a cada tick (mesmo timer do progresso) e mata o ffmpeg na
+// hora se o cliente pediu pausa - sem isso, pausar so tinha efeito depois
+// que o corte inteiro terminasse de renderizar (podia levar minutos).
+function runFfmpegWithProgress(args, totalDurationSeconds, onProgress, checkCancelled) {
   return new Promise((resolve, reject) => {
     const progressFile = path.join(os.tmpdir(), `ffmpeg-progress-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
     fs.writeFileSync(progressFile, '');
 
-    const child = spawn(FFMPEG_PATH, ['-y', '-hide_banner', '-loglevel', 'error', ...args, '-progress', progressFile, '-nostats']);
+    const child = spawn(FFMPEG_PATH, ['-y', '-hide_banner', '-loglevel', 'error', ...args, '-progress', progressFile, '-nostats'], {
+      detached: true,
+    });
+    function killGroup() {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        // grupo ja morreu - ignora
+      }
+    }
     let stderr = '';
     child.stderr.on('data', (chunk) => { stderr += chunk; });
 
     let closed = false;
-    const poll = setInterval(() => {
-      if (closed || !totalDurationSeconds) return;
+    let cancelling = false;
+    const poll = setInterval(async () => {
+      if (closed) return;
+      if (checkCancelled && !cancelling) {
+        cancelling = true;
+        try {
+          if (await checkCancelled()) {
+            killGroup();
+            return;
+          }
+        } finally {
+          cancelling = false;
+        }
+      }
+      if (!totalDurationSeconds) return;
       try {
         const content = fs.readFileSync(progressFile, 'utf8');
         const match = [...content.matchAll(/out_time_ms=(\d+)/g)].at(-1);
@@ -89,11 +115,14 @@ function runFfmpegWithProgress(args, totalDurationSeconds, onProgress) {
       fs.rm(progressFile, { force: true }, () => {});
       reject(err);
     });
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       if (closed) return;
       closed = true;
       clearInterval(poll);
       fs.rm(progressFile, { force: true }, () => {});
+      if (signal === 'SIGKILL') {
+        return reject(new PausedError('Renderizacao interrompida pelo cliente.'));
+      }
       if (code !== 0) {
         return reject(new Error(`ffmpeg saiu com codigo ${code}: ${stderr.slice(-800)}`));
       }
@@ -213,7 +242,7 @@ function buildFilter({ framing, w, h, subtitlesFilter }) {
 // (settings) - as "words" ja devem vir filtradas pro intervalo do corte, com
 // tempos ainda no eixo do video original. onProgress(percent) e chamado
 // periodicamente durante a renderizacao.
-async function renderClip({ videoPath, startSeconds, endSeconds, words, title, outputPath, settings = {}, onProgress }) {
+async function renderClip({ videoPath, startSeconds, endSeconds, words, title, outputPath, settings = {}, onProgress, checkCancelled }) {
   const aspectRatio = settings.aspect_ratio || '9:16';
   const framing = settings.framing || 'crop';
   const quality = settings.quality || 'high';
@@ -255,8 +284,8 @@ async function renderClip({ videoPath, startSeconds, endSeconds, words, title, o
       outputPath,
     ];
 
-    if (onProgress) {
-      await runFfmpegWithProgress(args, duration, onProgress);
+    if (onProgress || checkCancelled) {
+      await runFfmpegWithProgress(args, duration, onProgress || (() => {}), checkCancelled);
     } else {
       await runFfmpeg(args);
     }
