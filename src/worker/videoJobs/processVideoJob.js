@@ -212,6 +212,8 @@ async function run(sourceVideoId) {
           outputPath,
           settings,
           checkCancelled,
+          partIndex: clips.indexOf(clip) + 1,
+          partTotal: clips.length,
           // Fogo-e-esqueça de proposito (nao pode travar o poll do ffmpeg
           // esperando o banco) - mas com .catch, senao um erro transitorio de
           // escrita vira unhandled rejection e derruba o video-worker inteiro.

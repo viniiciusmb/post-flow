@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TonePill } from "@/components/ui/tone-pill"
 import { VideoSettingsCard } from "@/components/dashboard/VideoSettingsCard"
+import { ClipStyleEditorCard } from "@/components/dashboard/ClipStyleEditorCard"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { CLIP_STATUS_TONE, SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
@@ -635,6 +636,7 @@ export function VideosClipsPage() {
   const [tiktokAccounts, setTiktokAccounts] = useState<TikTokAccountSummary[]>([])
   const [avgProcessingSeconds, setAvgProcessingSeconds] = useState(480)
   const [showSettings, setShowSettings] = useState(false)
+  const [showStyleEditor, setShowStyleEditor] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [, setTick] = useState(0)
   const [selectionMode, setSelectionMode] = useState(false)
@@ -736,12 +738,17 @@ export function VideosClipsPage() {
           <IconAdjustmentsHorizontal className="size-4" />
           {showSettings ? "Ocultar configurações de corte" : "Configurar qualidade e estilo dos cortes"}
         </Button>
+        <Button variant="outline" size="sm" onClick={() => setShowStyleEditor((v) => !v)} className="gap-2">
+          <IconAdjustmentsHorizontal className="size-4" />
+          {showStyleEditor ? "Ocultar estilo visual" : "Estilo visual do corte"}
+        </Button>
         <Button variant={selectionMode ? "default" : "outline"} size="sm" onClick={toggleSelectionMode} className="gap-2">
           {selectionMode ? "Cancelar seleção" : "Selecionar vídeos"}
         </Button>
       </div>
       {showUpload && <UploadVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} />}
       {showSettings && <VideoSettingsCard />}
+      {showStyleEditor && <ClipStyleEditorCard />}
 
       {selectionMode && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">

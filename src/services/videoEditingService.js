@@ -28,10 +28,28 @@ const QUALITY_PRESETS = {
 // Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour,
 //         Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle,
 //         Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+// bubble_dark/bubble_purple usam BorderStyle=3 (caixa opaca atras do texto,
+// em vez de so contorno+sombra) - o campo "Outline" nesse modo vira o
+// espacamento da caixa, e BackColour vira a cor de preenchimento dela (era
+// so usada como cor de sombra nos estilos com BorderStyle=1 acima).
 const CAPTION_STYLES = {
   classic: 'Style: Default,Arial Black,96,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,7,0,2,80,80,260,1',
   bold: 'Style: Default,Arial Black,112,&H0000D7FF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,9,0,2,60,60,300,1',
   minimal: 'Style: Default,Arial,64,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3,0,2,100,100,140,1',
+  bubble_dark: 'Style: Default,Arial Black,90,&H00FFFFFF,&H000000FF,&H00000000,&H50000000,1,0,0,0,100,100,0,0,3,14,0,2,80,80,260,1',
+  bubble_purple: 'Style: Default,Arial Black,90,&H00FFFFFF,&H000000FF,&H00000000,&H50B26EF2,1,0,0,0,100,100,0,0,3,14,0,2,80,80,260,1',
+};
+
+// Mapeia a posicao escolhida (numeracao "Parte N") pro campo Alignment do
+// ASS - que ja usa a mesma convencao de teclado numerico (7/8/9 = topo
+// esquerda/centro/direita, 1/2/3 = baixo esquerda/centro/direita).
+const PART_LABEL_ALIGNMENT = {
+  top_left: 7,
+  top_center: 8,
+  top_right: 9,
+  bottom_left: 1,
+  bottom_center: 2,
+  bottom_right: 3,
 };
 
 function runFfmpeg(args) {
@@ -181,8 +199,11 @@ function formatAssTimestamp(seconds) {
 // Gera um .ass com uma linha por palavra, ja com o tempo relativo ao inicio
 // do corte (0 = comeco do clipe) - e isso que da o efeito "uma palavra de
 // cada vez" na tela. Se tituloAteSegundos > 0, insere tambem uma linha fixa
-// com o titulo do corte, visivel do inicio ate esse instante.
-function buildAssSubtitles(words, captionStyle, title, titleSeconds) {
+// com o titulo do corte, visivel do inicio ate esse instante. partLabel
+// (ex: "Parte 2"), quando informado, fica visivel o corte inteiro na
+// posicao escolhida (ver PART_LABEL_ALIGNMENT).
+function buildAssSubtitles(words, captionStyle, title, titleSeconds, partLabel, partLabelPosition, clipDuration) {
+  const partAlignment = PART_LABEL_ALIGNMENT[partLabelPosition] || PART_LABEL_ALIGNMENT.top_right;
   const header = `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -193,6 +214,7 @@ ScaledBorderAndShadow: yes
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 ${CAPTION_STYLES[captionStyle] || CAPTION_STYLES.classic}
 Style: Title,Arial Black,72,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,0,8,80,80,120,1
+Style: Part,Arial Black,56,&H00FFFFFF,&H000000FF,&H00000000,&H50000000,1,0,0,0,100,100,0,0,3,10,0,${partAlignment},50,50,50,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -210,6 +232,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     lines.unshift(`Dialogue: 1,0:00:00.00,${formatAssTimestamp(titleSeconds)},Title,,0,0,0,,${titleText}`);
   }
 
+  if (partLabel) {
+    lines.unshift(`Dialogue: 1,0:00:00.00,${formatAssTimestamp(clipDuration)},Part,,0,0,0,,${partLabel}`);
+  }
+
   return header + lines.join('\n') + '\n';
 }
 
@@ -222,7 +248,25 @@ function escapeForFilter(filePath) {
 // framing 'crop': corte central pra preencher o quadro (comportamento
 // original, sem faixas). framing 'blur_pad': mostra o video inteiro (sem
 // cortar nada) com fundo desfocado preenchendo o resto do quadro.
-function buildFilter({ framing, w, h, subtitlesFilter }) {
+// cropZoomPercent (0-100), quando informado, ativa o enquadramento continuo
+// do modo manual e ignora "framing" por completo: 100 = recorte apertado
+// (identico ao framing='crop'), 0 = video original inteiro visivel
+// (identico ao framing='blur_pad'), valores no meio interpolam a largura do
+// recorte entre os dois extremos - sempre com o fundo desfocado preenchendo
+// a sobra (que e zero quando zoom=100).
+function buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent }) {
+  if (cropZoomPercent !== null && cropZoomPercent !== undefined) {
+    const zoom = Math.max(0, Math.min(100, cropZoomPercent)) / 100;
+    const cropWidthExpr = `iw-(iw-ih*${w}/${h})*${zoom}`;
+    const chain = [
+      `[0:v]split=2[bg][fg]`,
+      `[bg]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=18:4[bgblur]`,
+      `[fg]crop=${cropWidthExpr}:ih,scale=${w}:${h}:force_original_aspect_ratio=decrease[fgscaled]`,
+      `[bgblur][fgscaled]overlay=(W-w)/2:(H-h)/2,setsar=1${subtitlesFilter ? `,${subtitlesFilter}` : ''}[outv]`,
+    ];
+    return { filterComplex: chain.join(';'), outputLabel: '[outv]' };
+  }
+
   if (framing === 'blur_pad') {
     const chain = [
       `[0:v]split=2[bg][fg]`,
@@ -242,13 +286,29 @@ function buildFilter({ framing, w, h, subtitlesFilter }) {
 // (settings) - as "words" ja devem vir filtradas pro intervalo do corte, com
 // tempos ainda no eixo do video original. onProgress(percent) e chamado
 // periodicamente durante a renderizacao.
-async function renderClip({ videoPath, startSeconds, endSeconds, words, title, outputPath, settings = {}, onProgress, checkCancelled }) {
+async function renderClip({
+  videoPath,
+  startSeconds,
+  endSeconds,
+  words,
+  title,
+  outputPath,
+  settings = {},
+  onProgress,
+  checkCancelled,
+  partIndex,
+  partTotal,
+}) {
   const aspectRatio = settings.aspect_ratio || '9:16';
   const framing = settings.framing || 'crop';
   const quality = settings.quality || 'high';
   const captionStyle = settings.caption_style || 'classic';
   const showTitle = settings.show_title !== false;
   const titleSeconds = showTitle ? Number(settings.title_seconds || 3) : 0;
+  // So no modo manual o zoom continuo entra em jogo - no automatico o
+  // comportamento continua exatamente o de sempre (framing crop/blur_pad).
+  const cropZoomPercent = settings.crop_style_mode === 'manual' ? Number(settings.crop_zoom_percent ?? 100) : null;
+  const partLabel = settings.show_part_label && partTotal > 1 ? `Parte ${partIndex}` : null;
 
   const { w, h } = ASPECT_RATIOS[aspectRatio] || ASPECT_RATIOS['9:16'];
   const { crf, preset } = QUALITY_PRESETS[quality] || QUALITY_PRESETS.high;
@@ -260,13 +320,24 @@ async function renderClip({ videoPath, startSeconds, endSeconds, words, title, o
 
   let assPath = null;
   let subtitlesFilter = null;
-  if (captionStyle !== 'none' || titleSeconds > 0) {
+  if (captionStyle !== 'none' || titleSeconds > 0 || partLabel) {
     assPath = outputPath.replace(/\.mp4$/, '.ass');
-    fs.writeFileSync(assPath, buildAssSubtitles(relativeWords, captionStyle, titleSeconds > 0 ? title : null, titleSeconds));
+    fs.writeFileSync(
+      assPath,
+      buildAssSubtitles(
+        relativeWords,
+        captionStyle,
+        titleSeconds > 0 ? title : null,
+        titleSeconds,
+        partLabel,
+        settings.part_label_position,
+        duration
+      )
+    );
     subtitlesFilter = `subtitles=${escapeForFilter(assPath)}`;
   }
 
-  const { simpleFilter, filterComplex, outputLabel } = buildFilter({ framing, w, h, subtitlesFilter });
+  const { simpleFilter, filterComplex, outputLabel } = buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent });
 
   try {
     const args = [

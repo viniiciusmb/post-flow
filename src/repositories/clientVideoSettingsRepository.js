@@ -17,6 +17,10 @@ const DEFAULTS = {
   title_seconds: 3,
   description_mode: 'auto',
   description_template: null,
+  crop_style_mode: 'auto',
+  crop_zoom_percent: 100,
+  show_part_label: false,
+  part_label_position: 'top_right',
 };
 
 async function findByClientId(clientUserId) {
@@ -38,17 +42,24 @@ async function upsert(
     titleSeconds,
     descriptionMode,
     descriptionTemplate,
+    cropStyleMode,
+    cropZoomPercent,
+    showPartLabel,
+    partLabelPosition,
   }
 ) {
   const { rows } = await pool.query(
     `INSERT INTO client_video_settings (
        client_user_id, aspect_ratio, framing, quality, caption_style, clip_length, clip_mode, max_clips,
-       show_title, title_seconds, description_mode, description_template
+       show_title, title_seconds, description_mode, description_template,
+       crop_style_mode, crop_zoom_percent, show_part_label, part_label_position
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      ON CONFLICT (client_user_id) DO UPDATE SET
        aspect_ratio = $2, framing = $3, quality = $4, caption_style = $5, clip_length = $6, clip_mode = $7, max_clips = $8,
-       show_title = $9, title_seconds = $10, description_mode = $11, description_template = $12, updated_at = now()
+       show_title = $9, title_seconds = $10, description_mode = $11, description_template = $12,
+       crop_style_mode = $13, crop_zoom_percent = $14, show_part_label = $15, part_label_position = $16,
+       updated_at = now()
      RETURNING *`,
     [
       clientUserId,
@@ -63,6 +74,10 @@ async function upsert(
       titleSeconds,
       descriptionMode,
       descriptionTemplate || null,
+      cropStyleMode,
+      cropZoomPercent,
+      showPartLabel,
+      partLabelPosition,
     ]
   );
   return rows[0];

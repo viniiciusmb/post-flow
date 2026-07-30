@@ -213,10 +213,12 @@ export interface DriveStatusResponse {
 export type VideoAspectRatio = "9:16" | "1:1" | "16:9" | "4:5"
 export type VideoFraming = "crop" | "blur_pad"
 export type VideoQuality = "high" | "medium"
-export type VideoCaptionStyle = "classic" | "bold" | "minimal" | "none"
+export type VideoCaptionStyle = "classic" | "bold" | "minimal" | "none" | "bubble_purple" | "bubble_dark"
 export type VideoClipLength = "short" | "balanced" | "long"
 export type VideoClipMode = "ai_choice" | "full_video" | "fixed_count"
 export type VideoDescriptionMode = "auto" | "fixed" | "none"
+export type CropStyleMode = "auto" | "manual"
+export type PartLabelPosition = "top_left" | "top_center" | "top_right" | "bottom_left" | "bottom_center" | "bottom_right"
 
 export interface ClientVideoSettings {
   aspectRatio: VideoAspectRatio
@@ -230,6 +232,10 @@ export interface ClientVideoSettings {
   titleSeconds: number
   descriptionMode: VideoDescriptionMode
   descriptionTemplate: string | null
+  cropStyleMode: CropStyleMode
+  cropZoomPercent: number
+  showPartLabel: boolean
+  partLabelPosition: PartLabelPosition
 }
 
 export interface ClientVideoSettingsResponse extends ClientVideoSettings {
@@ -241,6 +247,8 @@ export interface ClientVideoSettingsResponse extends ClientVideoSettings {
     clipLengths: VideoClipLength[]
     clipModes: VideoClipMode[]
     descriptionModes: VideoDescriptionMode[]
+    cropStyleModes: CropStyleMode[]
+    partLabelPositions: PartLabelPosition[]
   }
 }
 
