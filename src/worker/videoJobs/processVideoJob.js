@@ -14,6 +14,7 @@ const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRep
 const videosRepository = require('../../repositories/videosRepository');
 const postingsRepository = require('../../repositories/postingsRepository');
 const tiktokAccountsRepository = require('../../repositories/tiktokAccountsRepository');
+const sourceVideoTiktokTargetsRepository = require('../../repositories/sourceVideoTiktokTargetsRepository');
 const clientVideoSettingsRepository = require('../../repositories/clientVideoSettingsRepository');
 const ytDlpService = require('../../services/ytDlpService');
 const videoEditingService = require('../../services/videoEditingService');
@@ -175,7 +176,19 @@ async function run(sourceVideoId) {
 
     await checkPaused(sourceVideo.id);
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'cutting');
-    const tiktokAccount = await tiktokAccountsRepository.findActiveByClientId(clientUserId);
+
+    // Canal do YouTube posta numa unica conta (a vinculada a ele); video
+    // avulso (upload/link colado) pode ir pra varias, escolhidas pelo
+    // cliente no momento do envio (source_video_tiktok_targets).
+    let tiktokAccounts;
+    if (sourceVideo.youtube_channel_id) {
+      const channel = await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id);
+      const account = channel.tiktok_account_id ? await tiktokAccountsRepository.findById(channel.tiktok_account_id) : null;
+      tiktokAccounts = account ? [account] : [];
+    } else {
+      const accountIds = await sourceVideoTiktokTargetsRepository.listBySourceVideoId(sourceVideo.id);
+      tiktokAccounts = (await Promise.all(accountIds.map((id) => tiktokAccountsRepository.findById(id)))).filter(Boolean);
+    }
 
     for (const clip of clips) {
       if (clip.status === 'ready') continue; // ja renderizado antes de pausar
@@ -204,22 +217,25 @@ async function run(sourceVideoId) {
         const fileSizeBytes = fs.statSync(outputPath).size;
         await clipsRepository.saveRenderedFile(clip.id, outputPath, fs.existsSync(thumbnailPath) ? thumbnailPath : null);
 
-        // Sem conta TikTok conectada, o corte fica pronto mas nao vira
-        // "video" postavel. Com conta conectada, sempre vira video - mas so
-        // entra na fila de postagem se o cliente tiver ligado "postar
-        // automaticamente" (auto_post_enabled, desligado por padrao).
-        if (tiktokAccount) {
+        // Sem conta TikTok vinculada, o corte fica pronto mas nao vira
+        // "video" postavel. Com 1+ contas vinculadas, sempre vira video -
+        // mas so entra na fila de postagem de cada conta que tiver "postar
+        // automaticamente" ligado (auto_post_enabled, desligado por padrao).
+        if (tiktokAccounts.length > 0) {
           const video = await videosRepository.createFromClip({
             clipId: clip.id,
             filename: clip.title,
             fileSizeBytes,
           });
-          if (video && tiktokAccount.auto_post_enabled) {
-            await postingsRepository.createIfNotExists({
-              videoId: video.id,
-              tiktokAccountId: tiktokAccount.id,
-              caption: clip.description,
-            });
+          if (video) {
+            for (const tiktokAccount of tiktokAccounts) {
+              if (!tiktokAccount.auto_post_enabled) continue;
+              await postingsRepository.createIfNotExists({
+                videoId: video.id,
+                tiktokAccountId: tiktokAccount.id,
+                caption: clip.description,
+              });
+            }
           }
         }
       } catch (err) {

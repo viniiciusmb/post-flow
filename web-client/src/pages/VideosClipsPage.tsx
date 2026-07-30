@@ -12,6 +12,7 @@ import {
   IconTrash,
   IconUpload,
   IconBrandGoogleDrive,
+  IconBrandTiktok,
 } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Button } from "@/components/ui/button"
@@ -26,7 +27,39 @@ import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { CLIP_STATUS_TONE, SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
 import { ACTIVE_STATUSES, computeVideoProgress, formatEta } from "@/lib/videoProgress"
-import type { Clip, SourceVideo, SourceVideoStatus, YoutubeChannel } from "@/types/api"
+import type { Clip, SourceVideo, SourceVideoStatus, TikTokAccountSummary, YoutubeChannel } from "@/types/api"
+
+// So aparece quando o cliente tem 2+ contas TikTok - com 0 ou 1, o backend
+// resolve sozinho (ver resolveTiktokAccountIds no sourceVideosApiController).
+function TiktokAccountPicker({
+  accounts,
+  selected,
+  onChange,
+}: {
+  accounts: TikTokAccountSummary[]
+  selected: number[]
+  onChange: (ids: number[]) => void
+}) {
+  if (accounts.length < 2) return null
+
+  function toggle(id: number) {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
+  }
+
+  return (
+    <Field>
+      <FieldLabel>Postar cortes nessa(s) conta(s)</FieldLabel>
+      <div className="flex flex-wrap gap-3">
+        {accounts.map((a) => (
+          <label key={a.id} className="flex items-center gap-1.5 text-xs">
+            <Checkbox checked={selected.includes(a.id)} onCheckedChange={() => toggle(a.id)} />
+            {a.displayName}
+          </label>
+        ))}
+      </div>
+    </Field>
+  )
+}
 
 function formatDuration(seconds: number | null) {
   if (!seconds) return "—"
@@ -320,6 +353,14 @@ function VideoRow({
             {video.clipCount > 0 && ` · ${video.readyClipCount}/${video.clipCount} cortes concluídos`}
             {progress && progress.etaSeconds !== null && ` · faltam ~${formatEta(progress.etaSeconds)}`}
           </p>
+          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+            <IconBrandTiktok className="size-3" />
+            {video.tiktokAccountNames.length > 0 ? (
+              <>Postar em: {video.tiktokAccountNames.join(", ")}</>
+            ) : (
+              <span className="text-amber-600 dark:text-amber-400">Sem conta TikTok vinculada</span>
+            )}
+          </p>
         </div>
 
         <TonePill tone={SOURCE_VIDEO_STATUS_TONE[video.status].tone} spin={SOURCE_VIDEO_STATUS_TONE[video.status].spin}>
@@ -389,8 +430,9 @@ function VideoRow({
   )
 }
 
-function AddManualVideoCard({ onAdded }: { onAdded: () => void }) {
+function AddManualVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tiktokAccounts: TikTokAccountSummary[] }) {
   const [url, setUrl] = useState("")
+  const [selectedAccounts, setSelectedAccounts] = useState<number[]>([])
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -401,8 +443,12 @@ function AddManualVideoCard({ onAdded }: { onAdded: () => void }) {
     setSuccess(null)
     setSubmitting(true)
     try {
-      const created = await api.post<{ id: number; title: string }>("/api/client/source-videos/manual", { url })
+      const created = await api.post<{ id: number; title: string }>("/api/client/source-videos/manual", {
+        url,
+        tiktokAccountIds: selectedAccounts,
+      })
       setUrl("")
+      setSelectedAccounts([])
       setSuccess(`"${created.title}" entrou na fila — acompanhe o progresso na lista abaixo.`)
       onAdded()
     } catch (err) {
@@ -448,6 +494,7 @@ function AddManualVideoCard({ onAdded }: { onAdded: () => void }) {
                 </Button>
               </div>
             </Field>
+            <TiktokAccountPicker accounts={tiktokAccounts} selected={selectedAccounts} onChange={setSelectedAccounts} />
           </FieldGroup>
         </form>
       </CardContent>
@@ -455,9 +502,10 @@ function AddManualVideoCard({ onAdded }: { onAdded: () => void }) {
   )
 }
 
-function UploadVideoCard({ onAdded }: { onAdded: () => void }) {
+function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tiktokAccounts: TikTokAccountSummary[] }) {
   const [file, setFile] = useState<File | null>(null)
   const [title, setTitle] = useState("")
+  const [selectedAccounts, setSelectedAccounts] = useState<number[]>([])
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -474,6 +522,7 @@ function UploadVideoCard({ onAdded }: { onAdded: () => void }) {
     const formData = new FormData()
     formData.append("video", file)
     if (title.trim()) formData.append("title", title.trim())
+    if (selectedAccounts.length > 0) formData.append("tiktokAccountIds", JSON.stringify(selectedAccounts))
 
     const xhr = new XMLHttpRequest()
     xhr.open("POST", "/api/client/source-videos/upload")
@@ -486,6 +535,7 @@ function UploadVideoCard({ onAdded }: { onAdded: () => void }) {
         const data = JSON.parse(xhr.responseText)
         setFile(null)
         setTitle("")
+        setSelectedAccounts([])
         setSuccess(`"${data.title}" enviado — entrou na fila de corte.`)
         onAdded()
       } else {
@@ -547,6 +597,7 @@ function UploadVideoCard({ onAdded }: { onAdded: () => void }) {
                 </Button>
               </div>
             </Field>
+            <TiktokAccountPicker accounts={tiktokAccounts} selected={selectedAccounts} onChange={setSelectedAccounts} />
           </FieldGroup>
         </form>
       </CardContent>
@@ -568,6 +619,7 @@ export function VideosClipsPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const [videos, setVideos] = useState<SourceVideo[] | null>(null)
   const [channels, setChannels] = useState<YoutubeChannel[]>([])
+  const [tiktokAccounts, setTiktokAccounts] = useState<TikTokAccountSummary[]>([])
   const [avgProcessingSeconds, setAvgProcessingSeconds] = useState(480)
   const [showSettings, setShowSettings] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
@@ -578,13 +630,15 @@ export function VideosClipsPage() {
 
   async function load() {
     const query = channelIdFilter ? `?channelId=${channelIdFilter}` : ""
-    const [videosData, channelsData] = await Promise.all([
+    const [videosData, channelsData, tiktokData] = await Promise.all([
       api.get<{ videos: SourceVideo[]; avgProcessingSeconds: number }>(`/api/client/source-videos${query}`),
       api.get<{ channels: YoutubeChannel[] }>("/api/client/youtube-channels"),
+      api.get<{ accounts: TikTokAccountSummary[] }>("/api/client/tiktok-accounts"),
     ])
     setVideos(videosData.videos)
     setAvgProcessingSeconds(videosData.avgProcessingSeconds)
     setChannels(channelsData.channels)
+    setTiktokAccounts(tiktokData.accounts)
   }
 
   useEffect(() => {
@@ -618,7 +672,7 @@ export function VideosClipsPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Vídeos & Cortes">
-      <AddManualVideoCard onAdded={load} />
+      <AddManualVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} />
 
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={() => setShowUpload((v) => !v)} className="gap-2">
@@ -630,7 +684,7 @@ export function VideosClipsPage() {
           {showSettings ? "Ocultar configurações de corte" : "Configurar qualidade e estilo dos cortes"}
         </Button>
       </div>
-      {showUpload && <UploadVideoCard onAdded={load} />}
+      {showUpload && <UploadVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} />}
       {showSettings && <VideoSettingsCard />}
 
       {channelIdFilter && (

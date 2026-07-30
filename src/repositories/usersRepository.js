@@ -30,6 +30,18 @@ async function listByRole(role) {
   return rows;
 }
 
+async function updateProfile(id, { businessName, email }) {
+  const { rows } = await pool.query(
+    'UPDATE users SET business_name = $2, email = $3, updated_at = now() WHERE id = $1 RETURNING *',
+    [id, businessName, email.toLowerCase()]
+  );
+  return rows[0];
+}
+
+async function updatePasswordHash(id, passwordHash) {
+  await pool.query('UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1', [id, passwordHash]);
+}
+
 async function setActive(id, isActive) {
   const { rows } = await pool.query(
     'UPDATE users SET is_active = $2, updated_at = now() WHERE id = $1 RETURNING *',
@@ -59,4 +71,14 @@ async function listClientsWithStats() {
   return rows;
 }
 
-module.exports = { findByEmail, findById, create, listByRole, setActive, touchLastActive, listClientsWithStats };
+module.exports = {
+  findByEmail,
+  findById,
+  create,
+  listByRole,
+  setActive,
+  touchLastActive,
+  listClientsWithStats,
+  updateProfile,
+  updatePasswordHash,
+};

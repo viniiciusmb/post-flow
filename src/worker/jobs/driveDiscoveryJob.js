@@ -7,6 +7,7 @@ const driveFoldersRepository = require('../../repositories/driveFoldersRepositor
 const videosRepository = require('../../repositories/videosRepository');
 const postingsRepository = require('../../repositories/postingsRepository');
 const tiktokAccountsRepository = require('../../repositories/tiktokAccountsRepository');
+const driveFolderTiktokTargetsRepository = require('../../repositories/driveFolderTiktokTargetsRepository');
 const googleService = require('../../services/googleService');
 const logger = require('../../lib/logger');
 const { DRIVE_FOLDER_TYPE } = require('../../config/constants');
@@ -72,9 +73,14 @@ async function fanOut(video, folder) {
     return;
   }
 
-  const account = await tiktokAccountsRepository.findActiveByClientId(folder.client_user_id);
-  if (account && account.auto_post_enabled) {
-    await postingsRepository.createIfNotExists({ videoId: video.id, tiktokAccountId: account.id });
+  // Pasta-fonte do proprio cliente: contas escolhidas ao configurar a
+  // pasta (ver drive_folder_tiktok_targets) - pode ser mais de uma.
+  const accountIds = await driveFolderTiktokTargetsRepository.listByFolderId(folder.id);
+  for (const accountId of accountIds) {
+    const account = await tiktokAccountsRepository.findById(accountId);
+    if (account && account.is_active && account.auto_post_enabled) {
+      await postingsRepository.createIfNotExists({ videoId: video.id, tiktokAccountId: account.id });
+    }
   }
 }
 

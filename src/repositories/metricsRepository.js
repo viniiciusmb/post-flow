@@ -211,6 +211,36 @@ async function pruneOldTranscripts(days) {
   return rowCount;
 }
 
+// Amostra mais recente de uso da VPS (CPU/memoria/disco) - pros numeros
+// "agora" no card do admin.
+async function latestSystemMetric() {
+  const { rows } = await pool.query('SELECT * FROM system_metrics_samples ORDER BY sampled_at DESC LIMIT 1');
+  return rows[0] || null;
+}
+
+// Serie historica pro grafico (ultimas N horas).
+async function systemMetricsSince(since) {
+  const { rows } = await pool.query(
+    'SELECT * FROM system_metrics_samples WHERE sampled_at >= $1 ORDER BY sampled_at ASC',
+    [since]
+  );
+  return rows;
+}
+
+async function insertSystemMetricSample({ loadAvg1m, cpuCores, memUsedMb, memTotalMb, diskUsedGb, diskTotalGb }) {
+  await pool.query(
+    `INSERT INTO system_metrics_samples (load_avg_1m, cpu_cores, mem_used_mb, mem_total_mb, disk_used_gb, disk_total_gb)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [loadAvg1m, cpuCores, memUsedMb, memTotalMb, diskUsedGb, diskTotalGb]
+  );
+}
+
+// Mantem so os ultimos 30 dias de amostras (a cada 5min isso ja da mais de
+// 8 mil linhas - nao precisa crescer pra sempre).
+async function pruneOldSystemMetrics() {
+  await pool.query("DELETE FROM system_metrics_samples WHERE sampled_at < now() - interval '30 days'");
+}
+
 module.exports = {
   clientActivity,
   clientRanking,
@@ -222,6 +252,10 @@ module.exports = {
   listServiceStatus,
   clientUsageSince,
   clientUsageHistory,
+  latestSystemMetric,
+  systemMetricsSince,
+  insertSystemMetricSample,
+  pruneOldSystemMetrics,
   computeDailyRollup,
   pruneOldTranscripts,
 };

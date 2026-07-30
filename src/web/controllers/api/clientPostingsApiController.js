@@ -7,7 +7,8 @@ function thumbnailUrl(row) {
 }
 
 async function listQueue(req, res) {
-  const rows = await postingsRepository.listQueueForClient(req.session.user.id);
+  const accountId = req.query.accountId ? Number(req.query.accountId) : null;
+  const rows = await postingsRepository.listQueueForClient(req.session.user.id, accountId);
   res.json({
     postings: rows.map((p) => ({
       id: p.id,
@@ -22,7 +23,8 @@ async function listQueue(req, res) {
 }
 
 async function listPosted(req, res) {
-  const rows = await postingsRepository.listPostedForClient(req.session.user.id);
+  const accountId = req.query.accountId ? Number(req.query.accountId) : null;
+  const rows = await postingsRepository.listPostedForClient(req.session.user.id, accountId);
   res.json({
     postings: rows.map((p) => ({
       id: p.id,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { IconBrandYoutube, IconMovie, IconScissors, IconCircleCheck } from "@tabler/icons-react"
+import { IconBrandYoutube, IconMovie, IconScissors, IconCircleCheck, IconListCheck } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { TikTokConnectionCard } from "@/components/dashboard/TikTokConnectionCard"
 import { PostingsTable, type PostingRow } from "@/components/dashboard/PostingsTable"
@@ -47,7 +47,7 @@ export function ClientDashboardPage() {
     })) ?? []
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Visão geral">
+    <DashboardLayout user={user} onLogout={logout} title="Dashboard">
       {flash.tiktokConnected && (
         <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
           Conta TikTok conectada com sucesso!
@@ -79,12 +79,12 @@ export function ClientDashboardPage() {
       </div>
 
       {data ? (
-        <TikTokConnectionCard account={data.tiktokAccount} />
+        <TikTokConnectionCard accounts={data.tiktokAccounts} />
       ) : (
         <Skeleton className="h-24" />
       )}
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
         {data ? (
           <>
             <StatCard
@@ -115,9 +115,18 @@ export function ClientDashboardPage() {
               href="/client/videos-clips"
               hrefLabel="Ver vídeos & cortes"
             />
+            <StatCard
+              label="Cortes na fila aguardando postar"
+              value={data.counts.pendingInQueue}
+              icon={<IconListCheck />}
+              tone="cyan"
+              href="/client/tiktok-account"
+              hrefLabel="Ver contas TikTok"
+            />
           </>
         ) : (
           <>
+            <Skeleton className="h-24" />
             <Skeleton className="h-24" />
             <Skeleton className="h-24" />
             <Skeleton className="h-24" />

@@ -157,7 +157,7 @@ async function listPostedOlderThan(tiktokAccountId, hours) {
 
 // Fila de prontos aguardando postar - pro cliente revisar/editar legenda
 // antes de sair.
-async function listQueueForClient(clientUserId) {
+async function listQueueForClient(clientUserId, tiktokAccountId = null) {
   const { rows } = await pool.query(
     `SELECT p.*, c.title AS clip_title, c.description AS clip_description, c.thumbnail_path,
             c.id AS clip_id, c.start_seconds, c.end_seconds
@@ -165,24 +165,37 @@ async function listQueueForClient(clientUserId) {
      ${CLIP_FILE_JOIN}
      JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
      WHERE ta.client_user_id = $1 AND p.status = 'pending'
+       AND ($2::bigint IS NULL OR p.tiktok_account_id = $2)
      ORDER BY p.created_at ASC`,
-    [clientUserId]
+    [clientUserId, tiktokAccountId]
   );
   return rows;
 }
 
-async function listPostedForClient(clientUserId) {
+async function listPostedForClient(clientUserId, tiktokAccountId = null) {
   const { rows } = await pool.query(
     `SELECT p.*, c.title AS clip_title, c.thumbnail_path, c.id AS clip_id
      FROM postings p
      ${CLIP_FILE_JOIN}
      JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
      WHERE ta.client_user_id = $1 AND p.status = 'posted'
+       AND ($2::bigint IS NULL OR p.tiktok_account_id = $2)
      ORDER BY p.posted_at DESC
      LIMIT 100`,
-    [clientUserId]
+    [clientUserId, tiktokAccountId]
   );
   return rows;
+}
+
+async function countPendingForClient(clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS count
+     FROM postings p
+     JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
+     WHERE ta.client_user_id = $1 AND p.status = 'pending'`,
+    [clientUserId]
+  );
+  return rows[0].count;
 }
 
 async function findByIdOwnedByClient(id, clientUserId) {
@@ -229,6 +242,7 @@ module.exports = {
   listPostedOlderThan,
   listQueueForClient,
   listPostedForClient,
+  countPendingForClient,
   findByIdOwnedByClient,
   updateCaptionOwnedByClient,
   skipOwnedByClient,

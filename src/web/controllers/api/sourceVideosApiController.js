@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
+const sourceVideoTiktokTargetsRepository = require('../../../repositories/sourceVideoTiktokTargetsRepository');
+const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
 const driveFoldersRepository = require('../../../repositories/driveFoldersRepository');
 const driveConnectionsRepository = require('../../../repositories/driveConnectionsRepository');
@@ -18,6 +20,32 @@ const QUEUE_VIDEO_PROCESSING = 'video-processing';
 // Usado quando ainda nao ha historico suficiente de processamento pra
 // calcular uma media real (video tipico: download + transcricao + IA + corte).
 const DEFAULT_AVG_PROCESSING_SECONDS = 480;
+
+// Video avulso (upload/link colado) nao tem canal pra herdar a conta TikTok
+// de destino - o cliente escolhe na hora do envio. Com 0 contas, segue sem
+// nenhuma (corte fica pronto mas nao vira postagem); com 1, usa ela direto;
+// com 2+, exige que pelo menos uma tenha sido marcada.
+async function resolveTiktokAccountIds(req) {
+  const accounts = await tiktokAccountsRepository.listActiveByClientId(req.session.user.id);
+  if (accounts.length === 0) return { tiktokAccountIds: [] };
+  if (accounts.length === 1) return { tiktokAccountIds: [accounts[0].id] };
+
+  const raw = req.body.tiktokAccountIds;
+  const requested = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'string' && raw.trim()
+      ? JSON.parse(raw)
+      : [];
+  const ids = requested.map(Number).filter((n) => Number.isInteger(n));
+  // tiktok_accounts.id e BIGINT - o driver pg devolve como string, entao
+  // compara convertendo os dois lados pra numero.
+  const validIds = accounts.filter((a) => ids.includes(Number(a.id))).map((a) => a.id);
+
+  if (validIds.length === 0) {
+    return { error: 'Escolha pelo menos uma conta TikTok pra receber esse vídeo.' };
+  }
+  return { tiktokAccountIds: validIds };
+}
 
 async function list(req, res) {
   const channelId = req.query.channelId ? Number(req.query.channelId) : null;
@@ -44,6 +72,7 @@ async function list(req, res) {
       clipCount: v.clip_count,
       readyClipCount: v.ready_clip_count,
       processingStartedAt: v.processing_started_at,
+      tiktokAccountNames: v.tiktok_account_names || [],
     })),
   });
 }
@@ -112,6 +141,9 @@ async function createManual(req, res) {
     return res.status(409).json({ error: 'Esse video ja foi adicionado antes.' });
   }
 
+  const targets = await resolveTiktokAccountIds(req);
+  if (targets.error) return res.status(400).json({ error: targets.error });
+
   let metadata;
   try {
     metadata = await ytDlpService.getVideoMetadata(`https://www.youtube.com/watch?v=${videoId}`);
@@ -132,6 +164,10 @@ async function createManual(req, res) {
     return res.status(409).json({ error: 'Esse video ja foi adicionado antes.' });
   }
 
+  if (targets.tiktokAccountIds.length > 0) {
+    await sourceVideoTiktokTargetsRepository.setTargets(sourceVideo.id, targets.tiktokAccountIds);
+  }
+
   const boss = await queueService.getBoss();
   await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: sourceVideo.id });
 
@@ -144,6 +180,12 @@ async function createManual(req, res) {
 async function uploadVideo(req, res) {
   if (!req.file) {
     return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+  }
+
+  const targets = await resolveTiktokAccountIds(req);
+  if (targets.error) {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: targets.error });
   }
 
   let durationSeconds;
@@ -162,6 +204,10 @@ async function uploadVideo(req, res) {
     localVideoPath: req.file.path,
     durationSeconds,
   });
+
+  if (targets.tiktokAccountIds.length > 0) {
+    await sourceVideoTiktokTargetsRepository.setTargets(sourceVideo.id, targets.tiktokAccountIds);
+  }
 
   const boss = await queueService.getBoss();
   await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: sourceVideo.id });

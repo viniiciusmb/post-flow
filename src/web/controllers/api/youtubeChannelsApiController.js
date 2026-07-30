@@ -4,16 +4,22 @@ const youtubeChannelsRepository = require('../../../repositories/youtubeChannels
 const youtubeChannelService = require('../../../services/youtubeChannelService');
 const driveConnectionsRepository = require('../../../repositories/driveConnectionsRepository');
 const driveFoldersRepository = require('../../../repositories/driveFoldersRepository');
+const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
 const { extractDriveFolderId } = require('../../../lib/driveFolderId');
 
 async function list(req, res) {
-  const channels = await youtubeChannelsRepository.listByClientId(req.session.user.id);
+  const [channels, tiktokAccounts] = await Promise.all([
+    youtubeChannelsRepository.listByClientId(req.session.user.id),
+    tiktokAccountsRepository.listActiveByClientId(req.session.user.id),
+  ]);
   const exportFolders = await driveFoldersRepository.findExportFoldersByChannelIds(channels.map((c) => c.id));
   const exportFolderByChannel = new Map(exportFolders.map((f) => [f.youtube_channel_id, f]));
+  const tiktokAccountById = new Map(tiktokAccounts.map((a) => [a.id, a]));
 
   res.json({
     channels: channels.map((c) => {
       const exportFolder = exportFolderByChannel.get(c.id);
+      const tiktokAccount = c.tiktok_account_id ? tiktokAccountById.get(c.tiktok_account_id) : null;
       return {
         id: c.id,
         channelName: c.channel_name,
@@ -23,6 +29,8 @@ async function list(req, res) {
         lastPolledAt: c.last_polled_at,
         exportFolder: exportFolder ? { id: exportFolder.drive_folder_id, name: exportFolder.folder_name } : null,
         driveExportMode: c.drive_export_mode,
+        tiktokAccountId: c.tiktok_account_id,
+        tiktokAccountName: tiktokAccount ? tiktokAccount.display_name || tiktokAccount.tiktok_open_id : null,
       };
     }),
   });
@@ -41,7 +49,7 @@ async function create(req, res) {
     return res.status(400).json({ error: err.message });
   }
 
-  const channel = await youtubeChannelsRepository.create({
+  let channel = await youtubeChannelsRepository.create({
     clientUserId: req.session.user.id,
     youtubeChannelId: resolved.channelId,
     channelName: resolved.channelName,
@@ -51,6 +59,13 @@ async function create(req, res) {
 
   if (!channel) {
     return res.status(409).json({ error: 'Esse canal ja esta cadastrado.' });
+  }
+
+  // Cliente com uma unica conta TikTok: ja vincula sozinho (sem isso ele
+  // teria que ir em Vídeos & Cortes so pra escolher a unica opcao possivel).
+  const tiktokAccounts = await tiktokAccountsRepository.listActiveByClientId(req.session.user.id);
+  if (tiktokAccounts.length === 1) {
+    channel = await youtubeChannelsRepository.setTiktokAccount(channel.id, req.session.user.id, tiktokAccounts[0].id);
   }
 
   res.status(201).json({
@@ -63,8 +78,32 @@ async function create(req, res) {
       lastPolledAt: channel.last_polled_at,
       exportFolder: null,
       driveExportMode: channel.drive_export_mode,
+      tiktokAccountId: channel.tiktok_account_id,
+      tiktokAccountName: tiktokAccounts.length === 1 ? tiktokAccounts[0].display_name || tiktokAccounts[0].tiktok_open_id : null,
     },
   });
+}
+
+async function setTiktokAccount(req, res) {
+  const channel = await youtubeChannelsRepository.findById(Number(req.params.id));
+  if (!channel || channel.client_user_id !== req.session.user.id) {
+    return res.status(404).json({ error: 'Canal nao encontrado.' });
+  }
+
+  const rawId = req.body.tiktokAccountId;
+  if (rawId === null || rawId === undefined || rawId === '') {
+    const updated = await youtubeChannelsRepository.setTiktokAccount(channel.id, req.session.user.id, null);
+    return res.json({ tiktokAccountId: updated.tiktok_account_id });
+  }
+
+  const tiktokAccountId = Number(rawId);
+  const account = await tiktokAccountsRepository.findActiveByIdAndClient(tiktokAccountId, req.session.user.id);
+  if (!account) {
+    return res.status(400).json({ error: 'Conta TikTok invalida.' });
+  }
+
+  const updated = await youtubeChannelsRepository.setTiktokAccount(channel.id, req.session.user.id, account.id);
+  res.json({ tiktokAccountId: updated.tiktok_account_id, tiktokAccountName: account.display_name || account.tiktok_open_id });
 }
 
 async function setActive(req, res) {
@@ -130,4 +169,4 @@ async function setDriveExportMode(req, res) {
   res.json({ driveExportMode: channel.drive_export_mode });
 }
 
-module.exports = { list, create, setActive, remove, setExportFolder, setDriveExportMode };
+module.exports = { list, create, setActive, remove, setExportFolder, setDriveExportMode, setTiktokAccount };

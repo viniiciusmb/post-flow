@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { IconTrash, IconArrowRight, IconMovie, IconBrandGoogleDrive } from "@tabler/icons-react"
+import { IconTrash, IconArrowRight, IconMovie, IconBrandGoogleDrive, IconBrandTiktok } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -7,12 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
-import type { DriveStatusResponse, SourceVideo, TikTokAccountResponse, YoutubeChannel } from "@/types/api"
+import type { DriveStatusResponse, SourceVideo, TikTokAccountSummary, YoutubeChannel } from "@/types/api"
 
 function initials(name: string) {
   return name.slice(0, 2).toUpperCase()
@@ -51,35 +52,35 @@ function ChannelVideoThumb({ video }: { video: SourceVideo }) {
 function ChannelCard({
   channel,
   videos,
-  autoPostEnabled,
-  hasTiktokAccount,
+  tiktokAccounts,
   hasDriveConnection,
   onToggleActive,
-  onToggleAutoPost,
+  onSetTiktokAccount,
   onSetExportFolder,
   onSetDriveExportMode,
   onRemove,
 }: {
   channel: YoutubeChannel
   videos: SourceVideo[]
-  autoPostEnabled: boolean
-  hasTiktokAccount: boolean
+  tiktokAccounts: TikTokAccountSummary[]
   hasDriveConnection: boolean
   onToggleActive: (checked: boolean) => Promise<void>
-  onToggleAutoPost: (checked: boolean) => Promise<void>
+  onSetTiktokAccount: (tiktokAccountId: number | null) => Promise<void>
   onSetExportFolder: (folderLink: string, autoMode: boolean) => Promise<void>
   onSetDriveExportMode: (mode: "auto" | "manual") => Promise<void>
   onRemove: () => void
 }) {
   const recent = videos.slice(0, 6)
   const [savingActive, setSavingActive] = useState(false)
-  const [savingAutoPost, setSavingAutoPost] = useState(false)
+  const [savingTiktokAccount, setSavingTiktokAccount] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [exportFolderLink, setExportFolderLink] = useState("")
   const [autoModeOnCreate, setAutoModeOnCreate] = useState(false)
   const [savingExportFolder, setSavingExportFolder] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [savingExportMode, setSavingExportMode] = useState(false)
+
+  const linkedAccount = tiktokAccounts.find((a) => a.id === channel.tiktokAccountId) ?? null
 
   async function handleToggleActive() {
     setError(null)
@@ -93,15 +94,15 @@ function ChannelCard({
     }
   }
 
-  async function handleToggleAutoPost() {
+  async function handleSelectTiktokAccount(value: string) {
     setError(null)
-    setSavingAutoPost(true)
+    setSavingTiktokAccount(true)
     try {
-      await onToggleAutoPost(!autoPostEnabled)
+      await onSetTiktokAccount(value === "none" ? null : Number(value))
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível salvar. Tente de novo.")
     } finally {
-      setSavingAutoPost(false)
+      setSavingTiktokAccount(false)
     }
   }
 
@@ -182,40 +183,52 @@ function ChannelCard({
             </Button>
           </div>
 
-          <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">
-                {!hasTiktokAccount
-                  ? "Postagem automática no TikTok"
-                  : autoPostEnabled
-                    ? "Postando automaticamente no TikTok"
-                    : "Postagem automática pausada"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {!hasTiktokAccount ? (
-                  <>
-                    Conecte a{" "}
-                    <a href="/client/tiktok-account" className="text-primary hover:underline">
-                      conta TikTok
-                    </a>{" "}
-                    pra habilitar (vale pra todos os canais).
-                  </>
-                ) : autoPostEnabled ? (
-                  "Cortes prontos de qualquer canal entram na fila de postagem do TikTok."
-                ) : (
-                  "Cortes ficam prontos, mas não são enviados pro TikTok até você ligar isso."
-                )}
-              </p>
+          <div className="flex flex-col gap-2 border-t border-border pt-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <IconBrandTiktok className="size-4 text-muted-foreground" />
+              Postar cortes na conta
             </div>
-            <Button
-              size="sm"
-              variant={autoPostEnabled ? "outline" : "default"}
-              onClick={handleToggleAutoPost}
-              disabled={savingAutoPost || !hasTiktokAccount}
-              className="shrink-0"
-            >
-              {savingAutoPost ? "Salvando..." : autoPostEnabled ? "Pausar" : "Ligar"}
-            </Button>
+            {tiktokAccounts.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Nenhuma conta TikTok conectada ainda —{" "}
+                <a href="/client/tiktok-account" className="text-primary hover:underline">
+                  conecte uma
+                </a>{" "}
+                pra poder postar os cortes desse canal.
+              </p>
+            ) : (
+              <>
+                <Select
+                  value={channel.tiktokAccountId ? String(channel.tiktokAccountId) : "none"}
+                  onValueChange={handleSelectTiktokAccount}
+                  disabled={savingTiktokAccount}
+                >
+                  <SelectTrigger size="sm" className="w-full max-w-xs text-xs">
+                    <SelectValue placeholder="Escolha uma conta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhuma (não posta)</SelectItem>
+                    {tiktokAccounts.map((a) => (
+                      <SelectItem key={a.id} value={String(a.id)}>
+                        {a.displayName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {linkedAccount && (
+                  <p className="text-xs text-muted-foreground">
+                    Postagem automática {linkedAccount.autoPostEnabled ? "ligada" : "desligada"} pra essa conta —{" "}
+                    <a href="/client/tiktok-account" className="text-primary hover:underline">
+                      gerenciar em Contas TikTok
+                    </a>
+                    .
+                  </p>
+                )}
+                <a href="/client/tiktok-account" className="text-xs font-semibold text-primary hover:underline">
+                  + Conectar outra conta
+                </a>
+              </>
+            )}
           </div>
 
           {error && <p className="text-xs text-destructive">{error}</p>}
@@ -312,7 +325,7 @@ export function YouTubeChannelsPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const [channels, setChannels] = useState<YoutubeChannel[] | null>(null)
   const [videos, setVideos] = useState<SourceVideo[]>([])
-  const [tiktokAccount, setTiktokAccount] = useState<TikTokAccountResponse | null>(null)
+  const [tiktokAccounts, setTiktokAccounts] = useState<TikTokAccountSummary[]>([])
   const [driveStatus, setDriveStatus] = useState<DriveStatusResponse | null>(null)
   const [channelUrl, setChannelUrl] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -323,12 +336,12 @@ export function YouTubeChannelsPage() {
     const [channelsData, videosData, tiktokData, driveData] = await Promise.all([
       api.get<{ channels: YoutubeChannel[] }>("/api/client/youtube-channels"),
       api.get<{ videos: SourceVideo[] }>("/api/client/source-videos"),
-      api.get<TikTokAccountResponse>("/api/client/tiktok-account"),
+      api.get<{ accounts: TikTokAccountSummary[] }>("/api/client/tiktok-accounts"),
       api.get<DriveStatusResponse>("/api/client/drive"),
     ])
     setChannels(channelsData.channels)
     setVideos(videosData.videos)
-    setTiktokAccount(tiktokData)
+    setTiktokAccounts(tiktokData.accounts)
     setDriveStatus(driveData)
   }
 
@@ -358,8 +371,8 @@ export function YouTubeChannelsPage() {
     await load()
   }
 
-  async function toggleAutoPost(checked: boolean) {
-    await api.put("/api/client/tiktok-account/auto-post", { enabled: checked })
+  async function setTiktokAccount(channel: YoutubeChannel, tiktokAccountId: number | null) {
+    await api.post(`/api/client/youtube-channels/${channel.id}/tiktok-account`, { tiktokAccountId })
     await load()
   }
 
@@ -381,8 +394,6 @@ export function YouTubeChannelsPage() {
 
   if (authLoading || !user) return null
 
-  const hasTiktokAccount = tiktokAccount?.connected === true
-  const autoPostEnabled = tiktokAccount?.connected === true && tiktokAccount.autoPostEnabled
   const hasDriveConnection = driveStatus?.connected === true
 
   return (
@@ -445,11 +456,10 @@ export function YouTubeChannelsPage() {
                 key={channel.id}
                 channel={channel}
                 videos={videos.filter((v) => v.channelId === channel.id)}
-                autoPostEnabled={autoPostEnabled}
-                hasTiktokAccount={hasTiktokAccount}
+                tiktokAccounts={tiktokAccounts}
                 hasDriveConnection={hasDriveConnection}
                 onToggleActive={(checked) => toggleActive(channel, checked)}
-                onToggleAutoPost={toggleAutoPost}
+                onSetTiktokAccount={(tiktokAccountId) => setTiktokAccount(channel, tiktokAccountId)}
                 onSetExportFolder={(folderLink, autoMode) => setExportFolder(channel, folderLink, autoMode)}
                 onSetDriveExportMode={(mode) => setDriveExportMode(channel, mode)}
                 onRemove={() => removeChannel(channel)}

@@ -51,6 +51,16 @@ async function remove(id, clientUserId) {
 // 'auto' = qualquer corte pronto desse canal e enviado sozinho pra pasta de
 // destino do Drive (driveExportJob.js). 'manual' (padrao) = o cliente
 // escolhe corte a corte em Videos & Cortes.
+// tiktokAccountId pode ser null (desvincula - cortes ficam prontos mas nao
+// viram postagem ate o cliente escolher uma conta de novo).
+async function setTiktokAccount(id, clientUserId, tiktokAccountId) {
+  const { rows } = await pool.query(
+    'UPDATE youtube_channels SET tiktok_account_id = $3 WHERE id = $1 AND client_user_id = $2 RETURNING *',
+    [id, clientUserId, tiktokAccountId]
+  );
+  return rows[0] || null;
+}
+
 async function setDriveExportMode(id, clientUserId, mode) {
   const { rows } = await pool.query(
     'UPDATE youtube_channels SET drive_export_mode = $3 WHERE id = $1 AND client_user_id = $2 RETURNING *',
@@ -66,4 +76,14 @@ async function updatePollState(id, { lastVideoPublishedAt }) {
   );
 }
 
-module.exports = { listActive, listByClientId, findById, create, setActive, remove, updatePollState, setDriveExportMode };
+module.exports = {
+  listActive,
+  listByClientId,
+  findById,
+  create,
+  setActive,
+  remove,
+  updatePollState,
+  setDriveExportMode,
+  setTiktokAccount,
+};

@@ -12,10 +12,9 @@ const router = express.Router();
 router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 
 router.get('/dashboard', asyncHandler(clientApiController.dashboard));
-router.get('/tiktok-account', asyncHandler(clientApiController.tiktokAccount));
-router.put('/tiktok-account/auto-post', asyncHandler(clientApiController.setAutoPost));
-router.get('/tiktok-account/schedule', asyncHandler(clientApiController.getSchedule));
-router.put('/tiktok-account/schedule', asyncHandler(clientApiController.setSchedule));
+router.get('/profile', asyncHandler(clientApiController.getProfile));
+router.put('/profile', asyncHandler(clientApiController.updateProfile));
+router.put('/password', asyncHandler(clientApiController.updatePassword));
 router.get('/usage', asyncHandler(clientApiController.usage));
 
 module.exports = router;

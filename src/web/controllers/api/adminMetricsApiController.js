@@ -28,6 +28,8 @@ async function overview(req, res) {
     pipelineSelected,
     costSelected,
     rankingSelected,
+    systemLatest,
+    systemHistory,
   ] = await Promise.all([
     metricsRepository.clientActivity(since30d),
     metricsRepository.volumeSince(since30d),
@@ -42,6 +44,8 @@ async function overview(req, res) {
     metricsRepository.pipelineHealthSince(since, until),
     metricsRepository.costSince(since, until),
     metricsRepository.clientRanking({ since, until, limit: 5 }),
+    metricsRepository.latestSystemMetric(),
+    metricsRepository.systemMetricsSince(daysAgo(1)),
   ]);
 
   const aproveitamentoRate = volume30d.clipsGenerated > 0 ? volume30d.clipsPosted / volume30d.clipsGenerated : null;
@@ -82,6 +86,26 @@ async function overview(req, res) {
       lastHeartbeatAt: s.last_heartbeat_at,
       isUp: s.is_up,
     })),
+    system: {
+      latest: systemLatest
+        ? {
+            sampledAt: systemLatest.sampled_at,
+            loadAvg1m: Number(systemLatest.load_avg_1m),
+            cpuCores: systemLatest.cpu_cores,
+            memUsedMb: systemLatest.mem_used_mb,
+            memTotalMb: systemLatest.mem_total_mb,
+            diskUsedGb: systemLatest.disk_used_gb !== null ? Number(systemLatest.disk_used_gb) : null,
+            diskTotalGb: systemLatest.disk_total_gb !== null ? Number(systemLatest.disk_total_gb) : null,
+          }
+        : null,
+      history: systemHistory.map((s) => ({
+        sampledAt: s.sampled_at,
+        loadAvg1m: Number(s.load_avg_1m),
+        cpuCores: s.cpu_cores,
+        memUsedMb: s.mem_used_mb,
+        memTotalMb: s.mem_total_mb,
+      })),
+    },
     // Numeros recalculados so pro periodo escolhido no filtro (Hoje/Ontem/etc) -
     // os blocos acima continuam fixos em 7d/30d como referencia de tendencia.
     selected: {

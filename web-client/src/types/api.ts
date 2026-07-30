@@ -103,6 +103,18 @@ export interface AdminMetricsResponse {
     projectedMonthlyUsd: number
   }
   services: { name: string; lastHeartbeatAt: string; isUp: boolean }[]
+  system: {
+    latest: {
+      sampledAt: string
+      loadAvg1m: number
+      cpuCores: number
+      memUsedMb: number
+      memTotalMb: number
+      diskUsedGb: number | null
+      diskTotalGb: number | null
+    } | null
+    history: { sampledAt: string; loadAvg1m: number; cpuCores: number; memUsedMb: number; memTotalMb: number }[]
+  }
   selected: {
     videosDetected: number
     clipsGenerated: number
@@ -132,9 +144,17 @@ export interface TikTokAccountStats {
   statsUpdatedAt: string | null
 }
 
-export type TikTokAccountResponse =
-  | ({ connected: true; displayName: string; avatarUrl: string | null; connectedAt: string; autoPostEnabled: boolean } & TikTokAccountStats)
-  | { connected: false }
+export interface TikTokAccountSummary extends TikTokAccountStats {
+  id: number
+  displayName: string
+  avatarUrl: string | null
+  connectedAt: string
+  autoPostEnabled: boolean
+}
+
+export interface TikTokAccountsResponse {
+  accounts: TikTokAccountSummary[]
+}
 
 export type PostingScheduleMode = "auto" | "manual"
 
@@ -167,23 +187,27 @@ export interface PostedItem {
 
 export interface ClientDashboardResponse {
   range: RangeInfo
-  tiktokAccount:
-    | ({ connected: true; displayName: string; avatarUrl: string | null } & TikTokAccountStats)
-    | { connected: false }
+  tiktokAccounts: { id: number; displayName: string; avatarUrl: string | null }[]
   counts: {
     youtubeChannels: number
     videosThisMonth: number
     videosInRange: number
     clipsInRange: number
     clipsPostedInRange: number
+    pendingInQueue: number
   }
   postings: ClientPosting[]
+}
+
+export interface ClientProfileResponse {
+  businessName: string | null
+  email: string
 }
 
 export interface DriveStatusResponse {
   connected: boolean
   googleAccountEmail: string | null
-  folder: { id: string; name: string | null; lastPolledAt: string | null } | null
+  folder: { id: string; name: string | null; lastPolledAt?: string | null; tiktokAccountIds: number[] } | null
 }
 
 export type VideoAspectRatio = "9:16" | "1:1" | "16:9" | "4:5"
@@ -231,6 +255,8 @@ export interface YoutubeChannel {
   lastPolledAt: string | null
   exportFolder: { id: string; name: string | null } | null
   driveExportMode: DriveExportMode
+  tiktokAccountId: number | null
+  tiktokAccountName: string | null
 }
 
 export type SourceVideoStatus =
@@ -257,6 +283,7 @@ export interface SourceVideo {
   clipCount: number
   readyClipCount: number
   processingStartedAt: string | null
+  tiktokAccountNames: string[]
 }
 
 export interface SourceVideosResponse {

@@ -45,7 +45,7 @@ const ADMIN_GROUPS: { label?: string; items: NavItem[] }[] = [
     items: [
       { title: "Canais do YouTube", url: "/client/youtube-channels", icon: IconBrandYoutube },
       { title: "Vídeos & Cortes", url: "/client/videos-clips", icon: IconScissors },
-      { title: "Conta TikTok", url: "/client/tiktok-account", icon: IconBrandTiktok },
+      { title: "Contas TikTok", url: "/client/tiktok-account", icon: IconBrandTiktok },
       { title: "Configurações", url: "/client/settings", icon: IconSettings },
     ],
   },
@@ -55,10 +55,10 @@ const CLIENT_GROUPS: { label?: string; items: NavItem[] }[] = [
   {
     label: "Menu",
     items: [
-      { title: "Visão geral", url: "/client", icon: IconLayoutDashboard },
+      { title: "Dashboard", url: "/client", icon: IconLayoutDashboard },
       { title: "Canais do YouTube", url: "/client/youtube-channels", icon: IconBrandYoutube },
       { title: "Vídeos & Cortes", url: "/client/videos-clips", icon: IconScissors },
-      { title: "Conta TikTok", url: "/client/tiktok-account", icon: IconBrandTiktok },
+      { title: "Contas TikTok", url: "/client/tiktok-account", icon: IconBrandTiktok },
       { title: "Configurações", url: "/client/settings", icon: IconSettings },
     ],
   },

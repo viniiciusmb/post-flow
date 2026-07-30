@@ -230,11 +230,21 @@ async function markProcessingStarted(id) {
 // Lista videos-fonte de um cliente (via canal ou colados manualmente), com
 // contagem de cortes - usada na tela "Videos & Cortes". LEFT JOIN porque
 // video manual nao tem canal (yc.client_user_id seria NULL nesse caso).
+// tiktok_account_names: pro canal, a (unica) conta vinculada a ele; pra
+// video avulso (manual/upload), as contas escolhidas em source_video_tiktok_targets.
+// Usado pra mostrar "vai postar em qual conta" na tela Videos & Cortes.
 async function listForClient(clientUserId, { youtubeChannelId = null } = {}) {
   const { rows } = await pool.query(
     `SELECT sv.*, yc.channel_name,
             (SELECT count(*) FROM clips c WHERE c.source_video_id = sv.id) AS clip_count,
-            (SELECT count(*) FROM clips c WHERE c.source_video_id = sv.id AND c.status = 'ready') AS ready_clip_count
+            (SELECT count(*) FROM clips c WHERE c.source_video_id = sv.id AND c.status = 'ready') AS ready_clip_count,
+            COALESCE(
+              (SELECT array_agg(ta.display_name ORDER BY ta.display_name) FROM tiktok_accounts ta WHERE ta.id = yc.tiktok_account_id),
+              (SELECT array_agg(ta2.display_name ORDER BY ta2.display_name)
+               FROM source_video_tiktok_targets svt
+               JOIN tiktok_accounts ta2 ON ta2.id = svt.tiktok_account_id
+               WHERE svt.source_video_id = sv.id)
+            ) AS tiktok_account_names
      FROM source_videos sv
      LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
      WHERE coalesce(yc.client_user_id, sv.client_user_id) = $1

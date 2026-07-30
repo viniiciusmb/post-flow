@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
-import { IconAlertTriangle, IconCircleCheck, IconCircleX } from "@tabler/icons-react"
+import { IconAlertTriangle, IconCircleCheck, IconCircleX, IconServer } from "@tabler/icons-react"
+import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { DateRangeFilter } from "@/components/dashboard/DateRangeFilter"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TonePill } from "@/components/ui/tone-pill"
@@ -9,6 +11,16 @@ import { useAuth } from "@/hooks/useAuth"
 import { useDateRange } from "@/hooks/useDateRange"
 import { api } from "@/lib/api"
 import type { AdminMetricsResponse } from "@/types/api"
+
+const SYSTEM_CHART_CONFIG = {
+  cpuPercent: { label: "CPU (carga / núcleos)", color: "var(--tone-danger-ink)" },
+  memPercent: { label: "Memória usada", color: "var(--tone-indigo-ink)" },
+} satisfies ChartConfig
+
+function gb(n: number | null) {
+  if (n === null) return "—"
+  return `${n.toFixed(1)} GB`
+}
 
 const ERROR_RATE_WARN = 0.15
 const QUEUE_DEPTH_WARN = 20
@@ -137,6 +149,61 @@ export function AdminMetricsPage() {
             <Metric label="Custo médio por vídeo (30d)" value={usd(data.cost.avgCostPerVideo30d)} />
             <Metric label="Projeção mensal" value={usd(data.cost.projectedMonthlyUsd)} sub="com base nos últimos 7 dias" />
           </Section>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <IconServer className="size-4 text-muted-foreground" />
+                Saúde do servidor (VPS)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-6">
+              <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+                <Metric
+                  label="Carga da CPU (1 min)"
+                  value={data.system.latest ? data.system.latest.loadAvg1m.toFixed(2) : "—"}
+                  sub={data.system.latest ? `${data.system.latest.cpuCores} núcleos` : undefined}
+                />
+                <Metric
+                  label="Memória usada"
+                  value={data.system.latest ? `${Math.round((data.system.latest.memUsedMb / data.system.latest.memTotalMb) * 100)}%` : "—"}
+                  sub={data.system.latest ? `${(data.system.latest.memUsedMb / 1024).toFixed(1)} / ${(data.system.latest.memTotalMb / 1024).toFixed(1)} GB` : undefined}
+                />
+                <Metric
+                  label="Disco usado"
+                  value={data.system.latest ? `${Math.round(((data.system.latest.diskUsedGb ?? 0) / (data.system.latest.diskTotalGb || 1)) * 100)}%` : "—"}
+                  sub={data.system.latest ? `${gb(data.system.latest.diskUsedGb)} / ${gb(data.system.latest.diskTotalGb)}` : undefined}
+                />
+                <Metric
+                  label="Última amostra"
+                  value={data.system.latest ? new Date(data.system.latest.sampledAt).toLocaleTimeString("pt-BR") : "—"}
+                />
+              </div>
+
+              {data.system.history.length > 1 && (
+                <ChartContainer config={SYSTEM_CHART_CONFIG} className="aspect-auto h-56 w-full">
+                  <LineChart
+                    data={data.system.history.map((h) => ({
+                      time: new Date(h.sampledAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+                      cpuPercent: Math.round((h.loadAvg1m / h.cpuCores) * 100),
+                      memPercent: Math.round((h.memUsedMb / h.memTotalMb) * 100),
+                    }))}
+                  >
+                    <CartesianGrid vertical={false} />
+                    <XAxis dataKey="time" tickLine={false} axisLine={false} minTickGap={40} />
+                    <YAxis tickLine={false} axisLine={false} width={36} unit="%" />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Line dataKey="cpuPercent" stroke="var(--color-cpuPercent)" strokeWidth={2} dot={false} />
+                    <Line dataKey="memPercent" stroke="var(--color-memPercent)" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ChartContainer>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Amostrado a cada 5 minutos. Como o servidor é compartilhado (Docker Swarm sem limite de CPU/memória por
+                serviço), os números refletem a VPS inteira, não só o Post Flow.
+              </p>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>
