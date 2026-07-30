@@ -236,6 +236,7 @@ export interface ClientVideoSettings {
   cropZoomPercent: number
   showPartLabel: boolean
   partLabelPosition: PartLabelPosition
+  titleStyle: VideoCaptionStyle
 }
 
 export interface ClientVideoSettingsResponse extends ClientVideoSettings {
@@ -249,6 +250,7 @@ export interface ClientVideoSettingsResponse extends ClientVideoSettings {
     descriptionModes: VideoDescriptionMode[]
     cropStyleModes: CropStyleMode[]
     partLabelPositions: PartLabelPosition[]
+    titleStyles: VideoCaptionStyle[]
   }
 }
 

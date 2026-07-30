@@ -40,6 +40,17 @@ const CAPTION_STYLES = {
   bubble_purple: 'Style: Default,Arial Black,90,&H00FFFFFF,&H000000FF,&H00000000,&H50B26EF2,1,0,0,0,100,100,0,0,3,14,0,2,80,80,260,1',
 };
 
+// Mesma ideia do CAPTION_STYLES, mas pro titulo queimado no comeco do video -
+// Alignment=8 (topo-centro) em todos, fonte maior. O "Name" do Style
+// continua "Title" nos 5 (e o mesmo nome referenciado no Dialogue).
+const TITLE_STYLES = {
+  classic: 'Style: Title,Arial Black,72,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,0,8,80,80,120,1',
+  bold: 'Style: Title,Arial Black,80,&H0000D7FF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,7,0,8,60,60,120,1',
+  minimal: 'Style: Title,Arial,56,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3,0,8,100,100,100,1',
+  bubble_dark: 'Style: Title,Arial Black,64,&H00FFFFFF,&H000000FF,&H00000000,&H50000000,1,0,0,0,100,100,0,0,3,12,0,8,80,80,120,1',
+  bubble_purple: 'Style: Title,Arial Black,64,&H00FFFFFF,&H000000FF,&H00000000,&H50B26EF2,1,0,0,0,100,100,0,0,3,12,0,8,80,80,120,1',
+};
+
 // Mapeia a posicao escolhida (numeracao "Parte N") pro campo Alignment do
 // ASS - que ja usa a mesma convencao de teclado numerico (7/8/9 = topo
 // esquerda/centro/direita, 1/2/3 = baixo esquerda/centro/direita).
@@ -202,7 +213,7 @@ function formatAssTimestamp(seconds) {
 // com o titulo do corte, visivel do inicio ate esse instante. partLabel
 // (ex: "Parte 2"), quando informado, fica visivel o corte inteiro na
 // posicao escolhida (ver PART_LABEL_ALIGNMENT).
-function buildAssSubtitles(words, captionStyle, title, titleSeconds, partLabel, partLabelPosition, clipDuration) {
+function buildAssSubtitles(words, captionStyle, titleStyle, title, titleSeconds, partLabel, partLabelPosition, clipDuration) {
   const partAlignment = PART_LABEL_ALIGNMENT[partLabelPosition] || PART_LABEL_ALIGNMENT.top_right;
   const header = `[Script Info]
 ScriptType: v4.00+
@@ -213,7 +224,7 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 ${CAPTION_STYLES[captionStyle] || CAPTION_STYLES.classic}
-Style: Title,Arial Black,72,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,0,8,80,80,120,1
+${TITLE_STYLES[titleStyle] || TITLE_STYLES.classic}
 Style: Part,Arial Black,56,&H00FFFFFF,&H000000FF,&H00000000,&H50000000,1,0,0,0,100,100,0,0,3,10,0,${partAlignment},50,50,50,1
 
 [Events]
@@ -303,6 +314,7 @@ async function renderClip({
   const framing = settings.framing || 'crop';
   const quality = settings.quality || 'high';
   const captionStyle = settings.caption_style || 'classic';
+  const titleStyle = settings.title_style || 'classic';
   const showTitle = settings.show_title !== false;
   const titleSeconds = showTitle ? Number(settings.title_seconds || 3) : 0;
   // So no modo manual o zoom continuo entra em jogo - no automatico o
@@ -327,6 +339,7 @@ async function renderClip({
       buildAssSubtitles(
         relativeWords,
         captionStyle,
+        titleStyle,
         titleSeconds > 0 ? title : null,
         titleSeconds,
         partLabel,
@@ -375,4 +388,5 @@ module.exports = {
   ASPECT_RATIOS,
   QUALITY_PRESETS,
   CAPTION_STYLES,
+  TITLE_STYLES,
 };

@@ -10,6 +10,7 @@ const videoEditingService = require('../../../services/videoEditingService');
 const ASPECT_RATIOS = Object.keys(videoEditingService.ASPECT_RATIOS);
 const QUALITIES = Object.keys(videoEditingService.QUALITY_PRESETS);
 const CAPTION_STYLES = [...Object.keys(videoEditingService.CAPTION_STYLES), 'none'];
+const TITLE_STYLES = Object.keys(videoEditingService.TITLE_STYLES);
 const FRAMINGS = ['crop', 'blur_pad'];
 const CLIP_LENGTHS = ['short', 'balanced', 'long'];
 const CLIP_MODES = ['ai_choice', 'full_video', 'fixed_count'];
@@ -34,6 +35,7 @@ function toApi(settings) {
     cropZoomPercent: settings.crop_zoom_percent,
     showPartLabel: settings.show_part_label,
     partLabelPosition: settings.part_label_position,
+    titleStyle: settings.title_style,
   };
 }
 
@@ -47,6 +49,7 @@ const OPTIONS_PAYLOAD = {
   descriptionModes: DESCRIPTION_MODES,
   cropStyleModes: CROP_STYLE_MODES,
   partLabelPositions: PART_LABEL_POSITIONS,
+  titleStyles: TITLE_STYLES,
 };
 
 // toApi() nunca inclui "options" (sao constantes fixas, nao vem do banco) -
@@ -79,12 +82,14 @@ async function update(req, res) {
     cropZoomPercent,
     showPartLabel,
     partLabelPosition,
+    titleStyle,
   } = req.body;
 
   if (!ASPECT_RATIOS.includes(aspectRatio)) return res.status(400).json({ error: 'Proporcao invalida.' });
   if (!FRAMINGS.includes(framing)) return res.status(400).json({ error: 'Enquadramento invalido.' });
   if (!QUALITIES.includes(quality)) return res.status(400).json({ error: 'Qualidade invalida.' });
   if (!CAPTION_STYLES.includes(captionStyle)) return res.status(400).json({ error: 'Estilo de legenda invalido.' });
+  if (!TITLE_STYLES.includes(titleStyle)) return res.status(400).json({ error: 'Estilo de titulo invalido.' });
   if (!CLIP_LENGTHS.includes(clipLength)) return res.status(400).json({ error: 'Estilo de corte invalido.' });
   if (!CLIP_MODES.includes(clipMode)) return res.status(400).json({ error: 'Modo de corte invalido.' });
   if (!DESCRIPTION_MODES.includes(descriptionMode)) return res.status(400).json({ error: 'Modo de descricao invalido.' });
@@ -124,6 +129,7 @@ async function update(req, res) {
     cropZoomPercent: cropZoomPercentNum,
     showPartLabel: Boolean(showPartLabel),
     partLabelPosition,
+    titleStyle,
   });
   res.json(toApiWithOptions(saved));
 }

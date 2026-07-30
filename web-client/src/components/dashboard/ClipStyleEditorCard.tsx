@@ -3,32 +3,39 @@ import { IconAdjustmentsHorizontal } from "@tabler/icons-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { ClientVideoSettingsResponse, PartLabelPosition, VideoCaptionStyle } from "@/types/api"
 
-// Mesma formula do backend (videoEditingService.buildFilter) assumindo uma
-// fonte 16:9 tipica - so pra desenhar a caixa de recorte do tamanho certo,
-// nao afeta o render de verdade (o ffmpeg usa o video real).
-const TIGHT_CROP_RATIO = (9 / 16) * (9 / 16) // ~0.3164
-function zoomToBoxWidthPercent(zoom: number) {
-  return 1 - (1 - TIGHT_CROP_RATIO) * (zoom / 100)
+// A moldura 9:16 (o recorte final) é FIXA - nunca muda de tamanho. O que o
+// cliente redimensiona é o retângulo do vídeo original (16:9) por dentro
+// dela: maior = mais cortado nas bordas (preenche a moldura), menor = vídeo
+// inteiro visível com sobra em cima/embaixo (preenchida com fundo desfocado
+// no render de verdade).
+const FRAME_WIDTH = 180
+const FRAME_HEIGHT = 320
+const MIN_VIDEO_HEIGHT = FRAME_WIDTH * (9 / 16) // zoom=0: largura do vídeo = largura da moldura
+const MAX_VIDEO_HEIGHT = FRAME_HEIGHT // zoom=100: altura do vídeo = altura da moldura (ultrapassa a largura)
+const WRAPPER_WIDTH = Math.ceil(MAX_VIDEO_HEIGHT * (16 / 9)) + 40
+const FRAME_LEFT = (WRAPPER_WIDTH - FRAME_WIDTH) / 2
+
+function videoHeightForZoom(zoom: number) {
+  return MIN_VIDEO_HEIGHT + (MAX_VIDEO_HEIGHT - MIN_VIDEO_HEIGHT) * (zoom / 100)
 }
-function boxWidthPercentToZoom(widthPercent: number) {
-  const z = (1 - widthPercent) / (1 - TIGHT_CROP_RATIO)
+function zoomForVideoHeight(height: number) {
+  const z = (height - MIN_VIDEO_HEIGHT) / (MAX_VIDEO_HEIGHT - MIN_VIDEO_HEIGHT)
   return Math.round(Math.min(100, Math.max(0, z * 100)))
 }
 
-const PREVIEW_WIDTH = 320
-const PREVIEW_HEIGHT = 180
-
 function CropZoomEditor({ value, onChange, onCommit }: { value: number; onChange: (v: number) => void; onCommit: (v: number) => void }) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
-  const boxWidthPercent = zoomToBoxWidthPercent(value)
-  const boxWidthPx = boxWidthPercent * PREVIEW_WIDTH
+  const videoHeight = videoHeightForZoom(value)
+  const videoWidth = videoHeight * (16 / 9)
+  const videoLeftInFrame = (FRAME_WIDTH - videoWidth) / 2
 
   function handlePointerDown(e: React.PointerEvent) {
     e.preventDefault()
@@ -37,12 +44,14 @@ function CropZoomEditor({ value, onChange, onCommit }: { value: number; onChange
   }
 
   function handlePointerMove(e: React.PointerEvent) {
-    if (!dragging || !containerRef.current) return
-    const rect = containerRef.current.getBoundingClientRect()
-    const centerX = rect.left + rect.width / 2
-    const halfWidth = Math.abs(e.clientX - centerX)
-    const widthPercent = Math.min(1, Math.max(TIGHT_CROP_RATIO, (halfWidth * 2) / rect.width))
-    onChange(boxWidthPercentToZoom(widthPercent))
+    if (!dragging || !wrapperRef.current) return
+    const rect = wrapperRef.current.getBoundingClientRect()
+    const frameCenterX = rect.left + FRAME_LEFT + FRAME_WIDTH / 2
+    const halfWidth = Math.abs(e.clientX - frameCenterX)
+    const maxVideoWidth = MAX_VIDEO_HEIGHT * (16 / 9)
+    const newWidth = Math.min(maxVideoWidth, Math.max(FRAME_WIDTH, halfWidth * 2))
+    const newHeight = newWidth * (9 / 16)
+    onChange(zoomForVideoHeight(newHeight))
   }
 
   function handlePointerUp() {
@@ -53,45 +62,49 @@ function CropZoomEditor({ value, onChange, onCommit }: { value: number; onChange
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <div
-        ref={containerRef}
-        className="relative select-none rounded-md bg-black"
-        style={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
-      >
-        <div className="absolute inset-0 flex items-center justify-center text-[10px] text-white/40">
-          vídeo original (16:9)
-        </div>
+      <div ref={wrapperRef} className="relative select-none" style={{ width: WRAPPER_WIDTH, height: FRAME_HEIGHT }}>
+        {/* moldura 9:16 fixa - isso e o resultado final, nunca muda de tamanho */}
         <div
-          className="absolute top-0 flex h-full items-center justify-center border-2 border-white bg-white/10"
-          style={{ width: boxWidthPx, left: (PREVIEW_WIDTH - boxWidthPx) / 2 }}
+          className="absolute overflow-hidden rounded-md border-2 border-white bg-black"
+          style={{ left: FRAME_LEFT, width: FRAME_WIDTH, height: FRAME_HEIGHT }}
         >
-          <span className="pointer-events-none rounded bg-black/60 px-1 text-[9px] text-white">9:16</span>
           <div
-            className="absolute top-0 left-0 h-full w-3 cursor-ew-resize"
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-          />
-          <div
-            className="absolute top-0 right-0 h-full w-3 cursor-ew-resize"
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-          />
+            className="absolute flex items-center justify-center bg-neutral-700 text-center text-[10px] text-white/70"
+            style={{ width: videoWidth, height: videoHeight, left: videoLeftInFrame, top: (FRAME_HEIGHT - videoHeight) / 2 }}
+          >
+            vídeo original (16:9)
+          </div>
         </div>
+
+        {/* Alças de arrastar - fora da moldura (que tem overflow hidden), senao
+            ficariam impossiveis de clicar quando o video passa das bordas. */}
+        <div
+          className="absolute top-1/2 h-10 w-3 -translate-y-1/2 cursor-ew-resize rounded bg-primary shadow"
+          style={{ left: FRAME_LEFT + videoLeftInFrame - 6 }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+        />
+        <div
+          className="absolute top-1/2 h-10 w-3 -translate-y-1/2 cursor-ew-resize rounded bg-primary shadow"
+          style={{ left: FRAME_LEFT + videoLeftInFrame + videoWidth - 6 }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+        />
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="max-w-[220px] text-center text-xs text-muted-foreground">
         {value >= 90
-          ? "Bem apertado - preenche a tela toda, mostra menos do vídeo original."
+          ? "Bem apertado - preenche a moldura toda, mostra menos do vídeo original."
           : value <= 10
-            ? "Bem amplo - mostra o vídeo original quase inteiro, com fundo desfocado nas bordas."
-            : `Zoom em ${value}% - arraste as bordas da caixa branca pra ajustar.`}
+            ? "Bem amplo - mostra o vídeo original quase inteiro, com fundo desfocado preenchendo a sobra."
+            : `Zoom em ${value}% - arraste as alças roxas pra ajustar.`}
       </p>
     </div>
   )
 }
 
-const CAPTION_PREVIEW: Record<VideoCaptionStyle, { label: string; render: (text: string) => React.ReactNode }> = {
+const STYLE_PREVIEW: Record<VideoCaptionStyle, { label: string; render: (text: string) => React.ReactNode }> = {
   classic: {
     label: "Clássica",
     render: (text) => (
@@ -156,19 +169,21 @@ const CAPTION_PREVIEW: Record<VideoCaptionStyle, { label: string; render: (text:
   },
 }
 
-function CaptionStyleGallery({
+function StyleGallery({
   options,
   value,
   onChange,
+  sampleText,
 }: {
   options: VideoCaptionStyle[]
   value: VideoCaptionStyle
   onChange: (v: VideoCaptionStyle) => void
+  sampleText: string
 }) {
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
       {options.map((style) => {
-        const preview = CAPTION_PREVIEW[style]
+        const preview = STYLE_PREVIEW[style]
         if (!preview) return null
         return (
           <button
@@ -181,7 +196,7 @@ function CaptionStyleGallery({
             )}
           >
             <div className="flex h-16 w-full items-center justify-center rounded-md bg-neutral-900">
-              {preview.render("Exemplo")}
+              {preview.render(sampleText)}
             </div>
             <span className="text-xs font-medium">{preview.label}</span>
           </button>
@@ -191,31 +206,33 @@ function CaptionStyleGallery({
   )
 }
 
-const POSITION_GRID: PartLabelPosition[][] = [
-  ["top_left", "top_center", "top_right"],
-  ["bottom_left", "bottom_center", "bottom_right"],
-]
+const POSITIONS: PartLabelPosition[] = ["top_left", "top_center", "top_right", "bottom_left", "bottom_center", "bottom_right"]
+const POSITION_STYLE: Record<PartLabelPosition, React.CSSProperties> = {
+  top_left: { top: 8, left: 8 },
+  top_center: { top: 8, left: "50%", transform: "translateX(-50%)" },
+  top_right: { top: 8, right: 8 },
+  bottom_left: { bottom: 8, left: 8 },
+  bottom_center: { bottom: 8, left: "50%", transform: "translateX(-50%)" },
+  bottom_right: { bottom: 8, right: 8 },
+}
 
 function PartLabelPositionPicker({ value, onChange }: { value: PartLabelPosition; onChange: (v: PartLabelPosition) => void }) {
   return (
-    <div className="flex flex-col gap-1.5" style={{ width: 160 }}>
-      {POSITION_GRID.map((row, i) => (
-        <div key={i} className="flex justify-between gap-1.5">
-          {row.map((pos) => (
-            <button
-              key={pos}
-              type="button"
-              onClick={() => onChange(pos)}
-              className={cn(
-                "h-9 flex-1 rounded-md border text-[10px]",
-                value === pos ? "border-primary bg-primary/10" : "border-border hover:bg-accent"
-              )}
-              title={pos}
-            >
-              ●
-            </button>
-          ))}
-        </div>
+    <div className="relative rounded-md bg-neutral-900" style={{ width: 240, height: 180 }}>
+      <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white/25">corte 9:16</span>
+      {POSITIONS.map((pos) => (
+        <button
+          key={pos}
+          type="button"
+          onClick={() => onChange(pos)}
+          style={POSITION_STYLE[pos]}
+          className={cn(
+            "absolute rounded px-2 py-1 text-[10px] font-bold whitespace-nowrap",
+            value === pos ? "bg-primary text-primary-foreground" : "bg-white/15 text-white hover:bg-white/25"
+          )}
+        >
+          Parte 1
+        </button>
       ))}
     </div>
   )
@@ -258,8 +275,8 @@ export function ClipStyleEditorCard() {
           Estilo visual do corte
         </CardTitle>
         <CardDescription>
-          Automático usa nosso padrão (recorte central 9:16, legenda clássica, sem numeração). Manual te dá controle
-          total sobre enquadramento, legenda e numeração de parte.
+          Automático usa nosso padrão (recorte central 9:16, legenda clássica, título clássico, sem numeração). Manual
+          te dá controle total sobre enquadramento, legenda, título e numeração de parte.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
@@ -280,7 +297,7 @@ export function ClipStyleEditorCard() {
         {settings.cropStyleMode === "manual" && (
           <>
             <Field>
-              <FieldLabel>Enquadramento (arraste as bordas)</FieldLabel>
+              <FieldLabel>Enquadramento (arraste as alças)</FieldLabel>
               <CropZoomEditor
                 value={zoomDraft}
                 onChange={setZoomDraft}
@@ -289,13 +306,51 @@ export function ClipStyleEditorCard() {
             </Field>
 
             <Field>
-              <FieldLabel>Estilo da legenda e do título</FieldLabel>
-              <CaptionStyleGallery
+              <FieldLabel>Estilo da legenda</FieldLabel>
+              <StyleGallery
                 options={settings.options.captionStyles}
                 value={settings.captionStyle}
                 onChange={(v) => save({ ...settings, captionStyle: v })}
+                sampleText="Exemplo"
               />
             </Field>
+
+            <Field orientation="horizontal">
+              <Checkbox
+                id="showTitle"
+                checked={settings.showTitle}
+                onCheckedChange={(checked) => save({ ...settings, showTitle: checked === true })}
+              />
+              <FieldLabel htmlFor="showTitle" className="font-normal">
+                Mostrar o título no começo do vídeo
+              </FieldLabel>
+            </Field>
+
+            {settings.showTitle && (
+              <>
+                <Field>
+                  <FieldLabel htmlFor="titleSeconds">Por quantos segundos (1 a 15)</FieldLabel>
+                  <Input
+                    id="titleSeconds"
+                    type="number"
+                    min={1}
+                    max={15}
+                    className="w-24"
+                    value={settings.titleSeconds}
+                    onChange={(e) => save({ ...settings, titleSeconds: Number(e.target.value) })}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Estilo do título</FieldLabel>
+                  <StyleGallery
+                    options={settings.options.titleStyles}
+                    value={settings.titleStyle}
+                    onChange={(v) => save({ ...settings, titleStyle: v })}
+                    sampleText="Título aqui"
+                  />
+                </Field>
+              </>
+            )}
 
             <Field orientation="horizontal">
               <Checkbox

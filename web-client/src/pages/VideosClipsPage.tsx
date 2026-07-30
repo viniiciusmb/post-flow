@@ -255,7 +255,6 @@ function VideoRow({
   channel,
   onChanged,
   onDeleted,
-  selectionMode,
   selected,
   onToggleSelect,
 }: {
@@ -264,7 +263,6 @@ function VideoRow({
   channel: YoutubeChannel | null
   onChanged: () => void
   onDeleted: () => void
-  selectionMode: boolean
   selected: boolean
   onToggleSelect: () => void
 }) {
@@ -323,14 +321,12 @@ function VideoRow({
   return (
     <Card>
       <div className="flex w-full items-center gap-4 p-4">
-        {selectionMode && (
-          <Checkbox checked={selected} onCheckedChange={onToggleSelect} className="shrink-0" />
-        )}
+        <Checkbox checked={selected} onCheckedChange={onToggleSelect} className="shrink-0" />
         <button
           type="button"
-          onClick={() => (selectionMode ? onToggleSelect() : setOpen((v) => !v))}
+          onClick={() => setOpen((v) => !v)}
           className="flex items-center gap-4 text-left"
-          disabled={!selectionMode && video.clipCount === 0 && video.status !== "ready"}
+          disabled={video.clipCount === 0 && video.status !== "ready"}
         >
           {video.clipCount > 0 || video.status === "ready" ? (
             open ? (
@@ -377,25 +373,21 @@ function VideoRow({
           {SOURCE_VIDEO_STATUS_TONE[video.status].label}
         </TonePill>
 
-        {!selectionMode && (
-          <>
-            {isActive && (
-              <Button size="sm" variant="outline" onClick={pause} disabled={pausing} className="h-7 shrink-0 gap-1 text-xs">
-                <IconPlayerPause className="size-3" />
-                {pausing ? "Pausando..." : "Pausar"}
-              </Button>
-            )}
-            {isPaused && (
-              <Button size="sm" onClick={resume} disabled={resuming} className="h-7 shrink-0 gap-1 text-xs">
-                <IconPlayerPlay className="size-3" />
-                {resuming ? "Retomando..." : "Retomar"}
-              </Button>
-            )}
-            <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title="Remover vídeo">
-              <IconTrash className="size-4" />
-            </Button>
-          </>
+        {isActive && (
+          <Button size="sm" variant="outline" onClick={pause} disabled={pausing} className="h-7 shrink-0 gap-1 text-xs">
+            <IconPlayerPause className="size-3" />
+            {pausing ? "Pausando..." : "Pausar"}
+          </Button>
         )}
+        {isPaused && (
+          <Button size="sm" onClick={resume} disabled={resuming} className="h-7 shrink-0 gap-1 text-xs">
+            <IconPlayerPlay className="size-3" />
+            {resuming ? "Retomando..." : "Retomar"}
+          </Button>
+        )}
+        <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title="Remover vídeo">
+          <IconTrash className="size-4" />
+        </Button>
       </div>
 
       {(video.status === "error" || video.status === "cancelled") && (
@@ -639,7 +631,6 @@ export function VideosClipsPage() {
   const [showStyleEditor, setShowStyleEditor] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [, setTick] = useState(0)
-  const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -666,12 +657,6 @@ export function VideosClipsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
-  function toggleSelectionMode() {
-    setSelectionMode((v) => !v)
-    setSelectedIds(new Set())
-    setConfirmingBulkDelete(false)
-  }
-
   function toggleSelect(id: number) {
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -694,7 +679,6 @@ export function VideosClipsPage() {
     setBulkDeleting(true)
     try {
       await api.post("/api/client/source-videos/bulk-delete", { ids: [...selectedIds] })
-      setSelectionMode(false)
       setSelectedIds(new Set())
       await load()
     } finally {
@@ -742,23 +726,20 @@ export function VideosClipsPage() {
           <IconAdjustmentsHorizontal className="size-4" />
           {showStyleEditor ? "Ocultar estilo visual" : "Estilo visual do corte"}
         </Button>
-        <Button variant={selectionMode ? "default" : "outline"} size="sm" onClick={toggleSelectionMode} className="gap-2">
-          {selectionMode ? "Cancelar seleção" : "Selecionar vídeos"}
-        </Button>
       </div>
       {showUpload && <UploadVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} />}
       {showSettings && <VideoSettingsCard />}
       {showStyleEditor && <ClipStyleEditorCard />}
 
-      {selectionMode && (
+      {selectedIds.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
           <span className="text-sm text-muted-foreground">
-            {selectedIds.size === 0 ? "Nenhum vídeo selecionado" : `${selectedIds.size} selecionado${selectedIds.size > 1 ? "s" : ""}`}
+            {selectedIds.size} selecionado{selectedIds.size > 1 ? "s" : ""}
           </span>
           <Button
             size="sm"
             variant={confirmingBulkDelete ? "destructive" : "outline"}
-            disabled={selectedIds.size === 0 || bulkDeleting}
+            disabled={bulkDeleting}
             onClick={handleBulkDeleteClick}
             className="ml-auto gap-1.5"
           >
@@ -805,7 +786,6 @@ export function VideosClipsPage() {
                     channel={video.channelId ? (channelById.get(video.channelId) ?? null) : null}
                     onChanged={load}
                     onDeleted={load}
-                    selectionMode={selectionMode}
                     selected={selectedIds.has(video.id)}
                     onToggleSelect={() => toggleSelect(video.id)}
                   />
@@ -825,7 +805,6 @@ export function VideosClipsPage() {
                     channel={video.channelId ? (channelById.get(video.channelId) ?? null) : null}
                     onChanged={load}
                     onDeleted={load}
-                    selectionMode={selectionMode}
                     selected={selectedIds.has(video.id)}
                     onToggleSelect={() => toggleSelect(video.id)}
                   />

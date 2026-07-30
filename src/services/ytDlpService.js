@@ -137,6 +137,12 @@ async function run(args, opts) {
       try {
         return await runOnce(args, { ...opts, proxyUrl });
       } catch (err) {
+        // Pausa pedida pelo cliente nao e um erro transitorio de proxy -
+        // continuar tentando (ate 4x: 2 tentativas x 2 proxies) fazia o
+        // "Pausar" demorar bem mais do que devia, porque cada nova tentativa
+        // precisava do seu proprio ciclo de detectar+matar de novo. Propaga
+        // na hora, sem tentar de novo.
+        if (err instanceof PausedError) throw err;
         lastErr = err;
       }
     }

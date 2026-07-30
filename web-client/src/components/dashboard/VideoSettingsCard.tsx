@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { IconVideo } from "@tabler/icons-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -22,12 +21,6 @@ const FRAMING_LABELS: Record<string, string> = {
 const QUALITY_LABELS: Record<string, string> = {
   high: "Alta (mais nítido, arquivo maior)",
   medium: "Média (mais rápido de gerar)",
-}
-const CAPTION_LABELS: Record<string, string> = {
-  classic: "Clássica",
-  bold: "Chamativa (amarela, maior)",
-  minimal: "Minimalista",
-  none: "Sem legenda",
 }
 const CLIP_LENGTH_LABELS: Record<string, string> = {
   short: "Curtos (15–40s)",
@@ -178,13 +171,6 @@ export function VideoSettingsCard() {
             labels={QUALITY_LABELS}
             onChange={(v) => save({ ...settings, quality: v as never })}
           />
-          <OptionRow
-            label="Estilo da legenda"
-            value={settings.captionStyle}
-            options={settings.options.captionStyles}
-            labels={CAPTION_LABELS}
-            onChange={(v) => save({ ...settings, captionStyle: v as never })}
-          />
 
           {settings.clipMode !== "full_video" && (
             <OptionRow
@@ -194,31 +180,6 @@ export function VideoSettingsCard() {
               labels={CLIP_LENGTH_LABELS}
               onChange={(v) => save({ ...settings, clipLength: v as never })}
             />
-          )}
-
-          <Field orientation="horizontal">
-            <Checkbox
-              id="showTitle"
-              checked={settings.showTitle}
-              onCheckedChange={(checked) => save({ ...settings, showTitle: checked === true })}
-            />
-            <FieldLabel htmlFor="showTitle" className="font-normal">
-              Mostrar o título no começo do vídeo
-            </FieldLabel>
-          </Field>
-          {settings.showTitle && (
-            <Field>
-              <FieldLabel htmlFor="titleSeconds">Por quantos segundos (1 a 15)</FieldLabel>
-              <Input
-                id="titleSeconds"
-                type="number"
-                min={1}
-                max={15}
-                className="w-24"
-                value={settings.titleSeconds}
-                onChange={(e) => save({ ...settings, titleSeconds: Number(e.target.value) })}
-              />
-            </Field>
           )}
 
           <Field>
