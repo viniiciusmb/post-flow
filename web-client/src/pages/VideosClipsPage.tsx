@@ -21,6 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TonePill } from "@/components/ui/tone-pill"
 import { VideoSettingsCard } from "@/components/dashboard/VideoSettingsCard"
 import { ClipStyleEditorCard } from "@/components/dashboard/ClipStyleEditorCard"
@@ -269,9 +270,24 @@ function VideoRow({
   const [open, setOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [pausing, setPausing] = useState(false)
-  const [resuming, setResuming] = useState(false)
+  // Fica true desde o clique ate o servidor CONFIRMAR (status realmente
+  // mudar) - nao so durante a chamada da API, que responde rapido (so seta
+  // uma flag no banco) bem antes do worker de fato notar e parar. Sem isso,
+  // o botao voltava pra "Pausar" quase na hora, dando a impressao de que
+  // nada tinha acontecido, quando na verdade a pausa ainda estava
+  // acontecendo em segundo plano.
+  const [pauseRequested, setPauseRequested] = useState(false)
+  const [resumeRequested, setResumeRequested] = useState(false)
   const { clips, reload: reloadClips } = useClipsPolling(video.id, open, video.status)
+
+  const isActive = ACTIVE_STATUSES.includes(video.status)
+  const isPaused = video.status === "paused"
+
+  useEffect(() => {
+    if (!isActive) setPauseRequested(false)
+    if (!isPaused) setResumeRequested(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video.status])
 
   async function retry() {
     setRetrying(true)
@@ -284,22 +300,22 @@ function VideoRow({
   }
 
   async function pause() {
-    setPausing(true)
+    setPauseRequested(true)
     try {
       await api.post(`/api/client/source-videos/${video.id}/pause`, {})
       onChanged()
-    } finally {
-      setPausing(false)
+    } catch {
+      setPauseRequested(false)
     }
   }
 
   async function resume() {
-    setResuming(true)
+    setResumeRequested(true)
     try {
       await api.post(`/api/client/source-videos/${video.id}/resume`, {})
       onChanged()
-    } finally {
-      setResuming(false)
+    } catch {
+      setResumeRequested(false)
     }
   }
 
@@ -315,8 +331,6 @@ function VideoRow({
   }
 
   const progress = computeVideoProgress(video.status, video.processingStartedAt, avgProcessingSeconds)
-  const isActive = ACTIVE_STATUSES.includes(video.status)
-  const isPaused = video.status === "paused"
 
   return (
     <Card>
@@ -374,15 +388,15 @@ function VideoRow({
         </TonePill>
 
         {isActive && (
-          <Button size="sm" variant="outline" onClick={pause} disabled={pausing} className="h-7 shrink-0 gap-1 text-xs">
+          <Button size="sm" variant="outline" onClick={pause} disabled={pauseRequested} className="h-7 shrink-0 gap-1 text-xs">
             <IconPlayerPause className="size-3" />
-            {pausing ? "Pausando..." : "Pausar"}
+            {pauseRequested ? "Pausando..." : "Pausar"}
           </Button>
         )}
         {isPaused && (
-          <Button size="sm" onClick={resume} disabled={resuming} className="h-7 shrink-0 gap-1 text-xs">
+          <Button size="sm" onClick={resume} disabled={resumeRequested} className="h-7 shrink-0 gap-1 text-xs">
             <IconPlayerPlay className="size-3" />
-            {resuming ? "Retomando..." : "Retomar"}
+            {resumeRequested ? "Retomando..." : "Retomar"}
           </Button>
         )}
         <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title="Remover vídeo">
@@ -773,46 +787,52 @@ export function VideosClipsPage() {
           Nenhum vídeo detectado ainda. Cole um link, envie um arquivo, cadastre um canal em "Canais do YouTube" ou conecte sua pasta do Drive em "Configurações".
         </div>
       ) : (
-        <>
-          {inProgress.length > 0 && (
-            <div>
-              <h2 className="mb-3 text-sm font-medium text-muted-foreground">Em andamento</h2>
-              <div className="flex flex-col gap-3">
-                {inProgress.map((video) => (
-                  <VideoRow
-                    key={video.id}
-                    video={video}
-                    avgProcessingSeconds={avgProcessingSeconds}
-                    channel={video.channelId ? (channelById.get(video.channelId) ?? null) : null}
-                    onChanged={load}
-                    onDeleted={load}
-                    selected={selectedIds.has(video.id)}
-                    onToggleSelect={() => toggleSelect(video.id)}
-                  />
-                ))}
+        <Tabs defaultValue="in-progress">
+          <TabsList>
+            <TabsTrigger value="in-progress">Em andamento ({inProgress.length})</TabsTrigger>
+            <TabsTrigger value="finished">Prontos ({finished.length})</TabsTrigger>
+          </TabsList>
+          <TabsContent value="in-progress" className="flex flex-col gap-3">
+            {inProgress.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+                Nenhum vídeo em andamento agora.
               </div>
-            </div>
-          )}
-          {finished.length > 0 && (
-            <div>
-              <h2 className="mb-3 text-sm font-medium text-muted-foreground">Prontos</h2>
-              <div className="flex flex-col gap-3">
-                {finished.map((video) => (
-                  <VideoRow
-                    key={video.id}
-                    video={video}
-                    avgProcessingSeconds={avgProcessingSeconds}
-                    channel={video.channelId ? (channelById.get(video.channelId) ?? null) : null}
-                    onChanged={load}
-                    onDeleted={load}
-                    selected={selectedIds.has(video.id)}
-                    onToggleSelect={() => toggleSelect(video.id)}
-                  />
-                ))}
+            ) : (
+              inProgress.map((video) => (
+                <VideoRow
+                  key={video.id}
+                  video={video}
+                  avgProcessingSeconds={avgProcessingSeconds}
+                  channel={video.channelId ? (channelById.get(video.channelId) ?? null) : null}
+                  onChanged={load}
+                  onDeleted={load}
+                  selected={selectedIds.has(video.id)}
+                  onToggleSelect={() => toggleSelect(video.id)}
+                />
+              ))
+            )}
+          </TabsContent>
+          <TabsContent value="finished" className="flex flex-col gap-3">
+            {finished.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+                Nenhum vídeo pronto ainda.
               </div>
-            </div>
-          )}
-        </>
+            ) : (
+              finished.map((video) => (
+                <VideoRow
+                  key={video.id}
+                  video={video}
+                  avgProcessingSeconds={avgProcessingSeconds}
+                  channel={video.channelId ? (channelById.get(video.channelId) ?? null) : null}
+                  onChanged={load}
+                  onDeleted={load}
+                  selected={selectedIds.has(video.id)}
+                  onToggleSelect={() => toggleSelect(video.id)}
+                />
+              ))
+            )}
+          </TabsContent>
+        </Tabs>
       )}
     </DashboardLayout>
   )

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { IconBrandTiktok, IconHeart, IconUsers, IconMovie, IconTrash, IconPlus } from "@tabler/icons-react"
+import { IconBrandTiktok, IconHeart, IconUsers, IconMovie, IconTrash, IconPlus, IconClock } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
@@ -33,20 +34,36 @@ function ScheduleCard({ accountId }: { accountId: number }) {
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Rascunho local pros campos de digitação livre (horários, quantos por
+  // dia) - atualiza a tela a cada tecla, mas só salva no servidor quando o
+  // campo perde o foco. Sem isso, cada tecla/ajuste do seletor de hora
+  // disparava um save() próprio; requisições concorrentes podiam terminar
+  // fora de ordem e a mais lenta "vencia" com um valor antigo, dando a
+  // impressão de que o horário escolhido não tinha sido salvo.
+  const [manualTimesDraft, setManualTimesDraft] = useState<string[]>([])
+  const [videosPerDayDraft, setVideosPerDayDraft] = useState(1)
 
   useEffect(() => {
     setSettings(null)
-    api.get<PostingScheduleResponse>(`/api/client/tiktok-accounts/${accountId}/schedule`).then(setSettings)
+    api.get<PostingScheduleResponse>(`/api/client/tiktok-accounts/${accountId}/schedule`).then((data) => {
+      setSettings(data)
+      setManualTimesDraft(data.manualTimes)
+      setVideosPerDayDraft(data.videosPerDay)
+    })
   }, [accountId])
 
   async function save(next: PostingScheduleResponse) {
     setSettings(next)
+    setManualTimesDraft(next.manualTimes)
+    setVideosPerDayDraft(next.videosPerDay)
     setSaving(true)
     setError(null)
     setSavedFlash(false)
     try {
       const updated = await api.put<PostingScheduleResponse>(`/api/client/tiktok-accounts/${accountId}/schedule`, next)
       setSettings(updated)
+      setManualTimesDraft(updated.manualTimes)
+      setVideosPerDayDraft(updated.videosPerDay)
       setSavedFlash(true)
       setTimeout(() => setSavedFlash(false), 2000)
     } catch (err) {
@@ -59,13 +76,6 @@ function ScheduleCard({ accountId }: { accountId: number }) {
   function addManualTime() {
     if (!settings) return
     save({ ...settings, manualTimes: [...settings.manualTimes, "12:00"].sort() })
-  }
-
-  function updateManualTime(index: number, value: string) {
-    if (!settings) return
-    const next = [...settings.manualTimes]
-    next[index] = value
-    save({ ...settings, manualTimes: next })
   }
 
   function removeManualTime(index: number) {
@@ -118,8 +128,11 @@ function ScheduleCard({ accountId }: { accountId: number }) {
             min={1}
             max={20}
             className="w-24"
-            value={settings.videosPerDay}
-            onChange={(e) => save({ ...settings, videosPerDay: Number(e.target.value) })}
+            value={videosPerDayDraft}
+            onChange={(e) => setVideosPerDayDraft(Number(e.target.value))}
+            onBlur={() => {
+              if (videosPerDayDraft !== settings.videosPerDay) save({ ...settings, videosPerDay: videosPerDayDraft })
+            }}
           />
         </Field>
 
@@ -127,13 +140,22 @@ function ScheduleCard({ accountId }: { accountId: number }) {
           <Field>
             <FieldLabel>Horários (formato 24h)</FieldLabel>
             <div className="flex flex-col gap-2">
-              {settings.manualTimes.map((time, i) => (
+              {manualTimesDraft.map((time, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <Input
                     type="time"
                     className="w-32"
                     value={time}
-                    onChange={(e) => updateManualTime(i, e.target.value)}
+                    onChange={(e) => {
+                      const next = [...manualTimesDraft]
+                      next[i] = e.target.value
+                      setManualTimesDraft(next)
+                    }}
+                    onBlur={() => {
+                      if (manualTimesDraft[i] && manualTimesDraft[i] !== settings.manualTimes[i]) {
+                        save({ ...settings, manualTimes: manualTimesDraft })
+                      }
+                    }}
                   />
                   <Button variant="ghost" size="icon-sm" onClick={() => removeManualTime(i)}>
                     <IconTrash />
@@ -173,6 +195,20 @@ function ScheduleCard({ accountId }: { accountId: number }) {
       </CardContent>
     </Card>
   )
+}
+
+function formatScheduledFor(iso: string | null) {
+  if (!iso) return null
+  const date = new Date(iso)
+  const now = new Date()
+  const isToday = date.toDateString() === now.toDateString()
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const isTomorrow = date.toDateString() === tomorrow.toDateString()
+  const time = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+  if (isToday) return `Hoje às ${time}`
+  if (isTomorrow) return `Amanhã às ${time}`
+  return `${date.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" })} às ${time}`
 }
 
 function QueueCard({ accountId }: { accountId: number }) {
@@ -224,6 +260,12 @@ function QueueCard({ accountId }: { accountId: number }) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{item.clipTitle}</p>
+                  {item.scheduledFor && (
+                    <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <IconClock className="size-3" />
+                      Vai postar {formatScheduledFor(item.scheduledFor)}
+                    </p>
+                  )}
                   <div className="mt-1 flex gap-2">
                     <Input
                       value={drafts[item.id] ?? ""}
@@ -257,7 +299,15 @@ function PostedCard({ accountId }: { accountId: number }) {
   }, [accountId])
 
   if (!items) return <Skeleton className="h-32" />
-  if (items.length === 0) return null
+  if (items.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          Nenhum corte postado ainda.
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card>
@@ -387,8 +437,18 @@ function AccountCard({ account, onChanged }: { account: TikTokAccountSummary; on
       {autoPostEnabled && (
         <>
           <ScheduleCard accountId={account.id} />
-          <QueueCard accountId={account.id} />
-          <PostedCard accountId={account.id} />
+          <Tabs defaultValue="queue">
+            <TabsList>
+              <TabsTrigger value="queue">Fila</TabsTrigger>
+              <TabsTrigger value="posted">Postados</TabsTrigger>
+            </TabsList>
+            <TabsContent value="queue">
+              <QueueCard accountId={account.id} />
+            </TabsContent>
+            <TabsContent value="posted">
+              <PostedCard accountId={account.id} />
+            </TabsContent>
+          </Tabs>
         </>
       )}
     </div>

@@ -175,6 +175,7 @@ export interface PostingQueueItem {
   startSeconds: number
   endSeconds: number
   createdAt: string
+  scheduledFor: string | null
 }
 
 export interface PostedItem {
