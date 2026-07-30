@@ -158,7 +158,7 @@ export function AdminMetricsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-6">
-              <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-6 sm:grid-cols-5">
                 <Metric
                   label="Carga da CPU (1 min)"
                   value={data.system.latest ? data.system.latest.loadAvg1m.toFixed(2) : "—"}
@@ -177,6 +177,11 @@ export function AdminMetricsPage() {
                 <Metric
                   label="Última amostra"
                   value={data.system.latest ? new Date(data.system.latest.sampledAt).toLocaleTimeString("pt-BR") : "—"}
+                />
+                <Metric
+                  label="Túneis de cliente conectados"
+                  value={data.tunnels.connectedClients}
+                  sub="download saindo pela internet do cliente"
                 />
               </div>
 

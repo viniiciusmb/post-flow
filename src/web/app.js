@@ -23,6 +23,8 @@ const clientDriveApiRoutes = require('./routes/api/clientDriveApiRoutes');
 const clientVideoSettingsApiRoutes = require('./routes/api/clientVideoSettingsApiRoutes');
 const clientPostingsApiRoutes = require('./routes/api/clientPostingsApiRoutes');
 const tiktokAccountsApiRoutes = require('./routes/api/tiktokAccountsApiRoutes');
+const tunnelPublicApiRoutes = require('./routes/api/tunnelPublicApiRoutes');
+const clientTunnelApiRoutes = require('./routes/api/clientTunnelApiRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -110,6 +112,8 @@ app.use('/api/client/drive', clientDriveApiRoutes);
 app.use('/api/client/video-settings', clientVideoSettingsApiRoutes);
 app.use('/api/client/postings', clientPostingsApiRoutes);
 app.use('/api/client/tiktok-accounts', tiktokAccountsApiRoutes);
+app.use('/api/tunnel', tunnelPublicApiRoutes);
+app.use('/api/client/tunnel', clientTunnelApiRoutes);
 app.use('/api', (req, res) => res.status(404).json({ error: 'Rota nao encontrada.' }));
 
 app.use((req, res) => {

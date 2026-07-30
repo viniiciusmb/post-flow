@@ -72,6 +72,21 @@ const config = {
     relayUrl: process.env.TAILSCALE_RELAY_URL || '',
   },
 
+  // Tunel SSH reverso por cliente (docker/ssh-relay/) - substitui a ideia do
+  // Tailscale. relayControlUrl e interno (backend fala com o control-server
+  // do sidecar pra autorizar/revogar chaves); relaySocksHost e o hostname
+  // Docker que o video-worker usa pra montar a URL do proxy SOCKS5
+  // (socks5://<relaySocksHost>:<porta-do-tunel>); relayPublicHost/Port sao o
+  // que o programa do cliente/founder usa no comando `ssh -R` de fora,
+  // batendo na porta TCP publicada desse servico no EasyPanel (nao a porta
+  // 22 real da VPS, que continua so pro SSH de administracao).
+  tunnel: {
+    relayControlUrl: process.env.TUNNEL_RELAY_CONTROL_URL || '',
+    relaySocksHost: process.env.TUNNEL_RELAY_SOCKS_HOST || '',
+    relayPublicHost: process.env.TUNNEL_RELAY_PUBLIC_HOST || '',
+    relayPublicPort: process.env.TUNNEL_RELAY_PUBLIC_PORT || '2222',
+  },
+
   videoProcessing: {
     // Onde os videos baixados e os cortes ficam em disco antes de postar.
     workDir: process.env.VIDEO_WORK_DIR || '/tmp/post-flow-video',

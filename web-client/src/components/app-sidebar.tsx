@@ -61,6 +61,7 @@ const CLIENT_GROUPS: { label?: string; items: NavItem[] }[] = [
       { title: "Canais do YouTube", url: "/client/youtube-channels", icon: IconBrandYoutube },
       { title: "Vídeos & Cortes", url: "/client/videos-clips", icon: IconScissors },
       { title: "Contas TikTok", url: "/client/tiktok-account", icon: IconBrandTiktok },
+      { title: "Túnel", url: "/client/tunnel", icon: IconRouter },
       { title: "Configurações", url: "/client/settings", icon: IconSettings },
     ],
   },

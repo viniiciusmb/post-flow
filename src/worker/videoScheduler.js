@@ -7,6 +7,7 @@ const tiktokPostingJob = require('./jobs/tiktokPostingJob');
 const postingCleanupJob = require('./jobs/postingCleanupJob');
 const driveExportJob = require('./jobs/driveExportJob');
 const tailscaleTestJob = require('./jobs/tailscaleTestJob');
+const tunnelTestJob = require('./jobs/tunnelTestJob');
 const logger = require('../lib/logger');
 
 const QUEUE_CHANNEL_CHECK = 'youtube-channel-check';
@@ -16,6 +17,8 @@ const QUEUE_TIKTOK_POSTING = 'tiktok-posting';
 const QUEUE_POSTING_CLEANUP = 'posting-cleanup';
 const QUEUE_DRIVE_EXPORT = 'drive-export';
 const QUEUE_TAILSCALE_TEST = 'tailscale-test';
+const QUEUE_TUNNEL_TEST_ONE = 'tunnel-test-one';
+const QUEUE_TUNNEL_TEST_ALL = 'tunnel-test-all';
 
 async function start(boss) {
   await boss.createQueue(QUEUE_CHANNEL_CHECK);
@@ -25,6 +28,8 @@ async function start(boss) {
   await boss.createQueue(QUEUE_POSTING_CLEANUP);
   await boss.createQueue(QUEUE_DRIVE_EXPORT);
   await boss.createQueue(QUEUE_TAILSCALE_TEST);
+  await boss.createQueue(QUEUE_TUNNEL_TEST_ONE);
+  await boss.createQueue(QUEUE_TUNNEL_TEST_ALL);
 
   await boss.schedule(QUEUE_CHANNEL_CHECK, '*/20 * * * *');
   logger.info('Checagem de canais do YouTube agendada a cada 20 minutos.');
@@ -43,6 +48,9 @@ async function start(boss) {
 
   await boss.schedule(QUEUE_DRIVE_EXPORT, '*/15 * * * *');
   logger.info('Exportacao de cortes prontos pro Drive do cliente agendada a cada 15 minutos.');
+
+  await boss.schedule(QUEUE_TUNNEL_TEST_ALL, '*/5 * * * *');
+  logger.info('Teste de todos os tuneis SSH agendado a cada 5 minutos.');
 
   await boss.work(QUEUE_CHANNEL_CHECK, async () => {
     logger.info('Checando canais do YouTube...');
@@ -70,6 +78,16 @@ async function start(boss) {
   // Tailscale.
   await boss.work(QUEUE_TAILSCALE_TEST, async () => {
     await tailscaleTestJob.run();
+  });
+
+  // Sem agendamento - so roda quando o usuario clica "Testar conexao" na
+  // tela do Tunel (1 tunel especifico, dono passado no job.data).
+  await boss.work(QUEUE_TUNNEL_TEST_ONE, async ([job]) => {
+    await tunnelTestJob.runOne(job.data.tunnelId);
+  });
+
+  await boss.work(QUEUE_TUNNEL_TEST_ALL, async () => {
+    await tunnelTestJob.runAll();
   });
 
   // Sem passar batchSize/teamSize: o pg-boss so busca o proximo job depois

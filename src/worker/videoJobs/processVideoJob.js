@@ -93,7 +93,7 @@ async function run(sourceVideoId) {
       // download de novo.
     } else {
       await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
-      videoPath = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir, { checkCancelled });
+      videoPath = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir, { checkCancelled, clientUserId });
       await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath);
     }
 

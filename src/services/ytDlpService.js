@@ -26,6 +26,7 @@ const path = require('path');
 const os = require('os');
 const config = require('../config');
 const { PausedError } = require('../lib/errors');
+const downloadTunnelsRepository = require('../repositories/downloadTunnelsRepository');
 
 let cookiesFilePathCache = null;
 
@@ -41,6 +42,30 @@ function getCookiesFilePath() {
 
 function getProxyCandidates() {
   return [config.youtube.tailscaleProxyUrl, config.youtube.proxyUrl].filter(Boolean);
+}
+
+// Tunel SSH reverso (docker/ssh-relay/) - prioridade maxima quando existe:
+// 1) tunel do proprio cliente dono do video, se ele tiver o programa
+// instalado; 2) tunel de fallback do dono do sistema. Nao filtra por
+// "connected" (esse campo so alimenta o painel) - a tentativa de verdade e
+// o teste mais confiavel, e o loop de candidatos ja lida com falha.
+async function getTunnelCandidates(clientUserId) {
+  if (!config.tunnel.relaySocksHost) return [];
+
+  const candidates = [];
+  if (clientUserId) {
+    const clientTunnel = await downloadTunnelsRepository.findByClientId(clientUserId);
+    if (clientTunnel) {
+      candidates.push(`socks5://${config.tunnel.relaySocksHost}:${clientTunnel.assigned_port}`);
+    }
+  }
+
+  const founderTunnel = await downloadTunnelsRepository.findFounderTunnel();
+  if (founderTunnel) {
+    candidates.push(`socks5://${config.tunnel.relaySocksHost}:${founderTunnel.assigned_port}`);
+  }
+
+  return candidates;
 }
 
 // null = deixa o yt-dlp escolher sozinho (hoje cai no android_vr quando nao
@@ -135,12 +160,14 @@ function runOnce(args, { timeoutMs = 5 * 60 * 1000, proxyUrl = null, playerClien
   });
 }
 
-// Tenta cada combinacao de client (null/android/tv) x proxy (so o pago, se
-// configurado) em sequencia; se todas falharem, desiste (sem dobrar tentativas
-// de novo - variar o client ja cobre o caso "esse video caiu num nivel de
-// checagem mais rigoroso", que era o motivo de tentar de novo antes).
-async function run(args, opts) {
-  const proxyCandidates = getProxyCandidates();
+// Tenta cada combinacao de client (null/android/tv) x proxy (tunel do
+// cliente > tunel de fallback do founder > proxy pago, se configurado) em
+// sequencia; se todas falharem, desiste (sem dobrar tentativas de novo -
+// variar o client ja cobre o caso "esse video caiu num nivel de checagem
+// mais rigoroso", que era o motivo de tentar de novo antes).
+async function run(args, { clientUserId, ...opts } = {}) {
+  const tunnelCandidates = await getTunnelCandidates(clientUserId);
+  const proxyCandidates = [...tunnelCandidates, ...getProxyCandidates()];
   const proxiesToTry = proxyCandidates.length ? proxyCandidates : [null];
   const playerClientsToTry = getPlayerClientCandidates();
 
@@ -239,7 +266,7 @@ async function getVideoMetadata(url) {
 // mais estreito que a largura do video original, entao 1080p de origem nao
 // da nitidez extra perceptivel no resultado - so custa ~2.5x mais banda
 // (importa de verdade com proxy residencial, que e cobrado por GB).
-async function downloadVideo(videoId, outputDir, { checkCancelled } = {}) {
+async function downloadVideo(videoId, outputDir, { checkCancelled, clientUserId } = {}) {
   fs.mkdirSync(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, '%(id)s.%(ext)s');
 
@@ -253,7 +280,7 @@ async function downloadVideo(videoId, outputDir, { checkCancelled } = {}) {
       '-o', outputTemplate,
       `https://www.youtube.com/watch?v=${videoId}`,
     ],
-    { timeoutMs: 20 * 60 * 1000, checkCancelled }
+    { timeoutMs: 20 * 60 * 1000, checkCancelled, clientUserId }
   );
 
   const filePath = path.join(outputDir, `${videoId}.mp4`);

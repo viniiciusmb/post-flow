@@ -1,0 +1,25 @@
+# Configuracao do sshd isolado desse sidecar - nada aqui tem relacao com o
+# SSH real da VPS (host). Uma chave vazada aqui so consegue abrir um proxy
+# SOCKS numa porta especifica (via "permitlisten" no authorized_keys de cada
+# chave, gerenciado pelo control-server.js), nunca um shell ou acesso a
+# qualquer outro lugar.
+Port 22
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key
+
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AuthorizedKeysFile /home/tunnel/.ssh/authorized_keys
+
+AllowUsers tunnel
+AllowTcpForwarding remote
+GatewayPorts yes
+X11Forwarding no
+AllowAgentForwarding no
+PermitTunnel no
+PrintMotd no
+PrintLastLog no
+
+Subsystem sftp internal-sftp

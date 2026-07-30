@@ -1,6 +1,7 @@
 'use strict';
 
 const metricsRepository = require('../../../repositories/metricsRepository');
+const downloadTunnelsRepository = require('../../../repositories/downloadTunnelsRepository');
 const { resolveRange } = require('../../../lib/dateRanges');
 
 function daysAgo(n) {
@@ -30,6 +31,7 @@ async function overview(req, res) {
     rankingSelected,
     systemLatest,
     systemHistory,
+    connectedTunnels,
   ] = await Promise.all([
     metricsRepository.clientActivity(since30d),
     metricsRepository.volumeSince(since30d),
@@ -46,6 +48,7 @@ async function overview(req, res) {
     metricsRepository.clientRanking({ since, until, limit: 5 }),
     metricsRepository.latestSystemMetric(),
     metricsRepository.systemMetricsSince(daysAgo(1)),
+    downloadTunnelsRepository.countConnectedClients(),
   ]);
 
   const aproveitamentoRate = volume30d.clipsGenerated > 0 ? volume30d.clipsPosted / volume30d.clipsGenerated : null;
@@ -86,6 +89,7 @@ async function overview(req, res) {
       lastHeartbeatAt: s.last_heartbeat_at,
       isUp: s.is_up,
     })),
+    tunnels: { connectedClients: connectedTunnels },
     system: {
       latest: systemLatest
         ? {

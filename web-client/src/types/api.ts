@@ -115,6 +115,7 @@ export interface AdminMetricsResponse {
     } | null
     history: { sampledAt: string; loadAvg1m: number; cpuCores: number; memUsedMb: number; memTotalMb: number }[]
   }
+  tunnels: { connectedClients: number }
   selected: {
     videosDetected: number
     clipsGenerated: number
@@ -315,4 +316,26 @@ export interface Clip {
   renderProgressPercent: number
   thumbnailUrl: string | null
   exportedToDrive: boolean
+}
+
+export interface TunnelTestResult {
+  testedAt: string
+  directIp?: string
+  directError?: string
+  proxiedIp?: string
+  proxiedError?: string
+  success: boolean
+}
+
+export interface ClientTunnel {
+  id: number
+  label: string | null
+  connected: boolean
+  lastCheckedAt: string | null
+  lastTestResult: TunnelTestResult | null
+  paired: boolean
+}
+
+export interface ClientTunnelResponse {
+  tunnel: ClientTunnel | null
 }
