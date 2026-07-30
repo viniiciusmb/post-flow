@@ -57,12 +57,20 @@ const config = {
     proxyUrl: process.env.YTDLP_PROXY_URL || '',
     // Rele Tailscale (SOCKS5, ex: socks5://postflow-tailscale:1080) - mesma
     // ideia do proxy pago, mas de graca: sai pela internet de um aparelho
-    // (do admin ou de um cliente) que autorizou ser usado como saida. Tem
-    // prioridade sobre o proxy pago quando configurado.
+    // que autorizou ser usado como saida. Feature pausada (2026-07-30,
+    // aguardando decisao de custo do plano pago do Tailscale por cliente
+    // convidado) - variavel existe mas nao esta configurada em producao.
     tailscaleProxyUrl: process.env.YTDLP_TAILSCALE_PROXY_URL || '',
   },
 
   ytdlpPath: process.env.YTDLP_PATH || '/usr/local/bin/yt-dlp',
+
+  // Reservado pro rele Tailscale por cliente (docker/tailscale-relay/) -
+  // construido mas nao ligado a nada ainda, feature pausada (ver comentario
+  // acima) ate decisao de custo do plano pago do Tailscale.
+  tailscale: {
+    relayUrl: process.env.TAILSCALE_RELAY_URL || '',
+  },
 
   videoProcessing: {
     // Onde os videos baixados e os cortes ficam em disco antes de postar.

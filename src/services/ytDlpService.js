@@ -1,20 +1,23 @@
 // Listagem e download de videos via yt-dlp.
 //
 // O YouTube bloqueia IP de servidor por padrao ("Sign in to confirm you're
-// not a bot"). Testado manualmente (ver commits) contra videos reais:
-//   - So o provedor de PO token (bgutil-ytdlp-pot-provider) sem proxy: passa
-//     pra videos "de alta confianca" (muito populares), mas continua
-//     bloqueando video comum de canal pequeno/medio.
-//   - Um proxy residencial pago (YTDLP_PROXY_URL) resolve pra qualquer video.
-//   - O rele Tailscale (YTDLP_TAILSCALE_PROXY_URL) resolve igual, de graca,
-//     saindo pela internet de um aparelho autorizado (do admin ou de um
-//     cliente) em vez de pagar por banda - so funciona quando esse aparelho
-//     esta ligado/conectado, por isso e tentado primeiro e cai pro proxy
-//     pago se estiver indisponivel.
-// Cookie (YOUTUBE_COOKIES_BASE64) e contraproducente com qualquer proxy: ele
-// forca o yt-dlp a tentar os clientes "web", que o YouTube trava via
-// streaming SABR (so devolve storyboard, nenhum formato de video real). So
-// usamos cookie como ultimo recurso quando nenhum proxy/POT esta configurado.
+// not a bot"). Testado manualmente (ver commits e memoria
+// post-flow-youtube-bot-block-fix) contra videos reais:
+//   - So o provedor de PO token (bgutil-ytdlp-pot-provider, ja rodando em
+//     producao como servico `postflow_potprovider`) sem cookie: passa pra
+//     quase todo video, mas um video especifico (canal "Renato Cariani")
+//     ainda falhou com "Sign in to confirm you're not a bot" mesmo assim -
+//     sinal de que alguns videos caem num nivel mais rigoroso de checagem.
+//   - Cookie sozinho (sem forcar client) e contraproducente: faz o yt-dlp
+//     preferir o client "web", que o YouTube trava via streaming SABR-only
+//     (so devolve storyboard, nenhum formato de video real).
+//   - Um proxy residencial pago (YTDLP_PROXY_URL) resolveria pra qualquer
+//     video, mas o usuario pediu pra evitar custo recorrente - so fica como
+//     ultimo recurso, nao configurado em producao hoje.
+// A combinacao ainda nao testada (2026-07-30): cookie de uma conta AUTENTICADA
+// de verdade + POT token + client explicito nao-web (android/tv, que nao sao
+// SABR-forcados) ao mesmo tempo - antes cookie e POT eram mutuamente
+// exclusivos no codigo, o que nunca deixou essa combinacao ser tentada.
 'use strict';
 
 const { spawn } = require('child_process');
@@ -36,35 +39,43 @@ function getCookiesFilePath() {
   return filePath;
 }
 
-// Rele Tailscale primeiro (de graca, quando o aparelho autorizado esta
-// online), proxy pago como reserva. Se nenhum dos dois estiver configurado,
-// tenta so o POT provider; sem nada disso, cai pro cookie.
 function getProxyCandidates() {
   return [config.youtube.tailscaleProxyUrl, config.youtube.proxyUrl].filter(Boolean);
 }
 
-function runOnce(args, { timeoutMs = 5 * 60 * 1000, proxyUrl = null, checkCancelled = null } = {}) {
+// null = deixa o yt-dlp escolher sozinho (hoje cai no android_vr quando nao
+// ha cookie); os outros forcam um client explicito via extractor-args - nem
+// "android" nem "tv" sao afetados pelo SABR-only que trava o client "web".
+// Tentados em sequencia quando um falha, nao em paralelo.
+function getPlayerClientCandidates() {
+  return [null, 'android', 'tv'];
+}
+
+function runOnce(args, { timeoutMs = 5 * 60 * 1000, proxyUrl = null, playerClient = null, checkCancelled = null } = {}) {
   return new Promise((resolve, reject) => {
-    const hasProxyOrPot = Boolean(proxyUrl || config.youtube.potProviderUrl);
     const authArgs = [];
 
     if (proxyUrl) {
       authArgs.push('--proxy', proxyUrl);
     }
+    if (playerClient) {
+      authArgs.push('--extractor-args', `youtube:player_client=${playerClient}`);
+    }
     if (config.youtube.potProviderUrl) {
       authArgs.push('--extractor-args', `youtubepot-bgutilhttp:base_url=${config.youtube.potProviderUrl}`);
     }
-
-    if (!hasProxyOrPot) {
-      const cookies = getCookiesFilePath();
-      if (!cookies) {
-        return reject(
-          new Error(
-            'Nenhum proxy (Tailscale/pago), POT provider nem cookie configurados - sem isso o YouTube bloqueia a VPS.'
-          )
-        );
-      }
+    // Cookie agora e somado ao POT/client explicito (nao mais mutuamente
+    // exclusivo) - ver comentario no topo do arquivo.
+    const cookies = getCookiesFilePath();
+    if (cookies) {
       authArgs.push('--cookies', cookies);
+    }
+
+    const hasAnyAuth = Boolean(proxyUrl || config.youtube.potProviderUrl || cookies);
+    if (!hasAnyAuth) {
+      return reject(
+        new Error('Nenhum proxy, POT provider nem cookie configurados - sem isso o YouTube bloqueia a VPS.')
+      );
     }
 
     // detached:true poe o yt-dlp num grupo de processos proprio - importante
@@ -124,30 +135,54 @@ function runOnce(args, { timeoutMs = 5 * 60 * 1000, proxyUrl = null, checkCancel
   });
 }
 
-// Tenta cada proxy candidato em ordem (Tailscale de graca antes do pago); se
-// todos falharem (ex: link expirado, 403 pontual), tenta a rodada inteira
-// de novo uma vez antes de desistir.
+// Tenta cada combinacao de client (null/android/tv) x proxy (so o pago, se
+// configurado) em sequencia; se todas falharem, desiste (sem dobrar tentativas
+// de novo - variar o client ja cobre o caso "esse video caiu num nivel de
+// checagem mais rigoroso", que era o motivo de tentar de novo antes).
 async function run(args, opts) {
-  const candidates = getProxyCandidates();
-  const proxiesToTry = candidates.length ? candidates : [null];
+  const proxyCandidates = getProxyCandidates();
+  const proxiesToTry = proxyCandidates.length ? proxyCandidates : [null];
+  const playerClientsToTry = getPlayerClientCandidates();
 
   let lastErr;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (const playerClient of playerClientsToTry) {
     for (const proxyUrl of proxiesToTry) {
       try {
-        return await runOnce(args, { ...opts, proxyUrl });
+        return await runOnce(args, { ...opts, proxyUrl, playerClient });
       } catch (err) {
-        // Pausa pedida pelo cliente nao e um erro transitorio de proxy -
-        // continuar tentando (ate 4x: 2 tentativas x 2 proxies) fazia o
-        // "Pausar" demorar bem mais do que devia, porque cada nova tentativa
-        // precisava do seu proprio ciclo de detectar+matar de novo. Propaga
-        // na hora, sem tentar de novo.
+        // Pausa pedida pelo cliente nao e um erro transitorio de bloqueio -
+        // continuar tentando outros clients fazia o "Pausar" demorar bem mais
+        // do que devia, porque cada nova tentativa precisava do seu proprio
+        // ciclo de detectar+matar de novo. Propaga na hora, sem tentar de novo.
         if (err instanceof PausedError) throw err;
         lastErr = err;
       }
     }
   }
   throw lastErr;
+}
+
+// Espera aleatoria (10-40s) antes de cada download de verdade (nao na
+// listagem/metadados, que e leve e ja funcionava sem isso) - evita um padrao
+// de rajada (varios downloads em sequencia imediata) que pode ajudar a
+// contar como sinal de trafego automatizado pro YouTube. Confere pausa a
+// cada 2s igual ao resto do pipeline, pra "Pausar" continuar instantaneo.
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitBeforeDownload(checkCancelled) {
+  const totalMs = 10_000 + Math.floor(Math.random() * 30_000);
+  const stepMs = 2000;
+  let waited = 0;
+  while (waited < totalMs) {
+    if (checkCancelled && (await checkCancelled())) {
+      throw new PausedError('Download interrompido pelo cliente (durante espera anti-bloqueio).');
+    }
+    const step = Math.min(stepMs, totalMs - waited);
+    await sleep(step);
+    waited += step;
+  }
 }
 
 function parseUploadDate(value) {
@@ -207,6 +242,8 @@ async function getVideoMetadata(url) {
 async function downloadVideo(videoId, outputDir, { checkCancelled } = {}) {
   fs.mkdirSync(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, '%(id)s.%(ext)s');
+
+  await waitBeforeDownload(checkCancelled);
 
   await run(
     [
