@@ -7,14 +7,16 @@ import {
   IconRefresh,
   IconAdjustmentsHorizontal,
   IconPlayerPlay,
+  IconPlayerPause,
   IconDownload,
   IconTrash,
   IconUpload,
-  IconPlayerStop,
+  IconBrandGoogleDrive,
 } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -24,7 +26,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { CLIP_STATUS_TONE, SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
 import { ACTIVE_STATUSES, computeVideoProgress, formatEta } from "@/lib/videoProgress"
-import type { Clip, SourceVideo, SourceVideoStatus } from "@/types/api"
+import type { Clip, SourceVideo, SourceVideoStatus, YoutubeChannel } from "@/types/api"
 
 function formatDuration(seconds: number | null) {
   if (!seconds) return "—"
@@ -33,9 +35,55 @@ function formatDuration(seconds: number | null) {
   return `${m}:${String(s).padStart(2, "0")}`
 }
 
-function ClipCard({ clip }: { clip: Clip }) {
+function ClipCard({
+  clip,
+  channel,
+  onExported,
+  onFolderSet,
+}: {
+  clip: Clip
+  channel: YoutubeChannel | null
+  onExported: () => void
+  onFolderSet: () => void
+}) {
   const [playing, setPlaying] = useState(false)
+  const [showPasteFolder, setShowPasteFolder] = useState(false)
+  const [folderLink, setFolderLink] = useState("")
+  const [autoMode, setAutoMode] = useState(false)
+  const [savingFolder, setSavingFolder] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [driveError, setDriveError] = useState<string | null>(null)
   const downloadUrl = `/api/client/source-videos/clips/${clip.id}/download`
+
+  async function handleUpload() {
+    setUploading(true)
+    setDriveError(null)
+    try {
+      await api.post(`/api/client/source-videos/clips/${clip.id}/export-to-drive`, {})
+      onExported()
+    } catch (err) {
+      setDriveError(err instanceof ApiError ? err.message : "Falha ao enviar pro Drive.")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function handleChooseFolder(event: FormEvent) {
+    event.preventDefault()
+    if (!channel) return
+    setSavingFolder(true)
+    setDriveError(null)
+    try {
+      await api.post(`/api/client/youtube-channels/${channel.id}/export-folder`, { folderLink, autoMode })
+      setShowPasteFolder(false)
+      setFolderLink("")
+      onFolderSet()
+    } catch (err) {
+      setDriveError(err instanceof ApiError ? err.message : "Não foi possível salvar a pasta.")
+    } finally {
+      setSavingFolder(false)
+    }
+  }
 
   return (
     <div className="overflow-hidden rounded-lg border border-border">
@@ -88,6 +136,57 @@ function ClipCard({ clip }: { clip: Clip }) {
             </a>
           )}
         </div>
+
+        {clip.status === "ready" && channel && (
+          <div className="mt-2 border-t border-border pt-2">
+            {clip.exportedToDrive ? (
+              <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <IconBrandGoogleDrive className="size-3" />
+                Enviado pro Drive
+              </p>
+            ) : channel.exportFolder ? (
+              <button
+                type="button"
+                onClick={handleUpload}
+                disabled={uploading}
+                className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline disabled:opacity-50"
+              >
+                <IconBrandGoogleDrive className="size-3" />
+                {uploading ? "Enviando..." : "Fazer upload no Drive"}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowPasteFolder((v) => !v)}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                >
+                  <IconBrandGoogleDrive className="size-3" />
+                  Escolher pasta
+                </button>
+                {showPasteFolder && (
+                  <form onSubmit={handleChooseFolder} className="mt-2 flex flex-col gap-1.5">
+                    <Input
+                      value={folderLink}
+                      onChange={(e) => setFolderLink(e.target.value)}
+                      placeholder="Link da pasta do Drive"
+                      required
+                      className="h-7 text-[11px]"
+                    />
+                    <label className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                      <Checkbox checked={autoMode} onCheckedChange={(c) => setAutoMode(c === true)} className="mt-0.5" />
+                      Salvar todos os vídeos do canal "{channel.channelName}" automaticamente nessa pasta?
+                    </label>
+                    <Button type="submit" size="sm" disabled={savingFolder} className="h-7 text-[11px]">
+                      {savingFolder ? "Salvando..." : "Salvar"}
+                    </Button>
+                  </form>
+                )}
+              </>
+            )}
+            {driveError && <p className="mt-1 text-[11px] text-destructive">{driveError}</p>}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -113,44 +212,56 @@ function useClipsPolling(videoId: number, open: boolean, videoStatus: SourceVide
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, videoStatus])
 
-  return clips
+  return { clips, reload: load }
 }
 
 function VideoRow({
   video,
   avgProcessingSeconds,
-  onRetried,
+  channel,
+  onChanged,
   onDeleted,
 }: {
   video: SourceVideo
   avgProcessingSeconds: number
-  onRetried: () => void
+  channel: YoutubeChannel | null
+  onChanged: () => void
   onDeleted: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [cancelling, setCancelling] = useState(false)
-  const clips = useClipsPolling(video.id, open, video.status)
+  const [pausing, setPausing] = useState(false)
+  const [resuming, setResuming] = useState(false)
+  const { clips, reload: reloadClips } = useClipsPolling(video.id, open, video.status)
 
   async function retry() {
     setRetrying(true)
     try {
       await api.post(`/api/client/source-videos/${video.id}/retry`, {})
-      onRetried()
+      onChanged()
     } finally {
       setRetrying(false)
     }
   }
 
-  async function cancel() {
-    if (!confirm(`Cancelar o processamento de "${video.title}"?`)) return
-    setCancelling(true)
+  async function pause() {
+    setPausing(true)
     try {
-      await api.post(`/api/client/source-videos/${video.id}/cancel`, {})
-      onRetried()
+      await api.post(`/api/client/source-videos/${video.id}/pause`, {})
+      onChanged()
     } finally {
-      setCancelling(false)
+      setPausing(false)
+    }
+  }
+
+  async function resume() {
+    setResuming(true)
+    try {
+      await api.post(`/api/client/source-videos/${video.id}/resume`, {})
+      onChanged()
+    } finally {
+      setResuming(false)
     }
   }
 
@@ -166,6 +277,8 @@ function VideoRow({
   }
 
   const progress = computeVideoProgress(video.status, video.processingStartedAt, avgProcessingSeconds)
+  const isActive = ACTIVE_STATUSES.includes(video.status)
+  const isPaused = video.status === "paused"
 
   return (
     <Card>
@@ -204,6 +317,7 @@ function VideoRow({
           <p className="text-xs text-muted-foreground">
             {video.channelName ?? "Link avulso / upload"} · {formatDuration(video.durationSeconds)}
             {video.publishedAt && ` · ${new Date(video.publishedAt).toLocaleDateString("pt-BR")}`}
+            {video.clipCount > 0 && ` · ${video.readyClipCount}/${video.clipCount} cortes concluídos`}
             {progress && progress.etaSeconds !== null && ` · faltam ~${formatEta(progress.etaSeconds)}`}
           </p>
         </div>
@@ -212,15 +326,16 @@ function VideoRow({
           {SOURCE_VIDEO_STATUS_TONE[video.status].label}
         </TonePill>
 
-        {ACTIVE_STATUSES.includes(video.status) && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={cancel}
-            disabled={cancelling}
-            title="Cancelar processamento"
-          >
-            <IconPlayerStop className="size-4" />
+        {isActive && (
+          <Button size="sm" variant="outline" onClick={pause} disabled={pausing} className="h-7 shrink-0 gap-1 text-xs">
+            <IconPlayerPause className="size-3" />
+            {pausing ? "Pausando..." : "Pausar"}
+          </Button>
+        )}
+        {isPaused && (
+          <Button size="sm" onClick={resume} disabled={resuming} className="h-7 shrink-0 gap-1 text-xs">
+            <IconPlayerPlay className="size-3" />
+            {resuming ? "Retomando..." : "Retomar"}
           </Button>
         )}
         <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title="Remover vídeo">
@@ -255,7 +370,16 @@ function VideoRow({
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {clips.map((clip) => (
-                <ClipCard key={clip.id} clip={clip} />
+                <ClipCard
+                  key={clip.id}
+                  clip={clip}
+                  channel={channel}
+                  onExported={reloadClips}
+                  onFolderSet={() => {
+                    reloadClips()
+                    onChanged()
+                  }}
+                />
               ))}
             </div>
           )}
@@ -430,8 +554,9 @@ function UploadVideoCard({ onAdded }: { onAdded: () => void }) {
   )
 }
 
-const PENDING_STATUSES = ["detected", ...ACTIVE_STATUSES]
+const PENDING_STATUSES = ["detected", "paused", ...ACTIVE_STATUSES]
 const STAGE_PRIORITY: Record<string, number> = {
+  paused: -1,
   cutting: 0,
   selecting_clips: 1,
   transcribing: 2,
@@ -442,18 +567,24 @@ const STAGE_PRIORITY: Record<string, number> = {
 export function VideosClipsPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const [videos, setVideos] = useState<SourceVideo[] | null>(null)
+  const [channels, setChannels] = useState<YoutubeChannel[]>([])
   const [avgProcessingSeconds, setAvgProcessingSeconds] = useState(480)
   const [showSettings, setShowSettings] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [, setTick] = useState(0)
   const channelIdFilter = new URLSearchParams(window.location.search).get("channelId")
   const filteredChannelName = videos?.find((v) => String(v.channelId) === channelIdFilter)?.channelName
+  const channelById = new Map(channels.map((c) => [c.id, c]))
 
   async function load() {
     const query = channelIdFilter ? `?channelId=${channelIdFilter}` : ""
-    const data = await api.get<{ videos: SourceVideo[]; avgProcessingSeconds: number }>(`/api/client/source-videos${query}`)
-    setVideos(data.videos)
-    setAvgProcessingSeconds(data.avgProcessingSeconds)
+    const [videosData, channelsData] = await Promise.all([
+      api.get<{ videos: SourceVideo[]; avgProcessingSeconds: number }>(`/api/client/source-videos${query}`),
+      api.get<{ channels: YoutubeChannel[] }>("/api/client/youtube-channels"),
+    ])
+    setVideos(videosData.videos)
+    setAvgProcessingSeconds(videosData.avgProcessingSeconds)
+    setChannels(channelsData.channels)
   }
 
   useEffect(() => {
@@ -528,7 +659,14 @@ export function VideosClipsPage() {
               <h2 className="mb-3 text-sm font-medium text-muted-foreground">Em andamento</h2>
               <div className="flex flex-col gap-3">
                 {inProgress.map((video) => (
-                  <VideoRow key={video.id} video={video} avgProcessingSeconds={avgProcessingSeconds} onRetried={load} onDeleted={load} />
+                  <VideoRow
+                    key={video.id}
+                    video={video}
+                    avgProcessingSeconds={avgProcessingSeconds}
+                    channel={video.channelId ? (channelById.get(video.channelId) ?? null) : null}
+                    onChanged={load}
+                    onDeleted={load}
+                  />
                 ))}
               </div>
             </div>
@@ -538,7 +676,14 @@ export function VideosClipsPage() {
               <h2 className="mb-3 text-sm font-medium text-muted-foreground">Prontos</h2>
               <div className="flex flex-col gap-3">
                 {finished.map((video) => (
-                  <VideoRow key={video.id} video={video} avgProcessingSeconds={avgProcessingSeconds} onRetried={load} onDeleted={load} />
+                  <VideoRow
+                    key={video.id}
+                    video={video}
+                    avgProcessingSeconds={avgProcessingSeconds}
+                    channel={video.channelId ? (channelById.get(video.channelId) ?? null) : null}
+                    onChanged={load}
+                    onDeleted={load}
+                  />
                 ))}
               </div>
             </div>

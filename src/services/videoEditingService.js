@@ -76,11 +76,24 @@ function runFfmpegWithProgress(args, totalDurationSeconds, onProgress) {
       }
     }, 1500);
 
-    child.on('error', (err) => { closed = true; clearInterval(poll); fs.unlinkSync(progressFile); reject(err); });
-    child.on('close', (code) => {
+    // 'error' e 'close' podem os dois disparar pro mesmo processo que falhou
+    // ao dar spawn (ex: binario do ffmpeg sumiu/ficou corrompido) - sem a
+    // guarda de "closed" aqui, o segundo handler tentava apagar um arquivo
+    // que o primeiro ja tinha apagado (unlinkSync lancava ENOENT sem try/
+    // catch) e derrubava o processo inteiro do video-worker, nao so esse
+    // corte. fs.rm com force:true tambem nao lanca se o arquivo ja sumiu.
+    child.on('error', (err) => {
+      if (closed) return;
       closed = true;
       clearInterval(poll);
-      fs.unlinkSync(progressFile);
+      fs.rm(progressFile, { force: true }, () => {});
+      reject(err);
+    });
+    child.on('close', (code) => {
+      if (closed) return;
+      closed = true;
+      clearInterval(poll);
+      fs.rm(progressFile, { force: true }, () => {});
       if (code !== 0) {
         return reject(new Error(`ffmpeg saiu com codigo ${code}: ${stderr.slice(-800)}`));
       }

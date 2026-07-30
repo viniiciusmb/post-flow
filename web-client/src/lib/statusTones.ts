@@ -19,6 +19,7 @@ export const SOURCE_VIDEO_STATUS_TONE: Record<SourceVideoStatus, { tone: Tone; l
   ready: { tone: "success", label: "Pronto" },
   error: { tone: "danger", label: "Erro" },
   cancelled: { tone: "neutral", label: "Cancelado" },
+  paused: { tone: "neutral", label: "Pausado" },
 }
 
 export const CLIP_STATUS_TONE: Record<ClipStatus, { tone: Tone; label: string; spin?: boolean }> = {

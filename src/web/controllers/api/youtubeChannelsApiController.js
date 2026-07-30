@@ -22,6 +22,7 @@ async function list(req, res) {
         isActive: c.is_active,
         lastPolledAt: c.last_polled_at,
         exportFolder: exportFolder ? { id: exportFolder.drive_folder_id, name: exportFolder.folder_name } : null,
+        driveExportMode: c.drive_export_mode,
       };
     }),
   });
@@ -61,6 +62,7 @@ async function create(req, res) {
       isActive: channel.is_active,
       lastPolledAt: channel.last_polled_at,
       exportFolder: null,
+      driveExportMode: channel.drive_export_mode,
     },
   });
 }
@@ -105,7 +107,27 @@ async function setExportFolder(req, res) {
     folderName: req.body.folderName || null,
     connectionId: connection.id,
   });
-  res.json({ exportFolder: { id: folder.drive_folder_id, name: folder.folder_name } });
+
+  // Ao cadastrar a pasta, o cliente ja pode marcar "salvar automaticamente"
+  // de uma vez (checkbox no mesmo formulario) - sem isso o modo continua
+  // 'manual' (padrao) e o cliente escolhe corte a corte.
+  const updatedChannel =
+    req.body.autoMode === true
+      ? await youtubeChannelsRepository.setDriveExportMode(channel.id, req.session.user.id, 'auto')
+      : channel;
+
+  res.json({
+    exportFolder: { id: folder.drive_folder_id, name: folder.folder_name },
+    driveExportMode: updatedChannel.drive_export_mode,
+  });
 }
 
-module.exports = { list, create, setActive, remove, setExportFolder };
+// Liga/desliga o envio automatico sem mexer na pasta ja configurada.
+async function setDriveExportMode(req, res) {
+  const mode = req.body.mode === 'auto' ? 'auto' : 'manual';
+  const channel = await youtubeChannelsRepository.setDriveExportMode(Number(req.params.id), req.session.user.id, mode);
+  if (!channel) return res.status(404).json({ error: 'Canal nao encontrado.' });
+  res.json({ driveExportMode: channel.drive_export_mode });
+}
+
+module.exports = { list, create, setActive, remove, setExportFolder, setDriveExportMode };

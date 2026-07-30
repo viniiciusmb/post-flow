@@ -15,6 +15,7 @@ router.get('/', asyncHandler(controller.list));
 router.post('/', asyncHandler(controller.create));
 router.post('/:id/active', asyncHandler(controller.setActive));
 router.post('/:id/export-folder', asyncHandler(controller.setExportFolder));
+router.post('/:id/drive-export-mode', asyncHandler(controller.setDriveExportMode));
 router.delete('/:id', asyncHandler(controller.remove));
 
 module.exports = router;

@@ -8,6 +8,7 @@ const fs = require('fs');
 const driveFoldersRepository = require('../../repositories/driveFoldersRepository');
 const driveConnectionsRepository = require('../../repositories/driveConnectionsRepository');
 const clipsRepository = require('../../repositories/clipsRepository');
+const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRepository');
 const googleService = require('../../services/googleService');
 const logger = require('../../lib/logger');
 
@@ -22,8 +23,12 @@ async function run() {
   }
 }
 
+// Modo 'manual' (padrao) - o cliente escolhe corte a corte em Videos &
+// Cortes, esse job so cuida dos canais em modo 'auto'.
 async function exportForChannel(folder) {
   if (!folder.connection_id) return;
+  const channel = await youtubeChannelsRepository.findById(folder.youtube_channel_id);
+  if (!channel || channel.drive_export_mode !== 'auto') return;
   const connection = await driveConnectionsRepository.findById(folder.connection_id);
   const accessToken = await driveConnectionsRepository.getValidAccessToken(googleService, connection);
   if (!accessToken) return;

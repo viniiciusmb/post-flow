@@ -4,6 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
+const driveFoldersRepository = require('../../../repositories/driveFoldersRepository');
+const driveConnectionsRepository = require('../../../repositories/driveConnectionsRepository');
+const googleService = require('../../../services/googleService');
 const ytDlpService = require('../../../services/ytDlpService');
 const videoEditingService = require('../../../services/videoEditingService');
 const queueService = require('../../../services/queueService');
@@ -39,6 +42,7 @@ async function list(req, res) {
       status: v.status,
       errorMessage: v.error_message,
       clipCount: v.clip_count,
+      readyClipCount: v.ready_clip_count,
       processingStartedAt: v.processing_started_at,
     })),
   });
@@ -60,6 +64,7 @@ async function listClips(req, res) {
       errorMessage: c.error_message,
       renderProgressPercent: c.render_progress_percent,
       thumbnailUrl: c.thumbnail_path ? `/api/client/source-videos/clips/${c.id}/thumbnail` : null,
+      exportedToDrive: Boolean(c.exported_to_drive_at),
     })),
   });
 }
@@ -184,15 +189,31 @@ async function retry(req, res) {
   res.json({ id: updated.id, status: updated.status });
 }
 
-// Cancelamento cooperativo - so vale enquanto o video esta mesmo em
-// andamento (o repository ja filtra por status, aqui so trata "nao rolou").
-async function cancel(req, res) {
+// Pausa cooperativa - so vale enquanto o video esta mesmo em andamento (o
+// repository ja filtra por status, aqui so trata "nao rolou"). O progresso
+// (download, transcricao, cortes ja prontos) fica preservado pra retomar.
+async function pause(req, res) {
   const id = Number(req.params.id);
-  const updated = await sourceVideosRepository.requestCancelByIdOwnedByClient(id, req.session.user.id);
+  const updated = await sourceVideosRepository.requestPauseByIdOwnedByClient(id, req.session.user.id);
   if (!updated) {
     return res.status(400).json({ error: 'Esse video nao esta em processamento no momento (ou nao existe).' });
   }
-  res.json({ id: updated.id, cancelRequested: true });
+  res.json({ id: updated.id, pauseRequested: true });
+}
+
+// Retoma um video pausado de onde parou - nao refaz download/transcricao/
+// cortes ja prontos (ver processVideoJob.js).
+async function resume(req, res) {
+  const id = Number(req.params.id);
+  const updated = await sourceVideosRepository.resumeByIdOwnedByClient(id, req.session.user.id);
+  if (!updated) {
+    return res.status(400).json({ error: 'Esse video nao esta pausado no momento (ou nao existe).' });
+  }
+
+  const boss = await queueService.getBoss();
+  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: id });
+
+  res.json({ id: updated.id, status: updated.status });
 }
 
 // Remove o video e os cortes gerados a partir dele, inclusive os arquivos em
@@ -219,4 +240,60 @@ async function remove(req, res) {
   res.status(204).end();
 }
 
-module.exports = { list, listClips, downloadClip, clipThumbnail, createManual, uploadVideo, retry, cancel, remove };
+// Upload manual de um corte especifico pra pasta de destino ja configurada
+// no canal (ver youtubeChannelsApiController.setExportFolder). So funciona
+// pra corte vindo de canal (videos manuais/upload nao tem pasta associada).
+async function exportClipToDrive(req, res) {
+  const clip = await clipsRepository.findByIdWithChannelOwnedByClient(Number(req.params.id), req.session.user.id);
+  if (!clip || clip.status !== 'ready' || !clip.local_clip_path) {
+    return res.status(404).json({ error: 'Corte nao encontrado ou ainda nao esta pronto.' });
+  }
+  if (!clip.youtube_channel_id) {
+    return res.status(400).json({ error: 'Esse corte nao veio de um canal do YouTube, entao nao tem pasta de destino.' });
+  }
+  if (!fs.existsSync(clip.local_clip_path)) {
+    return res.status(410).json({ error: 'O arquivo desse corte nao esta mais no servidor.' });
+  }
+
+  const folder = await driveFoldersRepository.findExportFolderByChannelId(clip.youtube_channel_id);
+  if (!folder) {
+    return res.status(400).json({ error: 'Configure uma pasta de destino pra esse canal primeiro (na tela Canais do YouTube).' });
+  }
+
+  let accessToken;
+  try {
+    const connection = await driveConnectionsRepository.findById(folder.connection_id);
+    accessToken = await driveConnectionsRepository.getValidAccessToken(googleService, connection);
+  } catch (err) {
+    logger.error(`Falha ao renovar token do Google Drive pro corte ${clip.id}:`, err);
+    accessToken = null;
+  }
+  if (!accessToken) {
+    return res.status(400).json({ error: 'A conexao com o Google Drive nao esta mais valida - reconecte em Configurações.' });
+  }
+
+  const filename = `${(clip.title || 'corte').replace(/[^\p{L}\p{N}\s-]/gu, '').trim()}.mp4`;
+  try {
+    await googleService.uploadFile(accessToken, folder.drive_folder_id, clip.local_clip_path, filename, 'video/mp4');
+  } catch (err) {
+    logger.error(`Falha ao enviar o corte ${clip.id} pro Drive manualmente:`, err);
+    return res.status(502).json({ error: `Falha ao enviar pro Drive: ${err.message}` });
+  }
+  await clipsRepository.markExportedToDrive(clip.id);
+
+  res.json({ id: clip.id, exported: true });
+}
+
+module.exports = {
+  list,
+  listClips,
+  downloadClip,
+  clipThumbnail,
+  createManual,
+  uploadVideo,
+  retry,
+  pause,
+  resume,
+  remove,
+  exportClipToDrive,
+};

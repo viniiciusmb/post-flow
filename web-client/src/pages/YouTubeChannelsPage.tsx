@@ -4,6 +4,7 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -56,6 +57,7 @@ function ChannelCard({
   onToggleActive,
   onToggleAutoPost,
   onSetExportFolder,
+  onSetDriveExportMode,
   onRemove,
 }: {
   channel: YoutubeChannel
@@ -65,7 +67,8 @@ function ChannelCard({
   hasDriveConnection: boolean
   onToggleActive: (checked: boolean) => Promise<void>
   onToggleAutoPost: (checked: boolean) => Promise<void>
-  onSetExportFolder: (folderLink: string) => Promise<void>
+  onSetExportFolder: (folderLink: string, autoMode: boolean) => Promise<void>
+  onSetDriveExportMode: (mode: "auto" | "manual") => Promise<void>
   onRemove: () => void
 }) {
   const recent = videos.slice(0, 6)
@@ -73,8 +76,10 @@ function ChannelCard({
   const [savingAutoPost, setSavingAutoPost] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [exportFolderLink, setExportFolderLink] = useState("")
+  const [autoModeOnCreate, setAutoModeOnCreate] = useState(false)
   const [savingExportFolder, setSavingExportFolder] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [savingExportMode, setSavingExportMode] = useState(false)
 
   async function handleToggleActive() {
     setError(null)
@@ -105,12 +110,25 @@ function ChannelCard({
     setExportError(null)
     setSavingExportFolder(true)
     try {
-      await onSetExportFolder(exportFolderLink)
+      await onSetExportFolder(exportFolderLink, autoModeOnCreate)
       setExportFolderLink("")
+      setAutoModeOnCreate(false)
     } catch (err) {
       setExportError(err instanceof ApiError ? err.message : "Não foi possível salvar a pasta.")
     } finally {
       setSavingExportFolder(false)
+    }
+  }
+
+  async function handleToggleExportMode() {
+    setExportError(null)
+    setSavingExportMode(true)
+    try {
+      await onSetDriveExportMode(channel.driveExportMode === "auto" ? "manual" : "auto")
+    } catch (err) {
+      setExportError(err instanceof ApiError ? err.message : "Não foi possível salvar.")
+    } finally {
+      setSavingExportMode(false)
     }
   }
 
@@ -218,22 +236,52 @@ function ChannelCard({
             </p>
           ) : (
             <>
-              <p className="text-xs text-muted-foreground">
-                {channel.exportFolder
-                  ? `Pasta atual: ${channel.exportFolder.name ?? channel.exportFolder.id}`
-                  : "Opcional — cada corte pronto gerado desse canal é enviado automaticamente pra essa pasta."}
-              </p>
-              <form onSubmit={handleSetExportFolder} className="flex gap-2">
-                <Input
-                  placeholder="Link ou ID da pasta do Drive"
-                  value={exportFolderLink}
-                  onChange={(e) => setExportFolderLink(e.target.value)}
-                  required
-                  className="h-8 text-xs"
-                />
-                <Button type="submit" size="sm" disabled={savingExportFolder} className="shrink-0">
-                  {savingExportFolder ? "Salvando..." : channel.exportFolder ? "Trocar" : "Salvar"}
-                </Button>
+              {channel.exportFolder ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">
+                      Pasta atual: <span className="text-foreground">{channel.exportFolder.name ?? channel.exportFolder.id}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {channel.driveExportMode === "auto"
+                        ? "Todo corte pronto é enviado sozinho."
+                        : "Você escolhe corte a corte em Vídeos & Cortes."}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleToggleExportMode}
+                    disabled={savingExportMode}
+                    className="shrink-0"
+                  >
+                    {savingExportMode ? "Salvando..." : channel.driveExportMode === "auto" ? "Tornar manual" : "Tornar automático"}
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Opcional — cada corte pronto gerado desse canal pode ser salvo nessa pasta.
+                </p>
+              )}
+              <form onSubmit={handleSetExportFolder} className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Link ou ID da pasta do Drive"
+                    value={exportFolderLink}
+                    onChange={(e) => setExportFolderLink(e.target.value)}
+                    required
+                    className="h-8 text-xs"
+                  />
+                  <Button type="submit" size="sm" disabled={savingExportFolder} className="shrink-0">
+                    {savingExportFolder ? "Salvando..." : channel.exportFolder ? "Trocar" : "Salvar"}
+                  </Button>
+                </div>
+                {!channel.exportFolder && (
+                  <label className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                    <Checkbox checked={autoModeOnCreate} onCheckedChange={(c) => setAutoModeOnCreate(c === true)} className="mt-0.5" />
+                    Salvar todos os vídeos do canal "{channel.channelName}" automaticamente nessa pasta?
+                  </label>
+                )}
               </form>
               {exportError && <p className="text-xs text-destructive">{exportError}</p>}
             </>
@@ -315,8 +363,13 @@ export function YouTubeChannelsPage() {
     await load()
   }
 
-  async function setExportFolder(channel: YoutubeChannel, folderLink: string) {
-    await api.post(`/api/client/youtube-channels/${channel.id}/export-folder`, { folderLink })
+  async function setExportFolder(channel: YoutubeChannel, folderLink: string, autoMode: boolean) {
+    await api.post(`/api/client/youtube-channels/${channel.id}/export-folder`, { folderLink, autoMode })
+    await load()
+  }
+
+  async function setDriveExportMode(channel: YoutubeChannel, mode: "auto" | "manual") {
+    await api.post(`/api/client/youtube-channels/${channel.id}/drive-export-mode`, { mode })
     await load()
   }
 
@@ -397,7 +450,8 @@ export function YouTubeChannelsPage() {
                 hasDriveConnection={hasDriveConnection}
                 onToggleActive={(checked) => toggleActive(channel, checked)}
                 onToggleAutoPost={toggleAutoPost}
-                onSetExportFolder={(folderLink) => setExportFolder(channel, folderLink)}
+                onSetExportFolder={(folderLink, autoMode) => setExportFolder(channel, folderLink, autoMode)}
+                onSetDriveExportMode={(mode) => setDriveExportMode(channel, mode)}
                 onRemove={() => removeChannel(channel)}
               />
             ))}

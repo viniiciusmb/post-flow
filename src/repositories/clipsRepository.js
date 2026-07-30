@@ -37,6 +37,20 @@ async function findByIdOwnedByClient(id, clientUserId) {
   return rows[0] || null;
 }
 
+// Igual findByIdOwnedByClient, mas tambem traz o canal do YouTube (se
+// houver) - usado pro upload manual pro Drive, que precisa saber qual pasta
+// de destino esse canal tem configurada.
+async function findByIdWithChannelOwnedByClient(id, clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT c.*, sv.youtube_channel_id FROM clips c
+     JOIN source_videos sv ON sv.id = c.source_video_id
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     WHERE c.id = $1 AND coalesce(yc.client_user_id, sv.client_user_id) = $2`,
+    [id, clientUserId]
+  );
+  return rows[0] || null;
+}
+
 async function updateStatus(id, status, { errorMessage = null } = {}) {
   await pool.query(
     "UPDATE clips SET status = $2, error_message = $3, render_progress_percent = 0, updated_at = now() WHERE id = $1",
@@ -127,6 +141,7 @@ module.exports = {
   createMany,
   listBySourceVideoId,
   findByIdOwnedByClient,
+  findByIdWithChannelOwnedByClient,
   updateStatus,
   updateRenderProgress,
   saveRenderedFile,

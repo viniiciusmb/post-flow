@@ -48,6 +48,17 @@ async function remove(id, clientUserId) {
   await pool.query('DELETE FROM youtube_channels WHERE id = $1 AND client_user_id = $2', [id, clientUserId]);
 }
 
+// 'auto' = qualquer corte pronto desse canal e enviado sozinho pra pasta de
+// destino do Drive (driveExportJob.js). 'manual' (padrao) = o cliente
+// escolhe corte a corte em Videos & Cortes.
+async function setDriveExportMode(id, clientUserId, mode) {
+  const { rows } = await pool.query(
+    'UPDATE youtube_channels SET drive_export_mode = $3 WHERE id = $1 AND client_user_id = $2 RETURNING *',
+    [id, clientUserId, mode]
+  );
+  return rows[0] || null;
+}
+
 async function updatePollState(id, { lastVideoPublishedAt }) {
   await pool.query(
     'UPDATE youtube_channels SET last_polled_at = now(), last_video_published_at = COALESCE($2, last_video_published_at) WHERE id = $1',
@@ -55,4 +66,4 @@ async function updatePollState(id, { lastVideoPublishedAt }) {
   );
 }
 
-module.exports = { listActive, listByClientId, findById, create, setActive, remove, updatePollState };
+module.exports = { listActive, listByClientId, findById, create, setActive, remove, updatePollState, setDriveExportMode };

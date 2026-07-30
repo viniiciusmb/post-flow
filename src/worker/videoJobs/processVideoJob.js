@@ -28,16 +28,17 @@ const CLIP_LENGTH_PRESETS = {
   long: { minDuration: 60, maxDuration: 180 },
 };
 
-class CancelledError extends Error {}
+class PausedError extends Error {}
 
-// Cancelamento cooperativo: confere a flag entre as etapas principais (e a
-// cada corte do loop de renderizacao) e para no proximo checkpoint - nao
-// mata o yt-dlp/ffmpeg em andamento na hora, mas normalmente para em menos
-// de 1 minuto.
-async function checkCancelled(sourceVideoId) {
+// Pausa cooperativa: confere a flag entre as etapas principais (e a cada
+// corte do loop de renderizacao) e para no proximo checkpoint - nao mata o
+// yt-dlp/ffmpeg em andamento na hora, mas normalmente para em menos de 1
+// minuto. O trabalho ja feito ate ali (download, transcricao, cortes ja
+// renderizados) fica salvo pra retomar depois sem refazer.
+async function checkPaused(sourceVideoId) {
   const current = await sourceVideosRepository.findById(sourceVideoId);
   if (current && current.cancel_requested) {
-    throw new CancelledError('Cancelado pelo cliente.');
+    throw new PausedError('Pausado pelo cliente.');
   }
 }
 
@@ -47,11 +48,11 @@ async function run(sourceVideoId) {
 
   // Protecao contra job redelivered pelo pg-boss (ex: o worker caiu/foi
   // reiniciado no meio do processamento, e o pg-boss reenfileira o mesmo
-  // job pra tentar de novo) - "detected" e o unico status valido pra COMECAR
-  // um processamento do zero. Qualquer outro status aqui significa que esse
-  // video ja esta em andamento (ou ja terminou) numa execucao anterior -
-  // continuar reprocessaria tudo de novo e duplicaria os cortes ja criados.
-  if (sourceVideo.status !== 'detected') {
+  // job pra tentar de novo). "detected" comeca do zero, "paused" retoma de
+  // onde parou (ver logica de pular etapas ja feitas abaixo). Qualquer outro
+  // status aqui significa que esse video ja esta em andamento (ou ja
+  // terminou) numa execucao anterior - continuar duplicaria os cortes.
+  if (!['detected', 'paused'].includes(sourceVideo.status)) {
     logger.info(
       `Video-fonte ${sourceVideo.id} recebeu um job redelivered pelo pg-boss mas ja esta em status "${sourceVideo.status}" - ignorando pra nao duplicar.`
     );
@@ -71,96 +72,114 @@ async function run(sourceVideoId) {
   try {
     await sourceVideosRepository.markProcessingStarted(sourceVideo.id);
 
-    let videoPath;
+    let videoPath = sourceVideo.local_video_path;
     if (sourceVideo.input_type === 'upload') {
       // Arquivo ja esta em disco (upload direto) - so confirma que ainda
       // existe (pasta compartilhada, mas por seguranca).
-      videoPath = sourceVideo.local_video_path;
       if (!videoPath || !fs.existsSync(videoPath)) {
         throw new Error('Arquivo enviado nao foi encontrado no servidor.');
       }
       fs.mkdirSync(workDir, { recursive: true });
+    } else if (videoPath && fs.existsSync(videoPath)) {
+      // Ja baixado numa execucao anterior (retomando de uma pausa) - pula o
+      // download de novo.
     } else {
       await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
       videoPath = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir);
       await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath);
     }
 
-    await checkCancelled(sourceVideo.id);
-    await sourceVideosRepository.updateStatus(sourceVideo.id, 'transcribing');
-    const audioPath = path.join(workDir, 'audio.mp3');
-    await videoEditingService.extractAudio(videoPath, audioPath);
-    const transcript = await openaiTranscriptionService.transcribeAudio(audioPath);
-    await sourceVideosRepository.saveTranscript(sourceVideo.id, {
-      transcriptText: transcript.text,
-      transcriptWords: transcript.words,
-      whisperAudioSeconds: transcript.durationSeconds,
-      whisperCostUsd: transcript.costUsd,
-    });
-    fs.unlinkSync(audioPath);
+    await checkPaused(sourceVideo.id);
 
-    await checkCancelled(sourceVideo.id);
-    await sourceVideosRepository.updateStatus(sourceVideo.id, 'selecting_clips');
-    const clipLengthPreset = CLIP_LENGTH_PRESETS[settings.clip_length] || CLIP_LENGTH_PRESETS.balanced;
-
-    let selected;
-    if (settings.clip_mode === 'full_video') {
-      // Video inteiro vira um unico corte - sem IA escolhendo trecho, sem
-      // custo de Claude.
-      selected = [{ title: sourceVideo.title, description: null, startSeconds: 0, endSeconds: transcript.durationSeconds }];
+    let transcript;
+    if (sourceVideo.transcript_words) {
+      // Ja transcrito numa execucao anterior (retomando) - reaproveita.
+      transcript = {
+        text: sourceVideo.transcript_text,
+        words: sourceVideo.transcript_words,
+        durationSeconds: sourceVideo.whisper_audio_seconds,
+      };
     } else {
-      // 'ai_choice': sem numero fixo, so um teto de seguranca (duracao do
-      // video / duracao minima de cada corte). 'fixed_count': exatamente
-      // settings.max_clips.
-      const maxClips =
-        settings.clip_mode === 'ai_choice'
-          ? Math.max(1, Math.min(30, Math.floor(transcript.durationSeconds / clipLengthPreset.minDuration)))
-          : settings.max_clips;
-
-      const selection = await claudeClipSelectionService.selectClips(transcript.words, {
-        maxClips,
-        minDuration: clipLengthPreset.minDuration,
-        maxDuration: clipLengthPreset.maxDuration,
-        exact: settings.clip_mode === 'fixed_count',
+      await sourceVideosRepository.updateStatus(sourceVideo.id, 'transcribing');
+      const audioPath = path.join(workDir, 'audio.mp3');
+      await videoEditingService.extractAudio(videoPath, audioPath);
+      transcript = await openaiTranscriptionService.transcribeAudio(audioPath);
+      await sourceVideosRepository.saveTranscript(sourceVideo.id, {
+        transcriptText: transcript.text,
+        transcriptWords: transcript.words,
+        whisperAudioSeconds: transcript.durationSeconds,
+        whisperCostUsd: transcript.costUsd,
       });
-      await sourceVideosRepository.saveClaudeUsage(sourceVideo.id, {
-        inputTokens: selection.inputTokens,
-        outputTokens: selection.outputTokens,
-        costUsd: selection.costUsd,
-      });
-      selected = selection.clips;
+      fs.unlinkSync(audioPath);
     }
 
-    if (selected.length === 0) {
-      await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', {
-        errorMessage: 'A IA nao encontrou nenhum trecho adequado nesse video.',
-      });
-      return;
+    await checkPaused(sourceVideo.id);
+
+    let clips = await clipsRepository.listBySourceVideoId(sourceVideo.id);
+    if (clips.length === 0) {
+      await sourceVideosRepository.updateStatus(sourceVideo.id, 'selecting_clips');
+      const clipLengthPreset = CLIP_LENGTH_PRESETS[settings.clip_length] || CLIP_LENGTH_PRESETS.balanced;
+
+      let selected;
+      if (settings.clip_mode === 'full_video') {
+        // Video inteiro vira um unico corte - sem IA escolhendo trecho, sem
+        // custo de Claude.
+        selected = [{ title: sourceVideo.title, description: null, startSeconds: 0, endSeconds: transcript.durationSeconds }];
+      } else {
+        // 'ai_choice': sem numero fixo, so um teto de seguranca (duracao do
+        // video / duracao minima de cada corte). 'fixed_count': exatamente
+        // settings.max_clips.
+        const maxClips =
+          settings.clip_mode === 'ai_choice'
+            ? Math.max(1, Math.min(30, Math.floor(transcript.durationSeconds / clipLengthPreset.minDuration)))
+            : settings.max_clips;
+
+        const selection = await claudeClipSelectionService.selectClips(transcript.words, {
+          maxClips,
+          minDuration: clipLengthPreset.minDuration,
+          maxDuration: clipLengthPreset.maxDuration,
+          exact: settings.clip_mode === 'fixed_count',
+        });
+        await sourceVideosRepository.saveClaudeUsage(sourceVideo.id, {
+          inputTokens: selection.inputTokens,
+          outputTokens: selection.outputTokens,
+          costUsd: selection.costUsd,
+        });
+        selected = selection.clips;
+      }
+
+      if (selected.length === 0) {
+        await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', {
+          errorMessage: 'A IA nao encontrou nenhum trecho adequado nesse video.',
+        });
+        return;
+      }
+
+      // Descricao: 'auto' usa a que a IA ja sugeriu por corte, 'fixed' troca
+      // todas pelo mesmo texto do cliente, 'none' deixa em branco.
+      clips = await clipsRepository.createMany(
+        sourceVideo.id,
+        selected.map((c) => ({
+          title: c.title,
+          startSeconds: c.startSeconds,
+          endSeconds: c.endSeconds,
+          description:
+            settings.description_mode === 'fixed'
+              ? settings.description_template
+              : settings.description_mode === 'none'
+                ? null
+                : c.description || null,
+        }))
+      );
     }
 
-    // Descricao: 'auto' usa a que a IA ja sugeriu por corte, 'fixed' troca
-    // todas pelo mesmo texto do cliente, 'none' deixa em branco.
-    const clips = await clipsRepository.createMany(
-      sourceVideo.id,
-      selected.map((c) => ({
-        title: c.title,
-        startSeconds: c.startSeconds,
-        endSeconds: c.endSeconds,
-        description:
-          settings.description_mode === 'fixed'
-            ? settings.description_template
-            : settings.description_mode === 'none'
-              ? null
-              : c.description || null,
-      }))
-    );
-
-    await checkCancelled(sourceVideo.id);
+    await checkPaused(sourceVideo.id);
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'cutting');
     const tiktokAccount = await tiktokAccountsRepository.findActiveByClientId(clientUserId);
 
     for (const clip of clips) {
-      await checkCancelled(sourceVideo.id);
+      if (clip.status === 'ready') continue; // ja renderizado antes de pausar
+      await checkPaused(sourceVideo.id);
       try {
         await clipsRepository.updateStatus(clip.id, 'rendering');
         const outputPath = path.join(workDir, `clip-${clip.id}.mp4`);
@@ -216,10 +235,12 @@ async function run(sourceVideoId) {
 
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'ready');
   } catch (err) {
-    if (err instanceof CancelledError) {
-      logger.info(`Processamento do video-fonte ${sourceVideo.id} cancelado.`);
-      await sourceVideosRepository.updateStatus(sourceVideo.id, 'cancelled');
-      if (fs.existsSync(workDir)) fs.rmSync(workDir, { recursive: true, force: true });
+    if (err instanceof PausedError) {
+      logger.info(`Processamento do video-fonte ${sourceVideo.id} pausado - progresso preservado pra retomar depois.`);
+      // Nao apaga workDir nem cancel_requested aqui - o video baixado, a
+      // transcricao e os cortes ja renderizados ficam guardados pra retomar
+      // sem refazer (ver logica de "ja feito" no topo de cada etapa acima).
+      await sourceVideosRepository.updateStatus(sourceVideo.id, 'paused');
       return;
     }
     logger.error(`Falha ao processar o video-fonte ${sourceVideo.id}:`, err);

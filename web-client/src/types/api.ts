@@ -220,6 +220,8 @@ export interface ClientVideoSettingsResponse extends ClientVideoSettings {
   }
 }
 
+export type DriveExportMode = "auto" | "manual"
+
 export interface YoutubeChannel {
   id: number
   channelName: string | null
@@ -228,6 +230,7 @@ export interface YoutubeChannel {
   isActive: boolean
   lastPolledAt: string | null
   exportFolder: { id: string; name: string | null } | null
+  driveExportMode: DriveExportMode
 }
 
 export type SourceVideoStatus =
@@ -239,6 +242,7 @@ export type SourceVideoStatus =
   | "ready"
   | "error"
   | "cancelled"
+  | "paused"
 
 export interface SourceVideo {
   id: number
@@ -251,6 +255,7 @@ export interface SourceVideo {
   status: SourceVideoStatus
   errorMessage: string | null
   clipCount: number
+  readyClipCount: number
   processingStartedAt: string | null
 }
 
@@ -271,4 +276,5 @@ export interface Clip {
   errorMessage: string | null
   renderProgressPercent: number
   thumbnailUrl: string | null
+  exportedToDrive: boolean
 }

@@ -130,10 +130,10 @@ async function resetForAutoRetry(id) {
   return rows[0] || null;
 }
 
-// Pedido de cancelamento (cooperativo - o worker confere a flag entre
-// etapas). So permitido enquanto o video esta mesmo em andamento.
-const ACTIVE_STATUSES_FOR_CANCEL = ['downloading', 'transcribing', 'selecting_clips', 'cutting'];
-async function requestCancelByIdOwnedByClient(id, clientUserId) {
+// Pedido de pausa (cooperativo - o worker confere a flag entre etapas). So
+// permitido enquanto o video esta mesmo em andamento.
+const ACTIVE_STATUSES_FOR_PAUSE = ['downloading', 'transcribing', 'selecting_clips', 'cutting'];
+async function requestPauseByIdOwnedByClient(id, clientUserId) {
   const { rows } = await pool.query(
     `UPDATE source_videos
      SET cancel_requested = true, updated_at = now()
@@ -144,7 +144,25 @@ async function requestCancelByIdOwnedByClient(id, clientUserId) {
          WHERE coalesce(yc.client_user_id, sv.client_user_id) = $3
        )
      RETURNING *`,
-    [id, ACTIVE_STATUSES_FOR_CANCEL, clientUserId]
+    [id, ACTIVE_STATUSES_FOR_PAUSE, clientUserId]
+  );
+  return rows[0] || null;
+}
+
+// Retomar um video pausado - so limpa a flag (o job, ao ser reenfileirado,
+// ve status='paused' e continua de onde parou sozinho, ver processVideoJob.js).
+async function resumeByIdOwnedByClient(id, clientUserId) {
+  const { rows } = await pool.query(
+    `UPDATE source_videos
+     SET cancel_requested = false, updated_at = now()
+     WHERE id = $1 AND status = 'paused'
+       AND id IN (
+         SELECT sv.id FROM source_videos sv
+         LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+         WHERE coalesce(yc.client_user_id, sv.client_user_id) = $2
+       )
+     RETURNING *`,
+    [id, clientUserId]
   );
   return rows[0] || null;
 }
@@ -215,7 +233,8 @@ async function markProcessingStarted(id) {
 async function listForClient(clientUserId, { youtubeChannelId = null } = {}) {
   const { rows } = await pool.query(
     `SELECT sv.*, yc.channel_name,
-            (SELECT count(*) FROM clips c WHERE c.source_video_id = sv.id) AS clip_count
+            (SELECT count(*) FROM clips c WHERE c.source_video_id = sv.id) AS clip_count,
+            (SELECT count(*) FROM clips c WHERE c.source_video_id = sv.id AND c.status = 'ready') AS ready_clip_count
      FROM source_videos sv
      LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
      WHERE coalesce(yc.client_user_id, sv.client_user_id) = $1
@@ -305,7 +324,8 @@ module.exports = {
   deleteById,
   resetForRetry,
   resetForAutoRetry,
-  requestCancelByIdOwnedByClient,
+  requestPauseByIdOwnedByClient,
+  resumeByIdOwnedByClient,
   findTransientErrorsForAutoRetry,
   findStuckDetected,
   updateStatus,
