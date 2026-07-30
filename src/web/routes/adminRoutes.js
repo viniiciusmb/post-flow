@@ -17,6 +17,7 @@ router.get('/clients', serveSpaPage('admin-clients'));
 router.get('/postings', serveSpaPage('admin-postings'));
 router.get('/queue', serveSpaPage('admin-queue'));
 router.get('/metrics', serveSpaPage('admin-metrics'));
+router.get('/tailscale', serveSpaPage('admin-tailscale'));
 
 router.get('/drive', asyncHandler(driveController.manage));
 router.post('/drive/general-folder', asyncHandler(driveController.setGeneralFolder));

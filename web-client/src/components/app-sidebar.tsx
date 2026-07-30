@@ -9,6 +9,7 @@ import {
   IconBrandTiktok,
   IconChartBar,
   IconSettings,
+  IconRouter,
 } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
@@ -38,6 +39,7 @@ const ADMIN_GROUPS: { label?: string; items: NavItem[] }[] = [
       { title: "Fila de Processamento", url: "/admin/queue", icon: IconListCheck },
       { title: "Google Drive", url: "/admin/drive", icon: IconBrandGoogleDrive },
       { title: "Métricas", url: "/admin/metrics", icon: IconChartBar },
+      { title: "Tailscale", url: "/admin/tailscale", icon: IconRouter },
     ],
   },
   {

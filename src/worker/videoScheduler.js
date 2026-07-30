@@ -6,6 +6,7 @@ const videoErrorRetryJob = require('./jobs/videoErrorRetryJob');
 const tiktokPostingJob = require('./jobs/tiktokPostingJob');
 const postingCleanupJob = require('./jobs/postingCleanupJob');
 const driveExportJob = require('./jobs/driveExportJob');
+const tailscaleTestJob = require('./jobs/tailscaleTestJob');
 const logger = require('../lib/logger');
 
 const QUEUE_CHANNEL_CHECK = 'youtube-channel-check';
@@ -14,6 +15,7 @@ const QUEUE_VIDEO_ERROR_RETRY = 'video-error-retry';
 const QUEUE_TIKTOK_POSTING = 'tiktok-posting';
 const QUEUE_POSTING_CLEANUP = 'posting-cleanup';
 const QUEUE_DRIVE_EXPORT = 'drive-export';
+const QUEUE_TAILSCALE_TEST = 'tailscale-test';
 
 async function start(boss) {
   await boss.createQueue(QUEUE_CHANNEL_CHECK);
@@ -22,6 +24,7 @@ async function start(boss) {
   await boss.createQueue(QUEUE_TIKTOK_POSTING);
   await boss.createQueue(QUEUE_POSTING_CLEANUP);
   await boss.createQueue(QUEUE_DRIVE_EXPORT);
+  await boss.createQueue(QUEUE_TAILSCALE_TEST);
 
   await boss.schedule(QUEUE_CHANNEL_CHECK, '*/20 * * * *');
   logger.info('Checagem de canais do YouTube agendada a cada 20 minutos.');
@@ -61,6 +64,12 @@ async function start(boss) {
 
   await boss.work(QUEUE_DRIVE_EXPORT, async () => {
     await driveExportJob.run();
+  });
+
+  // Sem agendamento - so roda quando o admin clica "Testar conexao" na tela
+  // Tailscale.
+  await boss.work(QUEUE_TAILSCALE_TEST, async () => {
+    await tailscaleTestJob.run();
   });
 
   // Sem passar batchSize/teamSize: o pg-boss so busca o proximo job depois
