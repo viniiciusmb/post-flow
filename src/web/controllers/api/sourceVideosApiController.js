@@ -330,6 +330,60 @@ async function exportClipToDrive(req, res) {
   res.json({ id: clip.id, exported: true });
 }
 
+// Envia TODOS os cortes prontos (e ainda nao enviados) desse video-fonte pra
+// pasta de destino do canal, de uma vez - pro cliente que nao quer clicar
+// corte a corte. Continua o video inteiro mesmo se um corte especifico
+// falhar (arquivo sumiu, Drive fora do ar etc) - devolve quantos foram e
+// quantos falharam, sem um erro derrubar os outros.
+async function exportAllClipsToDrive(req, res) {
+  const sourceVideoId = Number(req.params.id);
+  const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(sourceVideoId, req.session.user.id);
+  if (!sourceVideo) return res.status(404).json({ error: 'Video nao encontrado.' });
+  if (!sourceVideo.youtube_channel_id) {
+    return res.status(400).json({ error: 'Esse video nao veio de um canal do YouTube, entao nao tem pasta de destino.' });
+  }
+
+  const folder = await driveFoldersRepository.findExportFolderByChannelId(sourceVideo.youtube_channel_id);
+  if (!folder) {
+    return res.status(400).json({ error: 'Configure uma pasta de destino pra esse canal primeiro (na tela Canais do YouTube).' });
+  }
+
+  let accessToken;
+  try {
+    const connection = await driveConnectionsRepository.findById(folder.connection_id);
+    accessToken = await driveConnectionsRepository.getValidAccessToken(googleService, connection);
+  } catch (err) {
+    logger.error(`Falha ao renovar token do Google Drive pro video ${sourceVideoId}:`, err);
+    accessToken = null;
+  }
+  if (!accessToken) {
+    return res.status(400).json({ error: 'A conexao com o Google Drive nao esta mais valida - reconecte em Configurações.' });
+  }
+
+  const clips = await clipsRepository.listBySourceVideoId(sourceVideoId);
+  const pending = clips.filter((c) => c.status === 'ready' && c.local_clip_path && !c.exported_to_drive_at);
+
+  let exported = 0;
+  let failed = 0;
+  for (const clip of pending) {
+    if (!fs.existsSync(clip.local_clip_path)) {
+      failed += 1;
+      continue;
+    }
+    const filename = `${(clip.title || 'corte').replace(/[^\p{L}\p{N}\s-]/gu, '').trim()}.mp4`;
+    try {
+      await googleService.uploadFile(accessToken, folder.drive_folder_id, clip.local_clip_path, filename, 'video/mp4');
+      await clipsRepository.markExportedToDrive(clip.id);
+      exported += 1;
+    } catch (err) {
+      logger.error(`Falha ao exportar o corte ${clip.id} pro Drive (envio em lote):`, err);
+      failed += 1;
+    }
+  }
+
+  res.json({ exported, failed, total: pending.length });
+}
+
 // Exclusao em lote (tela "Vídeos & Cortes", selecionar varios de uma vez) -
 // mesma logica do remove() de um so, so que em loop. Ids que nao existem ou
 // nao pertencem ao cliente sao ignorados silenciosamente (deleteByIdOwnedByClient
@@ -377,4 +431,5 @@ module.exports = {
   remove,
   bulkRemove,
   exportClipToDrive,
+  exportAllClipsToDrive,
 };

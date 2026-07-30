@@ -46,5 +46,6 @@ router.post('/bulk-delete', asyncHandler(controller.bulkRemove));
 router.get('/clips/:id/download', asyncHandler(controller.downloadClip));
 router.get('/clips/:id/thumbnail', asyncHandler(controller.clipThumbnail));
 router.post('/clips/:id/export-to-drive', asyncHandler(controller.exportClipToDrive));
+router.post('/:id/export-all-to-drive', asyncHandler(controller.exportAllClipsToDrive));
 
 module.exports = router;

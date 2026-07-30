@@ -227,6 +227,47 @@ function ClipCard({
   )
 }
 
+function ExportAllToDriveButton({ videoId, onExported }: { videoId: number; onExported: () => void }) {
+  const [sending, setSending] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleClick() {
+    setSending(true)
+    setError(null)
+    setResult(null)
+    try {
+      const data = await api.post<{ exported: number; failed: number; total: number }>(
+        `/api/client/source-videos/${videoId}/export-all-to-drive`,
+        {},
+      )
+      if (data.total === 0) {
+        setResult("Todos os cortes já foram enviados pro Drive.")
+      } else if (data.failed > 0) {
+        setResult(`${data.exported} de ${data.total} cortes enviados (${data.failed} falharam).`)
+      } else {
+        setResult(`${data.exported} corte(s) enviados pro Drive.`)
+      }
+      onExported()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Falha ao enviar os cortes pro Drive.")
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button type="button" variant="outline" size="sm" onClick={handleClick} disabled={sending} className="gap-1.5">
+        <IconBrandGoogleDrive className="size-3.5" />
+        {sending ? "Enviando cortes..." : "Exportar todos os cortes pro Drive"}
+      </Button>
+      {result && <span className="text-xs text-muted-foreground">{result}</span>}
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </div>
+  )
+}
+
 // Enquanto o corte esta rendering/pending, o progresso do video-fonte fica
 // "cutting" - poll dos clips a cada poucos segundos pra % andar na tela sem
 // precisar reabrir o card.
@@ -429,20 +470,27 @@ function VideoRow({
           ) : clips.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhum corte gerado ainda.</p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {clips.map((clip) => (
-                <ClipCard
-                  key={clip.id}
-                  clip={clip}
-                  channel={channel}
-                  onExported={reloadClips}
-                  onFolderSet={() => {
-                    reloadClips()
-                    onChanged()
-                  }}
-                />
-              ))}
-            </div>
+            <>
+              {channel?.exportFolder && clips.some((c) => c.status === "ready" && !c.exportedToDrive) && (
+                <div className="mb-3">
+                  <ExportAllToDriveButton videoId={video.id} onExported={reloadClips} />
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {clips.map((clip) => (
+                  <ClipCard
+                    key={clip.id}
+                    clip={clip}
+                    channel={channel}
+                    onExported={reloadClips}
+                    onFolderSet={() => {
+                      reloadClips()
+                      onChanged()
+                    }}
+                  />
+                ))}
+              </div>
+            </>
           )}
         </CardContent>
       )}

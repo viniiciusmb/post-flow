@@ -120,10 +120,16 @@ async function setSchedule(req, res) {
     autoDeleteAfterHours = null;
   }
 
+  // Guarda manualTimes como veio, mesmo em modo 'auto' - forcar pra [] aqui
+  // era o bug real: cliente configurava os horarios, clicava em
+  // "Automatico" (de proposito ou sem querer) e ao voltar pra "Manual" os
+  // horarios tinham sumido, precisando redigitar tudo. Em modo 'auto' esse
+  // array so fica guardado sem uso, pronto pra quando o cliente voltar a
+  // usar o modo manual.
   const updated = await postingScheduleSettingsRepository.upsert(account.id, {
     mode,
     videosPerDay,
-    manualTimes: mode === 'manual' ? manualTimes : [],
+    manualTimes,
     timezone,
     autoDeleteAfterHours,
   });
