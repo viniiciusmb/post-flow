@@ -179,6 +179,8 @@ export interface PostingQueueItem {
   endSeconds: number
   createdAt: string
   scheduledFor: string | null
+  channelId: number | null
+  channelName: string | null
 }
 
 export interface PostedItem {
@@ -195,6 +197,8 @@ export interface ErrorPostingItem {
   thumbnailUrl: string | null
   errorMessage: string | null
   updatedAt: string
+  channelId: number | null
+  channelName: string | null
 }
 
 export interface ClientDashboardResponse {

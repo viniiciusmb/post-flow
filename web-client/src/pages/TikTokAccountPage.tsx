@@ -12,6 +12,7 @@ import {
   IconSend,
   IconDownload,
   IconEye,
+  IconRefresh,
 } from "@tabler/icons-react"
 import {
   DndContext,
@@ -351,6 +352,7 @@ function ViewClipSheet({ item, onClose }: { item: PostingQueueItem; onClose: () 
 
 function QueueRow({
   item,
+  accountName,
   draft,
   onDraftChange,
   onSaveCaption,
@@ -362,6 +364,7 @@ function QueueRow({
   onView,
 }: {
   item: PostingQueueItem
+  accountName: string
   draft: string
   onDraftChange: (value: string) => void
   onSaveCaption: () => void
@@ -395,6 +398,9 @@ function QueueRow({
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{item.clipTitle}</p>
+        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+          {item.channelName ?? "Vídeo avulso"} <span className="mx-1">·</span> vai postar em <strong className="font-medium">{accountName}</strong>
+        </p>
         {item.scheduledFor && (
           <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
             <IconClock className="size-3" />
@@ -442,7 +448,7 @@ function QueueRow({
   )
 }
 
-function QueueCard({ accountId }: { accountId: number }) {
+function QueueCard({ accountId, accountName }: { accountId: number; accountName: string }) {
   const [items, setItems] = useState<PostingQueueItem[] | null>(null)
   const [drafts, setDrafts] = useState<Record<number, string>>({})
   const [fixing, setFixing] = useState(false)
@@ -585,6 +591,7 @@ function QueueCard({ accountId }: { accountId: number }) {
                   <QueueRow
                     key={item.id}
                     item={item}
+                    accountName={accountName}
                     draft={drafts[item.id] ?? ""}
                     onDraftChange={(value) => setDrafts({ ...drafts, [item.id]: value })}
                     onSaveCaption={() => saveCaption(item.id)}
@@ -617,15 +624,62 @@ function QueueCard({ accountId }: { accountId: number }) {
   )
 }
 
-function ErrorCard({ accountId }: { accountId: number }) {
+function ErrorCard({ accountId, accountName }: { accountId: number; accountName: string }) {
   const [items, setItems] = useState<ErrorPostingItem[] | null>(null)
+  const [selectedChannel, setSelectedChannel] = useState<string>("all")
+  const [retryingNowId, setRetryingNowId] = useState<number | null>(null)
+  const [requeueingId, setRequeueingId] = useState<number | null>(null)
+  const [itemError, setItemError] = useState<Record<number, string>>({})
+
+  async function load() {
+    const data = await api.get<{ postings: ErrorPostingItem[] }>(`/api/client/postings/errors?accountId=${accountId}`)
+    setItems(data.postings)
+  }
 
   useEffect(() => {
     setItems(null)
-    api.get<{ postings: ErrorPostingItem[] }>(`/api/client/postings/errors?accountId=${accountId}`).then((data) => setItems(data.postings))
+    setSelectedChannel("all")
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId])
 
+  // "Enviar pra fila novamente": so volta pro status pendente.
+  async function requeue(id: number) {
+    setRequeueingId(id)
+    setItemError((prev) => ({ ...prev, [id]: "" }))
+    try {
+      await api.post(`/api/client/postings/${id}/retry`, {})
+      await load()
+    } catch (err) {
+      setItemError((prev) => ({ ...prev, [id]: err instanceof ApiError ? err.message : "Não foi possível reenviar pra fila." }))
+    } finally {
+      setRequeueingId(null)
+    }
+  }
+
+  // "Tentar postar agora": volta pro pendente e ja tenta publicar na
+  // sequencia, sem esperar o proximo ciclo automatico.
+  async function retryNow(id: number) {
+    setRetryingNowId(id)
+    setItemError((prev) => ({ ...prev, [id]: "" }))
+    try {
+      await api.post(`/api/client/postings/${id}/retry`, {})
+      const result = await api.post<{ status: string; errorMessage: string | null }>(`/api/client/postings/${id}/post-now`, {})
+      if (result.status === "error") {
+        setItemError((prev) => ({ ...prev, [id]: result.errorMessage || "A TikTok recusou publicar esse corte de novo." }))
+      }
+      await load()
+    } catch (err) {
+      setItemError((prev) => ({ ...prev, [id]: err instanceof ApiError ? err.message : "Não foi possível tentar postar agora." }))
+    } finally {
+      setRetryingNowId(null)
+    }
+  }
+
   if (!items) return <Skeleton className="h-32" />
+
+  const channels = Array.from(new Map(items.map((i) => [String(i.channelId ?? "none"), i.channelName ?? "Vídeo avulso"])).entries())
+
   if (items.length === 0) {
     return (
       <Card>
@@ -636,16 +690,36 @@ function ErrorCard({ accountId }: { accountId: number }) {
     )
   }
 
+  const filtered = selectedChannel === "all" ? items : items.filter((i) => String(i.channelId ?? "none") === selectedChannel)
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Deram erro ao postar</CardTitle>
         <CardDescription>A TikTok recusou publicar esses cortes — não são reenviados sozinhos.</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-3">
+        {channels.length > 1 && (
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={selectedChannel}
+            onValueChange={(next) => next && setSelectedChannel(next)}
+            className="flex-wrap justify-start"
+          >
+            <ToggleGroupItem value="all" className="text-xs">
+              Geral
+            </ToggleGroupItem>
+            {channels.map(([id, name]) => (
+              <ToggleGroupItem key={id} value={id} className="text-xs">
+                {name}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        )}
         <div className="flex flex-col gap-2">
-          {items.map((item) => (
-            <div key={item.id} className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-2.5">
+          {filtered.map((item) => (
+            <div key={item.id} className="flex flex-col gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-2.5 sm:flex-row sm:items-start">
               <div className="h-14 w-10 shrink-0 overflow-hidden rounded-md bg-muted">
                 {item.thumbnailUrl && <img src={item.thumbnailUrl} alt="" className="h-full w-full object-cover" />}
               </div>
@@ -654,7 +728,33 @@ function ErrorCard({ accountId }: { accountId: number }) {
                   <p className="truncate text-sm">{item.clipTitle}</p>
                   <TonePill tone="danger">Erro</TonePill>
                 </div>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {item.channelName ?? "Vídeo avulso"} <span className="mx-1">·</span> conta <strong className="font-medium">{accountName}</strong>
+                </p>
                 {item.errorMessage && <p className="mt-0.5 text-xs text-muted-foreground">{item.errorMessage}</p>}
+                {itemError[item.id] && <p className="mt-0.5 text-xs text-destructive">{itemError[item.id]}</p>}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => retryNow(item.id)}
+                    disabled={retryingNowId === item.id || requeueingId === item.id}
+                    className="gap-1"
+                  >
+                    <IconSend className="size-3" />
+                    {retryingNowId === item.id ? "Tentando..." : "Tentar postar agora"}
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => requeue(item.id)}
+                    disabled={retryingNowId === item.id || requeueingId === item.id}
+                    className="gap-1"
+                  >
+                    <IconRefresh className="size-3" />
+                    {requeueingId === item.id ? "Enviando..." : "Enviar pra fila novamente"}
+                  </Button>
+                </div>
               </div>
               <span className="shrink-0 text-xs text-muted-foreground">
                 {new Date(item.updatedAt).toLocaleDateString("pt-BR")}
@@ -822,13 +922,13 @@ function AccountCard({ account, onChanged }: { account: TikTokAccountSummary; on
               <TabsTrigger value="errors">Erro</TabsTrigger>
             </TabsList>
             <TabsContent value="queue">
-              <QueueCard accountId={account.id} />
+              <QueueCard accountId={account.id} accountName={account.displayName} />
             </TabsContent>
             <TabsContent value="posted">
               <PostedCard accountId={account.id} />
             </TabsContent>
             <TabsContent value="errors">
-              <ErrorCard accountId={account.id} />
+              <ErrorCard accountId={account.id} accountName={account.displayName} />
             </TabsContent>
           </Tabs>
         </>

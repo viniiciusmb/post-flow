@@ -35,6 +35,8 @@ async function listQueue(req, res) {
       endSeconds: Number(p.end_seconds),
       createdAt: p.created_at,
       scheduledFor: displayScheduledFor(p.scheduled_for),
+      channelId: p.channel_id,
+      channelName: p.channel_name,
     })),
   });
 }
@@ -63,6 +65,8 @@ async function listErrors(req, res) {
       thumbnailUrl: thumbnailUrl(p),
       errorMessage: p.error_message,
       updatedAt: p.updated_at,
+      channelId: p.channel_id,
+      channelName: p.channel_name,
     })),
   });
 }
@@ -80,6 +84,18 @@ async function skip(req, res) {
   const updated = await postingsRepository.skipOwnedByClient(Number(req.params.id), req.session.user.id);
   if (!updated) {
     return res.status(404).json({ error: 'Postagem nao encontrada ou ja saiu da fila de espera.' });
+  }
+  res.status(204).end();
+}
+
+// Botao "Enviar pra fila novamente" na aba Erro: so funciona em postagem
+// que realmente esta com erro, volta pra pendente com um horario novo no
+// fim da fila. "Tentar postar agora" (frontend) chama isso primeiro e na
+// sequencia chama postNow.
+async function retry(req, res) {
+  const updated = await postingsRepository.retryOwnedByClient(Number(req.params.id), req.session.user.id);
+  if (!updated) {
+    return res.status(404).json({ error: 'Postagem nao encontrada ou nao esta com erro.' });
   }
   res.status(204).end();
 }
@@ -105,4 +121,4 @@ async function postNow(req, res) {
   res.json({ id: updated.id, status: updated.status, errorMessage: updated.error_message });
 }
 
-module.exports = { listQueue, listPosted, listErrors, updateCaption, skip, postNow };
+module.exports = { listQueue, listPosted, listErrors, updateCaption, skip, postNow, retry };

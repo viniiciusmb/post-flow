@@ -117,6 +117,10 @@ const CLIP_FILE_JOIN = `
   JOIN source_videos sv ON sv.id = c.source_video_id
 `;
 
+// LEFT porque video avulso/upload (source_videos.input_type != 'channel')
+// nao tem canal nenhum - vira "Video avulso" na tela.
+const YOUTUBE_CHANNEL_JOIN = `LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id`;
+
 // Ordem de exibicao/publicacao da fila: segue queue_order quando o cliente
 // ja arrastou pra reordenar, senao cai na ordem de chegada (id crescente ==
 // created_at crescente nessa tabela). Usada em toda consulta que lista ou
@@ -253,9 +257,10 @@ async function listPostedOlderThan(tiktokAccountId, hours) {
 async function listQueueForClient(clientUserId, tiktokAccountId = null) {
   const { rows } = await pool.query(
     `SELECT p.*, c.title AS clip_title, c.description AS clip_description, c.thumbnail_path,
-            c.id AS clip_id, c.start_seconds, c.end_seconds
+            c.id AS clip_id, c.start_seconds, c.end_seconds, yc.id AS channel_id, yc.channel_name
      FROM postings p
      ${CLIP_FILE_JOIN}
+     ${YOUTUBE_CHANNEL_JOIN}
      JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
      WHERE ta.client_user_id = $1 AND p.status = 'pending'
        AND ($2::bigint IS NULL OR p.tiktok_account_id = $2)
@@ -299,9 +304,10 @@ async function listPostedForClient(clientUserId, tiktokAccountId = null) {
 // corte nao saiu. Mostrado numa aba "Erro" ao lado de "Postados".
 async function listErrorForClient(clientUserId, tiktokAccountId = null) {
   const { rows } = await pool.query(
-    `SELECT p.*, c.title AS clip_title, c.thumbnail_path, c.id AS clip_id
+    `SELECT p.*, c.title AS clip_title, c.thumbnail_path, c.id AS clip_id, yc.id AS channel_id, yc.channel_name
      FROM postings p
      ${CLIP_FILE_JOIN}
+     ${YOUTUBE_CHANNEL_JOIN}
      JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
      WHERE ta.client_user_id = $1 AND p.status = 'error'
        AND ($2::bigint IS NULL OR p.tiktok_account_id = $2)
@@ -310,6 +316,24 @@ async function listErrorForClient(clientUserId, tiktokAccountId = null) {
     [clientUserId, tiktokAccountId]
   );
   return rows;
+}
+
+// Botao "Enviar pra fila novamente" (e passo inicial de "Tentar postar
+// agora"): so mexe se a postagem realmente estiver em erro - evita reenviar
+// algo que ja saiu ou que o cliente cancelou. Ganha um scheduled_for novo
+// (entra no fim da fila, como se fosse recem-criada).
+async function retryOwnedByClient(id, clientUserId) {
+  const posting = await findByIdOwnedByClient(id, clientUserId);
+  if (!posting || posting.status !== 'error') return null;
+
+  const scheduledFor = await computeNextScheduledFor(posting.tiktok_account_id);
+  const { rows } = await pool.query(
+    `UPDATE postings SET status = 'pending', error_message = NULL, scheduled_for = $2, updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id, scheduledFor]
+  );
+  return rows[0] || null;
 }
 
 async function countPendingForClient(clientUserId) {
@@ -372,6 +396,7 @@ module.exports = {
   listQueueForClient,
   listPostedForClient,
   listErrorForClient,
+  retryOwnedByClient,
   countPendingForClient,
   findByIdOwnedByClient,
   updateCaptionOwnedByClient,
