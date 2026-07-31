@@ -44,7 +44,15 @@ function portMarker(port) {
 function authorize(publicKey, port, label) {
   const marker = portMarker(port);
   const safeLabel = String(label || 'tunnel').replace(/[^\w .-]/g, '').slice(0, 60);
-  const line = `restrict,${marker} ${publicKey.trim()} ${safeLabel}`;
+  // NAO usar o atalho "restrict" aqui - testado ao vivo em producao e ele
+  // bloqueia o proprio encaminhamento remoto de porta mesmo com
+  // "permitlisten" junto (a chave autentica mas o `-R` do cliente falha
+  // com "remote port forwarding failed", sem nenhum erro claro do lado do
+  // servidor mesmo em log verbose). Listar as restricoes uma por uma sem
+  // "restrict" funciona igual (testado, o `-R` conecta e o SOCKS5
+  // realmente sai pela internet de quem conectou).
+  const restrictions = 'no-agent-forwarding,no-X11-forwarding,no-pty,no-user-rc';
+  const line = `${restrictions},${marker} ${publicKey.trim()} ${safeLabel}`;
   const lines = readLines().filter((existing) => !existing.includes(marker));
   lines.push(line);
   writeLines(lines);
