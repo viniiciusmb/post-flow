@@ -159,4 +159,30 @@ async function fixSchedule(req, res) {
   res.json({ updated: count });
 }
 
-module.exports = { list, deactivate, setAutoPost, getSchedule, setSchedule, setQueuePaused, fixSchedule };
+// Arrastar-e-soltar na tela: o cliente manda a lista completa de ids na
+// nova ordem. Reaplica os horarios em seguida (reflowScheduledFor) pra que
+// "postar em 1o" tambem valha pro horario mostrado, nao so pra ordem visual.
+async function setQueueOrder(req, res) {
+  const account = await findOwned(req);
+  if (!account) return res.status(404).json({ error: 'Conta nao encontrada.' });
+
+  const orderedIds = Array.isArray(req.body.orderedIds) ? req.body.orderedIds.map(Number).filter(Number.isFinite) : [];
+  if (orderedIds.length === 0) {
+    return res.status(400).json({ error: 'Lista de ordem invalida.' });
+  }
+
+  await postingsRepository.setQueueOrder(account.id, orderedIds);
+  const count = await postingsRepository.reflowScheduledFor(account.id);
+  res.json({ updated: count });
+}
+
+module.exports = {
+  list,
+  deactivate,
+  setAutoPost,
+  getSchedule,
+  setSchedule,
+  setQueuePaused,
+  fixSchedule,
+  setQueueOrder,
+};

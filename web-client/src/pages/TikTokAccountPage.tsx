@@ -1,5 +1,28 @@
 import { useEffect, useState } from "react"
-import { IconBrandTiktok, IconHeart, IconUsers, IconMovie, IconTrash, IconPlus, IconClock, IconAlertTriangle } from "@tabler/icons-react"
+import {
+  IconBrandTiktok,
+  IconHeart,
+  IconUsers,
+  IconMovie,
+  IconTrash,
+  IconPlus,
+  IconClock,
+  IconAlertTriangle,
+  IconGripVertical,
+  IconSend,
+  IconDownload,
+  IconEye,
+} from "@tabler/icons-react"
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -7,6 +30,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -298,6 +322,126 @@ function formatScheduledFor(iso: string | null) {
   return `${date.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" })} às ${time}`
 }
 
+// Painel lateral do botão "Ver": mostra o corte tocando de verdade e a
+// legenda que vai sair junto no TikTok, embaixo do vídeo.
+function ViewClipSheet({ item, onClose }: { item: PostingQueueItem; onClose: () => void }) {
+  const videoUrl = `/api/client/source-videos/clips/${item.clipId}/download`
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle className="pr-8">{item.clipTitle}</SheetTitle>
+        </SheetHeader>
+        <div className="flex flex-col gap-4 px-4 pb-6">
+          <video
+            src={videoUrl}
+            controls
+            autoPlay
+            className="aspect-[9/16] w-full rounded-md bg-black"
+          />
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Legenda que vai no TikTok</p>
+            <p className="whitespace-pre-wrap text-sm">{item.caption || "Sem legenda."}</p>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function QueueRow({
+  item,
+  draft,
+  onDraftChange,
+  onSaveCaption,
+  confirmingSkip,
+  skipping,
+  onSkipClick,
+  postingNow,
+  onPostNow,
+  onView,
+}: {
+  item: PostingQueueItem
+  draft: string
+  onDraftChange: (value: string) => void
+  onSaveCaption: () => void
+  confirmingSkip: boolean
+  skipping: boolean
+  onSkipClick: () => void
+  postingNow: boolean
+  onPostNow: () => void
+  onView: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
+  const downloadUrl = `/api/client/source-videos/clips/${item.clipId}/download`
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`flex flex-col gap-2 rounded-lg border border-border bg-background p-3 sm:flex-row sm:items-center ${isDragging ? "opacity-50" : ""}`}
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="hidden shrink-0 cursor-grab items-center justify-center self-stretch rounded-md text-muted-foreground hover:bg-accent active:cursor-grabbing sm:flex"
+        title="Arraste pra reordenar a fila"
+      >
+        <IconGripVertical className="size-4" />
+      </button>
+      <div className="h-20 w-14 shrink-0 overflow-hidden rounded-md bg-muted">
+        {item.thumbnailUrl && <img src={item.thumbnailUrl} alt="" className="h-full w-full object-cover" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{item.clipTitle}</p>
+        {item.scheduledFor && (
+          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+            <IconClock className="size-3" />
+            Vai postar {formatScheduledFor(item.scheduledFor)}
+          </p>
+        )}
+        <div className="mt-1 flex gap-2">
+          <Input
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            placeholder="Legenda desse corte..."
+            className="text-xs"
+          />
+          <Button size="sm" variant="outline" onClick={onSaveCaption}>
+            Salvar
+          </Button>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <Button size="xs" variant="outline" onClick={onPostNow} disabled={postingNow} className="gap-1">
+            <IconSend className="size-3" />
+            {postingNow ? "Postando..." : "Postar agora"}
+          </Button>
+          <Button size="xs" variant="outline" onClick={onView} className="gap-1">
+            <IconEye className="size-3" />
+            Ver
+          </Button>
+          <Button size="xs" variant="outline" className="gap-1" asChild>
+            <a href={downloadUrl} download>
+              <IconDownload className="size-3" />
+              Baixar
+            </a>
+          </Button>
+          <Button
+            size="xs"
+            variant={confirmingSkip ? "destructive" : "ghost"}
+            onClick={onSkipClick}
+            disabled={skipping}
+            className="text-muted-foreground"
+          >
+            {skipping ? "Cancelando..." : confirmingSkip ? "Confirmar cancelamento?" : "Cancelar postagem"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function QueueCard({ accountId }: { accountId: number }) {
   const [items, setItems] = useState<PostingQueueItem[] | null>(null)
   const [drafts, setDrafts] = useState<Record<number, string>>({})
@@ -307,6 +451,13 @@ function QueueCard({ accountId }: { accountId: number }) {
   const [confirmingSkipId, setConfirmingSkipId] = useState<number | null>(null)
   const [skippingId, setSkippingId] = useState<number | null>(null)
   const [skipError, setSkipError] = useState<string | null>(null)
+  const [postingNowId, setPostingNowId] = useState<number | null>(null)
+  const [postNowError, setPostNowError] = useState<string | null>(null)
+  const [viewingItem, setViewingItem] = useState<PostingQueueItem | null>(null)
+  const [reordering, setReordering] = useState(false)
+  const [orderError, setOrderError] = useState<string | null>(null)
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   async function load() {
     const data = await api.get<{ postings: PostingQueueItem[] }>(`/api/client/postings/queue?accountId=${accountId}`)
@@ -352,6 +503,22 @@ function QueueCard({ accountId }: { accountId: number }) {
     }
   }
 
+  async function postNow(id: number) {
+    setPostingNowId(id)
+    setPostNowError(null)
+    try {
+      const result = await api.post<{ status: string; errorMessage: string | null }>(`/api/client/postings/${id}/post-now`, {})
+      if (result.status === "error") {
+        setPostNowError(result.errorMessage || "A TikTok recusou publicar esse corte.")
+      }
+      await load()
+    } catch (err) {
+      setPostNowError(err instanceof ApiError ? err.message : "Não foi possível postar agora.")
+    } finally {
+      setPostingNowId(null)
+    }
+  }
+
   // Recalcula os horários de toda a fila do zero, preenchendo os buracos
   // deixados por cortes pulados/com erro — nunca acontece sozinho, só
   // quando alguém clica aqui de propósito.
@@ -370,64 +537,73 @@ function QueueCard({ accountId }: { accountId: number }) {
     }
   }
 
+  // Arrasta e solta: atualiza a ordem na tela na hora (otimista) e manda a
+  // lista completa pro servidor, que recalcula os horários pra bater com a
+  // nova ordem. Se falhar, recarrega do zero pra desfazer a mudança visual.
+  async function handleDragEnd(event: DragEndEvent) {
+    if (!items) return
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = items.findIndex((i) => i.id === active.id)
+    const newIndex = items.findIndex((i) => i.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const reordered = arrayMove(items, oldIndex, newIndex)
+    setItems(reordered)
+    setReordering(true)
+    setOrderError(null)
+    try {
+      await api.put(`/api/client/tiktok-accounts/${accountId}/queue-order`, { orderedIds: reordered.map((i) => i.id) })
+      await load()
+    } catch (err) {
+      setOrderError(err instanceof ApiError ? err.message : "Não foi possível salvar a nova ordem.")
+      await load()
+    } finally {
+      setReordering(false)
+    }
+  }
+
   if (!items) return <Skeleton className="h-32" />
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Fila de prontos aguardando postar</CardTitle>
-        <CardDescription>Revise ou edite a legenda antes de sair — a ordem é por ordem de chegada.</CardDescription>
+        <CardDescription>
+          Revise ou edite a legenda antes de sair — arraste pelo ícone à esquerda pra mudar a ordem em que saem.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {items.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nenhum corte esperando na fila agora.</p>
         ) : (
-          <div className="flex flex-col gap-3">
-            {items.map((item) => (
-              <div key={item.id} className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center">
-                <div className="h-20 w-14 shrink-0 overflow-hidden rounded-md bg-muted">
-                  {item.thumbnailUrl && (
-                    <img src={item.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{item.clipTitle}</p>
-                  {item.scheduledFor && (
-                    <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <IconClock className="size-3" />
-                      Vai postar {formatScheduledFor(item.scheduledFor)}
-                    </p>
-                  )}
-                  <div className="mt-1 flex gap-2">
-                    <Input
-                      value={drafts[item.id] ?? ""}
-                      onChange={(e) => setDrafts({ ...drafts, [item.id]: e.target.value })}
-                      placeholder="Legenda desse corte..."
-                      className="text-xs"
-                    />
-                    <Button size="sm" variant="outline" onClick={() => saveCaption(item.id)}>
-                      Salvar
-                    </Button>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  variant={confirmingSkipId === item.id ? "destructive" : "ghost"}
-                  onClick={() => handleSkipClick(item.id)}
-                  disabled={skippingId === item.id}
-                  className="shrink-0"
-                >
-                  {skippingId === item.id
-                    ? "Removendo..."
-                    : confirmingSkipId === item.id
-                      ? "Confirmar?"
-                      : "Não postar"}
-                </Button>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+              <div className="flex flex-col gap-3">
+                {items.map((item) => (
+                  <QueueRow
+                    key={item.id}
+                    item={item}
+                    draft={drafts[item.id] ?? ""}
+                    onDraftChange={(value) => setDrafts({ ...drafts, [item.id]: value })}
+                    onSaveCaption={() => saveCaption(item.id)}
+                    confirmingSkip={confirmingSkipId === item.id}
+                    skipping={skippingId === item.id}
+                    onSkipClick={() => handleSkipClick(item.id)}
+                    postingNow={postingNowId === item.id}
+                    onPostNow={() => postNow(item.id)}
+                    onView={() => setViewingItem(item)}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
         )}
+        {reordering && <p className="mt-2 text-xs text-muted-foreground">Salvando nova ordem...</p>}
+        {orderError && <p className="mt-2 text-xs text-destructive">{orderError}</p>}
         {skipError && <p className="mt-2 text-xs text-destructive">{skipError}</p>}
+        {postNowError && <p className="mt-2 text-xs text-destructive">{postNowError}</p>}
         <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
           <Button size="xs" variant="ghost" className="text-muted-foreground" onClick={fixSchedule} disabled={fixing}>
             {fixing ? "Corrigindo..." : "Corrigir horários de posts"}
@@ -436,6 +612,7 @@ function QueueCard({ accountId }: { accountId: number }) {
           {fixError && <span className="text-xs text-destructive">{fixError}</span>}
         </div>
       </CardContent>
+      {viewingItem && <ViewClipSheet item={viewingItem} onClose={() => setViewingItem(null)} />}
     </Card>
   )
 }

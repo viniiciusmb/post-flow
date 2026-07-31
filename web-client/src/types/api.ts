@@ -171,6 +171,7 @@ export interface PostingScheduleResponse {
 
 export interface PostingQueueItem {
   id: number
+  clipId: number
   clipTitle: string
   caption: string | null
   thumbnailUrl: string | null

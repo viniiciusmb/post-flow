@@ -155,4 +155,7 @@ async function checkStaleProcessing() {
   }
 }
 
-module.exports = { run };
+// publish() tambem e chamado direto pelo botao "Postar agora" (ver
+// clientPostingsApiController.postNow) - contorna fila/espacamento/pausa
+// de proposito, e o cliente pedindo explicitamente pra sair na hora.
+module.exports = { run, publish };

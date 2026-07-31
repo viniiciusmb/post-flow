@@ -16,5 +16,6 @@ router.get('/posted', asyncHandler(controller.listPosted));
 router.get('/errors', asyncHandler(controller.listErrors));
 router.put('/:id/caption', asyncHandler(controller.updateCaption));
 router.post('/:id/skip', asyncHandler(controller.skip));
+router.post('/:id/post-now', asyncHandler(controller.postNow));
 
 module.exports = router;

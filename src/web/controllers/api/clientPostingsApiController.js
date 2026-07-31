@@ -1,6 +1,8 @@
 'use strict';
 
 const postingsRepository = require('../../../repositories/postingsRepository');
+const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
+const tiktokPostingJob = require('../../../worker/jobs/tiktokPostingJob');
 
 function thumbnailUrl(row) {
   return row.thumbnail_path ? `/api/client/source-videos/clips/${row.clip_id}/thumbnail` : null;
@@ -25,6 +27,7 @@ async function listQueue(req, res) {
   res.json({
     postings: rows.map((p) => ({
       id: p.id,
+      clipId: p.clip_id,
       clipTitle: p.clip_title,
       caption: p.caption ?? p.clip_description,
       thumbnailUrl: thumbnailUrl(p),
@@ -81,4 +84,25 @@ async function skip(req, res) {
   res.status(204).end();
 }
 
-module.exports = { listQueue, listPosted, listErrors, updateCaption, skip };
+// Botao "Postar agora": publica esse corte na hora, sem esperar o
+// agendamento nem respeitar a pausa da fila - o cliente pediu explicitamente
+// pra sair ja. Usa a mesma logica de publicacao do job de fundo
+// (tiktokPostingJob.publish), so que disparada na hora em vez de num ciclo.
+async function postNow(req, res) {
+  const posting = await postingsRepository.findPublishableByIdOwnedByClient(Number(req.params.id), req.session.user.id);
+  if (!posting) {
+    return res.status(404).json({ error: 'Postagem nao encontrada ou ja saiu da fila de espera.' });
+  }
+
+  const account = await tiktokAccountsRepository.findActiveByIdAndClient(posting.tiktok_account_id, req.session.user.id);
+  if (!account) {
+    return res.status(404).json({ error: 'Conta TikTok nao encontrada.' });
+  }
+
+  await tiktokPostingJob.publish(account, posting);
+
+  const updated = await postingsRepository.findByIdOwnedByClient(posting.id, req.session.user.id);
+  res.json({ id: updated.id, status: updated.status, errorMessage: updated.error_message });
+}
+
+module.exports = { listQueue, listPosted, listErrors, updateCaption, skip, postNow };

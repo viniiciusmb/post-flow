@@ -18,5 +18,6 @@ router.get('/:id/schedule', asyncHandler(controller.getSchedule));
 router.put('/:id/schedule', asyncHandler(controller.setSchedule));
 router.put('/:id/queue-pause', asyncHandler(controller.setQueuePaused));
 router.post('/:id/fix-schedule', asyncHandler(controller.fixSchedule));
+router.put('/:id/queue-order', asyncHandler(controller.setQueueOrder));
 
 module.exports = router;

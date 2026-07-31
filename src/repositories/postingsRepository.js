@@ -117,17 +117,41 @@ const CLIP_FILE_JOIN = `
   JOIN source_videos sv ON sv.id = c.source_video_id
 `;
 
-// Postagem pendente mais antiga de uma conta - e o que o job de publicacao
-// pega quando ha espaco na cota do dia.
+// Ordem de exibicao/publicacao da fila: segue queue_order quando o cliente
+// ja arrastou pra reordenar, senao cai na ordem de chegada (id crescente ==
+// created_at crescente nessa tabela). Usada em toda consulta que lista ou
+// escolhe o "proximo" da fila pendente - se so a tela usasse isso e o job
+// de publicacao continuasse por created_at, arrastar pareceria funcionar
+// mas nao mudaria o que sai de verdade no TikTok.
+const PENDING_ORDER = 'COALESCE(p.queue_order, p.id) ASC';
+
+// Postagem pendente mais antiga (na ordem da fila) de uma conta - e o que
+// o job de publicacao pega quando ha espaco na cota do dia.
 async function findOldestPendingForAccount(tiktokAccountId) {
   const { rows } = await pool.query(
     `SELECT p.*, c.local_clip_path, c.title AS clip_title, v.file_size_bytes
      FROM postings p
      ${CLIP_FILE_JOIN}
      WHERE p.tiktok_account_id = $1 AND p.status = 'pending'
-     ORDER BY p.created_at ASC
+     ORDER BY ${PENDING_ORDER}
      LIMIT 1`,
     [tiktokAccountId]
+  );
+  return rows[0] || null;
+}
+
+// Usado pelo botao "Postar agora": mesmos dados de findOldestPendingForAccount,
+// mas buscando um corte especifico (e conferindo que pertence mesmo a esse
+// cliente e ainda esta pendente - nao deixa postar de novo algo ja postado/
+// cancelado clicando duas vezes rapido).
+async function findPublishableByIdOwnedByClient(id, clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT p.*, c.local_clip_path, c.title AS clip_title, v.file_size_bytes
+     FROM postings p
+     ${CLIP_FILE_JOIN}
+     JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
+     WHERE p.id = $1 AND ta.client_user_id = $2 AND p.status = 'pending'`,
+    [id, clientUserId]
   );
   return rows[0] || null;
 }
@@ -181,7 +205,7 @@ async function reflowScheduledFor(tiktokAccountId) {
   const settings = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(tiktokAccountId);
   const postedToday = await countTodayForAccount(tiktokAccountId, settings.timezone);
   const { rows: pending } = await pool.query(
-    "SELECT id FROM postings WHERE tiktok_account_id = $1 AND status = 'pending' ORDER BY created_at ASC",
+    `SELECT p.id FROM postings p WHERE p.tiktok_account_id = $1 AND p.status = 'pending' ORDER BY ${PENDING_ORDER}`,
     [tiktokAccountId]
   );
   const scheduledTimes = projectQueueTimes({
@@ -235,10 +259,24 @@ async function listQueueForClient(clientUserId, tiktokAccountId = null) {
      JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
      WHERE ta.client_user_id = $1 AND p.status = 'pending'
        AND ($2::bigint IS NULL OR p.tiktok_account_id = $2)
-     ORDER BY p.created_at ASC`,
+     ORDER BY ${PENDING_ORDER}`,
     [clientUserId, tiktokAccountId]
   );
   return rows;
+}
+
+// Grava a ordem que o cliente escolheu arrastando os cortes na tela - so
+// mexe em postagens PENDENTES dessa conta (defesa extra alem do que a tela
+// ja filtra). Numeros pequenos e sequenciais (0,1,2...), sempre menores que
+// qualquer id futuro, entao um corte novo continua entrando no fim da fila
+// sozinho ate o cliente arrastar nele tambem.
+async function setQueueOrder(tiktokAccountId, orderedIds) {
+  for (let i = 0; i < orderedIds.length; i++) {
+    await pool.query(
+      "UPDATE postings SET queue_order = $3, updated_at = now() WHERE id = $1 AND tiktok_account_id = $2 AND status = 'pending'",
+      [orderedIds[i], tiktokAccountId, i]
+    );
+  }
 }
 
 async function listPostedForClient(clientUserId, tiktokAccountId = null) {
@@ -323,10 +361,12 @@ module.exports = {
   listAllWithDetails,
   updateStatus,
   findOldestPendingForAccount,
+  findPublishableByIdOwnedByClient,
   countTodayForAccount,
   countPendingForAccount,
   mostRecentPostedAt,
   reflowScheduledFor,
+  setQueueOrder,
   listStaleProcessing,
   listPostedOlderThan,
   listQueueForClient,
