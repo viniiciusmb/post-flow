@@ -12,5 +12,9 @@ chmod 600 /home/tunnel/.ssh/authorized_keys
 
 ssh-keygen -A
 
-/usr/sbin/sshd -f /etc/ssh/sshd_config -D &
+# -e manda o log do sshd pra stderr em vez de syslog (esse container nao
+# tem syslog nenhum, entao sem -e as mensagens simplesmente desaparecem e
+# nunca aparecem em `docker service logs` - foi assim que o bug da conta
+# bloqueada ficou dificil de diagnosticar da primeira vez).
+/usr/sbin/sshd -f /etc/ssh/sshd_config -D -e &
 exec node /control-server.js
