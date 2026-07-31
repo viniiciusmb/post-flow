@@ -84,6 +84,17 @@ const config = {
     // Onde os videos baixados e os cortes ficam em disco antes de postar.
     workDir: process.env.VIDEO_WORK_DIR || '/tmp/post-flow-video',
   },
+
+  // Sistema de creditos/assinatura. Vazio ate o usuario mandar as chaves de
+  // verdade - stripeService checa isso e recusa com mensagem clara em vez de
+  // deixar o SDK explodir. Sem required() de proposito: a ausencia dessas
+  // variaveis nao pode travar o boot do servidor, so deixa a integracao com
+  // a Stripe indisponivel ate configurar.
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY || '',
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+  },
 };
 
 module.exports = config;

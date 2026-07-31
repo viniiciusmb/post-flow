@@ -84,6 +84,17 @@ async function listAll() {
   return rows;
 }
 
+// Usado pelo creditsService pra decidir o bolso (bonus se o cliente tem
+// tunel proprio conectado agora, normal senao) - so olha essa flag direto,
+// sem duplicar a logica de prioridade de candidatos do ytDlpService.
+async function hasConnectedClientTunnel(clientUserId) {
+  const { rows } = await pool.query(
+    "SELECT 1 FROM download_tunnels WHERE client_user_id = $1 AND owner_type = 'client' AND connected = true",
+    [clientUserId]
+  );
+  return rows.length > 0;
+}
+
 async function countConnectedClients() {
   const { rows } = await pool.query(
     "SELECT count(*)::int AS count FROM download_tunnels WHERE owner_type = 'client' AND connected = true"
@@ -115,6 +126,7 @@ module.exports = {
   completePairing,
   markTestResult,
   listAll,
+  hasConnectedClientTunnel,
   countConnectedClients,
   removeByClientId,
   setEnabled,

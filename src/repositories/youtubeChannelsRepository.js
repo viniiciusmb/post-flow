@@ -20,6 +20,14 @@ async function findById(id) {
   return rows[0] || null;
 }
 
+// Usado pro limite de canais por plano (youtubeChannelsApiController.create).
+async function countByClientId(clientUserId) {
+  const { rows } = await pool.query('SELECT count(*)::int AS count FROM youtube_channels WHERE client_user_id = $1', [
+    clientUserId,
+  ]);
+  return rows[0].count;
+}
+
 // Comeca PAUSADO (is_active = false) - o cliente precisa ligar de proposito
 // (ver setActive) pra comecar o corte automatico, controle explicito em vez
 // de automatico assim que adiciona. last_video_id comeca vazio de proposito:
@@ -91,6 +99,7 @@ module.exports = {
   listActive,
   listByClientId,
   findById,
+  countByClientId,
   create,
   setActive,
   remove,

@@ -5,6 +5,7 @@ const youtubeChannelService = require('../../../services/youtubeChannelService')
 const driveConnectionsRepository = require('../../../repositories/driveConnectionsRepository');
 const driveFoldersRepository = require('../../../repositories/driveFoldersRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
+const planLimitsService = require('../../../services/planLimitsService');
 const { extractDriveFolderId } = require('../../../lib/driveFolderId');
 
 async function list(req, res) {
@@ -40,6 +41,12 @@ async function create(req, res) {
   const { channelUrl } = req.body;
   if (!channelUrl) {
     return res.status(400).json({ error: 'Informe o link ou @handle do canal.' });
+  }
+
+  const currentCount = await youtubeChannelsRepository.countByClientId(req.session.user.id);
+  const limitCheck = await planLimitsService.checkChannelLimit(req.session.user.id, currentCount);
+  if (!limitCheck.allowed) {
+    return res.status(403).json({ error: limitCheck.reason });
   }
 
   let resolved;

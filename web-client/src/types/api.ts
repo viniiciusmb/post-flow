@@ -381,3 +381,71 @@ export interface AdminBandwidthResponse {
   proxy: { configured: boolean; enabled: boolean }
   clientTunnels: { id: number; clientUserId: number; label: string | null; enabled: boolean; connected: boolean }[]
 }
+
+export type CreditBucket = "normal" | "bonus"
+export type SubscriptionStatus = "sem_plano" | "ativo" | "inadimplente" | "cancelado"
+
+export interface CreditBucketView {
+  quotaMinutes: number
+  usedMinutes: number
+  extraMinutes: number
+  availableMinutes: number
+}
+
+export interface BillingPlan {
+  key: string
+  name: string
+  priceCents: number
+  weeklyMinutesNormal: number
+  weeklyMinutesBonus: number
+  maxYoutubeChannels: number | null
+  maxTiktokAccounts: number | null
+}
+
+export interface CreditTransactionView {
+  id: number
+  sourceVideoId: number
+  bucket: CreditBucket
+  status: "reservado" | "confirmado" | "liberado"
+  minutesCharged: number
+  downloadPath: string | null
+  createdAt: string
+}
+
+export interface ClientBillingOverviewResponse {
+  stripeConfigured: boolean
+  subscription: {
+    planKey: string | null
+    planName: string | null
+    status: SubscriptionStatus
+    overageCardEnabled: boolean
+  }
+  credits: { normal: CreditBucketView; bonus: CreditBucketView }
+  plans: BillingPlan[]
+  overage: { rateCentsNormal: number; rateCentsBonus: number; pendingCents: number }
+  package: { minutes: number; priceCents: number }
+  recentPurchases: { id: number; bucket: CreditBucket; minutes: number; amountCents: number; status: string; createdAt: string }[]
+  recentTransactions: CreditTransactionView[]
+}
+
+export interface AdminBillingClient {
+  clientUserId: number
+  email: string
+  businessName: string | null
+  planKey: string | null
+  planName: string | null
+  status: SubscriptionStatus
+  overageCardEnabled: boolean
+}
+
+export interface AdminBillingClientsResponse {
+  clients: AdminBillingClient[]
+}
+
+export interface AdminBillingPlansResponse {
+  plans: BillingPlan[]
+}
+
+export interface AdminOverageSummaryResponse {
+  clients: { clientUserId: number; email: string; businessName: string | null; pendingCents: number; billedCents: number }[]
+}

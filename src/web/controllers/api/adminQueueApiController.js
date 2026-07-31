@@ -2,7 +2,9 @@
 
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
+const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const queueService = require('../../../services/queueService');
+const queuePriorityService = require('../../../services/queuePriorityService');
 
 function summarize(row) {
   return {
@@ -46,8 +48,12 @@ async function retry(req, res) {
   const updated = await sourceVideosRepository.resetForRetry(sourceVideo.id);
   if (!updated) return res.status(409).json({ error: 'Nao foi possivel reiniciar esse video agora, tente de novo.' });
 
+  const clientUserId = sourceVideo.youtube_channel_id
+    ? (await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id)).client_user_id
+    : sourceVideo.client_user_id;
+  const priority = await queuePriorityService.resolveQueuePriorityForClient(clientUserId);
   const boss = await queueService.getBoss();
-  await boss.send('video-processing', { sourceVideoId: sourceVideo.id });
+  await boss.send('video-processing', { sourceVideoId: sourceVideo.id }, { priority });
 
   res.status(204).end();
 }

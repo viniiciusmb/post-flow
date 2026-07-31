@@ -34,6 +34,8 @@ export default defineConfig({
         'admin-metrics': path.resolve(__dirname, 'admin-metrics.html'),
         tunnel: path.resolve(__dirname, 'tunnel.html'),
         bandwidth: path.resolve(__dirname, 'bandwidth.html'),
+        'client-billing': path.resolve(__dirname, 'client-billing.html'),
+        'admin-billing': path.resolve(__dirname, 'admin-billing.html'),
       },
     },
   },

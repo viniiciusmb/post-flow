@@ -8,7 +8,8 @@ const path = require('path');
 const fs = require('fs');
 const config = require('../../config');
 const logger = require('../../lib/logger');
-const { PausedError } = require('../../lib/errors');
+const { PausedError, AwaitingCreditsError } = require('../../lib/errors');
+const creditsService = require('../../services/creditsService');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../repositories/clipsRepository');
 const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRepository');
@@ -87,11 +88,25 @@ async function run(sourceVideoId) {
       if (!videoPath || !fs.existsSync(videoPath)) {
         throw new Error('Arquivo enviado nao foi encontrado no servidor.');
       }
+      // Upload nao passa por egress de banda nenhum, mas Whisper/Claude/
+      // ffmpeg continuam custando - cobra do bolso normal na hora (sem
+      // etapa de download separada, ver creditsService.chargeForUpload).
+      const uploadCharge = await creditsService.chargeForUpload(sourceVideo, clientUserId);
+      if (uploadCharge.outcome === 'blocked') {
+        throw new AwaitingCreditsError('Sem credito disponivel pra processar este upload.');
+      }
       fs.mkdirSync(workDir, { recursive: true });
     } else if (videoPath && fs.existsSync(videoPath)) {
       // Ja baixado numa execucao anterior (retomando de uma pausa) - pula o
       // download de novo.
     } else {
+      // Reserva o credito ANTES de baixar - se nao houver saldo (e sem
+      // cartao de excedente ligado), nao inicia o download nenhum.
+      const reserveOutcome = await creditsService.reserveBeforeDownload(sourceVideo, clientUserId);
+      if (reserveOutcome.outcome === 'blocked') {
+        throw new AwaitingCreditsError('Sem credito disponivel pra baixar este video.');
+      }
+
       await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
       const downloadResult = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir, { checkCancelled, clientUserId });
       videoPath = downloadResult.filePath;
@@ -104,6 +119,9 @@ async function run(sourceVideoId) {
         egressType: downloadResult.egressType,
         tunnelId: downloadResult.tunnelId,
       });
+      // Download terminou com sucesso - confirma a cobranca (ou fatura de
+      // excedente) definitiva agora que o caminho real de egress e conhecido.
+      await creditsService.confirmAfterDownload(sourceVideo, clientUserId, reserveOutcome, downloadResult);
     }
 
     await checkPaused(sourceVideo.id);
@@ -287,9 +305,20 @@ async function run(sourceVideoId) {
       // Nao apaga workDir nem cancel_requested aqui - o video baixado, a
       // transcricao e os cortes ja renderizados ficam guardados pra retomar
       // sem refazer (ver logica de "ja feito" no topo de cada etapa acima).
+      // O credito (se ja reservado) tambem fica reservado - retomar nao deve
+      // cobrar de novo nem devolver o credito por ter pausado.
       await sourceVideosRepository.updateStatus(sourceVideo.id, 'paused');
       return;
     }
+    if (err instanceof AwaitingCreditsError) {
+      logger.info(`Video-fonte ${sourceVideo.id} aguardando credito - ${err.message}`);
+      await sourceVideosRepository.updateStatus(sourceVideo.id, 'aguardando_creditos');
+      return;
+    }
+    // Download nao chegou a completar (ou qualquer outra falha antes da
+    // confirmacao) - libera o credito reservado, se houver (sem-op se ja
+    // tinha sido confirmado ou nunca reservado, ver releaseIfReserved).
+    await creditsService.releaseIfReserved(sourceVideo.id);
     logger.error(`Falha ao processar o video-fonte ${sourceVideo.id}:`, err);
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', { errorMessage: err.message });
   }

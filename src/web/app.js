@@ -25,6 +25,9 @@ const clientPostingsApiRoutes = require('./routes/api/clientPostingsApiRoutes');
 const tiktokAccountsApiRoutes = require('./routes/api/tiktokAccountsApiRoutes');
 const tunnelPublicApiRoutes = require('./routes/api/tunnelPublicApiRoutes');
 const clientTunnelApiRoutes = require('./routes/api/clientTunnelApiRoutes');
+const clientBillingApiRoutes = require('./routes/api/clientBillingApiRoutes');
+const adminBillingApiRoutes = require('./routes/api/adminBillingApiRoutes');
+const stripeWebhookApiRoutes = require('./routes/api/stripeWebhookApiRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -51,6 +54,11 @@ app.use(
     },
   })
 );
+// Precisa vir ANTES do express.json() global: o webhook da Stripe verifica
+// a assinatura contra o corpo BRUTO da requisicao - se o JSON generico
+// parseasse primeiro, os bytes originais se perderiam e a verificacao
+// falharia sempre.
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -114,6 +122,9 @@ app.use('/api/client/postings', clientPostingsApiRoutes);
 app.use('/api/client/tiktok-accounts', tiktokAccountsApiRoutes);
 app.use('/api/tunnel', tunnelPublicApiRoutes);
 app.use('/api/client/tunnel', clientTunnelApiRoutes);
+app.use('/api/client/billing', clientBillingApiRoutes);
+app.use('/api/admin/billing', adminBillingApiRoutes);
+app.use('/api/stripe/webhook', stripeWebhookApiRoutes);
 app.use('/api', (req, res) => res.status(404).json({ error: 'Rota nao encontrada.' }));
 
 app.use((req, res) => {

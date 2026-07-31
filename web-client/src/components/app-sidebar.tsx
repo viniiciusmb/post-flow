@@ -11,6 +11,7 @@ import {
   IconSettings,
   IconGauge,
   IconRouter,
+  IconReceipt2,
 } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
@@ -41,6 +42,7 @@ const ADMIN_GROUPS: { label?: string; items: NavItem[] }[] = [
       { title: "Google Drive", url: "/admin/drive", icon: IconBrandGoogleDrive },
       { title: "Métricas", url: "/admin/metrics", icon: IconChartBar },
       { title: "Banda", url: "/admin/bandwidth", icon: IconGauge },
+      { title: "Planos e crédito", url: "/admin/billing", icon: IconReceipt2 },
     ],
   },
   {
@@ -63,6 +65,7 @@ const CLIENT_GROUPS: { label?: string; items: NavItem[] }[] = [
       { title: "Vídeos & Cortes", url: "/client/videos-clips", icon: IconScissors },
       { title: "Contas TikTok", url: "/client/tiktok-account", icon: IconBrandTiktok },
       { title: "Túnel", url: "/client/tunnel", icon: IconRouter },
+      { title: "Planos e crédito", url: "/client/billing", icon: IconReceipt2 },
       { title: "Configurações", url: "/client/settings", icon: IconSettings },
     ],
   },

@@ -5,6 +5,7 @@
 const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRepository');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
 const ytDlpService = require('../../services/ytDlpService');
+const queuePriorityService = require('../../services/queuePriorityService');
 const logger = require('../../lib/logger');
 
 const QUEUE_VIDEO_PROCESSING = 'video-processing';
@@ -39,6 +40,7 @@ async function run(boss) {
       // Do mais antigo pro mais novo, pra entrar na fila em ordem
       // cronologica (e pro video mais recente, no fim do loop, virar o
       // novo marco d'agua).
+      const priority = await queuePriorityService.resolveQueuePriorityForClient(channel.client_user_id);
       for (const video of [...newVideos].reverse()) {
         const created = await sourceVideosRepository.createIfNotExists({
           youtubeChannelId: channel.id,
@@ -52,7 +54,7 @@ async function run(boss) {
         if (!created) continue; // ja conhecido, nada a fazer
 
         logger.info(`Novo video detectado: "${created.title}" (canal ${channel.channel_name}).`);
-        await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: created.id });
+        await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: created.id }, { priority });
       }
 
       await youtubeChannelsRepository.updatePollState(channel.id, { lastVideoId: videos[0].videoId });

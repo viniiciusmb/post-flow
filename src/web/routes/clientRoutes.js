@@ -16,5 +16,6 @@ router.get('/videos-clips', serveSpaPage('videos-clips'));
 router.get('/tiktok-account', serveSpaPage('tiktok-account'));
 router.get('/settings', serveSpaPage('client-settings'));
 router.get('/tunnel', serveSpaPage('tunnel'));
+router.get('/billing', serveSpaPage('client-billing'));
 
 module.exports = router;

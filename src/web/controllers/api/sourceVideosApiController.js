@@ -12,6 +12,7 @@ const googleService = require('../../../services/googleService');
 const ytDlpService = require('../../../services/ytDlpService');
 const videoEditingService = require('../../../services/videoEditingService');
 const queueService = require('../../../services/queueService');
+const queuePriorityService = require('../../../services/queuePriorityService');
 const metricsRepository = require('../../../repositories/metricsRepository');
 const config = require('../../../config');
 const logger = require('../../../lib/logger');
@@ -169,7 +170,8 @@ async function createManual(req, res) {
   }
 
   const boss = await queueService.getBoss();
-  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: sourceVideo.id });
+  const priority = await queuePriorityService.resolveQueuePriorityForClient(req.session.user.id);
+  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: sourceVideo.id }, { priority });
 
   res.status(201).json({ id: sourceVideo.id, title: sourceVideo.title, status: sourceVideo.status });
 }
@@ -210,7 +212,8 @@ async function uploadVideo(req, res) {
   }
 
   const boss = await queueService.getBoss();
-  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: sourceVideo.id });
+  const priority = await queuePriorityService.resolveQueuePriorityForClient(req.session.user.id);
+  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: sourceVideo.id }, { priority });
 
   res.status(201).json({ id: sourceVideo.id, title: sourceVideo.title, status: sourceVideo.status });
 }
@@ -230,7 +233,8 @@ async function retry(req, res) {
   if (!updated) return res.status(409).json({ error: 'Nao foi possivel reiniciar esse video agora, tente de novo.' });
 
   const boss = await queueService.getBoss();
-  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: id });
+  const priority = await queuePriorityService.resolveQueuePriorityForClient(req.session.user.id);
+  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: id }, { priority });
 
   res.json({ id: updated.id, status: updated.status });
 }
@@ -257,7 +261,8 @@ async function resume(req, res) {
   }
 
   const boss = await queueService.getBoss();
-  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: id });
+  const priority = await queuePriorityService.resolveQueuePriorityForClient(req.session.user.id);
+  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: id }, { priority });
 
   res.json({ id: updated.id, status: updated.status });
 }

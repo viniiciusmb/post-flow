@@ -7,6 +7,8 @@ const tiktokPostingJob = require('./jobs/tiktokPostingJob');
 const postingCleanupJob = require('./jobs/postingCleanupJob');
 const driveExportJob = require('./jobs/driveExportJob');
 const tunnelTestJob = require('./jobs/tunnelTestJob');
+const creditWeeklyResetJob = require('./jobs/creditWeeklyResetJob');
+const overageBillingJob = require('./jobs/overageBillingJob');
 const logger = require('../lib/logger');
 
 const QUEUE_CHANNEL_CHECK = 'youtube-channel-check';
@@ -17,6 +19,8 @@ const QUEUE_POSTING_CLEANUP = 'posting-cleanup';
 const QUEUE_DRIVE_EXPORT = 'drive-export';
 const QUEUE_TUNNEL_TEST_ONE = 'tunnel-test-one';
 const QUEUE_TUNNEL_TEST_ALL = 'tunnel-test-all';
+const QUEUE_CREDIT_WEEKLY_RESET = 'credit-weekly-reset';
+const QUEUE_OVERAGE_BILLING = 'overage-billing';
 
 async function start(boss) {
   await boss.createQueue(QUEUE_CHANNEL_CHECK);
@@ -27,6 +31,8 @@ async function start(boss) {
   await boss.createQueue(QUEUE_DRIVE_EXPORT);
   await boss.createQueue(QUEUE_TUNNEL_TEST_ONE);
   await boss.createQueue(QUEUE_TUNNEL_TEST_ALL);
+  await boss.createQueue(QUEUE_CREDIT_WEEKLY_RESET);
+  await boss.createQueue(QUEUE_OVERAGE_BILLING);
 
   await boss.schedule(QUEUE_CHANNEL_CHECK, '*/20 * * * *');
   logger.info('Checagem de canais do YouTube agendada a cada 20 minutos.');
@@ -49,6 +55,15 @@ async function start(boss) {
   await boss.schedule(QUEUE_TUNNEL_TEST_ALL, '*/5 * * * *');
   logger.info('Teste de todos os tuneis SSH agendado a cada 5 minutos.');
 
+  // So mexe nos clientes cujo ciclo ja completou 7 dias (checagem por
+  // cliente dentro do proprio job) - de hora em hora e frequente o
+  // suficiente sem ficar rodando toda hora a toa.
+  await boss.schedule(QUEUE_CREDIT_WEEKLY_RESET, '10 * * * *');
+  logger.info('Reset semanal de credito agendado de hora em hora.');
+
+  await boss.schedule(QUEUE_OVERAGE_BILLING, '20 * * * *');
+  logger.info('Faturamento de excedente agendado de hora em hora.');
+
   await boss.work(QUEUE_CHANNEL_CHECK, async () => {
     logger.info('Checando canais do YouTube...');
     await channelCheckJob.run(boss);
@@ -69,6 +84,14 @@ async function start(boss) {
 
   await boss.work(QUEUE_DRIVE_EXPORT, async () => {
     await driveExportJob.run();
+  });
+
+  await boss.work(QUEUE_CREDIT_WEEKLY_RESET, async () => {
+    await creditWeeklyResetJob.run();
+  });
+
+  await boss.work(QUEUE_OVERAGE_BILLING, async () => {
+    await overageBillingJob.run();
   });
 
   // Sem agendamento - so roda quando o usuario clica "Testar conexao" na

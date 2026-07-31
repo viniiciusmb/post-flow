@@ -160,6 +160,27 @@ async function resumeByIdOwnedByClient(id, clientUserId) {
   return rows[0] || null;
 }
 
+// Videos parados por falta de credito (ver creditsService/AwaitingCreditsError) -
+// usado pra "destravar" tudo de um cliente quando ele compra credito avulso
+// ou liga o cartao de excedente (ver creditsUnlockService).
+async function findAwaitingCreditsByClientId(clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT sv.* FROM source_videos sv
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     WHERE coalesce(yc.client_user_id, sv.client_user_id) = $1 AND sv.status = 'aguardando_creditos'`,
+    [clientUserId]
+  );
+  return rows;
+}
+
+async function resumeAwaitingCredits(id) {
+  const { rows } = await pool.query(
+    `UPDATE source_videos SET status = 'detected', updated_at = now() WHERE id = $1 AND status = 'aguardando_creditos' RETURNING *`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
 // Erros que parecem transitorios (proxy/rede) e ainda nao esgotaram as
 // tentativas automaticas, parados ha tempo suficiente pra nao brigar com um
 // retry manual que o cliente acabou de disparar.
@@ -332,6 +353,8 @@ module.exports = {
   resumeByIdOwnedByClient,
   findTransientErrorsForAutoRetry,
   findStuckDetected,
+  findAwaitingCreditsByClientId,
+  resumeAwaitingCredits,
   updateStatus,
   saveDownload,
   saveTranscript,
