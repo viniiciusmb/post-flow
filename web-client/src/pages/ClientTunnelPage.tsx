@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
-import { IconRouter, IconCircleCheck, IconCircleX, IconRefresh, IconDownload } from "@tabler/icons-react"
+import { IconRouter, IconCircleCheck, IconCircleX, IconRefresh, IconDownload, IconArrowLeft } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -10,6 +10,8 @@ import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import type { ClientTunnel, ClientTunnelResponse } from "@/types/api"
+
+type Os = "windows" | "mac"
 
 function StepCard({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
   return (
@@ -22,6 +24,77 @@ function StepCard({ number, title, children }: { number: number; title: string; 
         <div className="text-sm text-muted-foreground">{children}</div>
       </div>
     </div>
+  )
+}
+
+function OsPicker({ onSelect }: { onSelect: (os: Os) => void }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Qual é o sistema do seu computador?</CardTitle>
+        <CardDescription>Escolha uma opção pra ver o passo a passo certo pro seu computador.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap gap-3">
+        <Button variant="outline" size="lg" className="h-auto flex-col gap-1 px-8 py-4" onClick={() => onSelect("windows")}>
+          <span className="text-2xl">🪟</span>
+          <span>Windows</span>
+        </Button>
+        <Button variant="outline" size="lg" className="h-auto flex-col gap-1 px-8 py-4" onClick={() => onSelect("mac")}>
+          <span className="text-2xl">🍎</span>
+          <span>Mac</span>
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+function BackToOsPicker({ onClick }: { onClick: () => void }) {
+  return (
+    <Button variant="ghost" size="sm" onClick={onClick} className="w-fit gap-1.5 text-muted-foreground">
+      <IconArrowLeft className="size-3.5" />
+      Trocar sistema (Windows/Mac)
+    </Button>
+  )
+}
+
+function UninstallGuide({ os }: { os: Os }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Quer desinstalar o programa?</CardTitle>
+        <CardDescription>Sem problema — dá pra desinstalar a qualquer momento, sem afetar mais nada.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        <StepCard number={1} title="Primeiro, desconecte por aqui">
+          Se o programa já estiver conectado, volte no topo desta página e clique no botão{" "}
+          <strong className="text-foreground">"Desconectar"</strong>. Isso avisa o nosso sistema que você não vai
+          mais usar essa conexão.
+        </StepCard>
+        <StepCard number={2} title="Feche o programa no seu computador">
+          Clique no ícone dele ({os === "windows" ? "perto do relógio, canto inferior direito" : "na barra de menu, topo da tela"}
+          ) e clique em <strong className="text-foreground">"Sair"</strong>.
+        </StepCard>
+        <StepCard number={3} title='Se tinha ativado "Iniciar com o sistema", desmarque antes'>
+          Se você marcou essa opção no menu do programa, clique nela de novo pra desmarcar antes de fechar — assim
+          ele não tenta abrir sozinho da próxima vez que ligar o computador.
+        </StepCard>
+        <StepCard number={4} title="Apague os arquivos">
+          {os === "windows" ? (
+            <>
+              Vá na pasta <strong className="text-foreground">Downloads</strong>, apague a pasta que você extraiu
+              (a que tinha o arquivo <code className="rounded bg-muted px-1">post-flow-tunnel-windows.exe</code>{" "}
+              dentro) e, se quiser, o arquivo <code className="rounded bg-muted px-1">.zip</code> original também.
+            </>
+          ) : (
+            <>
+              Vá na pasta <strong className="text-foreground">Downloads</strong>, clique com o botão direito no
+              arquivo <code className="rounded bg-muted px-1">post-flow-tunnel-mac</code> e escolha{" "}
+              <strong className="text-foreground">"Mover para o Lixo"</strong>.
+            </>
+          )}
+        </StepCard>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -160,6 +233,7 @@ function ConnectedStatus({ tunnel, onChanged }: { tunnel: ClientTunnel; onChange
 export function ClientTunnelPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const [data, setData] = useState<ClientTunnelResponse | null>(null)
+  const [selectedOs, setSelectedOs] = useState<Os | null>(null)
 
   async function load() {
     const res = await api.get<ClientTunnelResponse>("/api/client/tunnel")
@@ -201,16 +275,19 @@ export function ClientTunnelPage() {
             <CardContent className="flex flex-col gap-2 py-4 text-sm">
               <p className="font-semibold">Não se preocupe se você nunca instalou um programa assim antes.</p>
               <p className="text-muted-foreground">
-                O passo a passo abaixo explica cada clique. Escolha o sistema do SEU computador (Windows ou Mac) e
-                siga só aquela parte. Se travar em algum passo, é só voltar aqui depois — nada quebra, e dá pra tentar
-                de novo quantas vezes precisar.
+                O passo a passo explica cada clique. Se travar em algum passo, é só voltar aqui depois — nada quebra,
+                e dá pra tentar de novo quantas vezes precisar.
               </p>
             </CardContent>
           </Card>
 
+          {!selectedOs && <OsPicker onSelect={setSelectedOs} />}
+
+          {selectedOs === "windows" && <BackToOsPicker onClick={() => setSelectedOs(null)} />}
+          {selectedOs === "windows" && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">💻 Se o seu computador é Windows</CardTitle>
+              <CardTitle className="text-base">💻 Instalando no Windows</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
               <StepCard number={1} title="Baixe o programa">
@@ -262,10 +339,13 @@ export function ClientTunnelPage() {
               </StepCard>
             </CardContent>
           </Card>
+          )}
 
+          {selectedOs === "mac" && <BackToOsPicker onClick={() => setSelectedOs(null)} />}
+          {selectedOs === "mac" && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">🍎 Se o seu computador é Mac</CardTitle>
+              <CardTitle className="text-base">🍎 Instalando no Mac</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
               <StepCard number={1} title="Baixe o programa">
@@ -311,25 +391,32 @@ export function ClientTunnelPage() {
               </StepCard>
             </CardContent>
           </Card>
+          )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Conectar</CardTitle>
-              <CardDescription>Cole aqui o código de 6 caracteres que apareceu no programa.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <PairingForm onPaired={load} />
-            </CardContent>
-          </Card>
+          {selectedOs && (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Conectar</CardTitle>
+                  <CardDescription>Cole aqui o código de 6 caracteres que apareceu no programa.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PairingForm onPaired={load} />
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardContent className="py-4 text-sm text-muted-foreground">
-              <strong className="text-foreground">Uma coisa importante:</strong> pra isso funcionar, seu computador
-              precisa estar ligado e conectado à internet. Se ele desligar, hibernar ou perder a internet, não tem
-              problema nenhum — os downloads simplesmente voltam a usar a conexão de reserva até seu computador
-              voltar a ficar disponível.
-            </CardContent>
-          </Card>
+              <Card>
+                <CardContent className="py-4 text-sm text-muted-foreground">
+                  <strong className="text-foreground">Uma coisa importante:</strong> pra isso funcionar, seu
+                  computador precisa estar ligado e conectado à internet. Se ele desligar, hibernar ou perder a
+                  internet, não tem problema nenhum — os downloads simplesmente voltam a usar a conexão de reserva
+                  até seu computador voltar a ficar disponível.
+                </CardContent>
+              </Card>
+
+              <UninstallGuide os={selectedOs} />
+            </>
+          )}
         </>
       )}
     </DashboardLayout>
