@@ -20,6 +20,5 @@ X11Forwarding no
 AllowAgentForwarding no
 PermitTunnel no
 PrintMotd no
-PrintLastLog no
 
 Subsystem sftp internal-sftp

@@ -67,7 +67,9 @@ async function testTunnel(tunnel) {
 // Sob demanda - 1 tunel especifico (botao "Testar conexao" no painel).
 async function runOne(tunnelId) {
   const tunnels = await downloadTunnelsRepository.listAll();
-  const tunnel = tunnels.find((t) => t.id === tunnelId);
+  // pg devolve BIGINT como string - comparar com Number() dos dois lados
+  // evita o mesmo bug de comparacao ja visto com outros ids BIGINT no projeto.
+  const tunnel = tunnels.find((t) => Number(t.id) === Number(tunnelId));
   if (!tunnel) throw new Error(`Tunel #${tunnelId} nao encontrado.`);
   return testTunnel(tunnel);
 }
