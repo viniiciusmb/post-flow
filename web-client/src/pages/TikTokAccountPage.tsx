@@ -36,32 +36,48 @@ function formatCount(n: number | null | undefined) {
 function PauseQueueBar({ accountId }: { accountId: number }) {
   const [paused, setPaused] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setPaused(null)
-    api.get<PostingScheduleResponse>(`/api/client/tiktok-accounts/${accountId}/schedule`).then((data) => setPaused(data.paused))
+    setError(null)
+    api
+      .get<PostingScheduleResponse>(`/api/client/tiktok-accounts/${accountId}/schedule`)
+      .then((data) => setPaused(data.paused))
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Não foi possível carregar."))
   }, [accountId])
 
-  async function toggle() {
-    if (paused === null) return
-    const next = !paused
-    if (
-      next &&
-      !confirm("Pausar a fila de postagem dessa conta? Nenhum corte novo vai ser enviado ao TikTok até você retomar.")
-    )
-      return
+  async function setPausedOnServer(next: boolean) {
     setSaving(true)
+    setError(null)
     try {
       const updated = await api.put<PostingScheduleResponse>(`/api/client/tiktok-accounts/${accountId}/queue-pause`, {
         paused: next,
       })
       setPaused(updated.paused)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível salvar. Tente de novo.")
     } finally {
       setSaving(false)
     }
   }
 
-  if (paused === null) return <Skeleton className="h-16" />
+  // Sem popup nativo (dava problema em alguns navegadores/apps): primeiro
+  // clique em "Pausar fila" só arma a confirmação (o botão muda de texto e
+  // cor por alguns segundos), segundo clique dentro da janela pausa de
+  // verdade. Retomar não precisa dessa confirmação — é reversível na hora.
+  function handlePauseClick() {
+    if (!confirming) {
+      setConfirming(true)
+      setTimeout(() => setConfirming(false), 4000)
+      return
+    }
+    setConfirming(false)
+    setPausedOnServer(true)
+  }
+
+  if (paused === null && !error) return <Skeleton className="h-16" />
 
   return (
     <div
@@ -75,14 +91,27 @@ function PauseQueueBar({ accountId }: { accountId: number }) {
           <p className="font-medium">{paused ? "Fila de postagem pausada" : "Fila de postagem ativa"}</p>
           <p className="text-xs text-muted-foreground">
             {paused
-              ? "Nenhum corte novo sai pro TikTok até você retomar."
+              ? "Nenhum corte novo sai pro TikTok até você retomar a postagem automática."
               : "Use isso se algo der errado e os cortes começarem a sair rápido demais ou fora do esperado."}
           </p>
+          {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
         </div>
       </div>
-      <Button size="sm" variant={paused ? "default" : "destructive"} onClick={toggle} disabled={saving} className="shrink-0">
-        {saving ? "..." : paused ? "Retomar fila" : "Pausar fila"}
-      </Button>
+      {paused ? (
+        <Button size="sm" variant="default" onClick={() => setPausedOnServer(false)} disabled={saving} className="shrink-0">
+          {saving ? "Retomando..." : "Retomar postagem automática"}
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          variant={confirming ? "destructive" : "outline"}
+          onClick={handlePauseClick}
+          disabled={saving}
+          className="shrink-0"
+        >
+          {saving ? "Pausando..." : confirming ? "Confirmar pausa da fila?" : "Pausar fila"}
+        </Button>
+      )}
     </div>
   )
 }
@@ -274,6 +303,10 @@ function QueueCard({ accountId }: { accountId: number }) {
   const [drafts, setDrafts] = useState<Record<number, string>>({})
   const [fixing, setFixing] = useState(false)
   const [fixedFlash, setFixedFlash] = useState<string | null>(null)
+  const [fixError, setFixError] = useState<string | null>(null)
+  const [confirmingSkipId, setConfirmingSkipId] = useState<number | null>(null)
+  const [skippingId, setSkippingId] = useState<number | null>(null)
+  const [skipError, setSkipError] = useState<string | null>(null)
 
   async function load() {
     const data = await api.get<{ postings: PostingQueueItem[] }>(`/api/client/postings/queue?accountId=${accountId}`)
@@ -292,10 +325,31 @@ function QueueCard({ accountId }: { accountId: number }) {
     await load()
   }
 
-  async function skip(id: number) {
-    if (!confirm("Não postar este corte? Ele sai da fila de espera.")) return
-    await api.post(`/api/client/postings/${id}/skip`, {})
-    await load()
+  // Sem popup nativo (mesmo padrão já usado pra exclusão em lote de vídeos -
+  // deu problema antes com confirm() nativo em alguns navegadores/apps):
+  // primeiro clique só arma a confirmação, segundo clique dentro da janela
+  // executa de verdade.
+  function handleSkipClick(id: number) {
+    if (confirmingSkipId !== id) {
+      setConfirmingSkipId(id)
+      setTimeout(() => setConfirmingSkipId((cur) => (cur === id ? null : cur)), 4000)
+      return
+    }
+    setConfirmingSkipId(null)
+    doSkip(id)
+  }
+
+  async function doSkip(id: number) {
+    setSkippingId(id)
+    setSkipError(null)
+    try {
+      await api.post(`/api/client/postings/${id}/skip`, {})
+      await load()
+    } catch (err) {
+      setSkipError(err instanceof ApiError ? err.message : "Não foi possível remover esse corte da fila.")
+    } finally {
+      setSkippingId(null)
+    }
   }
 
   // Recalcula os horários de toda a fila do zero, preenchendo os buracos
@@ -304,10 +358,13 @@ function QueueCard({ accountId }: { accountId: number }) {
   async function fixSchedule() {
     setFixing(true)
     setFixedFlash(null)
+    setFixError(null)
     try {
       const result = await api.post<{ updated: number }>(`/api/client/tiktok-accounts/${accountId}/fix-schedule`, {})
       setFixedFlash(`${result.updated} horário(s) recalculado(s).`)
       await load()
+    } catch (err) {
+      setFixError(err instanceof ApiError ? err.message : "Não foi possível corrigir os horários. Tente de novo.")
     } finally {
       setFixing(false)
     }
@@ -353,18 +410,30 @@ function QueueCard({ accountId }: { accountId: number }) {
                     </Button>
                   </div>
                 </div>
-                <Button size="sm" variant="ghost" onClick={() => skip(item.id)} className="shrink-0">
-                  Não postar
+                <Button
+                  size="sm"
+                  variant={confirmingSkipId === item.id ? "destructive" : "ghost"}
+                  onClick={() => handleSkipClick(item.id)}
+                  disabled={skippingId === item.id}
+                  className="shrink-0"
+                >
+                  {skippingId === item.id
+                    ? "Removendo..."
+                    : confirmingSkipId === item.id
+                      ? "Confirmar?"
+                      : "Não postar"}
                 </Button>
               </div>
             ))}
           </div>
         )}
+        {skipError && <p className="mt-2 text-xs text-destructive">{skipError}</p>}
         <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
           <Button size="xs" variant="ghost" className="text-muted-foreground" onClick={fixSchedule} disabled={fixing}>
             {fixing ? "Corrigindo..." : "Corrigir horários de posts"}
           </Button>
           {fixedFlash && <span className="text-xs text-muted-foreground">{fixedFlash}</span>}
+          {fixError && <span className="text-xs text-destructive">{fixError}</span>}
         </div>
       </CardContent>
     </Card>
