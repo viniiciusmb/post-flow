@@ -197,38 +197,117 @@ export function ClientTunnelPage() {
         <ConnectedStatus tunnel={data.tunnel} onChanged={load} />
       ) : (
         <>
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="flex flex-col gap-2 py-4 text-sm">
+              <p className="font-semibold">Não se preocupe se você nunca instalou um programa assim antes.</p>
+              <p className="text-muted-foreground">
+                O passo a passo abaixo explica cada clique. Escolha o sistema do SEU computador (Windows ou Mac) e
+                siga só aquela parte. Se travar em algum passo, é só voltar aqui depois — nada quebra, e dá pra tentar
+                de novo quantas vezes precisar.
+              </p>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Passo a passo</CardTitle>
+              <CardTitle className="text-base">💻 Se o seu computador é Windows</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
-              <StepCard number={1} title="Baixe o programa pro seu computador">
-                <div className="flex flex-wrap gap-2">
-                  <a href="/downloads/post-flow-tunnel-windows.zip" download>
+              <StepCard number={1} title="Baixe o programa">
+                <div className="flex flex-col gap-2">
+                  <a href="/downloads/post-flow-tunnel-windows.zip" download className="w-fit">
                     <Button size="sm" variant="outline" className="gap-2">
                       <IconDownload className="size-4" />
-                      Windows
+                      Baixar pra Windows
                     </Button>
                   </a>
-                  <a href="/downloads/post-flow-tunnel-mac" download>
-                    <Button size="sm" variant="outline" className="gap-2">
-                      <IconDownload className="size-4" />
-                      Mac
-                    </Button>
-                  </a>
+                  <p>
+                    O arquivo baixado normalmente vai pra uma pasta chamada <strong className="text-foreground">Downloads</strong> no
+                    seu computador. Se não souber onde encontrar, digite "Downloads" na busca do Windows (o ícone de
+                    lupa, geralmente perto do botão Iniciar) e abra a pasta que aparecer.
+                  </p>
                 </div>
               </StepCard>
-              <StepCard number={2} title="Abra o programa">
-                No Windows, extraia o arquivo baixado (botão direito → "Extrair tudo") e abra o programa dentro da
-                pasta extraída. Se aparecer um aviso de "aplicativo desconhecido", clique em "Mais informações" →
-                "Executar assim mesmo" (é normal, o programa ainda não tem uma assinatura digital paga). No Mac, se o
-                sistema bloquear na primeira vez, vá em Ajustes → Privacidade e Segurança e permita a abertura.
+              <StepCard number={2} title='"Extraia" o arquivo baixado'>
+                O arquivo baixado tem uma "pasta compactada" dentro dele (é assim que ele fica menor pra baixar mais
+                rápido) — antes de usar, precisa abrir essa compactação. Clique com o{" "}
+                <strong className="text-foreground">botão direito do mouse</strong> em cima do arquivo baixado (o nome
+                é parecido com <code className="rounded bg-muted px-1">post-flow-tunnel-windows.zip</code>) e escolha a
+                opção <strong className="text-foreground">"Extrair tudo..."</strong>. Vai abrir uma janela pequena — só
+                clique no botão <strong className="text-foreground">"Extrair"</strong> dela, sem mudar nada.
               </StepCard>
-              <StepCard number={3} title="Copie o código que aparece no programa">
-                Um ícone novo vai aparecer na barra de tarefas/menu com um código curto de 6 letras/números.
+              <StepCard number={3} title="Abra a pasta nova e execute o programa">
+                Depois de extrair, vai aparecer uma pasta nova com o mesmo nome. Abra ela (duplo clique) e procure
+                dentro um arquivo chamado{" "}
+                <code className="rounded bg-muted px-1">post-flow-tunnel-windows.exe</code>. Dê um{" "}
+                <strong className="text-foreground">duplo clique</strong> nesse arquivo.
               </StepCard>
-              <StepCard number={4} title="Cole o código aqui embaixo">
-                Assim que conectar, essa página atualiza sozinha.
+              <StepCard number={4} title='Se aparecer uma tela azul de aviso, não é vírus'>
+                É bem comum o Windows mostrar uma tela dizendo{" "}
+                <strong className="text-foreground">"O Windows protegeu o computador"</strong>. Isso acontece com
+                qualquer programa novo que ainda não pagou por um "certificado" — não significa que tem vírus. Pra
+                continuar: clique no texto pequeno{" "}
+                <strong className="text-foreground">"Mais informações"</strong>, e depois no botão que vai aparecer
+                escrito <strong className="text-foreground">"Executar assim mesmo"</strong>.
+              </StepCard>
+              <StepCard number={5} title="Procure o ícone perto do relógio">
+                O programa não abre uma janela — ele fica rodando "escondido" perto do relógio, no canto inferior
+                direito da tela. Se não ver um ícone novo ali, clique na setinha{" "}
+                <strong className="text-foreground">"^"</strong> pra mostrar os ícones escondidos. Vai ter um círculo
+                colorido novo — esse é o programa.
+              </StepCard>
+              <StepCard number={6} title="Veja o código">
+                Clique nesse ícone. Vai aparecer um código curto de 6 letras/números — é esse código que você vai
+                colar no campo lá embaixo desta página.
+              </StepCard>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">🍎 Se o seu computador é Mac</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-5">
+              <StepCard number={1} title="Baixe o programa">
+                <div className="flex flex-col gap-2">
+                  <a href="/downloads/post-flow-tunnel-mac" download className="w-fit">
+                    <Button size="sm" variant="outline" className="gap-2">
+                      <IconDownload className="size-4" />
+                      Baixar pra Mac
+                    </Button>
+                  </a>
+                  <p>
+                    O arquivo baixado normalmente vai pra pasta{" "}
+                    <strong className="text-foreground">Downloads</strong> — o próprio navegador costuma mostrar um
+                    aviso "Download concluído" com um atalho pra ele.
+                  </p>
+                </div>
+              </StepCard>
+              <StepCard number={2} title="Abra o arquivo baixado">
+                Dê um <strong className="text-foreground">duplo clique</strong> no arquivo que você baixou (o nome é
+                parecido com <code className="rounded bg-muted px-1">post-flow-tunnel-mac</code>).
+              </StepCard>
+              <StepCard number={3} title='Se o Mac bloquear, não é vírus'>
+                É bem comum aparecer uma mensagem tipo{" "}
+                <strong className="text-foreground">"não é possível abrir porque é de um desenvolvedor não
+                identificado"</strong>. Isso acontece com qualquer programa novo que ainda não pagou pela
+                "identificação" da Apple — não significa que tem vírus. Pra resolver: clique no ícone da maçã (canto
+                superior esquerdo) → <strong className="text-foreground">Ajustes do Sistema</strong> →{" "}
+                <strong className="text-foreground">Privacidade e Segurança</strong> → role a tela pra baixo até achar
+                uma frase mencionando o programa bloqueado → clique em{" "}
+                <strong className="text-foreground">"Abrir Assim Mesmo"</strong>.
+              </StepCard>
+              <StepCard number={4} title="Abra o arquivo de novo">
+                Volte na pasta Downloads e dê duplo clique no arquivo mais uma vez — agora ele deve abrir
+                normalmente.
+              </StepCard>
+              <StepCard number={5} title="Procure o ícone no topo da tela">
+                O programa não abre uma janela — ele fica rodando "escondido" na barra de menu, bem no topo da tela
+                (ao lado do relógio, Wi-Fi, etc). Vai ter um círculo colorido novo ali — esse é o programa.
+              </StepCard>
+              <StepCard number={6} title="Veja o código">
+                Clique nesse ícone. Vai aparecer um código curto de 6 letras/números — é esse código que você vai
+                colar no campo lá embaixo desta página.
               </StepCard>
             </CardContent>
           </Card>
@@ -236,9 +315,19 @@ export function ClientTunnelPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Conectar</CardTitle>
+              <CardDescription>Cole aqui o código de 6 caracteres que apareceu no programa.</CardDescription>
             </CardHeader>
             <CardContent>
               <PairingForm onPaired={load} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="py-4 text-sm text-muted-foreground">
+              <strong className="text-foreground">Uma coisa importante:</strong> pra isso funcionar, seu computador
+              precisa estar ligado e conectado à internet. Se ele desligar, hibernar ou perder a internet, não tem
+              problema nenhum — os downloads simplesmente voltam a usar a conexão de reserva até seu computador
+              voltar a ficar disponível.
             </CardContent>
           </Card>
         </>
