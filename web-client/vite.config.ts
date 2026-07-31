@@ -32,7 +32,6 @@ export default defineConfig({
         'admin-queue': path.resolve(__dirname, 'admin-queue.html'),
         'tiktok-account': path.resolve(__dirname, 'tiktok-account.html'),
         'admin-metrics': path.resolve(__dirname, 'admin-metrics.html'),
-        'admin-tailscale': path.resolve(__dirname, 'admin-tailscale.html'),
         tunnel: path.resolve(__dirname, 'tunnel.html'),
         bandwidth: path.resolve(__dirname, 'bandwidth.html'),
       },

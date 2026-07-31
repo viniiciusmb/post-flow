@@ -53,27 +53,20 @@ const config = {
     // Proxy residencial pago (ex: http://usuario:senha@host:porta) - resolve
     // de vez o bloqueio "Sign in to confirm you're not a bot" que a VPS toma
     // por ser IP de datacenter, independente de cookie/token. Usado como
-    // reserva quando o rele Tailscale (abaixo) nao esta disponivel.
+    // reserva quando o tunel SSH (abaixo) nao esta disponivel.
     proxyUrl: process.env.YTDLP_PROXY_URL || '',
-    // Rele Tailscale (SOCKS5, ex: socks5://postflow-tailscale:1080) - mesma
-    // ideia do proxy pago, mas de graca: sai pela internet de um aparelho
-    // que autorizou ser usado como saida. Feature pausada (2026-07-30,
-    // aguardando decisao de custo do plano pago do Tailscale por cliente
-    // convidado) - variavel existe mas nao esta configurada em producao.
+    // Rele SOCKS5 generico opcional (ex: um proxy externo qualquer) - so
+    // entra como candidato se essa variavel for configurada; hoje nao esta
+    // configurada em producao, o tunel SSH por cliente/founder (abaixo) e
+    // usado no lugar.
     tailscaleProxyUrl: process.env.YTDLP_TAILSCALE_PROXY_URL || '',
   },
 
   ytdlpPath: process.env.YTDLP_PATH || '/usr/local/bin/yt-dlp',
 
-  // Reservado pro rele Tailscale por cliente (docker/tailscale-relay/) -
-  // construido mas nao ligado a nada ainda, feature pausada (ver comentario
-  // acima) ate decisao de custo do plano pago do Tailscale.
-  tailscale: {
-    relayUrl: process.env.TAILSCALE_RELAY_URL || '',
-  },
-
-  // Tunel SSH reverso por cliente (docker/ssh-relay/) - substitui a ideia do
-  // Tailscale. relayControlUrl e interno (backend fala com o control-server
+  // Tunel SSH reverso por cliente (docker/ssh-relay/) - substitui a ideia
+  // (nunca implantada) de usar Tailscale por cliente. relayControlUrl e
+  // interno (backend fala com o control-server
   // do sidecar pra autorizar/revogar chaves); relaySocksHost e o hostname
   // Docker que o video-worker usa pra montar a URL do proxy SOCKS5
   // (socks5://<relaySocksHost>:<porta-do-tunel>); relayPublicHost/Port sao o

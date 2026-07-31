@@ -3,16 +3,6 @@
 const pool = require('../db/pool');
 const crypto = require('../lib/crypto');
 
-// Mantida so pra locais que ainda tratam "a conta" no singular (nenhum
-// fluxo de postagem deve mais usar essa - ver processVideoJob/driveDiscoveryJob).
-async function findActiveByClientId(clientUserId) {
-  const { rows } = await pool.query(
-    'SELECT * FROM tiktok_accounts WHERE client_user_id = $1 AND is_active = true ORDER BY connected_at ASC',
-    [clientUserId]
-  );
-  return rows[0] || null;
-}
-
 async function listActiveByClientId(clientUserId) {
   const { rows } = await pool.query(
     'SELECT * FROM tiktok_accounts WHERE client_user_id = $1 AND is_active = true ORDER BY connected_at ASC',
@@ -51,14 +41,6 @@ async function listReceivingGeneralContent() {
      WHERE is_active = true AND receives_general_content = true AND auto_post_enabled = true`
   );
   return rows;
-}
-
-async function setReceivesGeneralContent(id, receives) {
-  const { rows } = await pool.query(
-    'UPDATE tiktok_accounts SET receives_general_content = $2, updated_at = now() WHERE id = $1 RETURNING *',
-    [id, receives]
-  );
-  return rows[0] || null;
 }
 
 // Conecta uma conta TikTok pro cliente. Reconectar a MESMA conta (mesmo
@@ -181,12 +163,10 @@ async function saveStats(id, { followerCount, followingCount, likesCount, videoC
 
 module.exports = {
   findById,
-  findActiveByClientId,
   findActiveByIdAndClient,
   listActiveByClientId,
   listActive,
   listReceivingGeneralContent,
-  setReceivesGeneralContent,
   upsertForClient,
   deactivate,
   getValidAccessToken,

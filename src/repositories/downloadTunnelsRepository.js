@@ -68,20 +68,6 @@ async function completePairing(pairingCode, clientUserId) {
   return rows[0] || null;
 }
 
-async function createFounderTunnel({ publicKey, label }) {
-  const { rows: idRows } = await pool.query(
-    "SELECT nextval(pg_get_serial_sequence('download_tunnels', 'id')) AS id"
-  );
-  const id = Number(idRows[0].id);
-  const { rows } = await pool.query(
-    `INSERT INTO download_tunnels (id, owner_type, client_user_id, label, public_key, assigned_port)
-     VALUES ($1, 'founder', NULL, $2, $3, $4)
-     RETURNING *`,
-    [id, label || 'Founder', publicKey, PORT_BASE + id]
-  );
-  return rows[0];
-}
-
 async function markTestResult(id, { connected, result }) {
   const { rows } = await pool.query(
     `UPDATE download_tunnels
@@ -127,7 +113,6 @@ module.exports = {
   findByPairingCode,
   createPendingPairing,
   completePairing,
-  createFounderTunnel,
   markTestResult,
   listAll,
   countConnectedClients,

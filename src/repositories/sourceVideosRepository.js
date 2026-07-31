@@ -47,13 +47,6 @@ async function findByYoutubeVideoId(youtubeVideoId) {
   return rows[0] || null;
 }
 
-async function findNextDetected() {
-  const { rows } = await pool.query(
-    "SELECT * FROM source_videos WHERE status = 'detected' ORDER BY created_at ASC LIMIT 1"
-  );
-  return rows[0] || null;
-}
-
 async function findById(id) {
   const { rows } = await pool.query('SELECT * FROM source_videos WHERE id = $1', [id]);
   return rows[0] || null;
@@ -329,7 +322,6 @@ module.exports = {
   createManual,
   createUpload,
   findByYoutubeVideoId,
-  findNextDetected,
   findById,
   findByIdOwnedByClient,
   deleteByIdOwnedByClient,

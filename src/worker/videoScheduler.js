@@ -6,7 +6,6 @@ const videoErrorRetryJob = require('./jobs/videoErrorRetryJob');
 const tiktokPostingJob = require('./jobs/tiktokPostingJob');
 const postingCleanupJob = require('./jobs/postingCleanupJob');
 const driveExportJob = require('./jobs/driveExportJob');
-const tailscaleTestJob = require('./jobs/tailscaleTestJob');
 const tunnelTestJob = require('./jobs/tunnelTestJob');
 const logger = require('../lib/logger');
 
@@ -16,7 +15,6 @@ const QUEUE_VIDEO_ERROR_RETRY = 'video-error-retry';
 const QUEUE_TIKTOK_POSTING = 'tiktok-posting';
 const QUEUE_POSTING_CLEANUP = 'posting-cleanup';
 const QUEUE_DRIVE_EXPORT = 'drive-export';
-const QUEUE_TAILSCALE_TEST = 'tailscale-test';
 const QUEUE_TUNNEL_TEST_ONE = 'tunnel-test-one';
 const QUEUE_TUNNEL_TEST_ALL = 'tunnel-test-all';
 
@@ -27,7 +25,6 @@ async function start(boss) {
   await boss.createQueue(QUEUE_TIKTOK_POSTING);
   await boss.createQueue(QUEUE_POSTING_CLEANUP);
   await boss.createQueue(QUEUE_DRIVE_EXPORT);
-  await boss.createQueue(QUEUE_TAILSCALE_TEST);
   await boss.createQueue(QUEUE_TUNNEL_TEST_ONE);
   await boss.createQueue(QUEUE_TUNNEL_TEST_ALL);
 
@@ -72,12 +69,6 @@ async function start(boss) {
 
   await boss.work(QUEUE_DRIVE_EXPORT, async () => {
     await driveExportJob.run();
-  });
-
-  // Sem agendamento - so roda quando o admin clica "Testar conexao" na tela
-  // Tailscale.
-  await boss.work(QUEUE_TAILSCALE_TEST, async () => {
-    await tailscaleTestJob.run();
   });
 
   // Sem agendamento - so roda quando o usuario clica "Testar conexao" na

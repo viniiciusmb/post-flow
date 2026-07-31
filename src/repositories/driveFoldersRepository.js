@@ -7,11 +7,6 @@ async function listAll() {
   return rows;
 }
 
-async function findGeneralFolder() {
-  const { rows } = await pool.query("SELECT * FROM drive_folders WHERE type = 'general' LIMIT 1");
-  return rows[0] || null;
-}
-
 async function findByClientId(clientUserId) {
   const { rows } = await pool.query(
     "SELECT * FROM drive_folders WHERE type = 'client' AND client_user_id = $1",
@@ -90,7 +85,6 @@ async function listExportFolders() {
 
 module.exports = {
   listAll,
-  findGeneralFolder,
   findByClientId,
   upsertGeneralFolder,
   upsertClientFolder,

@@ -3,10 +3,6 @@
 const authService = require('../../services/authService');
 const { ROLES } = require('../../config/constants');
 
-function showLogin(req, res) {
-  res.render('auth/login', { title: 'Entrar', error: null });
-}
-
 async function login(req, res) {
   const { email, password } = req.body;
   const user = await authService.verifyLogin(email, password);
@@ -39,4 +35,4 @@ function logout(req, res) {
   req.session.destroy(() => res.redirect('/login'));
 }
 
-module.exports = { showLogin, login, showRegister, register, logout };
+module.exports = { login, showRegister, register, logout };

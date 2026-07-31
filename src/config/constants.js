@@ -13,14 +13,9 @@ const POSTING_STATUS = Object.freeze({
   ERROR: 'error',
 });
 
-const POST_MODE = Object.freeze({
-  DRAFT_INBOX: 'draft_inbox',
-  DIRECT_POST: 'direct_post',
-});
-
 const DRIVE_FOLDER_TYPE = Object.freeze({
   GENERAL: 'general',
   CLIENT: 'client',
 });
 
-module.exports = { ROLES, POSTING_STATUS, POST_MODE, DRIVE_FOLDER_TYPE };
+module.exports = { ROLES, POSTING_STATUS, DRIVE_FOLDER_TYPE };

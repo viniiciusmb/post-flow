@@ -1,9 +1,9 @@
 // Testa se um tunel SSH (founder ou de um cliente) esta funcionando de
 // verdade - busca o IP direto da VPS e o IP passando pelo proxy SOCKS5
 // daquele tunel especifico; se forem diferentes, o tunel esta saindo pela
-// internet de quem conectou (evidencia real, mesmo padrao ja usado e
-// testado no tailscaleTestJob.js). Roda periodicamente (todos os tuneis) e
-// tambem sob demanda (1 tunel so, quando o usuario clica "Testar conexao").
+// internet de quem conectou (evidencia real). Roda periodicamente (todos os
+// tuneis) e tambem sob demanda (1 tunel so, quando o usuario clica "Testar
+// conexao").
 'use strict';
 
 const https = require('https');
