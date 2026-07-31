@@ -35,40 +35,54 @@ function projectedTimestamp(hhmm, dayOffset, timezone) {
   return new Date(Date.now() + diffMinutes * 60000);
 }
 
-// Um slot calculado no passado (ja passou hoje, mas ainda nao foi
-// consumido porque o job so roda a cada ~10min) vira "agora" pra exibicao -
-// mostrar um horario que ja passou como "vai postar" seria confuso.
-function clampToFuture(date) {
+// Percorre os slots em sequencia a partir de "postedToday" e PULA (nao
+// atribui a ninguem) qualquer slot que ja passou - antes, cada slot vencido
+// virava "agora" individualmente (clampToFuture por item), entao varios
+// itens vencidos empilhavam todos no mesmo "agora" em vez de escorregar
+// pros proximos slots futuros da rotacao. Ex: horarios 08/12/16/20, agora
+// 16:28, 4 itens pendentes -> antes dava [agora,agora,agora,20:00]; agora
+// da certo: [20:00 hoje, 08:00 amanha, 12:00 amanha, 16:00 amanha].
+function nextFutureSlots({ count, startIndex, slotForIndex }) {
+  const results = [];
   const now = new Date();
-  return date < now ? now : date;
+  let globalIndex = startIndex;
+  while (results.length < count) {
+    const t = slotForIndex(globalIndex);
+    globalIndex++;
+    if (t < now) continue;
+    results.push(t);
+  }
+  return results;
 }
 
 function projectManual({ manualTimes, videosPerDay, timezone, postedToday, count }) {
   const sorted = [...manualTimes].sort();
   const slotsPerDay = Math.max(1, Math.min(sorted.length, videosPerDay));
-  const results = [];
-  for (let i = 0; i < count; i++) {
-    const globalIndex = postedToday + i;
-    const dayOffset = Math.floor(globalIndex / slotsPerDay);
-    const slotWithinDay = globalIndex % slotsPerDay;
-    results.push(clampToFuture(projectedTimestamp(sorted[slotWithinDay], dayOffset, timezone)));
-  }
-  return results;
+  return nextFutureSlots({
+    count,
+    startIndex: postedToday,
+    slotForIndex: (globalIndex) => {
+      const dayOffset = Math.floor(globalIndex / slotsPerDay);
+      const slotWithinDay = globalIndex % slotsPerDay;
+      return projectedTimestamp(sorted[slotWithinDay], dayOffset, timezone);
+    },
+  });
 }
 
 function projectAuto({ videosPerDay, timezone, postedToday, count }) {
   const windowMinutes = (AUTO_WINDOW_END_HOUR - AUTO_WINDOW_START_HOUR) * 60;
   const minGap = Math.max(20, Math.floor(windowMinutes / videosPerDay));
-  const results = [];
-  for (let i = 0; i < count; i++) {
-    const globalIndex = postedToday + i;
-    const dayOffset = Math.floor(globalIndex / videosPerDay);
-    const slotWithinDay = globalIndex % videosPerDay;
-    const minutesFromStart = slotWithinDay * minGap;
-    const hhmm = `${String(AUTO_WINDOW_START_HOUR + Math.floor(minutesFromStart / 60)).padStart(2, '0')}:${String(minutesFromStart % 60).padStart(2, '0')}`;
-    results.push(clampToFuture(projectedTimestamp(hhmm, dayOffset, timezone)));
-  }
-  return results;
+  return nextFutureSlots({
+    count,
+    startIndex: postedToday,
+    slotForIndex: (globalIndex) => {
+      const dayOffset = Math.floor(globalIndex / videosPerDay);
+      const slotWithinDay = globalIndex % videosPerDay;
+      const minutesFromStart = slotWithinDay * minGap;
+      const hhmm = `${String(AUTO_WINDOW_START_HOUR + Math.floor(minutesFromStart / 60)).padStart(2, '0')}:${String(minutesFromStart % 60).padStart(2, '0')}`;
+      return projectedTimestamp(hhmm, dayOffset, timezone);
+    },
+  });
 }
 
 // Devolve um array de Date, um por item da fila (na mesma ordem/FIFO usada
