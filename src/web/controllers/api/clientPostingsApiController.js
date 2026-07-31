@@ -1,35 +1,29 @@
 'use strict';
 
 const postingsRepository = require('../../../repositories/postingsRepository');
-const postingScheduleSettingsRepository = require('../../../repositories/postingScheduleSettingsRepository');
-const { projectQueueTimes } = require('../../../lib/postingSchedule');
 
 function thumbnailUrl(row) {
   return row.thumbnail_path ? `/api/client/source-videos/clips/${row.clip_id}/thumbnail` : null;
+}
+
+// scheduled_for e gravado uma unica vez quando a postagem entra na fila
+// (ver postingsRepository.createIfNotExists) e so muda de novo se alguem
+// pedir "Corrigir horarios" - aqui so ajusta a EXIBICAO: um horario que ja
+// passou (fila atrasada) mostra "agora" em vez de uma hora no passado,
+// sem mexer no valor gravado.
+function displayScheduledFor(scheduledFor) {
+  if (!scheduledFor) return null;
+  const date = new Date(scheduledFor);
+  const now = new Date();
+  return (date < now ? now : date).toISOString();
 }
 
 async function listQueue(req, res) {
   const accountId = req.query.accountId ? Number(req.query.accountId) : null;
   const rows = await postingsRepository.listQueueForClient(req.session.user.id, accountId);
 
-  // So da pra prever "vai postar quando" olhando a agenda de UMA conta -
-  // sem accountId (fila combinada de varias contas) a estimativa fica null.
-  let scheduledTimes = [];
-  if (accountId) {
-    const settings = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(accountId);
-    const postedToday = await postingsRepository.countTodayForAccount(accountId, settings.timezone);
-    scheduledTimes = projectQueueTimes({
-      mode: settings.mode,
-      manualTimes: settings.manual_times,
-      videosPerDay: settings.videos_per_day,
-      timezone: settings.timezone,
-      postedToday: Number(postedToday),
-      count: rows.length,
-    });
-  }
-
   res.json({
-    postings: rows.map((p, i) => ({
+    postings: rows.map((p) => ({
       id: p.id,
       clipTitle: p.clip_title,
       caption: p.caption ?? p.clip_description,
@@ -37,7 +31,7 @@ async function listQueue(req, res) {
       startSeconds: Number(p.start_seconds),
       endSeconds: Number(p.end_seconds),
       createdAt: p.created_at,
-      scheduledFor: scheduledTimes[i] ? scheduledTimes[i].toISOString() : null,
+      scheduledFor: displayScheduledFor(p.scheduled_for),
     })),
   });
 }
@@ -52,6 +46,20 @@ async function listPosted(req, res) {
       thumbnailUrl: thumbnailUrl(p),
       postedAt: p.posted_at,
       tiktokPostId: p.tiktok_post_id,
+    })),
+  });
+}
+
+async function listErrors(req, res) {
+  const accountId = req.query.accountId ? Number(req.query.accountId) : null;
+  const rows = await postingsRepository.listErrorForClient(req.session.user.id, accountId);
+  res.json({
+    postings: rows.map((p) => ({
+      id: p.id,
+      clipTitle: p.clip_title,
+      thumbnailUrl: thumbnailUrl(p),
+      errorMessage: p.error_message,
+      updatedAt: p.updated_at,
     })),
   });
 }
@@ -73,4 +81,4 @@ async function skip(req, res) {
   res.status(204).end();
 }
 
-module.exports = { listQueue, listPosted, updateCaption, skip };
+module.exports = { listQueue, listPosted, listErrors, updateCaption, skip };

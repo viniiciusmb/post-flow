@@ -48,6 +48,8 @@ function toMinutesOfDay(hhmm) {
 
 async function maybePublishNext(account) {
   const settings = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(account.id);
+  if (settings.paused) return;
+
   const postedToday = await postingsRepository.countTodayForAccount(account.id, settings.timezone);
   if (postedToday >= settings.videos_per_day) return;
 

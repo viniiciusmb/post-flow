@@ -13,6 +13,7 @@ router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 
 router.get('/queue', asyncHandler(controller.listQueue));
 router.get('/posted', asyncHandler(controller.listPosted));
+router.get('/errors', asyncHandler(controller.listErrors));
 router.put('/:id/caption', asyncHandler(controller.updateCaption));
 router.post('/:id/skip', asyncHandler(controller.skip));
 

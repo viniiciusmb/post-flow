@@ -65,4 +65,23 @@ async function listWithAutoDelete() {
   return rows;
 }
 
-module.exports = { findByTiktokAccountId, findOrCreateByTiktokAccountId, upsert, listWithAutoDelete, DEFAULTS };
+// Botao de emergencia: pausa so a publicacao de novos itens dessa conta (o
+// job de posting confere isso antes de tudo) - nao afeta o que ja estava
+// em 'processing', so impede novos disparos.
+async function setPaused(tiktokAccountId, paused) {
+  const settings = await findOrCreateByTiktokAccountId(tiktokAccountId);
+  const { rows } = await pool.query(
+    'UPDATE posting_schedule_settings SET paused = $2, updated_at = now() WHERE tiktok_account_id = $1 RETURNING *',
+    [tiktokAccountId, paused]
+  );
+  return rows[0] || settings;
+}
+
+module.exports = {
+  findByTiktokAccountId,
+  findOrCreateByTiktokAccountId,
+  upsert,
+  setPaused,
+  listWithAutoDelete,
+  DEFAULTS,
+};

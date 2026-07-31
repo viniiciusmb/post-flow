@@ -165,6 +165,7 @@ export interface PostingScheduleResponse {
   manualTimes: string[]
   timezone: string
   autoDeleteAfterHours: number | null
+  paused: boolean
   options: { retentionPresetsHours: number[] }
 }
 
@@ -185,6 +186,14 @@ export interface PostedItem {
   thumbnailUrl: string | null
   postedAt: string
   tiktokPostId: string | null
+}
+
+export interface ErrorPostingItem {
+  id: number
+  clipTitle: string
+  thumbnailUrl: string | null
+  errorMessage: string | null
+  updatedAt: string
 }
 
 export interface ClientDashboardResponse {

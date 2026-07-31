@@ -2,6 +2,7 @@
 
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
 const postingScheduleSettingsRepository = require('../../../repositories/postingScheduleSettingsRepository');
+const postingsRepository = require('../../../repositories/postingsRepository');
 const tiktokService = require('../../../services/tiktokService');
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -75,6 +76,7 @@ function scheduleToApi(settings) {
     manualTimes: settings.manual_times,
     timezone: settings.timezone,
     autoDeleteAfterHours: settings.auto_delete_after_hours,
+    paused: settings.paused,
     options: { retentionPresetsHours: RETENTION_PRESETS },
   };
 }
@@ -136,4 +138,25 @@ async function setSchedule(req, res) {
   res.json(scheduleToApi(updated));
 }
 
-module.exports = { list, deactivate, setAutoPost, getSchedule, setSchedule };
+// Botao de emergencia: pausa so a fila dessa conta (o job para de disparar
+// novos posts, mas nao mexe no que ja esta em processamento).
+async function setQueuePaused(req, res) {
+  const account = await findOwned(req);
+  if (!account) return res.status(404).json({ error: 'Conta nao encontrada.' });
+
+  const updated = await postingScheduleSettingsRepository.setPaused(account.id, Boolean(req.body.paused));
+  res.json(scheduleToApi(updated));
+}
+
+// Botao "Corrigir horarios de posts": recalcula scheduled_for de toda a
+// fila pendente dessa conta do zero, preenchendo os buracos deixados por
+// cortes pulados/com erro. So roda quando pedido de proposito.
+async function fixSchedule(req, res) {
+  const account = await findOwned(req);
+  if (!account) return res.status(404).json({ error: 'Conta nao encontrada.' });
+
+  const count = await postingsRepository.reflowScheduledFor(account.id);
+  res.json({ updated: count });
+}
+
+module.exports = { list, deactivate, setAutoPost, getSchedule, setSchedule, setQueuePaused, fixSchedule };

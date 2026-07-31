@@ -16,5 +16,7 @@ router.post('/:id/deactivate', asyncHandler(controller.deactivate));
 router.put('/:id/auto-post', asyncHandler(controller.setAutoPost));
 router.get('/:id/schedule', asyncHandler(controller.getSchedule));
 router.put('/:id/schedule', asyncHandler(controller.setSchedule));
+router.put('/:id/queue-pause', asyncHandler(controller.setQueuePaused));
+router.post('/:id/fix-schedule', asyncHandler(controller.fixSchedule));
 
 module.exports = router;

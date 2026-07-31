@@ -1,18 +1,42 @@
 'use strict';
 
 const pool = require('../db/pool');
+const postingScheduleSettingsRepository = require('./postingScheduleSettingsRepository');
+const { projectQueueTimes } = require('../lib/postingSchedule');
+
+// Calcula UMA VEZ o horario previsto pra postagem que esta entrando na fila
+// agora, encaixando depois de tudo que ja saiu hoje + tudo que ja esta
+// esperando (mesma logica de projecao usada na tela, mas so pro proximo
+// slot livre). Fica gravado em postings.scheduled_for e nunca mais muda
+// sozinho - ver reflowScheduledFor() pro unico jeito de recalcular todo
+// mundo de proposito (botao "Corrigir horarios").
+async function computeNextScheduledFor(tiktokAccountId) {
+  const settings = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(tiktokAccountId);
+  const postedToday = await countTodayForAccount(tiktokAccountId, settings.timezone);
+  const pendingCount = await countPendingForAccount(tiktokAccountId);
+  const [scheduledFor] = projectQueueTimes({
+    mode: settings.mode,
+    manualTimes: settings.manual_times,
+    videosPerDay: settings.videos_per_day,
+    timezone: settings.timezone,
+    postedToday: Number(postedToday) + pendingCount,
+    count: 1,
+  });
+  return scheduledFor;
+}
 
 // Usa ON CONFLICT DO NOTHING: a restricao UNIQUE(video_id, tiktok_account_id)
 // garante que o mesmo video nunca gera duas postagens para a mesma conta.
 // caption comeca igual a descricao do corte (quando ha uma), mas depois e
 // editavel a parte na fila sem afetar o corte original.
 async function createIfNotExists({ videoId, tiktokAccountId, caption = null }) {
+  const scheduledFor = await computeNextScheduledFor(tiktokAccountId);
   const { rows } = await pool.query(
-    `INSERT INTO postings (video_id, tiktok_account_id, caption)
-     VALUES ($1, $2, $3)
+    `INSERT INTO postings (video_id, tiktok_account_id, caption, scheduled_for)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT (video_id, tiktok_account_id) DO NOTHING
      RETURNING *`,
-    [videoId, tiktokAccountId, caption]
+    [videoId, tiktokAccountId, caption, scheduledFor]
   );
   return rows[0] || null;
 }
@@ -138,6 +162,45 @@ async function mostRecentPostedAt(tiktokAccountId) {
   return rows[0].last_posted_at;
 }
 
+// Quantos itens estao esperando na fila agora (independente de cliente) -
+// usado pra encaixar o proximo slot livre ao criar uma postagem nova.
+async function countPendingForAccount(tiktokAccountId) {
+  const { rows } = await pool.query(
+    "SELECT count(*)::int AS count FROM postings WHERE tiktok_account_id = $1 AND status = 'pending'",
+    [tiktokAccountId]
+  );
+  return rows[0].count;
+}
+
+// Recalcula scheduled_for de TODA a fila pendente dessa conta, do zero, na
+// ordem de chegada - e o unico jeito de "preencher os buracos" deixados por
+// cortes que foram pulados/deram erro. So roda quando alguem pede
+// explicitamente (botao "Corrigir horarios de posts"), nunca sozinho -
+// senao volta o bug de um "Nao postar" empurrar todo mundo pra frente.
+async function reflowScheduledFor(tiktokAccountId) {
+  const settings = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(tiktokAccountId);
+  const postedToday = await countTodayForAccount(tiktokAccountId, settings.timezone);
+  const { rows: pending } = await pool.query(
+    "SELECT id FROM postings WHERE tiktok_account_id = $1 AND status = 'pending' ORDER BY created_at ASC",
+    [tiktokAccountId]
+  );
+  const scheduledTimes = projectQueueTimes({
+    mode: settings.mode,
+    manualTimes: settings.manual_times,
+    videosPerDay: settings.videos_per_day,
+    timezone: settings.timezone,
+    postedToday: Number(postedToday),
+    count: pending.length,
+  });
+  for (let i = 0; i < pending.length; i++) {
+    await pool.query('UPDATE postings SET scheduled_for = $2, updated_at = now() WHERE id = $1', [
+      pending[i].id,
+      scheduledTimes[i],
+    ]);
+  }
+  return pending.length;
+}
+
 // Postagens em 'processing' ha um tempo - o job de publicacao revarre essas
 // pra fechar o status quando a TikTok ja tiver terminado de processar.
 async function listStaleProcessing() {
@@ -187,6 +250,24 @@ async function listPostedForClient(clientUserId, tiktokAccountId = null) {
      WHERE ta.client_user_id = $1 AND p.status = 'posted'
        AND ($2::bigint IS NULL OR p.tiktok_account_id = $2)
      ORDER BY p.posted_at DESC
+     LIMIT 100`,
+    [clientUserId, tiktokAccountId]
+  );
+  return rows;
+}
+
+// Postagens que a TikTok recusou/falharam de vez - ficavam invisiveis pro
+// cliente antes (so existiam no banco), sem nenhum jeito de saber que um
+// corte nao saiu. Mostrado numa aba "Erro" ao lado de "Postados".
+async function listErrorForClient(clientUserId, tiktokAccountId = null) {
+  const { rows } = await pool.query(
+    `SELECT p.*, c.title AS clip_title, c.thumbnail_path, c.id AS clip_id
+     FROM postings p
+     ${CLIP_FILE_JOIN}
+     JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
+     WHERE ta.client_user_id = $1 AND p.status = 'error'
+       AND ($2::bigint IS NULL OR p.tiktok_account_id = $2)
+     ORDER BY p.updated_at DESC
      LIMIT 100`,
     [clientUserId, tiktokAccountId]
   );
@@ -243,11 +324,14 @@ module.exports = {
   updateStatus,
   findOldestPendingForAccount,
   countTodayForAccount,
+  countPendingForAccount,
   mostRecentPostedAt,
+  reflowScheduledFor,
   listStaleProcessing,
   listPostedOlderThan,
   listQueueForClient,
   listPostedForClient,
+  listErrorForClient,
   countPendingForClient,
   findByIdOwnedByClient,
   updateCaptionOwnedByClient,

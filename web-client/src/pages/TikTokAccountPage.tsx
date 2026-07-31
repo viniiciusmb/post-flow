@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { IconBrandTiktok, IconHeart, IconUsers, IconMovie, IconTrash, IconPlus, IconClock } from "@tabler/icons-react"
+import { IconBrandTiktok, IconHeart, IconUsers, IconMovie, IconTrash, IconPlus, IconClock, IconAlertTriangle } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
-import type { PostedItem, PostingQueueItem, PostingScheduleResponse, TikTokAccountSummary } from "@/types/api"
+import type { ErrorPostingItem, PostedItem, PostingQueueItem, PostingScheduleResponse, TikTokAccountSummary } from "@/types/api"
 
 const RETENTION_LABELS: Record<number, string> = {
   24: "1 dia",
@@ -27,6 +27,64 @@ function formatCount(n: number | null | undefined) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}mil`
   return String(n)
+}
+
+// Botao de emergencia: se algo der errado e os cortes comecarem a sair um
+// atras do outro (ou qualquer outro bug), pausa só o disparo de NOVOS posts
+// dessa conta — o que já estava em processamento não é afetado. Fica bem
+// visível de propósito, separado das outras configurações de agendamento.
+function PauseQueueBar({ accountId }: { accountId: number }) {
+  const [paused, setPaused] = useState<boolean | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setPaused(null)
+    api.get<PostingScheduleResponse>(`/api/client/tiktok-accounts/${accountId}/schedule`).then((data) => setPaused(data.paused))
+  }, [accountId])
+
+  async function toggle() {
+    if (paused === null) return
+    const next = !paused
+    if (
+      next &&
+      !confirm("Pausar a fila de postagem dessa conta? Nenhum corte novo vai ser enviado ao TikTok até você retomar.")
+    )
+      return
+    setSaving(true)
+    try {
+      const updated = await api.put<PostingScheduleResponse>(`/api/client/tiktok-accounts/${accountId}/queue-pause`, {
+        paused: next,
+      })
+      setPaused(updated.paused)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (paused === null) return <Skeleton className="h-16" />
+
+  return (
+    <div
+      className={`flex flex-col items-start gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between ${
+        paused ? "border-destructive/40 bg-destructive/10" : "border-border"
+      }`}
+    >
+      <div className="flex items-start gap-2 text-sm">
+        {paused && <IconAlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />}
+        <div>
+          <p className="font-medium">{paused ? "Fila de postagem pausada" : "Fila de postagem ativa"}</p>
+          <p className="text-xs text-muted-foreground">
+            {paused
+              ? "Nenhum corte novo sai pro TikTok até você retomar."
+              : "Use isso se algo der errado e os cortes começarem a sair rápido demais ou fora do esperado."}
+          </p>
+        </div>
+      </div>
+      <Button size="sm" variant={paused ? "default" : "destructive"} onClick={toggle} disabled={saving} className="shrink-0">
+        {saving ? "..." : paused ? "Retomar fila" : "Pausar fila"}
+      </Button>
+    </div>
+  )
 }
 
 function ScheduleCard({ accountId }: { accountId: number }) {
@@ -214,6 +272,8 @@ function formatScheduledFor(iso: string | null) {
 function QueueCard({ accountId }: { accountId: number }) {
   const [items, setItems] = useState<PostingQueueItem[] | null>(null)
   const [drafts, setDrafts] = useState<Record<number, string>>({})
+  const [fixing, setFixing] = useState(false)
+  const [fixedFlash, setFixedFlash] = useState<string | null>(null)
 
   async function load() {
     const data = await api.get<{ postings: PostingQueueItem[] }>(`/api/client/postings/queue?accountId=${accountId}`)
@@ -236,6 +296,21 @@ function QueueCard({ accountId }: { accountId: number }) {
     if (!confirm("Não postar este corte? Ele sai da fila de espera.")) return
     await api.post(`/api/client/postings/${id}/skip`, {})
     await load()
+  }
+
+  // Recalcula os horários de toda a fila do zero, preenchendo os buracos
+  // deixados por cortes pulados/com erro — nunca acontece sozinho, só
+  // quando alguém clica aqui de propósito.
+  async function fixSchedule() {
+    setFixing(true)
+    setFixedFlash(null)
+    try {
+      const result = await api.post<{ updated: number }>(`/api/client/tiktok-accounts/${accountId}/fix-schedule`, {})
+      setFixedFlash(`${result.updated} horário(s) recalculado(s).`)
+      await load()
+    } finally {
+      setFixing(false)
+    }
   }
 
   if (!items) return <Skeleton className="h-32" />
@@ -285,6 +360,62 @@ function QueueCard({ accountId }: { accountId: number }) {
             ))}
           </div>
         )}
+        <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
+          <Button size="xs" variant="ghost" className="text-muted-foreground" onClick={fixSchedule} disabled={fixing}>
+            {fixing ? "Corrigindo..." : "Corrigir horários de posts"}
+          </Button>
+          {fixedFlash && <span className="text-xs text-muted-foreground">{fixedFlash}</span>}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ErrorCard({ accountId }: { accountId: number }) {
+  const [items, setItems] = useState<ErrorPostingItem[] | null>(null)
+
+  useEffect(() => {
+    setItems(null)
+    api.get<{ postings: ErrorPostingItem[] }>(`/api/client/postings/errors?accountId=${accountId}`).then((data) => setItems(data.postings))
+  }, [accountId])
+
+  if (!items) return <Skeleton className="h-32" />
+  if (items.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          Nenhum corte com erro de postagem.
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Deram erro ao postar</CardTitle>
+        <CardDescription>A TikTok recusou publicar esses cortes — não são reenviados sozinhos.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col gap-2">
+          {items.map((item) => (
+            <div key={item.id} className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-2.5">
+              <div className="h-14 w-10 shrink-0 overflow-hidden rounded-md bg-muted">
+                {item.thumbnailUrl && <img src={item.thumbnailUrl} alt="" className="h-full w-full object-cover" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm">{item.clipTitle}</p>
+                  <TonePill tone="danger">Erro</TonePill>
+                </div>
+                {item.errorMessage && <p className="mt-0.5 text-xs text-muted-foreground">{item.errorMessage}</p>}
+              </div>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {new Date(item.updatedAt).toLocaleDateString("pt-BR")}
+              </span>
+            </div>
+          ))}
+        </div>
       </CardContent>
     </Card>
   )
@@ -436,17 +567,22 @@ function AccountCard({ account, onChanged }: { account: TikTokAccountSummary; on
 
       {autoPostEnabled && (
         <>
+          <PauseQueueBar accountId={account.id} />
           <ScheduleCard accountId={account.id} />
           <Tabs defaultValue="queue">
             <TabsList>
               <TabsTrigger value="queue">Fila</TabsTrigger>
               <TabsTrigger value="posted">Postados</TabsTrigger>
+              <TabsTrigger value="errors">Erro</TabsTrigger>
             </TabsList>
             <TabsContent value="queue">
               <QueueCard accountId={account.id} />
             </TabsContent>
             <TabsContent value="posted">
               <PostedCard accountId={account.id} />
+            </TabsContent>
+            <TabsContent value="errors">
+              <ErrorCard accountId={account.id} />
             </TabsContent>
           </Tabs>
         </>
