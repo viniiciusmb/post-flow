@@ -125,11 +125,17 @@ async function countTodayForAccount(tiktokAccountId, timezone) {
 
 // Ultima vez que essa conta mandou uma postagem pra fora (usado pelo modo
 // automatico pra espacar - null se a conta nunca postou nada ainda).
-async function mostRecentQueuedAt(tiktokAccountId) {
-  const { rows } = await pool.query('SELECT max(queued_at) AS last_queued_at FROM postings WHERE tiktok_account_id = $1', [
-    tiktokAccountId,
-  ]);
-  return rows[0].last_queued_at;
+// So conta postagens que realmente saíram (status='posted') - antes contava
+// qualquer tentativa (inclusive as que falharam), fazendo uma conta com
+// erro persistente (ex: permissão do TikTok recusada) esperar o mesmo
+// espaçamento de "já postei recentemente" mesmo nunca tendo postado nada,
+// travando o retry automático em horas em vez de minutos.
+async function mostRecentPostedAt(tiktokAccountId) {
+  const { rows } = await pool.query(
+    "SELECT max(posted_at) AS last_posted_at FROM postings WHERE tiktok_account_id = $1 AND status = 'posted'",
+    [tiktokAccountId]
+  );
+  return rows[0].last_posted_at;
 }
 
 // Postagens em 'processing' ha um tempo - o job de publicacao revarre essas
@@ -237,7 +243,7 @@ module.exports = {
   updateStatus,
   findOldestPendingForAccount,
   countTodayForAccount,
-  mostRecentQueuedAt,
+  mostRecentPostedAt,
   listStaleProcessing,
   listPostedOlderThan,
   listQueueForClient,

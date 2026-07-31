@@ -59,13 +59,13 @@ async function maybePublishNext(account) {
     if (postedToday >= allowedSoFar) return;
   } else {
     if (hour < AUTO_WINDOW_START_HOUR || hour >= AUTO_WINDOW_END_HOUR) return;
-    const lastQueuedAt = await postingsRepository.mostRecentQueuedAt(account.id);
-    if (lastQueuedAt) {
+    const lastPostedAt = await postingsRepository.mostRecentPostedAt(account.id);
+    if (lastPostedAt) {
       const minGapMinutes = Math.max(
         20,
         Math.floor(((AUTO_WINDOW_END_HOUR - AUTO_WINDOW_START_HOUR) * 60) / settings.videos_per_day)
       );
-      const elapsedMinutes = (Date.now() - new Date(lastQueuedAt).getTime()) / 60000;
+      const elapsedMinutes = (Date.now() - new Date(lastPostedAt).getTime()) / 60000;
       if (elapsedMinutes < minGapMinutes) return;
     }
   }
