@@ -22,13 +22,14 @@ async function findById(id) {
 
 // Comeca PAUSADO (is_active = false) - o cliente precisa ligar de proposito
 // (ver setActive) pra comecar o corte automatico, controle explicito em vez
-// de automatico assim que adiciona. last_video_published_at comeca em
-// "agora": quando ligado, so processa video publicado DEPOIS desse momento -
-// o historico do canal nunca entra no fluxo.
+// de automatico assim que adiciona. last_video_id comeca vazio de proposito:
+// a primeira checagem do canal (channelCheckJob.js) usa isso pra saber que
+// e a "primeira vez" e so estabelece o marco d'agua no video mais recente
+// de agora, sem enfileirar nada do historico do canal.
 async function create({ clientUserId, youtubeChannelId, channelName, channelUrl, avatarUrl }) {
   const { rows } = await pool.query(
-    `INSERT INTO youtube_channels (client_user_id, youtube_channel_id, channel_name, channel_url, avatar_url, is_active, last_video_published_at)
-     VALUES ($1, $2, $3, $4, $5, false, now())
+    `INSERT INTO youtube_channels (client_user_id, youtube_channel_id, channel_name, channel_url, avatar_url, is_active)
+     VALUES ($1, $2, $3, $4, $5, false)
      ON CONFLICT (client_user_id, youtube_channel_id) DO NOTHING
      RETURNING *`,
     [clientUserId, youtubeChannelId, channelName, channelUrl, avatarUrl]
@@ -36,15 +37,17 @@ async function create({ clientUserId, youtubeChannelId, channelName, channelUrl,
   return rows[0] || null;
 }
 
-// Ao RETOMAR (isActive=true), avanca last_video_published_at pra agora -
-// senao todo video publicado durante o tempo em que o canal ficou pausado
-// entra de uma vez como "novo" no proximo poll (era exatamente esse o bug:
-// canal pausado por um tempo, ao retomar uma leva inteira de videos antigos
-// caia na fila). Ao pausar (isActive=false) nao mexe em nada.
+// Ao RETOMAR (isActive=true), zera last_video_id - senao todo video
+// publicado durante o tempo em que o canal ficou pausado entra de uma vez
+// como "novo" no proximo poll (era exatamente esse o bug: canal pausado
+// por um tempo, ao retomar uma leva inteira de videos antigos caia na
+// fila). Zerar faz a proxima checagem tratar como "primeira vez de novo" -
+// so reestabelece o marco d'agua, sem processar o que passou durante a
+// pausa. Ao pausar (isActive=false) nao mexe em nada.
 async function setActive(id, clientUserId, isActive) {
   const { rows } = await pool.query(
     `UPDATE youtube_channels
-     SET is_active = $3, last_video_published_at = CASE WHEN $3 THEN now() ELSE last_video_published_at END
+     SET is_active = $3, last_video_id = CASE WHEN $3 THEN NULL ELSE last_video_id END
      WHERE id = $1 AND client_user_id = $2
      RETURNING *`,
     [id, clientUserId, isActive]
@@ -77,10 +80,10 @@ async function setDriveExportMode(id, clientUserId, mode) {
   return rows[0] || null;
 }
 
-async function updatePollState(id, { lastVideoPublishedAt }) {
+async function updatePollState(id, { lastVideoId }) {
   await pool.query(
-    'UPDATE youtube_channels SET last_polled_at = now(), last_video_published_at = COALESCE($2, last_video_published_at) WHERE id = $1',
-    [id, lastVideoPublishedAt]
+    'UPDATE youtube_channels SET last_polled_at = now(), last_video_id = COALESCE($2, last_video_id) WHERE id = $1',
+    [id, lastVideoId]
   );
 }
 
