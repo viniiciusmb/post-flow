@@ -74,6 +74,7 @@ func ensureKeypair() (privateKeyPath string, publicKey string, err error) {
 		hostname, _ := os.Hostname()
 		keygenBin := resolveBinary("ssh-keygen")
 		cmd := exec.Command(keygenBin, "-t", "ed25519", "-f", privateKeyPath, "-N", "", "-C", "postflow-tunnel-"+hostname)
+		hideWindow(cmd)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
 		if runErr := cmd.Run(); runErr != nil {
@@ -184,6 +185,7 @@ func runSupervisor(privateKeyPath string, info *pairingInfo, pausedCh <-chan boo
 			fmt.Sprintf("%s@%s", info.SSHUser, info.SSHHost),
 		}
 		cmd := exec.Command(sshBin, args...)
+		hideWindow(cmd)
 
 		start := time.Now()
 		err := cmd.Start()
