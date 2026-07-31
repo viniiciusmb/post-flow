@@ -197,10 +197,12 @@ async function updateStatus(id, status, { errorMessage = null } = {}) {
   return rows[0] || null;
 }
 
-async function saveDownload(id, localVideoPath) {
+async function saveDownload(id, localVideoPath, { bytes = null, egressType = null, tunnelId = null } = {}) {
   await pool.query(
-    'UPDATE source_videos SET local_video_path = $2, updated_at = now() WHERE id = $1',
-    [id, localVideoPath]
+    `UPDATE source_videos
+     SET local_video_path = $2, download_bytes = $3, download_egress_type = $4, download_tunnel_id = $5, updated_at = now()
+     WHERE id = $1`,
+    [id, localVideoPath, bytes, egressType, tunnelId]
   );
 }
 

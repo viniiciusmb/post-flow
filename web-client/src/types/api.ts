@@ -339,3 +339,28 @@ export interface ClientTunnel {
 export interface ClientTunnelResponse {
   tunnel: ClientTunnel | null
 }
+
+export type BandwidthEgressType = "client_tunnel" | "founder_tunnel" | "proxy" | "direct"
+
+export interface BandwidthByEgress {
+  egressType: BandwidthEgressType
+  bytes: number
+  videos: number
+}
+
+export interface BandwidthByClient {
+  clientUserId: number
+  name: string
+  ownTunnelBytes: number
+  fallbackBytes: number
+  videos: number
+}
+
+export interface AdminBandwidthResponse {
+  range: RangeInfo
+  byEgress: BandwidthByEgress[]
+  byClient: BandwidthByClient[]
+  founderTunnel: { id: number; enabled: boolean; connected: boolean; lastCheckedAt: string | null } | null
+  proxy: { configured: boolean; enabled: boolean }
+  clientTunnels: { id: number; clientUserId: number; label: string | null; enabled: boolean; connected: boolean }[]
+}

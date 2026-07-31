@@ -111,6 +111,16 @@ async function removeByClientId(clientUserId) {
   ]);
 }
 
+// Liga/desliga sem derrubar a conexao SSH em si - so tira/poe esse tunel
+// como candidato em ytDlpService.getCandidates().
+async function setEnabled(id, enabled) {
+  const { rows } = await pool.query(
+    'UPDATE download_tunnels SET enabled = $2 WHERE id = $1 RETURNING *',
+    [id, enabled]
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
   findByClientId,
   findFounderTunnel,
@@ -122,4 +132,5 @@ module.exports = {
   listAll,
   countConnectedClients,
   removeByClientId,
+  setEnabled,
 };

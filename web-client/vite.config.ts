@@ -34,6 +34,7 @@ export default defineConfig({
         'admin-metrics': path.resolve(__dirname, 'admin-metrics.html'),
         'admin-tailscale': path.resolve(__dirname, 'admin-tailscale.html'),
         tunnel: path.resolve(__dirname, 'tunnel.html'),
+        bandwidth: path.resolve(__dirname, 'bandwidth.html'),
       },
     },
   },

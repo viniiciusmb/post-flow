@@ -241,6 +241,49 @@ async function pruneOldSystemMetrics() {
   await pool.query("DELETE FROM system_metrics_samples WHERE sampled_at < now() - interval '30 days'");
 }
 
+// ---------- banda (tunel/proxy) - painel "Banda", custo/margem ----------
+
+async function bandwidthByEgressSince(since, until = new Date()) {
+  const { rows } = await pool.query(
+    `SELECT
+       coalesce(download_egress_type, 'direct') AS egress_type,
+       coalesce(sum(download_bytes), 0) AS bytes,
+       count(*)::int AS videos
+     FROM source_videos
+     WHERE download_bytes IS NOT NULL AND created_at >= $1 AND created_at <= $2
+     GROUP BY coalesce(download_egress_type, 'direct')`,
+    [since, until]
+  );
+  return rows.map((r) => ({ egressType: r.egress_type, bytes: Number(r.bytes), videos: r.videos }));
+}
+
+// Por cliente: quanto saiu pelo tunel DELE mesmo vs quanto caiu pro
+// fallback (tunel do founder ou proxy pago) - "fallback alto" sinaliza que
+// o tunel daquele cliente nao estava confiavel no periodo.
+async function bandwidthByClientSince(since, until = new Date()) {
+  const { rows } = await pool.query(
+    `SELECT
+       u.id AS client_user_id, u.business_name, u.email,
+       coalesce(sum(sv.download_bytes) FILTER (WHERE sv.download_egress_type = 'client_tunnel'), 0) AS own_tunnel_bytes,
+       coalesce(sum(sv.download_bytes) FILTER (WHERE sv.download_egress_type != 'client_tunnel'), 0) AS fallback_bytes,
+       count(sv.id)::int AS videos
+     FROM source_videos sv
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     JOIN users u ON u.id = coalesce(yc.client_user_id, sv.client_user_id)
+     WHERE sv.download_bytes IS NOT NULL AND sv.created_at >= $1 AND sv.created_at <= $2
+     GROUP BY u.id, u.business_name, u.email
+     ORDER BY sum(sv.download_bytes) DESC`,
+    [since, until]
+  );
+  return rows.map((r) => ({
+    clientUserId: r.client_user_id,
+    name: r.business_name || r.email,
+    ownTunnelBytes: Number(r.own_tunnel_bytes),
+    fallbackBytes: Number(r.fallback_bytes),
+    videos: r.videos,
+  }));
+}
+
 module.exports = {
   clientActivity,
   clientRanking,
@@ -257,5 +300,7 @@ module.exports = {
   insertSystemMetricSample,
   pruneOldSystemMetrics,
   computeDailyRollup,
+  bandwidthByEgressSince,
+  bandwidthByClientSince,
   pruneOldTranscripts,
 };

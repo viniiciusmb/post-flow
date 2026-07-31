@@ -93,8 +93,17 @@ async function run(sourceVideoId) {
       // download de novo.
     } else {
       await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
-      videoPath = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir, { checkCancelled, clientUserId });
-      await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath);
+      const downloadResult = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir, { checkCancelled, clientUserId });
+      videoPath = downloadResult.filePath;
+      // Tamanho real do arquivo baixado = consumo de banda de verdade pra
+      // essa origem (tunel do cliente/founder ou proxy) - alimenta o painel
+      // "Banda" (custo/margem).
+      const downloadBytes = fs.statSync(videoPath).size;
+      await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath, {
+        bytes: downloadBytes,
+        egressType: downloadResult.egressType,
+        tunnelId: downloadResult.tunnelId,
+      });
     }
 
     await checkPaused(sourceVideo.id);

@@ -27,6 +27,9 @@ const os = require('os');
 const config = require('../config');
 const { PausedError } = require('../lib/errors');
 const downloadTunnelsRepository = require('../repositories/downloadTunnelsRepository');
+const settingsRepository = require('../repositories/settingsRepository');
+
+const RESIDENTIAL_PROXY_ENABLED_KEY = 'residential_proxy_enabled';
 
 let cookiesFilePathCache = null;
 
@@ -40,29 +43,50 @@ function getCookiesFilePath() {
   return filePath;
 }
 
-function getProxyCandidates() {
-  return [config.youtube.tailscaleProxyUrl, config.youtube.proxyUrl].filter(Boolean);
-}
-
-// Tunel SSH reverso (docker/ssh-relay/) - prioridade maxima quando existe:
-// 1) tunel do proprio cliente dono do video, se ele tiver o programa
-// instalado; 2) tunel de fallback do dono do sistema. Nao filtra por
-// "connected" (esse campo so alimenta o painel) - a tentativa de verdade e
-// o teste mais confiavel, e o loop de candidatos ja lida com falha.
-async function getTunnelCandidates(clientUserId) {
-  if (!config.tunnel.relaySocksHost) return [];
-
+// Lista de candidatos em ordem de prioridade, cada um com o tipo (pra
+// rastrear consumo de banda por origem no painel "Banda") e checando o
+// proprio "ligado": tunel do cliente dono do video (se ele tiver o
+// programa instalado e o founder nao tiver desativado essa chave em
+// especifico), tunel de fallback do dono do sistema (se ligado no painel),
+// proxy pago (se ligado no painel). Nao filtra por "connected" nos tuneis
+// (esse campo so alimenta o painel) - a tentativa de verdade e o teste
+// mais confiavel, e o loop de candidatos ja lida com falha.
+async function getCandidates(clientUserId) {
   const candidates = [];
-  if (clientUserId) {
-    const clientTunnel = await downloadTunnelsRepository.findByClientId(clientUserId);
-    if (clientTunnel) {
-      candidates.push(`socks5://${config.tunnel.relaySocksHost}:${clientTunnel.assigned_port}`);
+
+  if (config.tunnel.relaySocksHost) {
+    if (clientUserId) {
+      const clientTunnel = await downloadTunnelsRepository.findByClientId(clientUserId);
+      if (clientTunnel && clientTunnel.enabled) {
+        candidates.push({
+          type: 'client_tunnel',
+          tunnelId: clientTunnel.id,
+          url: `socks5://${config.tunnel.relaySocksHost}:${clientTunnel.assigned_port}`,
+        });
+      }
+    }
+
+    const founderTunnel = await downloadTunnelsRepository.findFounderTunnel();
+    if (founderTunnel && founderTunnel.enabled) {
+      candidates.push({
+        type: 'founder_tunnel',
+        tunnelId: founderTunnel.id,
+        url: `socks5://${config.tunnel.relaySocksHost}:${founderTunnel.assigned_port}`,
+      });
     }
   }
 
-  const founderTunnel = await downloadTunnelsRepository.findFounderTunnel();
-  if (founderTunnel) {
-    candidates.push(`socks5://${config.tunnel.relaySocksHost}:${founderTunnel.assigned_port}`);
+  // Rele Tailscale (dormant hoje, YTDLP_TAILSCALE_PROXY_URL nao configurado
+  // em producao) - sem toggle proprio, so entra se um dia for configurado.
+  if (config.youtube.tailscaleProxyUrl) {
+    candidates.push({ type: 'proxy', tunnelId: null, url: config.youtube.tailscaleProxyUrl });
+  }
+
+  if (config.youtube.proxyUrl) {
+    const proxyEnabled = await settingsRepository.getValue(RESIDENTIAL_PROXY_ENABLED_KEY, true);
+    if (proxyEnabled) {
+      candidates.push({ type: 'proxy', tunnelId: null, url: config.youtube.proxyUrl });
+    }
   }
 
   return candidates;
@@ -160,22 +184,24 @@ function runOnce(args, { timeoutMs = 5 * 60 * 1000, proxyUrl = null, playerClien
   });
 }
 
-// Tenta cada combinacao de client (null/android/tv) x proxy (tunel do
-// cliente > tunel de fallback do founder > proxy pago, se configurado) em
-// sequencia; se todas falharem, desiste (sem dobrar tentativas de novo -
-// variar o client ja cobre o caso "esse video caiu num nivel de checagem
-// mais rigoroso", que era o motivo de tentar de novo antes).
+// Tenta cada combinacao de client (null/android/tv) x candidato (tunel do
+// cliente > tunel de fallback do founder > proxy pago, cada um so se
+// "ligado") em sequencia; se todas falharem, desiste (sem dobrar tentativas
+// de novo - variar o client ja cobre o caso "esse video caiu num nivel de
+// checagem mais rigoroso", que era o motivo de tentar de novo antes).
+// Devolve tambem QUAL candidato funcionou (usedCandidate) - usado pra
+// registrar consumo de banda por origem no painel "Banda".
 async function run(args, { clientUserId, ...opts } = {}) {
-  const tunnelCandidates = await getTunnelCandidates(clientUserId);
-  const proxyCandidates = [...tunnelCandidates, ...getProxyCandidates()];
-  const proxiesToTry = proxyCandidates.length ? proxyCandidates : [null];
+  const candidates = await getCandidates(clientUserId);
+  const candidatesToTry = candidates.length ? candidates : [{ type: 'direct', tunnelId: null, url: null }];
   const playerClientsToTry = getPlayerClientCandidates();
 
   let lastErr;
   for (const playerClient of playerClientsToTry) {
-    for (const proxyUrl of proxiesToTry) {
+    for (const candidate of candidatesToTry) {
       try {
-        return await runOnce(args, { ...opts, proxyUrl, playerClient });
+        const stdout = await runOnce(args, { ...opts, proxyUrl: candidate.url, playerClient });
+        return { stdout, usedCandidate: candidate };
       } catch (err) {
         // Pausa pedida pelo cliente nao e um erro transitorio de bloqueio -
         // continuar tentando outros clients fazia o "Pausar" demorar bem mais
@@ -219,7 +245,7 @@ function parseUploadDate(value) {
 
 // Lista os videos recentes de um canal (modo "flat" - rapido, sem baixar nada).
 async function listChannelVideos(channelUrl, { limit = 15 } = {}) {
-  const stdout = await run([
+  const { stdout } = await run([
     '--flat-playlist',
     '--dump-json',
     '--playlist-end', String(limit),
@@ -250,7 +276,7 @@ function extractVideoId(url) {
 // Busca so os metadados de um video avulso (sem baixar) - usado quando o
 // cliente cola o link manualmente em vez de vir da checagem de um canal.
 async function getVideoMetadata(url) {
-  const stdout = await run(['--dump-json', '--no-warnings', '--no-playlist', '--skip-download', url]);
+  const { stdout } = await run(['--dump-json', '--no-warnings', '--no-playlist', '--skip-download', url]);
   const entry = JSON.parse(stdout.trim().split('\n')[0]);
   return {
     videoId: entry.id,
@@ -272,7 +298,7 @@ async function downloadVideo(videoId, outputDir, { checkCancelled, clientUserId 
 
   await waitBeforeDownload(checkCancelled);
 
-  await run(
+  const { usedCandidate } = await run(
     [
       '-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]',
       '--merge-output-format', 'mp4',
@@ -287,7 +313,7 @@ async function downloadVideo(videoId, outputDir, { checkCancelled, clientUserId 
   if (!fs.existsSync(filePath)) {
     throw new Error('Download concluido mas o arquivo esperado nao foi encontrado em disco.');
   }
-  return filePath;
+  return { filePath, egressType: usedCandidate.type, tunnelId: usedCandidate.tunnelId };
 }
 
 module.exports = { listChannelVideos, downloadVideo, extractVideoId, getVideoMetadata };
