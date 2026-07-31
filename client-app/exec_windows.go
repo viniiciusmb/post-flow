@@ -17,3 +17,10 @@ func hideWindow(cmd *exec.Cmd) {
 		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
 	}
 }
+
+// O systray no Windows precisa de bytes no formato .ico de verdade - PNG
+// puro (que funciona bem no Mac) simplesmente nao aparece na bandeja, sem
+// erro nenhum.
+func platformIcon(png []byte) []byte {
+	return wrapPNGAsICO(png)
+}

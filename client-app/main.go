@@ -89,26 +89,6 @@ func ensureKeypair() (privateKeyPath string, publicKey string, err error) {
 	return privateKeyPath, string(bytes.TrimSpace(pubBytes)), nil
 }
 
-func loadCachedPairing() *pairingInfo {
-	data, err := os.ReadFile(filepath.Join(configDir(), "pairing.json"))
-	if err != nil {
-		return nil
-	}
-	var info pairingInfo
-	if err := json.Unmarshal(data, &info); err != nil {
-		return nil
-	}
-	return &info
-}
-
-func saveCachedPairing(info *pairingInfo) {
-	data, err := json.Marshal(info)
-	if err != nil {
-		return
-	}
-	_ = os.WriteFile(filepath.Join(configDir(), "pairing.json"), data, 0o600)
-}
-
 func registerPending(publicKey string) (*pairingInfo, error) {
 	hostname, _ := os.Hostname()
 	body, _ := json.Marshal(map[string]string{"publicKey": publicKey, "label": hostname})
@@ -131,17 +111,6 @@ func registerPending(publicKey string) (*pairingInfo, error) {
 	return &info, nil
 }
 
-func getOrRegisterPairing(publicKey string) (*pairingInfo, error) {
-	if cached := loadCachedPairing(); cached != nil {
-		return cached, nil
-	}
-	info, err := registerPending(publicKey)
-	if err != nil {
-		return nil, err
-	}
-	saveCachedPairing(info)
-	return info, nil
-}
 
 type connectionState int
 
@@ -233,7 +202,14 @@ func onReady() {
 		return
 	}
 
-	info, err := getOrRegisterPairing(publicKey)
+	// Sempre busca um codigo NOVO ao abrir, nunca reaproveita um salvo em
+	// disco - o codigo expira em 15min do lado do servidor, e um cache sem
+	// data de validade fazia o programa mostrar/tentar um codigo ja
+	// expirado depois de reabrir o app mais tarde (bug real visto por um
+	// cliente testando: "codigo invalido ou expirado" mesmo colando
+	// certinho, porque o app tinha guardado um codigo de um teste anterior
+	// e nunca buscava um novo).
+	info, err := registerPending(publicKey)
 	if err != nil {
 		mStatus.SetTitle("Erro ao conectar com o Post Flow")
 		return
