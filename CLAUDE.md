@@ -19,6 +19,17 @@ ssh root@72.61.219.94 "docker exec <ID> node scripts/migrate.js up"
 ```
 Depois, dê uma olhada rápida nos logs (`docker service logs postflow_web --since 1m | grep -i error`) antes de dizer que está tudo certo.
 
+## Regra operacional nº 2 — binários do programa de bandeja (`client-app/`) não são buildados no Dockerfile
+
+**Tentei fazer o Dockerfile compilar `client-app/` (Go, `github.com/getlantern/systray`) automaticamente a cada deploy e quebrou o build dos 3 serviços** (2026-07-30) — cross-compilar um app com ícone de bandeja pra macOS/Windows a partir de um builder Linux não funciona (a lib do ícone precisa de CGO com biblioteca nativa de cada sistema, que só existe compilando no próprio Mac/Windows). Corrigido revertendo pra: os binários (`post-flow-tunnel-mac`, `post-flow-tunnel-windows.zip`) ficam **commitados** em `src/web/public/downloads/`, copiados como arquivo estático normal (`COPY . .` já pega, sem etapa de build no Dockerfile). **Sempre que `client-app/*.go` mudar, tem que recompilar manualmente neste Mac e recommitar antes do deploy**, senão o programa que os clientes baixam fica desatualizado:
+```
+source /tmp/pf-go-env.sh   # ou: export PATH="$HOME/go-toolchain/go/bin:$PATH"
+cd "client-app" && go build -o /tmp/post-flow-tunnel-mac .
+GOOS=windows GOARCH=amd64 go build -ldflags="-H windowsgui" -o /tmp/post-flow-tunnel-windows.exe .
+# empacotar o Windows junto com o OpenSSH portatil (ssh.exe/ssh-keygen.exe) num .zip - ver histórico de sessão pra receita completa
+cp /tmp/post-flow-tunnel-mac ../src/web/public/downloads/
+```
+
 ## Antes de sugerir qualquer deploy
 
 Cheque se há vídeo em processamento (não interrompa renderização em andamento sem avisar):
