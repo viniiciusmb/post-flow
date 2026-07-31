@@ -18,12 +18,19 @@ const MAX_CHUNK_SIZE_BYTES = 64 * 1024 * 1024;
 const PUBLISH_DONE_STATUSES = ['PUBLISH_COMPLETE', 'SEND_TO_USER_INBOX'];
 const PUBLISH_FAILED_STATUSES = ['FAILED'];
 
-// user.info.basic: nome/avatar pro painel. video.publish: necessario pra
-// Fase 3 (postar no TikTok). user.info.stats: seguidores/curtidas/videos pro
-// dashboard do cliente. Pedimos tudo agora pra nao ter que refazer a conexao
-// com o cliente depois - so vale a partir de quando o cliente reconectar
-// (tokens antigos nao ganham escopo novo sozinhos).
-const SCOPES = ['user.info.basic', 'user.info.stats', 'video.publish'];
+// user.info.basic: nome/avatar pro painel. user.info.stats: seguidores/
+// curtidas/videos pro dashboard do cliente. video.upload: escopo que a
+// PUBLISH_INIT_URL de verdade exige, ja que ela usa o endpoint de INBOX
+// (/inbox/video/init/, modo rascunho) - "video.publish" so vale pro
+// endpoint de publicacao direta no perfil (/publish/video/init/), que
+// nao e o que este app chama. Pedimos video.publish tambem so por
+// seguranca/futuro, mas sozinho ele NAO autoriza o fluxo de inbox (foi
+// a causa real do erro "did not authorize the scope" - nao tinha nada a
+// ver com config do Developer Console). Pedimos tudo agora pra nao ter
+// que refazer a conexao com o cliente depois - so vale a partir de
+// quando o cliente reconectar (tokens antigos nao ganham escopo novo
+// sozinhos).
+const SCOPES = ['user.info.basic', 'user.info.stats', 'video.publish', 'video.upload'];
 
 function buildAuthorizeUrl(state) {
   const params = new URLSearchParams({
