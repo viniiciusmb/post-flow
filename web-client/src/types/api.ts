@@ -151,6 +151,9 @@ export interface TikTokAccountSummary extends TikTokAccountStats {
   avatarUrl: string | null
   connectedAt: string
   autoPostEnabled: boolean
+  pendingCount: number
+  postedCount: number
+  errorCount: number
 }
 
 export interface TikTokAccountsResponse {

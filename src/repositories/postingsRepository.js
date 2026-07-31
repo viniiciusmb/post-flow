@@ -336,6 +336,21 @@ async function retryOwnedByClient(id, clientUserId) {
   return rows[0] || null;
 }
 
+// Resumo rapido pra caixa fechada da conta na tela (sem abrir nada) - so 3
+// contagens, sem trazer os itens em si.
+async function countByStatusForAccount(tiktokAccountId) {
+  const { rows } = await pool.query(
+    `SELECT status, count(*)::int AS count
+     FROM postings
+     WHERE tiktok_account_id = $1 AND status IN ('pending', 'posted', 'error')
+     GROUP BY status`,
+    [tiktokAccountId]
+  );
+  const result = { pending: 0, posted: 0, error: 0 };
+  for (const row of rows) result[row.status] = row.count;
+  return result;
+}
+
 async function countPendingForClient(clientUserId) {
   const { rows } = await pool.query(
     `SELECT count(*)::int AS count
@@ -397,6 +412,7 @@ module.exports = {
   listPostedForClient,
   listErrorForClient,
   retryOwnedByClient,
+  countByStatusForAccount,
   countPendingForClient,
   findByIdOwnedByClient,
   updateCaptionOwnedByClient,

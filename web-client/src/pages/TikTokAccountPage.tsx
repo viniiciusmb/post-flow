@@ -810,21 +810,22 @@ function PostedCard({ accountId }: { accountId: number }) {
   )
 }
 
-function AccountCard({ account, onChanged }: { account: TikTokAccountSummary; onChanged: () => void }) {
-  const [savingAutoPost, setSavingAutoPost] = useState(false)
-  const [autoPostEnabled, setAutoPostEnabled] = useState(account.autoPostEnabled)
+// Caixa fechada da conta - so informação e resumo, nada aberto/editável
+// aqui. Clicar em "Configurar postagens dessa conta" que seleciona ela e
+// revela o painel de configuração embaixo da lista inteira.
+function AccountBox({
+  account,
+  selected,
+  onSelect,
+  onChanged,
+}: {
+  account: TikTokAccountSummary
+  selected: boolean
+  onSelect: () => void
+  onChanged: () => void
+}) {
   const [deactivating, setDeactivating] = useState(false)
   const hasStats = account.followerCount !== null && account.followerCount !== undefined
-
-  async function toggleAutoPost(checked: boolean) {
-    setSavingAutoPost(true)
-    setAutoPostEnabled(checked)
-    try {
-      await api.put<{ autoPostEnabled: boolean }>(`/api/client/tiktok-accounts/${account.id}/auto-post`, { enabled: checked })
-    } finally {
-      setSavingAutoPost(false)
-    }
-  }
 
   async function disconnect() {
     if (
@@ -843,57 +844,103 @@ function AccountCard({ account, onChanged }: { account: TikTokAccountSummary; on
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <Avatar className="size-11 bg-foreground text-background">
-                {account.avatarUrl && <AvatarImage src={account.avatarUrl} alt="" />}
-                <AvatarFallback className="bg-foreground text-background">
-                  <IconBrandTiktok className="size-5" />
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">{account.displayName}</span>
-                  <TonePill tone="success">Conectada</TonePill>
-                </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Conectada em {new Date(account.connectedAt).toLocaleDateString("pt-BR")}.
-                </p>
+    <Card className={selected ? "ring-2 ring-primary" : undefined}>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <Avatar className="size-11 bg-foreground text-background">
+              {account.avatarUrl && <AvatarImage src={account.avatarUrl} alt="" />}
+              <AvatarFallback className="bg-foreground text-background">
+                <IconBrandTiktok className="size-5" />
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">{account.displayName}</span>
+                <TonePill tone="success">Conectada</TonePill>
               </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Conectada em {new Date(account.connectedAt).toLocaleDateString("pt-BR")}.
+              </p>
             </div>
-            <Button variant="ghost" size="sm" onClick={disconnect} disabled={deactivating} className="gap-1.5 text-destructive hover:text-destructive">
-              <IconTrash className="size-4" />
-              {deactivating ? "Desconectando..." : "Desconectar"}
-            </Button>
           </div>
+          <Button variant="ghost" size="sm" onClick={disconnect} disabled={deactivating} className="gap-1.5 text-destructive hover:text-destructive">
+            <IconTrash className="size-4" />
+            {deactivating ? "Desconectando..." : "Desconectar"}
+          </Button>
+        </div>
 
-          {hasStats && (
-            <div className="flex flex-wrap items-center gap-6 border-t border-border pt-4 text-sm">
-              <span className="flex items-center gap-1.5 tabular-nums">
-                <IconUsers className="size-4 text-muted-foreground" />
-                <span className="font-semibold">{formatCount(account.followerCount)}</span>
-                <span className="text-muted-foreground">seguidores</span>
-              </span>
-              <span className="flex items-center gap-1.5 tabular-nums">
-                <IconHeart className="size-4 text-muted-foreground" />
-                <span className="font-semibold">{formatCount(account.likesCount)}</span>
-                <span className="text-muted-foreground">curtidas</span>
-              </span>
-              <span className="flex items-center gap-1.5 tabular-nums">
-                <IconMovie className="size-4 text-muted-foreground" />
-                <span className="font-semibold">{formatCount(account.videoCount)}</span>
-                <span className="text-muted-foreground">vídeos no perfil</span>
-              </span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        {hasStats && (
+          <div className="flex flex-wrap items-center gap-6 border-t border-border pt-4 text-sm">
+            <span className="flex items-center gap-1.5 tabular-nums">
+              <IconUsers className="size-4 text-muted-foreground" />
+              <span className="font-semibold">{formatCount(account.followerCount)}</span>
+              <span className="text-muted-foreground">seguidores</span>
+            </span>
+            <span className="flex items-center gap-1.5 tabular-nums">
+              <IconHeart className="size-4 text-muted-foreground" />
+              <span className="font-semibold">{formatCount(account.likesCount)}</span>
+              <span className="text-muted-foreground">curtidas</span>
+            </span>
+            <span className="flex items-center gap-1.5 tabular-nums">
+              <IconMovie className="size-4 text-muted-foreground" />
+              <span className="font-semibold">{formatCount(account.videoCount)}</span>
+              <span className="text-muted-foreground">vídeos no perfil</span>
+            </span>
+          </div>
+        )}
 
-      <Card>
-        <CardContent className="flex items-start gap-3 py-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+            <span>
+              <strong className="font-semibold text-foreground">{account.pendingCount}</strong> na fila
+            </span>
+            <span>
+              <strong className="font-semibold text-foreground">{account.postedCount}</strong> postados
+            </span>
+            <span className={account.errorCount > 0 ? "text-destructive" : undefined}>
+              <strong className="font-semibold">{account.errorCount}</strong> com erro
+            </span>
+          </div>
+          <Button size="sm" variant={selected ? "default" : "outline"} onClick={onSelect}>
+            {selected ? "Fechar configurações" : "Configurar postagens dessa conta"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Painel de configuração da conta selecionada - fica FORA da lista de
+// caixas, uma unica vez embaixo de tudo (nao dentro de cada card), pra
+// deixar claro que so uma conta por vez esta sendo editada.
+function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSummary; onChanged: () => void }) {
+  const [savingAutoPost, setSavingAutoPost] = useState(false)
+  const [autoPostEnabled, setAutoPostEnabled] = useState(account.autoPostEnabled)
+
+  useEffect(() => {
+    setAutoPostEnabled(account.autoPostEnabled)
+  }, [account.id, account.autoPostEnabled])
+
+  async function toggleAutoPost(checked: boolean) {
+    setSavingAutoPost(true)
+    setAutoPostEnabled(checked)
+    try {
+      await api.put<{ autoPostEnabled: boolean }>(`/api/client/tiktok-accounts/${account.id}/auto-post`, { enabled: checked })
+      onChanged()
+    } finally {
+      setSavingAutoPost(false)
+    }
+  }
+
+  return (
+    <Card className="border-primary/40">
+      <CardHeader>
+        <CardTitle className="text-base">Configurar postagens de {account.displayName}</CardTitle>
+        <CardDescription>As configurações abaixo valem só pra essa conta — cada conta tem as suas.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex items-start gap-3 rounded-lg border border-border p-4">
           <Checkbox
             id={`autoPost-${account.id}`}
             checked={autoPostEnabled}
@@ -908,38 +955,39 @@ function AccountCard({ account, onChanged }: { account: TikTokAccountSummary; on
               depois que você ligar isso aqui.
             </p>
           </label>
-        </CardContent>
-      </Card>
+        </div>
 
-      {autoPostEnabled && (
-        <>
-          <PauseQueueBar accountId={account.id} />
-          <ScheduleCard accountId={account.id} />
-          <Tabs defaultValue="queue">
-            <TabsList>
-              <TabsTrigger value="queue">Fila</TabsTrigger>
-              <TabsTrigger value="posted">Postados</TabsTrigger>
-              <TabsTrigger value="errors">Erro</TabsTrigger>
-            </TabsList>
-            <TabsContent value="queue">
-              <QueueCard accountId={account.id} accountName={account.displayName} />
-            </TabsContent>
-            <TabsContent value="posted">
-              <PostedCard accountId={account.id} />
-            </TabsContent>
-            <TabsContent value="errors">
-              <ErrorCard accountId={account.id} accountName={account.displayName} />
-            </TabsContent>
-          </Tabs>
-        </>
-      )}
-    </div>
+        {autoPostEnabled && (
+          <>
+            <PauseQueueBar accountId={account.id} />
+            <ScheduleCard accountId={account.id} />
+            <Tabs defaultValue="queue">
+              <TabsList>
+                <TabsTrigger value="queue">Fila</TabsTrigger>
+                <TabsTrigger value="posted">Postados</TabsTrigger>
+                <TabsTrigger value="errors">Erro</TabsTrigger>
+              </TabsList>
+              <TabsContent value="queue">
+                <QueueCard accountId={account.id} accountName={account.displayName} />
+              </TabsContent>
+              <TabsContent value="posted">
+                <PostedCard accountId={account.id} />
+              </TabsContent>
+              <TabsContent value="errors">
+                <ErrorCard accountId={account.id} accountName={account.displayName} />
+              </TabsContent>
+            </Tabs>
+          </>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
 export function TikTokAccountPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const [accounts, setAccounts] = useState<TikTokAccountSummary[] | null>(null)
+  const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
 
   async function load() {
     const data = await api.get<{ accounts: TikTokAccountSummary[] }>("/api/client/tiktok-accounts")
@@ -951,14 +999,32 @@ export function TikTokAccountPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
+  // Se a conta selecionada for desconectada (ou de algum jeito sumir da
+  // lista), fecha o painel em vez de deixar ele preso numa conta fantasma.
+  useEffect(() => {
+    if (accounts && selectedAccountId !== null && !accounts.some((a) => a.id === selectedAccountId)) {
+      setSelectedAccountId(null)
+    }
+  }, [accounts, selectedAccountId])
+
   if (authLoading || !user) return null
+
+  const selectedAccount = accounts?.find((a) => a.id === selectedAccountId) ?? null
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Contas TikTok">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Cada conta conectada aqui pode ser vinculada a canais do YouTube diferentes, com seu próprio agendamento.
-        </p>
+        <div>
+          <p className="text-sm text-muted-foreground">
+            Cada conta conectada aqui pode ser vinculada a canais do YouTube diferentes, com seu próprio agendamento.
+          </p>
+          {accounts && accounts.length > 0 && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Se ao conectar outra conta aparecer a mesma de antes, é porque seu navegador continua logado nela no
+              site do TikTok — saia da conta por lá (ou abra numa aba anônima) antes de conectar de novo.
+            </p>
+          )}
+        </div>
         <Button asChild size="sm" className="shrink-0">
           <a href="/auth/tiktok/connect">
             <IconPlus className="size-4" />
@@ -977,11 +1043,21 @@ export function TikTokAccountPage() {
           Nenhuma conta TikTok conectada ainda.
         </div>
       ) : (
-        <div className="flex flex-col gap-6">
-          {accounts.map((account) => (
-            <AccountCard key={account.id} account={account} onChanged={load} />
-          ))}
-        </div>
+        <>
+          <div className="flex flex-col gap-4">
+            {accounts.map((account) => (
+              <AccountBox
+                key={account.id}
+                account={account}
+                selected={selectedAccountId === account.id}
+                onSelect={() => setSelectedAccountId((cur) => (cur === account.id ? null : account.id))}
+                onChanged={load}
+              />
+            ))}
+          </div>
+
+          {selectedAccount && <AccountDetailPanel account={selectedAccount} onChanged={load} />}
+        </>
       )}
     </DashboardLayout>
   )

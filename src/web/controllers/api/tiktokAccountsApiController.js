@@ -28,7 +28,7 @@ async function refreshStatsIfStale(account) {
   }
 }
 
-function accountToApi(account) {
+function accountToApi(account, counts) {
   return {
     id: account.id,
     displayName: account.display_name || account.tiktok_open_id,
@@ -40,13 +40,21 @@ function accountToApi(account) {
     videoCount: account.video_count,
     statsUpdatedAt: account.stats_updated_at,
     autoPostEnabled: account.auto_post_enabled,
+    pendingCount: counts.pending,
+    postedCount: counts.posted,
+    errorCount: counts.error,
   };
 }
 
+// Contagens (fila/postados/erro) pra caixa fechada de cada conta na tela -
+// da pra ver de relance sem precisar selecionar/abrir nada.
 async function list(req, res) {
   const accounts = await tiktokAccountsRepository.listActiveByClientId(req.session.user.id);
   const refreshed = await Promise.all(accounts.map(refreshStatsIfStale));
-  res.json({ accounts: refreshed.map(accountToApi) });
+  const withCounts = await Promise.all(
+    refreshed.map(async (account) => accountToApi(account, await postingsRepository.countByStatusForAccount(account.id)))
+  );
+  res.json({ accounts: withCounts });
 }
 
 async function findOwned(req) {

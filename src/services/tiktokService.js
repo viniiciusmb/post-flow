@@ -39,6 +39,12 @@ function buildAuthorizeUrl(state) {
     scope: SCOPES.join(','),
     redirect_uri: config.tiktok.redirectUri,
     state,
+    // Sem isso, clicar em "Conectar outra conta" com o navegador ja logado
+    // na TikTok pulava direto pra tela de sucesso reautorizando a MESMA
+    // conta de antes (a TikTok reusa a sessao do navegador silenciosamente).
+    // disable_auto_auth=1 forca a tela de autorizacao aparecer sempre, dando
+    // chance da pessoa trocar de conta ali (ou sair/entrar com outra antes).
+    disable_auto_auth: '1',
   });
   return `${AUTHORIZE_URL}?${params.toString()}`;
 }
