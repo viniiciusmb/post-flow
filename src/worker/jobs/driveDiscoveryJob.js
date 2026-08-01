@@ -1,5 +1,5 @@
 // Varre todas as pastas do Drive cadastradas, cadastra videos novos e
-// gera as postagens pendentes (fan-out da pasta Geral / pasta do cliente).
+// gera as postagens pendentes (fan-out da pasta-fonte de cada cliente).
 'use strict';
 
 const driveConnectionsRepository = require('../../repositories/driveConnectionsRepository');
@@ -10,7 +10,6 @@ const tiktokAccountsRepository = require('../../repositories/tiktokAccountsRepos
 const driveFolderTiktokTargetsRepository = require('../../repositories/driveFolderTiktokTargetsRepository');
 const googleService = require('../../services/googleService');
 const logger = require('../../lib/logger');
-const { DRIVE_FOLDER_TYPE } = require('../../config/constants');
 
 async function run() {
   const folders = await driveFoldersRepository.listAll();
@@ -19,9 +18,8 @@ async function run() {
   }
 }
 
-// Cada pasta guarda qual conexao Google usar (a do admin pra "Geral" e pras
-// pastas de cliente cadastradas por ele, ou a do proprio cliente quando ele
-// conectou o Drive dele mesmo) - assim cada dono usa so o token dele.
+// Cada pasta guarda qual conexao Google usar (a do proprio cliente que
+// conectou o Drive dele) - assim cada dono usa so o token dele.
 async function processFolder(folder) {
   if (!folder.connection_id) {
     logger.info(`Drive discovery: pasta "${folder.folder_name || folder.drive_folder_id}" sem conexao Google associada, pulando.`);
@@ -65,14 +63,6 @@ async function processFolder(folder) {
 }
 
 async function fanOut(video, folder) {
-  if (folder.type === DRIVE_FOLDER_TYPE.GENERAL) {
-    const accounts = await tiktokAccountsRepository.listReceivingGeneralContent();
-    for (const account of accounts) {
-      await postingsRepository.createIfNotExists({ videoId: video.id, tiktokAccountId: account.id });
-    }
-    return;
-  }
-
   // Pasta-fonte do proprio cliente: contas escolhidas ao configurar a
   // pasta (ver drive_folder_tiktok_targets) - pode ser mais de uma.
   const accountIds = await driveFolderTiktokTargetsRepository.listByFolderId(folder.id);

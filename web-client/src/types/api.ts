@@ -22,7 +22,7 @@ export type PostingStatus =
   | "error"
   | "skipped"
 
-export type PostingOrigin = "drive_general" | "drive_client" | "youtube_clip"
+export type PostingOrigin = "drive_client" | "youtube_clip"
 
 export interface AdminPosting {
   id: number

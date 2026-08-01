@@ -35,14 +35,6 @@ async function listActive() {
   return rows;
 }
 
-async function listReceivingGeneralContent() {
-  const { rows } = await pool.query(
-    `SELECT * FROM tiktok_accounts
-     WHERE is_active = true AND receives_general_content = true AND auto_post_enabled = true`
-  );
-  return rows;
-}
-
 // Conecta uma conta TikTok pro cliente. Reconectar a MESMA conta (mesmo
 // tiktok_open_id) atualiza a linha existente (tokens/nome/avatar) e
 // reativa se tinha sido desconectada; conectar uma conta DIFERENTE insere
@@ -166,7 +158,6 @@ module.exports = {
   findActiveByIdAndClient,
   listActiveByClientId,
   listActive,
-  listReceivingGeneralContent,
   upsertForClient,
   deactivate,
   getValidAccessToken,

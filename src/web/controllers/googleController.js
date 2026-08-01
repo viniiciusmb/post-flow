@@ -3,25 +3,24 @@
 const crypto = require('crypto');
 const googleService = require('../../services/googleService');
 const driveConnectionsRepository = require('../../repositories/driveConnectionsRepository');
-const { ROLES } = require('../../config/constants');
 
-// Admin conecta pela pagina EJS /admin/drive; cliente conecta pelo dashboard
-// novo (React), que so tem rota de API - por isso o cliente volta pra
-// /client (SPA) com a querystring, em vez de uma pagina propria.
-function returnPathFor(role) {
-  return role === ROLES.ADMIN ? '/admin/drive' : '/client';
+// Conecta/reconecta Google Drive - admin e cliente usam a mesma tela
+// (Configurações do cliente, React) pra gerenciar a propria conexão, mesmo
+// quando quem esta logado e o admin usando um canal proprio de teste.
+function returnPathFor() {
+  return '/client';
 }
 
 function connect(req, res) {
   const state = crypto.randomBytes(16).toString('hex');
   req.session.googleOAuthState = state;
-  req.session.googleOAuthReturnPath = returnPathFor(req.session.user.role);
+  req.session.googleOAuthReturnPath = returnPathFor();
   res.redirect(googleService.buildAuthorizeUrl(state));
 }
 
 async function callback(req, res) {
   const { code, state, error, error_description: errorDescription } = req.query;
-  const returnPath = req.session.googleOAuthReturnPath || returnPathFor(req.session.user.role);
+  const returnPath = req.session.googleOAuthReturnPath || returnPathFor();
 
   if (error) {
     return res.redirect(`${returnPath}?google_error=${encodeURIComponent(errorDescription || error)}`);

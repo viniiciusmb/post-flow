@@ -15,17 +15,6 @@ async function findByClientId(clientUserId) {
   return rows[0] || null;
 }
 
-// Substitui a pasta "Geral" atual (so pode existir uma).
-async function upsertGeneralFolder({ driveFolderId, folderName, connectionId }) {
-  await pool.query("DELETE FROM drive_folders WHERE type = 'general'");
-  const { rows } = await pool.query(
-    `INSERT INTO drive_folders (type, drive_folder_id, folder_name, connection_id)
-     VALUES ('general', $1, $2, $3) RETURNING *`,
-    [driveFolderId, folderName, connectionId]
-  );
-  return rows[0];
-}
-
 // Substitui a pasta de um cliente especifico (um cliente so tem uma pasta).
 // connectionId e a conexao Google Drive usada pra ler essa pasta - a do
 // admin quando ele cadastra pro cliente, a do proprio cliente quando ele
@@ -86,7 +75,6 @@ async function listExportFolders() {
 module.exports = {
   listAll,
   findByClientId,
-  upsertGeneralFolder,
   upsertClientFolder,
   updateLastPolled,
   findExportFolderByChannelId,

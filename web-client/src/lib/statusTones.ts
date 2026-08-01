@@ -31,7 +31,6 @@ export const CLIP_STATUS_TONE: Record<ClipStatus, { tone: Tone; label: string; s
 }
 
 export const ORIGIN_LABEL: Record<PostingOrigin, string> = {
-  drive_general: "Drive Geral",
   drive_client: "Drive do Cliente",
   youtube_clip: "YouTube",
 }

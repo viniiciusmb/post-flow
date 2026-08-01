@@ -14,7 +14,6 @@ const POSTING_STATUS = Object.freeze({
 });
 
 const DRIVE_FOLDER_TYPE = Object.freeze({
-  GENERAL: 'general',
   CLIENT: 'client',
 });
 
