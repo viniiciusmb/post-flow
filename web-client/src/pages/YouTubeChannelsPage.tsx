@@ -351,6 +351,7 @@ export function YouTubeChannelsPage() {
   // resposta de POST /api/client/youtube-channels).
   const [latestVideoPrompt, setLatestVideoPrompt] = useState<{ channelId: number; video: LatestChannelVideo } | null>(null)
   const [processingLatest, setProcessingLatest] = useState(false)
+  const [latestVideoError, setLatestVideoError] = useState<string | null>(null)
 
   async function load() {
     const [channelsData, videosData, tiktokData, driveData] = await Promise.all([
@@ -395,13 +396,18 @@ export function YouTubeChannelsPage() {
   async function acceptLatestVideo() {
     if (!latestVideoPrompt) return
     setProcessingLatest(true)
+    setLatestVideoError(null)
     try {
       await api.post(`/api/client/youtube-channels/${latestVideoPrompt.channelId}/process-latest-video`, {})
       setLatestVideoPrompt(null)
+      await load()
       setSuccess("Vídeo mais recente entrou na fila de processamento.")
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível processar esse vídeo agora.")
-      setLatestVideoPrompt(null)
+      // Fica com o popup aberto mostrando o erro (em vez de fechar
+      // silenciosamente) - sem isso o cliente via o popup so sumir sem
+      // explicação nenhuma quando a chamada falhava (ex: video ja
+      // processado antes por engano, canal bloqueado etc).
+      setLatestVideoError(err instanceof ApiError ? err.message : "Não foi possível processar esse vídeo agora.")
     } finally {
       setProcessingLatest(false)
     }
@@ -510,7 +516,15 @@ export function YouTubeChannelsPage() {
         )}
       </div>
 
-      <Dialog open={latestVideoPrompt !== null} onOpenChange={(open) => !open && setLatestVideoPrompt(null)}>
+      <Dialog
+        open={latestVideoPrompt !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLatestVideoPrompt(null)
+            setLatestVideoError(null)
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Já começar a usar o Post Flow com esse canal?</DialogTitle>
@@ -520,6 +534,11 @@ export function YouTubeChannelsPage() {
               vídeos publicados a partir de agora entram na fila sozinhos.
             </DialogDescription>
           </DialogHeader>
+          {latestVideoError && (
+            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {latestVideoError}
+            </p>
+          )}
           {latestVideoPrompt && (
             <div className="flex gap-3 rounded-lg border border-border p-3">
               <div className="h-16 w-28 shrink-0 overflow-hidden rounded-md bg-muted">
@@ -542,11 +561,18 @@ export function YouTubeChannelsPage() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setLatestVideoPrompt(null)} disabled={processingLatest}>
-              Não, só a partir de agora
+            <Button
+              variant="outline"
+              onClick={() => {
+                setLatestVideoPrompt(null)
+                setLatestVideoError(null)
+              }}
+              disabled={processingLatest}
+            >
+              {latestVideoError ? "Fechar" : "Não, só a partir de agora"}
             </Button>
             <Button onClick={acceptLatestVideo} disabled={processingLatest}>
-              {processingLatest ? "Enviando..." : "Sim, processar esse vídeo"}
+              {processingLatest ? "Enviando..." : latestVideoError ? "Tentar de novo" : "Sim, processar esse vídeo"}
             </Button>
           </DialogFooter>
         </DialogContent>

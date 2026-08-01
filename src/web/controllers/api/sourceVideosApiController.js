@@ -3,7 +3,6 @@
 const fs = require('fs');
 const path = require('path');
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
-const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const sourceVideoTiktokTargetsRepository = require('../../../repositories/sourceVideoTiktokTargetsRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
@@ -138,23 +137,15 @@ async function createManual(req, res) {
     return res.status(400).json({ error: 'Link do YouTube invalido. Cole a URL completa do video.' });
   }
 
-  // Video ja existe no sistema - antes so bloqueava com "ja foi adicionado",
-  // o que impedia o cliente de reenviar um video que ele mesmo ja tinha
-  // tentado (ex: deu erro antes) so porque a linha ja existia. Agora: se for
-  // de outro cliente, continua bloqueando (nao mexe no video de outro); se
-  // for do proprio cliente e estiver com erro/cancelado, reenfileira igual
-  // um retry; senao (ja em andamento ou pronto), so informa o status atual
-  // em vez de um erro generico - nunca bloqueia sem explicar o motivo.
-  const existing = await sourceVideosRepository.findByYoutubeVideoId(videoId);
+  // Video ja existe (pra este MESMO cliente - a unicidade e por dono, ver
+  // migration 042, entao clientes diferentes nunca se bloqueiam aqui) -
+  // antes so bloqueava com "ja foi adicionado", o que impedia o cliente de
+  // reenviar um video que ele mesmo ja tinha tentado (ex: deu erro antes) so
+  // porque a linha ja existia. Agora: se estiver com erro/cancelado,
+  // reenfileira igual um retry; senao (ja em andamento ou pronto), so
+  // informa o status atual em vez de um erro generico.
+  const existing = await sourceVideosRepository.findByYoutubeVideoIdForOwner(videoId, req.session.user.id);
   if (existing) {
-    const ownerClientId = existing.youtube_channel_id
-      ? (await youtubeChannelsRepository.findById(existing.youtube_channel_id)).client_user_id
-      : existing.client_user_id;
-
-    if (ownerClientId !== req.session.user.id) {
-      return res.status(409).json({ error: 'Esse video ja foi adicionado antes.' });
-    }
-
     if (['error', 'cancelled'].includes(existing.status)) {
       await clipsRepository.deleteBySourceVideoId(existing.id);
       const updated = await sourceVideosRepository.resetForRetry(existing.id);

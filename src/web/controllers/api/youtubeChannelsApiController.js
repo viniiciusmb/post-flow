@@ -143,6 +143,7 @@ async function processLatestVideo(req, res) {
 
   const sourceVideo = await sourceVideosRepository.createIfNotExists({
     youtubeChannelId: channel.id,
+    ownerClientUserId: req.session.user.id,
     youtubeVideoId: video.videoId,
     title: video.title,
     thumbnailUrl: video.thumbnailUrl,
@@ -150,7 +151,7 @@ async function processLatestVideo(req, res) {
     durationSeconds: video.durationSeconds,
   });
   if (!sourceVideo) {
-    return res.status(409).json({ error: 'Esse video ja foi adicionado antes.' });
+    return res.status(409).json({ error: 'Você já processou esse vídeo antes.' });
   }
 
   const boss = await queueService.getBoss();

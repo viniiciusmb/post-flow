@@ -44,6 +44,7 @@ async function run(boss) {
       for (const video of [...newVideos].reverse()) {
         const created = await sourceVideosRepository.createIfNotExists({
           youtubeChannelId: channel.id,
+          ownerClientUserId: channel.client_user_id,
           youtubeVideoId: video.videoId,
           title: video.title,
           thumbnailUrl: video.thumbnailUrl,

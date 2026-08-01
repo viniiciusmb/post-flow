@@ -3,27 +3,31 @@
 const pool = require('../db/pool');
 
 // ON CONFLICT precisa citar o mesmo predicado WHERE do indice parcial
-// (uq_source_videos_youtube_video_id, migrations/021) - sem isso o Postgres
+// (uq_source_videos_video_per_owner, migrations/042) - sem isso o Postgres
 // nao consegue inferir qual indice usar e a insercao falha com "there is no
 // unique or exclusion constraint matching the ON CONFLICT specification".
-async function createIfNotExists({ youtubeChannelId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds }) {
+// A unicidade e por (video, dono) - nao global - pra dois clientes
+// diferentes poderem processar o MESMO video do YouTube de forma
+// independente (cada um paga o proprio credito), inclusive quando os dois
+// monitoram o mesmo canal real por engano/coincidencia.
+async function createIfNotExists({ youtubeChannelId, ownerClientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds }) {
   const { rows } = await pool.query(
-    `INSERT INTO source_videos (youtube_channel_id, youtube_video_id, title, thumbnail_url, published_at, duration_seconds)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (youtube_video_id) WHERE youtube_video_id IS NOT NULL DO NOTHING
+    `INSERT INTO source_videos (youtube_channel_id, owner_client_user_id, youtube_video_id, title, thumbnail_url, published_at, duration_seconds)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (youtube_video_id, owner_client_user_id) WHERE youtube_video_id IS NOT NULL DO NOTHING
      RETURNING *`,
-    [youtubeChannelId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds]
+    [youtubeChannelId, ownerClientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds]
   );
   return rows[0] || null;
 }
 
 // Video colado manualmente pelo cliente (input_type = 'manual') - nao tem
-// canal, pertence direto ao cliente que colou o link.
+// canal, pertence direto ao cliente que colou o link (tambem o dono).
 async function createManual({ clientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds }) {
   const { rows } = await pool.query(
-    `INSERT INTO source_videos (client_user_id, input_type, youtube_video_id, title, thumbnail_url, published_at, duration_seconds)
-     VALUES ($1, 'manual', $2, $3, $4, $5, $6)
-     ON CONFLICT (youtube_video_id) WHERE youtube_video_id IS NOT NULL DO NOTHING
+    `INSERT INTO source_videos (client_user_id, owner_client_user_id, input_type, youtube_video_id, title, thumbnail_url, published_at, duration_seconds)
+     VALUES ($1, $1, 'manual', $2, $3, $4, $5, $6)
+     ON CONFLICT (youtube_video_id, owner_client_user_id) WHERE youtube_video_id IS NOT NULL DO NOTHING
      RETURNING *`,
     [clientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds]
   );
@@ -34,16 +38,22 @@ async function createManual({ clientUserId, youtubeVideoId, title, thumbnailUrl,
 // youtube_video_id nenhum, pertence direto ao cliente que enviou.
 async function createUpload({ clientUserId, title, localVideoPath, durationSeconds }) {
   const { rows } = await pool.query(
-    `INSERT INTO source_videos (client_user_id, input_type, title, local_video_path, duration_seconds, status)
-     VALUES ($1, 'upload', $2, $3, $4, 'detected')
+    `INSERT INTO source_videos (client_user_id, owner_client_user_id, input_type, title, local_video_path, duration_seconds, status)
+     VALUES ($1, $1, 'upload', $2, $3, $4, 'detected')
      RETURNING *`,
     [clientUserId, title, localVideoPath, durationSeconds]
   );
   return rows[0];
 }
 
-async function findByYoutubeVideoId(youtubeVideoId) {
-  const { rows } = await pool.query('SELECT * FROM source_videos WHERE youtube_video_id = $1', [youtubeVideoId]);
+// Escopado por dono - cada cliente enxerga so a propria copia do video (ver
+// migration 042). E o que permite dois clientes processarem o mesmo video
+// do YouTube de forma independente, sem um bloquear o outro.
+async function findByYoutubeVideoIdForOwner(youtubeVideoId, ownerClientUserId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM source_videos WHERE youtube_video_id = $1 AND owner_client_user_id = $2',
+    [youtubeVideoId, ownerClientUserId]
+  );
   return rows[0] || null;
 }
 
@@ -358,7 +368,7 @@ module.exports = {
   createIfNotExists,
   createManual,
   createUpload,
-  findByYoutubeVideoId,
+  findByYoutubeVideoIdForOwner,
   findById,
   findByIdOwnedByClient,
   deleteByIdOwnedByClient,
