@@ -38,7 +38,14 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
-import type { ErrorPostingItem, PostedItem, PostingQueueItem, PostingScheduleResponse, TikTokAccountSummary } from "@/types/api"
+import type {
+  ErrorPostingItem,
+  PostedItem,
+  PostingQueueItem,
+  PostingScheduleResponse,
+  TikTokAccountSummary,
+  YoutubeChannel,
+} from "@/types/api"
 
 const RETENTION_LABELS: Record<number, string> = {
   24: "1 dia",
@@ -626,14 +633,23 @@ function QueueCard({ accountId, accountName }: { accountId: number; accountName:
 
 function ErrorCard({ accountId, accountName }: { accountId: number; accountName: string }) {
   const [items, setItems] = useState<ErrorPostingItem[] | null>(null)
+  // Canais monitorados do cliente (todos, nao so os que tem erro agora) -
+  // sem isso, o filtro so mostrava como opcao o canal que ja tinha erro
+  // (ex: sempre "Renato Cariani"), dando a impressao de que os outros
+  // canais tinham sumido - na real eles so nao tinham nenhum erro ainda.
+  const [allChannels, setAllChannels] = useState<YoutubeChannel[]>([])
   const [selectedChannel, setSelectedChannel] = useState<string>("all")
   const [retryingNowId, setRetryingNowId] = useState<number | null>(null)
   const [requeueingId, setRequeueingId] = useState<number | null>(null)
   const [itemError, setItemError] = useState<Record<number, string>>({})
 
   async function load() {
-    const data = await api.get<{ postings: ErrorPostingItem[] }>(`/api/client/postings/errors?accountId=${accountId}`)
+    const [data, channelsData] = await Promise.all([
+      api.get<{ postings: ErrorPostingItem[] }>(`/api/client/postings/errors?accountId=${accountId}`),
+      api.get<{ channels: YoutubeChannel[] }>("/api/client/youtube-channels"),
+    ])
     setItems(data.postings)
+    setAllChannels(channelsData.channels)
   }
 
   useEffect(() => {
@@ -678,7 +694,12 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
 
   if (!items) return <Skeleton className="h-32" />
 
-  const channels = Array.from(new Map(items.map((i) => [String(i.channelId ?? "none"), i.channelName ?? "Vídeo avulso"])).entries())
+  const channels = Array.from(
+    new Map<string, string>([
+      ...allChannels.map((c): [string, string] => [String(c.id), c.channelName ?? "Canal"]),
+      ...items.map((i): [string, string] => [String(i.channelId ?? "none"), i.channelName ?? "Vídeo avulso"]),
+    ]).entries()
+  )
 
   if (items.length === 0) {
     return (

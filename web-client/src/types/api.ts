@@ -298,6 +298,7 @@ export type SourceVideoStatus =
   | "error"
   | "cancelled"
   | "paused"
+  | "aguardando_creditos"
 
 export interface SourceVideo {
   id: number
@@ -444,6 +445,14 @@ export interface AdminBillingClientsResponse {
 
 export interface AdminBillingPlansResponse {
   plans: BillingPlan[]
+}
+
+export interface LatestChannelVideo {
+  videoId: string
+  title: string
+  thumbnailUrl: string | null
+  durationSeconds: number | null
+  publishedAt: string | null
 }
 
 export interface AdminOverageSummaryResponse {

@@ -463,6 +463,17 @@ function VideoRow({
         </div>
       )}
 
+      {video.status === "aguardando_creditos" && (
+        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2">
+          <p className="text-xs text-destructive">
+            Sem crédito disponível pra processar este vídeo agora.
+          </p>
+          <Button variant="outline" size="sm" asChild className="h-7 shrink-0 gap-1 text-xs">
+            <a href="/client/billing">Ver planos e crédito</a>
+          </Button>
+        </div>
+      )}
+
       {open && (
         <CardContent className="border-t border-border pt-4">
           {!clips ? (
@@ -511,13 +522,13 @@ function AddManualVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; 
     setSuccess(null)
     setSubmitting(true)
     try {
-      const created = await api.post<{ id: number; title: string }>("/api/client/source-videos/manual", {
+      const created = await api.post<{ id: number; title: string; message?: string }>("/api/client/source-videos/manual", {
         url,
         tiktokAccountIds: selectedAccounts,
       })
       setUrl("")
       setSelectedAccounts([])
-      setSuccess(`"${created.title}" entrou na fila — acompanhe o progresso na lista abaixo.`)
+      setSuccess(created.message || `"${created.title}" entrou na fila — acompanhe o progresso na lista abaixo.`)
       onAdded()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível cortar esse vídeo.")
@@ -673,7 +684,7 @@ function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tik
   )
 }
 
-const PENDING_STATUSES = ["detected", "paused", ...ACTIVE_STATUSES]
+const PENDING_STATUSES = ["detected", "paused", "aguardando_creditos", ...ACTIVE_STATUSES]
 const STAGE_PRIORITY: Record<string, number> = {
   paused: -1,
   cutting: 0,
@@ -681,6 +692,7 @@ const STAGE_PRIORITY: Record<string, number> = {
   transcribing: 2,
   downloading: 3,
   detected: 4,
+  aguardando_creditos: 5,
 }
 
 export function VideosClipsPage() {

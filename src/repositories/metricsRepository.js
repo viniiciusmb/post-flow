@@ -73,6 +73,38 @@ async function pipelineHealthSince(since, until = new Date()) {
   };
 }
 
+// Tempo medio de cada etapa do pipeline, normalizado por minuto de video
+// (ex: "1 min de video demora, em media, 15s de download") - so entra na
+// media quem tem as 3 marcas de etapa preenchidas (ver migration 041) e
+// duration_seconds > 0 (senao a divisao por minuto nao faz sentido).
+async function stageTimingsSince(since, until = new Date()) {
+  const { rows } = await pool.query(
+    `SELECT
+       count(*)::int AS sample_size,
+       avg(EXTRACT(EPOCH FROM (download_completed_at - processing_started_at)) / (duration_seconds / 60.0)) AS avg_download_seconds_per_min,
+       avg(EXTRACT(EPOCH FROM (transcription_completed_at - download_completed_at)) / (duration_seconds / 60.0)) AS avg_transcription_seconds_per_min,
+       avg(EXTRACT(EPOCH FROM (clip_selection_completed_at - transcription_completed_at)) / (duration_seconds / 60.0)) AS avg_selection_seconds_per_min,
+       avg(EXTRACT(EPOCH FROM (updated_at - clip_selection_completed_at)) / (duration_seconds / 60.0)) AS avg_cutting_seconds_per_min,
+       avg(EXTRACT(EPOCH FROM (updated_at - processing_started_at)) / (duration_seconds / 60.0)) AS avg_total_seconds_per_min
+     FROM source_videos
+     WHERE status = 'ready' AND updated_at >= $1 AND updated_at <= $2
+       AND duration_seconds > 0
+       AND processing_started_at IS NOT NULL AND download_completed_at IS NOT NULL
+       AND transcription_completed_at IS NOT NULL AND clip_selection_completed_at IS NOT NULL`,
+    [since, until]
+  );
+  const row = rows[0];
+  const toNumber = (v) => (v === null ? null : Number(v));
+  return {
+    sampleSize: row.sample_size,
+    avgDownloadSecondsPerMinute: toNumber(row.avg_download_seconds_per_min),
+    avgTranscriptionSecondsPerMinute: toNumber(row.avg_transcription_seconds_per_min),
+    avgSelectionSecondsPerMinute: toNumber(row.avg_selection_seconds_per_min),
+    avgCuttingSecondsPerMinute: toNumber(row.avg_cutting_seconds_per_min),
+    avgTotalSecondsPerMinute: toNumber(row.avg_total_seconds_per_min),
+  };
+}
+
 async function queueDepth() {
   const { rows } = await pool.query("SELECT count(*)::int AS count FROM source_videos WHERE status = 'detected'");
   return rows[0].count;
@@ -289,6 +321,7 @@ module.exports = {
   clientRanking,
   volumeSince,
   pipelineHealthSince,
+  stageTimingsSince,
   queueDepth,
   costSince,
   upsertHeartbeat,

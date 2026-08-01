@@ -5,8 +5,15 @@ const youtubeChannelService = require('../../../services/youtubeChannelService')
 const driveConnectionsRepository = require('../../../repositories/driveConnectionsRepository');
 const driveFoldersRepository = require('../../../repositories/driveFoldersRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
+const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 const planLimitsService = require('../../../services/planLimitsService');
+const ytDlpService = require('../../../services/ytDlpService');
+const queueService = require('../../../services/queueService');
+const queuePriorityService = require('../../../services/queuePriorityService');
+const logger = require('../../../lib/logger');
 const { extractDriveFolderId } = require('../../../lib/driveFolderId');
+
+const QUEUE_VIDEO_PROCESSING = 'video-processing';
 
 async function list(req, res) {
   const [channels, tiktokAccounts] = await Promise.all([
@@ -75,6 +82,26 @@ async function create(req, res) {
     channel = await youtubeChannelsRepository.setTiktokAccount(channel.id, req.session.user.id, tiktokAccounts[0].id);
   }
 
+  // Melhor esforco: busca so o video mais recente do canal (sem baixar,
+  // rapido) pra oferecer "quer processar esse ja?" na hora - se falhar (canal
+  // sem video, yt-dlp indisponivel etc), nao atrapalha o cadastro do canal
+  // em si, so fica sem essa sugestao.
+  let latestVideo = null;
+  try {
+    const [video] = await ytDlpService.listChannelVideos(resolved.channelUrl, { limit: 1 });
+    if (video) {
+      latestVideo = {
+        videoId: video.videoId,
+        title: video.title,
+        thumbnailUrl: video.thumbnailUrl,
+        durationSeconds: video.durationSeconds,
+        publishedAt: video.publishedAt,
+      };
+    }
+  } catch (err) {
+    logger.error(`Falha ao buscar o video mais recente do canal recem-cadastrado ${channel.id}:`, err);
+  }
+
   res.status(201).json({
     channel: {
       id: channel.id,
@@ -88,7 +115,49 @@ async function create(req, res) {
       tiktokAccountId: channel.tiktok_account_id,
       tiktokAccountName: tiktokAccounts.length === 1 ? tiktokAccounts[0].display_name || tiktokAccounts[0].tiktok_open_id : null,
     },
+    latestVideo,
   });
+}
+
+// Cliente aceitou o popup "quer processar o video mais recente agora?" -
+// busca o video de novo (nao confia em metadado vindo do cliente) e entra
+// na fila igual um video de canal normal (mesma funcao createIfNotExists
+// que o channelCheckJob usa) - nao mexe no watermark (last_video_id), que
+// so e definido pela primeira checagem periodica do canal.
+async function processLatestVideo(req, res) {
+  const channel = await youtubeChannelsRepository.findById(Number(req.params.id));
+  if (!channel || channel.client_user_id !== req.session.user.id) {
+    return res.status(404).json({ error: 'Canal nao encontrado.' });
+  }
+
+  let video;
+  try {
+    [video] = await ytDlpService.listChannelVideos(channel.channel_url, { limit: 1 });
+  } catch (err) {
+    logger.error(`Falha ao buscar o video mais recente do canal ${channel.id} pra processar agora:`, err);
+    return res.status(502).json({ error: `Nao foi possivel ler os dados do canal: ${err.message}` });
+  }
+  if (!video) {
+    return res.status(404).json({ error: 'Esse canal nao tem nenhum video.' });
+  }
+
+  const sourceVideo = await sourceVideosRepository.createIfNotExists({
+    youtubeChannelId: channel.id,
+    youtubeVideoId: video.videoId,
+    title: video.title,
+    thumbnailUrl: video.thumbnailUrl,
+    publishedAt: video.publishedAt,
+    durationSeconds: video.durationSeconds,
+  });
+  if (!sourceVideo) {
+    return res.status(409).json({ error: 'Esse video ja foi adicionado antes.' });
+  }
+
+  const boss = await queueService.getBoss();
+  const priority = await queuePriorityService.resolveQueuePriorityForClient(req.session.user.id);
+  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: sourceVideo.id }, { priority });
+
+  res.status(201).json({ id: sourceVideo.id, title: sourceVideo.title, status: sourceVideo.status });
 }
 
 async function setTiktokAccount(req, res) {
@@ -176,4 +245,13 @@ async function setDriveExportMode(req, res) {
   res.json({ driveExportMode: channel.drive_export_mode });
 }
 
-module.exports = { list, create, setActive, remove, setExportFolder, setDriveExportMode, setTiktokAccount };
+module.exports = {
+  list,
+  create,
+  setActive,
+  remove,
+  setExportFolder,
+  setDriveExportMode,
+  setTiktokAccount,
+  processLatestVideo,
+};

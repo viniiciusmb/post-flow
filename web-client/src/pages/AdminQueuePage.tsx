@@ -3,10 +3,20 @@ import { IconCheck, IconRefresh, IconX } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api } from "@/lib/api"
+
+interface StageTimings {
+  sampleSize: number
+  avgDownloadSecondsPerMinute: number | null
+  avgTranscriptionSecondsPerMinute: number | null
+  avgSelectionSecondsPerMinute: number | null
+  avgCuttingSecondsPerMinute: number | null
+  avgTotalSecondsPerMinute: number | null
+}
 
 interface QueueItem {
   id: number
@@ -23,6 +33,24 @@ interface QueueOverview {
   processing: QueueItem | null
   waiting: QueueItem[]
   history: QueueItem[]
+  stageTimings: StageTimings
+}
+
+function formatSecondsPerMinute(seconds: number | null) {
+  if (seconds === null) return "—"
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const minutes = Math.floor(seconds / 60)
+  const rest = Math.round(seconds % 60)
+  return `${minutes}min${rest > 0 ? ` ${rest}s` : ""}`
+}
+
+function TimingMetric({ label, seconds }: { label: string; seconds: number | null }) {
+  return (
+    <div>
+      <div className="font-heading text-2xl font-semibold tabular-nums">{formatSecondsPerMinute(seconds)}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  )
 }
 
 const STEPS: { status: string; label: string }[] = [
@@ -160,11 +188,30 @@ export function AdminQueuePage() {
                       {v.title} · {v.channelName}
                     </div>
                   </div>
+                  {v.status === "aguardando_creditos" && <TonePill tone="danger">Sem crédito</TonePill>}
                   <div className="shrink-0 text-xs text-muted-foreground">{timeAgo(v.createdAt)}</div>
                 </div>
               ))}
             </div>
           )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Tempo de processamento (por minuto de vídeo)</CardTitle>
+              <CardDescription>
+                Média dos últimos 30 dias, normalizada por minuto de vídeo — ex: "15s" significa 15 segundos dessa
+                etapa pra cada 1 minuto de vídeo original.
+                {data.stageTimings.sampleSize > 0 && ` Baseado em ${data.stageTimings.sampleSize} vídeo(s).`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-6 sm:grid-cols-5">
+              <TimingMetric label="Download" seconds={data.stageTimings.avgDownloadSecondsPerMinute} />
+              <TimingMetric label="Transcrição" seconds={data.stageTimings.avgTranscriptionSecondsPerMinute} />
+              <TimingMetric label="Seleção de cortes" seconds={data.stageTimings.avgSelectionSecondsPerMinute} />
+              <TimingMetric label="Corte/renderização" seconds={data.stageTimings.avgCuttingSecondsPerMinute} />
+              <TimingMetric label="Total" seconds={data.stageTimings.avgTotalSecondsPerMinute} />
+            </CardContent>
+          </Card>
 
           <div className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">Histórico recente</div>
           {data.history.length === 0 ? (

@@ -214,7 +214,8 @@ async function updateStatus(id, status, { errorMessage = null } = {}) {
 async function saveDownload(id, localVideoPath, { bytes = null, egressType = null, tunnelId = null } = {}) {
   await pool.query(
     `UPDATE source_videos
-     SET local_video_path = $2, download_bytes = $3, download_egress_type = $4, download_tunnel_id = $5, updated_at = now()
+     SET local_video_path = $2, download_bytes = $3, download_egress_type = $4, download_tunnel_id = $5,
+         download_completed_at = now(), updated_at = now()
      WHERE id = $1`,
     [id, localVideoPath, bytes, egressType, tunnelId]
   );
@@ -224,7 +225,8 @@ async function saveTranscript(id, { transcriptText, transcriptWords, whisperAudi
   await pool.query(
     `UPDATE source_videos
      SET transcript_text = $2, transcript_words = $3,
-         whisper_audio_seconds = $4, whisper_cost_usd = $5, updated_at = now()
+         whisper_audio_seconds = $4, whisper_cost_usd = $5,
+         transcription_completed_at = now(), updated_at = now()
      WHERE id = $1`,
     [id, transcriptText, JSON.stringify(transcriptWords), whisperAudioSeconds, whisperCostUsd]
   );
@@ -236,6 +238,18 @@ async function saveClaudeUsage(id, { inputTokens, outputTokens, costUsd }) {
      SET claude_input_tokens = $2, claude_output_tokens = $3, claude_cost_usd = $4, updated_at = now()
      WHERE id = $1`,
     [id, inputTokens, outputTokens, costUsd]
+  );
+}
+
+// Marca o fim da etapa de selecao de cortes (seja pela IA ou pelo modo
+// "video inteiro"/"quantidade fixa") - usado pra calcular quanto tempo cada
+// etapa do pipeline levou (ver metricsRepository.stageTimingsSince). COALESCE
+// pra nao sobrescrever se o video for retomado depois de uma pausa e passar
+// de novo por esse ponto com os cortes ja escolhidos antes.
+async function markClipSelectionCompleted(id) {
+  await pool.query(
+    `UPDATE source_videos SET clip_selection_completed_at = COALESCE(clip_selection_completed_at, now()) WHERE id = $1`,
+    [id]
   );
 }
 
@@ -312,13 +326,15 @@ async function findCurrentlyProcessing() {
   return rows[0] || null;
 }
 
+// 'aguardando_creditos' entra aqui tambem (nao so 'detected') - senao esses
+// videos ficavam invisiveis pro admin (nao aparecem em nenhuma outra lista).
 async function listWaiting() {
   const { rows } = await pool.query(
     `SELECT sv.*, yc.channel_name, u.email AS client_email, u.business_name AS client_business_name
      FROM source_videos sv
      LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
      JOIN users u ON u.id = coalesce(yc.client_user_id, sv.client_user_id)
-     WHERE sv.status = 'detected'
+     WHERE sv.status IN ('detected', 'aguardando_creditos')
      ORDER BY sv.created_at ASC`
   );
   return rows;
@@ -359,6 +375,7 @@ module.exports = {
   saveDownload,
   saveTranscript,
   saveClaudeUsage,
+  markClipSelectionCompleted,
   markProcessingStarted,
   listForClient,
   countInProgress,

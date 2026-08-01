@@ -10,10 +10,25 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TonePill } from "@/components/ui/tone-pill"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
-import type { DriveStatusResponse, SourceVideo, TikTokAccountSummary, YoutubeChannel } from "@/types/api"
+import type { DriveStatusResponse, LatestChannelVideo, SourceVideo, TikTokAccountSummary, YoutubeChannel } from "@/types/api"
+
+function formatDuration(seconds: number | null) {
+  if (!seconds) return null
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  return `${minutes}:${String(rest).padStart(2, "0")}`
+}
 
 function initials(name: string) {
   return name.slice(0, 2).toUpperCase()
@@ -331,6 +346,11 @@ export function YouTubeChannelsPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Popup "quer processar o video mais recente agora?" - so aparece quando o
+  // canal recem-cadastrado tem um video pra sugerir (ver latestVideo na
+  // resposta de POST /api/client/youtube-channels).
+  const [latestVideoPrompt, setLatestVideoPrompt] = useState<{ channelId: number; video: LatestChannelVideo } | null>(null)
+  const [processingLatest, setProcessingLatest] = useState(false)
 
   async function load() {
     const [channelsData, videosData, tiktokData, driveData] = await Promise.all([
@@ -355,14 +375,35 @@ export function YouTubeChannelsPage() {
     setSuccess(null)
     setSubmitting(true)
     try {
-      await api.post("/api/client/youtube-channels", { channelUrl })
+      const created = await api.post<{ channel: YoutubeChannel; latestVideo: LatestChannelVideo | null }>(
+        "/api/client/youtube-channels",
+        { channelUrl }
+      )
       setChannelUrl("")
       setSuccess('Canal adicionado, ainda "Pausado" — marque "Baixar e cortar automaticamente" abaixo pra ativar.')
       await load()
+      if (created.latestVideo) {
+        setLatestVideoPrompt({ channelId: created.channel.id, video: created.latestVideo })
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Nao foi possivel adicionar o canal.")
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function acceptLatestVideo() {
+    if (!latestVideoPrompt) return
+    setProcessingLatest(true)
+    try {
+      await api.post(`/api/client/youtube-channels/${latestVideoPrompt.channelId}/process-latest-video`, {})
+      setLatestVideoPrompt(null)
+      setSuccess("Vídeo mais recente entrou na fila de processamento.")
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Não foi possível processar esse vídeo agora.")
+      setLatestVideoPrompt(null)
+    } finally {
+      setProcessingLatest(false)
     }
   }
 
@@ -468,6 +509,48 @@ export function YouTubeChannelsPage() {
           </div>
         )}
       </div>
+
+      <Dialog open={latestVideoPrompt !== null} onOpenChange={(open) => !open && setLatestVideoPrompt(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Já começar a usar o Post Flow com esse canal?</DialogTitle>
+            <DialogDescription>
+              Encontramos o vídeo mais recente desse canal. Quer que a gente já processe ele agora (baixar, cortar e
+              deixar pronto pra postar)? Se preferir não, o canal continua monitorado normalmente — só os próximos
+              vídeos publicados a partir de agora entram na fila sozinhos.
+            </DialogDescription>
+          </DialogHeader>
+          {latestVideoPrompt && (
+            <div className="flex gap-3 rounded-lg border border-border p-3">
+              <div className="h-16 w-28 shrink-0 overflow-hidden rounded-md bg-muted">
+                {latestVideoPrompt.video.thumbnailUrl ? (
+                  <img src={latestVideoPrompt.video.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <IconMovie className="size-5 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 text-sm font-medium">{latestVideoPrompt.video.title}</p>
+                {formatDuration(latestVideoPrompt.video.durationSeconds) && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatDuration(latestVideoPrompt.video.durationSeconds)}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLatestVideoPrompt(null)} disabled={processingLatest}>
+              Não, só a partir de agora
+            </Button>
+            <Button onClick={acceptLatestVideo} disabled={processingLatest}>
+              {processingLatest ? "Enviando..." : "Sim, processar esse vídeo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   )
 }

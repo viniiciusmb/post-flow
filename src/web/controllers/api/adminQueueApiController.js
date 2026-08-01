@@ -3,6 +3,7 @@
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
+const metricsRepository = require('../../../repositories/metricsRepository');
 const queueService = require('../../../services/queueService');
 const queuePriorityService = require('../../../services/queuePriorityService');
 
@@ -20,16 +21,21 @@ function summarize(row) {
 }
 
 async function overview(req, res) {
-  const [processing, waiting, history] = await Promise.all([
+  const since30d = new Date();
+  since30d.setDate(since30d.getDate() - 30);
+
+  const [processing, waiting, history, stageTimings] = await Promise.all([
     sourceVideosRepository.findCurrentlyProcessing(),
     sourceVideosRepository.listWaiting(),
     sourceVideosRepository.listRecentHistory({ limit: 20 }),
+    metricsRepository.stageTimingsSince(since30d),
   ]);
 
   res.json({
     processing: processing ? summarize(processing) : null,
     waiting: waiting.map(summarize),
     history: history.map(summarize),
+    stageTimings,
   });
 }
 

@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
+const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const sourceVideoTiktokTargetsRepository = require('../../../repositories/sourceVideoTiktokTargetsRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
@@ -137,9 +138,43 @@ async function createManual(req, res) {
     return res.status(400).json({ error: 'Link do YouTube invalido. Cole a URL completa do video.' });
   }
 
+  // Video ja existe no sistema - antes so bloqueava com "ja foi adicionado",
+  // o que impedia o cliente de reenviar um video que ele mesmo ja tinha
+  // tentado (ex: deu erro antes) so porque a linha ja existia. Agora: se for
+  // de outro cliente, continua bloqueando (nao mexe no video de outro); se
+  // for do proprio cliente e estiver com erro/cancelado, reenfileira igual
+  // um retry; senao (ja em andamento ou pronto), so informa o status atual
+  // em vez de um erro generico - nunca bloqueia sem explicar o motivo.
   const existing = await sourceVideosRepository.findByYoutubeVideoId(videoId);
   if (existing) {
-    return res.status(409).json({ error: 'Esse video ja foi adicionado antes.' });
+    const ownerClientId = existing.youtube_channel_id
+      ? (await youtubeChannelsRepository.findById(existing.youtube_channel_id)).client_user_id
+      : existing.client_user_id;
+
+    if (ownerClientId !== req.session.user.id) {
+      return res.status(409).json({ error: 'Esse video ja foi adicionado antes.' });
+    }
+
+    if (['error', 'cancelled'].includes(existing.status)) {
+      await clipsRepository.deleteBySourceVideoId(existing.id);
+      const updated = await sourceVideosRepository.resetForRetry(existing.id);
+      const boss = await queueService.getBoss();
+      const priority = await queuePriorityService.resolveQueuePriorityForClient(req.session.user.id);
+      await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: existing.id }, { priority });
+      return res.status(200).json({
+        id: existing.id,
+        title: existing.title,
+        status: updated.status,
+        message: `"${existing.title}" ja estava no sistema (com erro) - recolocamos na fila.`,
+      });
+    }
+
+    return res.status(200).json({
+      id: existing.id,
+      title: existing.title,
+      status: existing.status,
+      message: `"${existing.title}" ja esta no sistema (status: ${existing.status}).`,
+    });
   }
 
   const targets = await resolveTiktokAccountIds(req);

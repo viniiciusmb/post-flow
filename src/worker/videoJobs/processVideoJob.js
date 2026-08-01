@@ -75,7 +75,7 @@ async function run(sourceVideoId) {
   const clientUserId = sourceVideo.youtube_channel_id
     ? (await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id)).client_user_id
     : sourceVideo.client_user_id;
-  const settings = await clientVideoSettingsRepository.findByClientId(clientUserId);
+  let settings = await clientVideoSettingsRepository.findByClientId(clientUserId);
   const checkCancelled = () => isCancelRequested(sourceVideo.id);
 
   try {
@@ -207,9 +207,19 @@ async function run(sourceVideoId) {
         }))
       );
     }
+    await sourceVideosRepository.markClipSelectionCompleted(sourceVideo.id);
 
     await checkPaused(sourceVideo.id);
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'cutting');
+
+    // Recarrega as configuracoes agora, na hora de cortar de verdade - o
+    // download+transcricao+selecao de trechos pode levar bastante tempo
+    // (as vezes 10+ minutos num video longo), e se o cliente mudar o estilo
+    // de legenda/titulo nesse meio tempo, o corte tinha saido com o estilo
+    // ANTIGO (o que estava valendo quando o job comecou), nao o que aparece
+    // selecionado na tela agora. Sem isso era exatamente o bug reportado:
+    // "escolhi uma legenda e saiu outra parecida, com cor errada".
+    settings = await clientVideoSettingsRepository.findByClientId(clientUserId);
 
     // Canal do YouTube posta numa unica conta (a vinculada a ele); video
     // avulso (upload/link colado) pode ir pra varias, escolhidas pelo
