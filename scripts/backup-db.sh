@@ -104,39 +104,85 @@ rotate "$BACKUP_ROOT/weekly" "$KEEP_WEEKLY"
 rotate "$BACKUP_ROOT/monthly" "$KEEP_MONTHLY"
 
 # ---------------------------------------------------------------------------
-# Copia fora da VPS (opcional, mas e o que protege contra perder o servidor).
+# Copia fora da VPS - o que protege contra PERDER O SERVIDOR.
 #
-# Tudo acima protege contra migration ruim, DELETE sem WHERE e bug - mas nao
+# Tudo acima protege contra migration ruim, DELETE sem WHERE e bug, mas nao
 # contra o disco da VPS falhar, porque as copias estao NO MESMO disco.
 #
-# Pra ligar, coloque num arquivo /etc/postflow-backup.env (chmod 600):
-#   OFFSITE_BUCKET=s3://meu-bucket/postflow
-#   AWS_ACCESS_KEY_ID=...
-#   AWS_SECRET_ACCESS_KEY=...
-#   AWS_ENDPOINT_URL=https://s3.us-west-004.backblazeb2.com   # so pro B2
-# e instale o cliente: apt-get install -y awscli
+# Usa a API NATIVA do Backblaze B2 (curl + jq, que ja existem no servidor) em
+# vez da interface S3. Motivo: a VPS e Ubuntu 24.04 e o pacote "awscli" nao
+# existe mais nos repositorios dela; a alternativa seria instalar o AWS CLI v2
+# na mao (~50 MB) ou o rclone, e nada disso se justifica pra mandar um arquivo
+# de 1,4 MB por dia. Sao 3 chamadas HTTP simples.
+#
+# Pra ligar, crie /etc/postflow-backup.env (chmod 600, NUNCA no git):
+#   B2_KEY_ID=...
+#   B2_APP_KEY=...
+#   B2_BUCKET=postflow
 #
 # Sem esse arquivo, o backup local continua funcionando normalmente e so
-# registra um aviso - de proposito: falha no envio pra fora nunca pode fazer
-# parecer que nao houve backup nenhum.
+# registra "local-apenas" - de proposito: falha no envio pra fora nunca pode
+# fazer parecer que nao houve backup nenhum.
 # ---------------------------------------------------------------------------
 OFFSITE_STATUS="local-apenas"
 [ -f /etc/postflow-backup.env ] && . /etc/postflow-backup.env
 
-if [ -n "${OFFSITE_BUCKET:-}" ]; then
-  if ! command -v aws >/dev/null 2>&1; then
-    log "AVISO: OFFSITE_BUCKET configurado mas o comando 'aws' nao existe (apt-get install -y awscli)."
+upload_b2() {
+  local arquivo="$1" nome="$2"
+
+  # 1) Autentica. A chave e limitada ao bucket, entao a propria resposta ja diz
+  #    qual bucketId ela alcanca - nao precisa procurar pelo nome.
+  local auth
+  auth=$(curl -s --max-time 30 -u "${B2_KEY_ID}:${B2_APP_KEY}" \
+    https://api.backblazeb2.com/b2api/v3/b2_authorize_account) || return 1
+
+  local token api_url bucket_id
+  token=$(echo "$auth" | jq -r '.authorizationToken // empty')
+  api_url=$(echo "$auth" | jq -r '.apiInfo.storageApi.apiUrl // empty')
+  bucket_id=$(echo "$auth" | jq -r '.apiInfo.storageApi.bucketId // empty')
+  [ -z "$token" ] && { log "B2: autenticacao falhou: $(echo "$auth" | jq -r '.message // "resposta inesperada"')"; return 1; }
+  [ -z "$bucket_id" ] && { log "B2: a chave nao esta limitada a um bucket - refaca a chave restrita ao bucket ${B2_BUCKET:-postflow}."; return 1; }
+
+  # 2) Pede a URL de upload (o B2 sorteia um servidor por envio).
+  local up
+  up=$(curl -s --max-time 30 -H "Authorization: ${token}" \
+    "${api_url}/b2api/v3/b2_get_upload_url?bucketId=${bucket_id}") || return 1
+  local up_url up_token
+  up_url=$(echo "$up" | jq -r '.uploadUrl // empty')
+  up_token=$(echo "$up" | jq -r '.authorizationToken // empty')
+  [ -z "$up_url" ] && { log "B2: nao consegui a URL de upload: $(echo "$up" | jq -r '.message // "resposta inesperada"')"; return 1; }
+
+  # 3) Envia. O B2 EXIGE o SHA1 do conteudo e confere do lado dele - se o
+  #    arquivo chegar corrompido, o proprio B2 recusa. E verificacao de
+  #    integridade de graca, alem da que ja fizemos com pg_restore --list.
+  local sha1
+  sha1=$(sha1sum "$arquivo" | cut -d' ' -f1)
+  local resp
+  resp=$(curl -s --max-time 300 -X POST "$up_url" \
+    -H "Authorization: ${up_token}" \
+    -H "X-Bz-File-Name: ${nome}" \
+    -H "Content-Type: application/octet-stream" \
+    -H "X-Bz-Content-Sha1: ${sha1}" \
+    --data-binary "@${arquivo}") || return 1
+
+  [ "$(echo "$resp" | jq -r '.fileId // empty')" = "" ] && {
+    log "B2: upload recusado: $(echo "$resp" | jq -r '.message // "resposta inesperada"')"
+    return 1
+  }
+  return 0
+}
+
+if [ -n "${B2_KEY_ID:-}" ] && [ -n "${B2_APP_KEY:-}" ]; then
+  if ! command -v jq >/dev/null 2>&1; then
+    log "AVISO: B2 configurado mas falta o 'jq' (apt-get install -y jq)."
     OFFSITE_STATUS="offsite-sem-cliente"
   else
-    ENDPOINT_ARG=""
-    [ -n "${AWS_ENDPOINT_URL:-}" ] && ENDPOINT_ARG="--endpoint-url $AWS_ENDPOINT_URL"
-    log "Enviando copia pra $OFFSITE_BUCKET ..."
-    # shellcheck disable=SC2086
-    if aws $ENDPOINT_ARG s3 cp "$TARGET" "$OFFSITE_BUCKET/$(basename "$TARGET")" >/dev/null 2>&1; then
-      log "Copia externa enviada."
+    log "Enviando copia pro Backblaze B2..."
+    if upload_b2 "$TARGET" "$(basename "$TARGET")"; then
+      log "Copia externa enviada e confirmada pelo B2 (SHA1 conferido)."
       OFFSITE_STATUS="offsite-ok"
     else
-      log "AVISO: falha ao enviar a copia externa (o backup local esta salvo)."
+      log "AVISO: falha ao enviar a copia externa (o backup LOCAL esta salvo)."
       OFFSITE_STATUS="offsite-falhou"
     fi
   fi

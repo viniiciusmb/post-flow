@@ -17,10 +17,13 @@ Tudo que dava pra fazer sozinho das seções 1, 2, 3 e 4 foi feito e já está e
   está publicado na landing, nos Termos, na Privacidade e na página de contato
   (`src/config/constants.js` → `CONTACT.supportEmail`), então hoje o site anuncia um canal de
   suporte que não recebe nada.
-- [ ] **Criar a conta no Backblaze B2** e passar as credenciais pra ligar o backup fora da VPS.
-  O script já está pronto e testado — é só colar num arquivo `/etc/postflow-backup.env`. Passo a
-  passo em `docs/backups.md`. Hoje o backup existe, mas todas as cópias estão no MESMO disco da
-  produção (protege contra bug/erro humano, não contra perder o servidor).
+- [x] ~~Criar a conta no Backblaze B2~~ **FEITO em 02/08/2026.** Bucket privado `postflow`,
+  chave limitada a ele, envio usando a API nativa do B2 (`curl`+`jq` — o Ubuntu 24.04 da VPS não
+  tem mais `awscli` nos repositórios). Testado de verdade: o arquivo foi baixado DE VOLTA do B2 e
+  restaurado, batendo com produção.
+- [ ] **Regenerar a Master Application Key do Backblaze** — ela chegou a ser colada no chat antes
+  de trocarmos pela chave limitada ao bucket. A limitada é a que está em uso; a Master continua
+  válida até ser regenerada no painel (Application Keys → Regenerate Master Application Key).
 - [ ] **Escolher um serviço de e-mail** (Resend/SendGrid/SES) — continua bloqueando "esqueci minha
   senha" e verificação de e-mail no cadastro (ver seção 8).
 
