@@ -86,26 +86,44 @@ credenciais. Como o dump tem ~1,4 MB, qualquer plano gratuito cobre com folga.
 
 ### Como ligar (Backblaze B2 — escolhido pelo fundador)
 
-1. Crie a conta em [backblaze.com/b2](https://www.backblaze.com/b2/cloud-storage.html) e um
-   bucket **privado** (ex: `postflow-backups`).
-2. Em "Application Keys", gere uma chave com acesso só a esse bucket. Anote `keyID`,
-   `applicationKey` e o **endpoint** do bucket (aparece na lista de buckets, algo como
-   `s3.us-west-004.backblazeb2.com`).
-3. Na VPS:
+Bucket já criado em 02/08/2026:
+
+| | |
+|---|---|
+| Nome | `postflow` |
+| Tipo | Private |
+| Endpoint | `s3.us-east-005.backblazeb2.com` |
+| ID do bucket | `5fc9a2ad4208c73e90f20b12` |
+
+Falta a chave de acesso. No painel do Backblaze, **Application Keys → Add a New Application
+Key**, com acesso limitado ao bucket `postflow` (não "All") e tipo **Read and Write**. O
+`applicationKey` aparece **uma única vez** — se fechar a página, tem que gerar outra.
+
+Depois, na VPS:
 
 ```bash
 ssh root@72.61.219.94
 apt-get update && apt-get install -y awscli
 
 cat > /etc/postflow-backup.env <<'FIM'
-OFFSITE_BUCKET=s3://postflow-backups/postflow
+OFFSITE_BUCKET=s3://postflow/postflow
 AWS_ACCESS_KEY_ID=SEU_KEY_ID
 AWS_SECRET_ACCESS_KEY=SUA_APPLICATION_KEY
-AWS_ENDPOINT_URL=https://s3.us-west-004.backblazeb2.com
+AWS_ENDPOINT_URL=https://s3.us-east-005.backblazeb2.com
 FIM
 chmod 600 /etc/postflow-backup.env
 
 /usr/local/bin/postflow-backup    # deve terminar com "(offsite-ok)"
+```
+
+> O arquivo `/etc/postflow-backup.env` fica **fora do repositório** de propósito (a chave é uma
+> senha). Nunca commite esses valores.
+
+Pra conferir depois que os arquivos estão chegando mesmo:
+
+```bash
+. /etc/postflow-backup.env
+aws --endpoint-url "$AWS_ENDPOINT_URL" s3 ls s3://postflow/postflow/
 ```
 
 Se o envio externo falhar, o backup local continua sendo feito normalmente e o script registra
