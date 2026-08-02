@@ -92,10 +92,25 @@ async function createCheckoutSessionForPackage({ customerId, amountCents, minute
 // Cadastra cartao pra cobranca automatica de excedente sem cobrar nada na
 // hora (modo "setup") - o cartao so e debitado depois, pelo
 // overageBillingJob semanal.
+// Guarda o cartao do cliente pra cobrar o excedente DEPOIS, sem ele estar na
+// tela (o overageBillingJob roda de hora em hora, sozinho).
+//
+// Dois parametros aqui nao sao opcionais, e a falta deles so aparece tarde:
+//
+//   currency  - a Stripe recusa a sessao de setup sem moeda quando o cliente
+//               ainda nao tem uma definida. Era erro na hora de abrir a tela:
+//               "Missing required param: currency".
+//
+// A sessao de setup ja guarda o cartao pronto pra uso futuro; quem declara
+// que a cobranca acontece com o cliente ausente e o off_session:true na hora
+// de pagar a fatura (ver createInvoiceItemsAndPay). Sem esse par, cobranca
+// automatica de excedente e recusada por autenticacao pendente - e o cliente
+// nem estaria online pra autenticar.
 async function createSetupSessionForOverageCard({ customerId, successUrl, cancelUrl, metadata }) {
   const stripe = getClient();
   return stripe.checkout.sessions.create({
     mode: 'setup',
+    currency: 'brl',
     customer: customerId,
     metadata,
     success_url: successUrl,
@@ -136,14 +151,37 @@ async function createInvoiceItemsAndPay({ customerId, paymentMethodId, items }) 
       description: item.description,
     });
   }
+  // auto_advance FALSE de proposito. Com true, a Stripe finaliza e cobra
+  // sozinha em segundo plano; o pay() logo abaixo entao explodia com "Invoice
+  // is already paid". E o pior nao era o erro: o overageBillingJob trata
+  // exceção como falha de cobranca e deixa os lancamentos como 'pendente',
+  // entao na hora seguinte ele criava os itens DE NOVO e cobrava o cliente
+  // uma segunda vez. Controlando finalize+pay aqui, o resultado da cobranca e
+  // o que a funcao devolve, e so entao os lancamentos sao marcados como pagos.
   const invoice = await stripe.invoices.create({
     customer: customerId,
-    auto_advance: true,
+    auto_advance: false,
     default_payment_method: paymentMethodId,
     collection_method: 'charge_automatically',
+    // Sem isto a fatura nasce VAZIA. Os invoiceItems acima ficam "pendentes"
+    // no cliente, e as versoes atuais da API nao os puxam por padrao: a
+    // cobranca saia com total R$ 0,00, a Stripe marcava como paga, o job
+    // marcava os lancamentos como pagos, e o cliente nunca era cobrado pelo
+    // excedente. Falha silenciosa: tudo "funcionava", so nao entrava dinheiro.
+    pending_invoice_items_behavior: 'include',
   });
+  // Finalizar uma fatura com collection_method 'charge_automatically' JA
+  // dispara a cobranca. Chamar pay() em seguida explodia com "Invoice is
+  // already paid" - e como o overageBillingJob trata exceção como falha, os
+  // lancamentos ficavam 'pendente' e o cliente era cobrado DE NOVO na hora
+  // seguinte. Por isso conferimos o status antes: so chamamos pay() se a
+  // fatura realmente ficou em aberto.
   const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
-  return stripe.invoices.pay(finalized.id);
+  if (finalized.status === 'paid') return finalized;
+  // off_session: true diz a Stripe que ninguem esta na frente da tela pra
+  // responder a um desafio do banco - e o caso do excedente, cobrado por um
+  // job de fundo.
+  return stripe.invoices.pay(finalized.id, { off_session: true });
 }
 
 async function createProductAndPrice({ name, priceCents, intervalMonths }) {

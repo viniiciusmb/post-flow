@@ -257,6 +257,28 @@
   --color-sidebar: var(--sidebar);
 }
 
+/* ===========================================================================
+   CAUSA RAIZ das "linhas pretas" que apareciam pela interface inteira.
+   ---------------------------------------------------------------------------
+   O Tailwind v4 mudou a cor PADRAO de borda: era cinza (gray-200), virou
+   `currentColor`. O reset dele declara `*, ::after, ::before { border: 0 solid }`
+   sem cor nenhuma, e as utilidades `border`, `border-b`, `border-t` so definem
+   ESTILO e LARGURA. Resultado: qualquer borda sem classe de cor explicita
+   herdava a cor do TEXTO, ou seja, quase preto.
+   Era isso que fazia cada cartao, cada divisoria e a barra do topo parecerem
+   contornados a caneta - e nao adiantava clarear o token --border, porque o
+   token nem estava sendo usado nesses casos.
+   Esta regra devolve o comportamento esperado: borda sem cor usa --border.
+   =========================================================================== */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop {
+    border-color: var(--border);
+  }
+}
+
 body {
   @apply bg-background text-foreground antialiased;
   font-family: var(--font-sans);

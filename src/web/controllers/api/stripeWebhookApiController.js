@@ -78,6 +78,26 @@ async function handleSubscriptionUpdated(subscription) {
   }
 }
 
+// A fatura pode nao estar ligada a uma assinatura (fatura avulsa de
+// excedente, por exemplo), entao a busca e sempre pelo customer.
+async function handleInvoicePaymentFailed(invoice) {
+  const existing = await clientSubscriptionsRepository.findByStripeCustomerId(invoice.customer);
+  if (!existing) return;
+  await clientSubscriptionsRepository.setStatus(existing.client_user_id, 'inadimplente');
+  logger.warn(`Cobranca recusada do cliente ${existing.client_user_id} (fatura ${invoice.id}) - marcado como inadimplente.`);
+}
+
+async function handleInvoicePaid(invoice) {
+  const existing = await clientSubscriptionsRepository.findByStripeCustomerId(invoice.customer);
+  if (!existing) return;
+  // So reativa quem estava inadimplente. Nao mexe em quem cancelou de
+  // proposito: pagar uma fatura antiga nao deveria ressuscitar a assinatura.
+  if (existing.status !== 'inadimplente') return;
+  await clientSubscriptionsRepository.setStatus(existing.client_user_id, 'ativo');
+  await creditsUnlockService.unlockAwaitingCreditsForClient(existing.client_user_id);
+  logger.info(`Cliente ${existing.client_user_id} pagou a fatura ${invoice.id} - assinatura reativada.`);
+}
+
 async function webhook(req, res) {
   let event;
   try {
@@ -92,11 +112,36 @@ async function webhook(req, res) {
       case 'checkout.session.completed':
         await handleCheckoutCompleted(event.data.object);
         break;
+      // Todo evento que mexe no ciclo de vida da assinatura cai no mesmo
+      // tratamento: ele le o status que a Stripe mandou e sincroniza o nosso.
+      // "created" entra aqui porque a assinatura pode nascer fora do nosso
+      // checkout (o admin criando pelo dashboard da Stripe, por exemplo), e
+      // nesse caso nao existiria checkout.session.completed nenhum.
+      case 'customer.subscription.created':
       case 'customer.subscription.updated':
+      case 'customer.subscription.paused':
+      case 'customer.subscription.resumed':
       case 'customer.subscription.deleted':
         await handleSubscriptionUpdated(event.data.object);
         break;
+      // Cobranca recusada. A Stripe tambem manda subscription.updated com
+      // past_due, mas isso pode demorar; aqui o cliente ja fica marcado como
+      // inadimplente na hora, que e o que trava processamento novo.
+      case 'invoice.payment_failed':
+        await handleInvoicePaymentFailed(event.data.object);
+        break;
+      // Pagamento entrou (mensalidade ou fatura de excedente). Se o cliente
+      // estava inadimplente, volta a ficar ativo sem precisar esperar o
+      // proximo subscription.updated.
+      case 'invoice.paid':
+      case 'invoice.payment_succeeded':
+        await handleInvoicePaid(event.data.object);
+        break;
       default:
+        // Os outros eventos que o endpoint recebe (invoice.created,
+        // invoice.deleted etc) sao ignorados de proposito: nao mudam nada do
+        // nosso lado. Devolver 200 pra eles evita que a Stripe fique
+        // reenviando e marque o endpoint como problematico.
         break;
     }
     res.json({ received: true });
