@@ -5,7 +5,6 @@ const express = require('express');
 const helmet = require('helmet');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
-const rateLimit = require('express-rate-limit');
 
 const config = require('../config');
 const pool = require('../db/pool');
@@ -29,6 +28,8 @@ const clientBillingApiRoutes = require('./routes/api/clientBillingApiRoutes');
 const adminBillingApiRoutes = require('./routes/api/adminBillingApiRoutes');
 const stripeWebhookApiRoutes = require('./routes/api/stripeWebhookApiRoutes');
 const errorHandler = require('./middleware/errorHandler');
+const csrf = require('./middleware/csrf');
+const rateLimits = require('./middleware/rateLimits');
 
 const app = express();
 
@@ -79,10 +80,20 @@ app.use(
     cookie: {
       httpOnly: true,
       secure: config.isProduction,
+      // 'lax' e a defesa principal contra CSRF: o navegador nao manda esse
+      // cookie num POST/PUT/DELETE vindo de outro site. NAO pode ser 'strict'
+      // porque os retornos de OAuth (TikTok/Google) sao navegacoes vindas de
+      // outro dominio - com 'strict' o usuario voltaria "deslogado" do
+      // callback e a conexao nunca completaria.
+      sameSite: 'lax',
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 dias
     },
   })
 );
+
+// Segunda camada anti-CSRF (token de dupla submissao). Precisa vir depois da
+// sessao (guarda o token nela) e antes das rotas. Ver middleware/csrf.js.
+app.use(csrf.middleware);
 
 // Deixa req.session.user disponivel em todas as views (nav, saudacao, etc).
 app.use((req, res, next) => {
@@ -90,8 +101,17 @@ app.use((req, res, next) => {
   next();
 });
 
-const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
-app.use(['/login', '/register', '/api/auth/login'], loginLimiter);
+// Limites de requisicao por categoria (ver middleware/rateLimits.js). A ordem
+// importa: o mais especifico primeiro, o teto geral por ultimo. O webhook da
+// Stripe fica de fora - quem chama e a Stripe, que pode legitimamente mandar
+// varios eventos de uma vez, e a rota ja e autenticada por assinatura.
+app.use(['/login', '/register', '/api/auth/login'], rateLimits.auth);
+app.use('/api/tunnel', rateLimits.publicApi);
+app.use(['/api/client/billing', '/api/admin/billing'], rateLimits.billing);
+app.use('/api/client/source-videos/upload', rateLimits.upload);
+app.use('/api', (req, res, next) =>
+  req.path.startsWith('/stripe/webhook') ? next() : rateLimits.geral(req, res, next)
+);
 
 app.get('/', (req, res) => {
   if (!req.session.user) return res.redirect('/login');

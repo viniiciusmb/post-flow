@@ -26,7 +26,7 @@ import { TonePill } from "@/components/ui/tone-pill"
 import { VideoSettingsCard } from "@/components/dashboard/VideoSettingsCard"
 import { ClipStyleEditorCard } from "@/components/dashboard/ClipStyleEditorCard"
 import { useAuth } from "@/hooks/useAuth"
-import { api, ApiError } from "@/lib/api"
+import { api, ApiError, csrfToken } from "@/lib/api"
 import { CLIP_STATUS_TONE, SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
 import { ACTIVE_STATUSES, computeVideoProgress, formatEta } from "@/lib/videoProgress"
 import type { Clip, SourceVideo, SourceVideoStatus, TikTokAccountSummary, YoutubeChannel } from "@/types/api"
@@ -605,6 +605,9 @@ function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tik
 
     const xhr = new XMLHttpRequest()
     xhr.open("POST", "/api/client/source-videos/upload")
+    // Upload usa XHR direto (pra ter barra de progresso) em vez do lib/api,
+    // então precisa mandar o token anti-CSRF na mão.
+    xhr.setRequestHeader("X-CSRF-Token", csrfToken())
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100))
     }

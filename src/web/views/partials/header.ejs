@@ -24,6 +24,7 @@
         <% } %>
         <li>
           <form action="/logout" method="post" style="margin:0">
+            <input type="hidden" name="_csrf" value="<%= locals.csrfToken || '' %>">
             <button type="submit" class="secondary outline"><%= currentUser.email %> · Sair</button>
           </form>
         </li>

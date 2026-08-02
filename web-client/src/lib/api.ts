@@ -6,11 +6,27 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Token anti-CSRF. O servidor grava esse valor num cookie legível (csrf_token)
+ * e exige o mesmo valor no cabeçalho X-CSRF-Token em toda requisição que muda
+ * estado. Um site de terceiro consegue até forçar a requisição, mas não
+ * consegue ler o cookie de outro domínio pra descobrir o valor — então a
+ * comparação falha do lado do servidor. Ver src/web/middleware/csrf.js.
+ */
+export function csrfToken(): string {
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)
+  return match ? decodeURIComponent(match[1]) : ""
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrfToken(),
+      ...init?.headers,
+    },
   })
 
   if (response.status === 204) return undefined as T
