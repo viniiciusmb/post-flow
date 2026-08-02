@@ -17,4 +17,14 @@ async function getBoss() {
   return bossInstance;
 }
 
-module.exports = { getBoss };
+// Encerramento limpo no SIGTERM do deploy: devolve pra fila os jobs que este
+// processo pegou mas ainda nao terminou, em vez de deixa-los "em execucao"
+// esperando o timeout do pg-boss.
+async function stopBoss() {
+  if (!bossInstance) return;
+  const boss = bossInstance;
+  bossInstance = undefined;
+  await boss.stop({ graceful: true, timeout: 5000 });
+}
+
+module.exports = { getBoss, stopBoss };

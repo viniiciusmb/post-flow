@@ -51,6 +51,41 @@ function Metric({ label, value, sub }: { label: string; value: string | number; 
   )
 }
 
+// Backup do banco: a falha perigosa aqui e a silenciosa (parou de rodar e
+// ninguem viu), por isso qualquer coisa diferente de "ok" vira pilula vermelha
+// em vez de so um numero a mais.
+function BackupMetric({ backup }: { backup: AdminMetricsResponse["backup"] }) {
+  const isOk = backup.status === "ok"
+  const label =
+    backup.status === "nunca"
+      ? "nunca rodou"
+      : backup.status === "erro"
+        ? "falhou"
+        : backup.status === "atrasado"
+          ? "atrasado"
+          : backup.ageHours !== null && backup.ageHours < 1
+            ? "há minutos"
+            : `há ${Math.round(backup.ageHours ?? 0)}h`
+
+  return (
+    <div>
+      <div className="font-heading text-2xl font-semibold tabular-nums">
+        {isOk ? (
+          <span className="text-tone-success-ink">OK</span>
+        ) : (
+          <TonePill tone="danger" icon={<IconAlertTriangle className="size-3.5" />}>
+            {label}
+          </TonePill>
+        )}
+      </div>
+      <div className="text-xs text-muted-foreground">Backup do banco</div>
+      <div className="mt-0.5 text-xs text-muted-foreground/70">
+        {isOk ? `último ${label}` : "verifique /var/log/postflow-backup.log na VPS"}
+      </div>
+    </div>
+  )
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <Card>
@@ -158,7 +193,7 @@ export function AdminMetricsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-6">
-              <div className="grid grid-cols-2 gap-6 sm:grid-cols-5">
+              <div className="grid grid-cols-2 gap-6 sm:grid-cols-6">
                 <Metric
                   label="Carga da CPU (1 min)"
                   value={data.system.latest ? data.system.latest.loadAvg1m.toFixed(2) : "—"}
@@ -183,6 +218,7 @@ export function AdminMetricsPage() {
                   value={data.tunnels.connectedClients}
                   sub="download saindo pela internet do cliente"
                 />
+                <BackupMetric backup={data.backup} />
               </div>
 
               {data.system.history.length > 1 && (

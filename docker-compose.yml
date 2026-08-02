@@ -1,9 +1,15 @@
-# Caminho alternativo de deploy (em vez de PM2 direto na VPS).
-# Sobe 3 containers: banco de dados, servidor web e worker.
+# Caminho alternativo de deploy (em vez do EasyPanel, que e o que roda de
+# verdade em producao - ver docs/deployment-easypanel.md).
+#
+# ATENCAO: o sistema tem TRES processos de aplicacao, nao dois. Subir so "web"
+# faz o site abrir normalmente e nada funcionar por baixo: nenhum video e
+# processado, nenhum corte e postado no TikTok, nenhuma exportacao pro Drive
+# acontece. Os 3 rodam o MESMO codigo/imagem, mudando so o comando de entrada.
+#
 # Uso: docker compose up -d --build
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: postflow
@@ -13,7 +19,19 @@ services:
       - postflow_db_data:/var/lib/postgresql/data
     ports:
       - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postflow']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # Provedor de PO token do yt-dlp. Sem ele o YouTube bloqueia quase todo
+  # download vindo de IP de servidor ("Sign in to confirm you're not a bot").
+  potprovider:
+    image: brainicism/bgutil-ytdlp-pot-provider
+    restart: unless-stopped
+
+  # Processo 1: servidor Express + a SPA React (web-client/).
   web:
     build: .
     restart: unless-stopped
@@ -21,11 +39,21 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://postflow:postflow@db:5432/postflow
+      YTDLP_POT_PROVIDER_URL: http://potprovider:4416
+      VIDEO_WORK_DIR: /tmp/post-flow-video
     ports:
       - '3000:3000'
+    volumes:
+      # Compartilhado com o video-worker: o web precisa LER o arquivo do corte
+      # (preview/download no painel) que o video-worker ESCREVEU.
+      - postflow_clips:/tmp/post-flow-video
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
+  # Processo 2: tarefas leves de fundo (checar pasta do Drive de origem,
+  # metricas, saude da VPS). NAO tem o volume de clipes de proposito - nenhum
+  # job que precise ler arquivo de corte pode morar aqui.
   worker:
     build: .
     restart: unless-stopped
@@ -34,7 +62,29 @@ services:
     environment:
       DATABASE_URL: postgres://postflow:postflow@db:5432/postflow
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+
+  # Processo 3: pipeline pesado de video (download, Whisper, Claude, ffmpeg) e
+  # TUDO que precisa ler arquivo de corte em disco: publicacao no TikTok,
+  # exportacao pro Drive, limpeza de retencao, recuperacao de video travado.
+  # Separado do "worker" pra que uma renderizacao pesada (ou um crash dela)
+  # nao trave a checagem de Drive nem as metricas.
+  video-worker:
+    build: .
+    restart: unless-stopped
+    command: node src/worker/videoIndex.js
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://postflow:postflow@db:5432/postflow
+      YTDLP_POT_PROVIDER_URL: http://potprovider:4416
+      VIDEO_WORK_DIR: /tmp/post-flow-video
+    volumes:
+      - postflow_clips:/tmp/post-flow-video
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   postflow_db_data:
+  postflow_clips:

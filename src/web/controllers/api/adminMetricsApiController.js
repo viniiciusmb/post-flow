@@ -2,12 +2,36 @@
 
 const metricsRepository = require('../../../repositories/metricsRepository');
 const downloadTunnelsRepository = require('../../../repositories/downloadTunnelsRepository');
+const settingsRepository = require('../../../repositories/settingsRepository');
 const { resolveRange } = require('../../../lib/dateRanges');
 
 function daysAgo(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
   return d;
+}
+
+// O backup do banco roda por cron NO HOST da VPS (scripts/backup-db.sh), fora
+// do Node - a unica coisa que ele deixa aqui e a chave "last_db_backup" em
+// settings. Traduzimos isso pra um status legivel porque a falha mais perigosa
+// de backup e a silenciosa: parou de rodar ha semanas e ninguem percebeu.
+const BACKUP_STALE_HOURS = 36;
+
+function buildBackupStatus(raw) {
+  if (!raw || !raw.at) {
+    return { status: 'nunca', lastAt: null, ageHours: null, detail: 'nenhum backup registrado ainda' };
+  }
+  const lastAt = new Date(raw.at);
+  const ageHours = (Date.now() - lastAt.getTime()) / 3_600_000;
+  let status = raw.status === 'ok' ? 'ok' : 'erro';
+  if (status === 'ok' && ageHours > BACKUP_STALE_HOURS) status = 'atrasado';
+  return {
+    status,
+    lastAt: lastAt.toISOString(),
+    ageHours: Math.round(ageHours * 10) / 10,
+    sizeBytes: raw.bytes ? Number(raw.bytes) : null,
+    detail: raw.detail || null,
+  };
 }
 
 async function overview(req, res) {
@@ -32,6 +56,7 @@ async function overview(req, res) {
     systemLatest,
     systemHistory,
     connectedTunnels,
+    lastBackupRaw,
   ] = await Promise.all([
     metricsRepository.clientActivity(since30d),
     metricsRepository.volumeSince(since30d),
@@ -49,6 +74,7 @@ async function overview(req, res) {
     metricsRepository.latestSystemMetric(),
     metricsRepository.systemMetricsSince(daysAgo(1)),
     downloadTunnelsRepository.countConnectedClients(),
+    settingsRepository.getValue('last_db_backup', null),
   ]);
 
   const aproveitamentoRate = volume30d.clipsGenerated > 0 ? volume30d.clipsPosted / volume30d.clipsGenerated : null;
@@ -90,6 +116,7 @@ async function overview(req, res) {
       isUp: s.is_up,
     })),
     tunnels: { connectedClients: connectedTunnels },
+    backup: buildBackupStatus(lastBackupRaw),
     system: {
       latest: systemLatest
         ? {

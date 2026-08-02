@@ -3,6 +3,7 @@
 const channelCheckJob = require('./videoJobs/channelCheckJob');
 const processVideoJob = require('./videoJobs/processVideoJob');
 const videoErrorRetryJob = require('./jobs/videoErrorRetryJob');
+const videoStuckRecoveryJob = require('./jobs/videoStuckRecoveryJob');
 const tiktokPostingJob = require('./jobs/tiktokPostingJob');
 const postingCleanupJob = require('./jobs/postingCleanupJob');
 const driveExportJob = require('./jobs/driveExportJob');
@@ -14,6 +15,7 @@ const logger = require('../lib/logger');
 const QUEUE_CHANNEL_CHECK = 'youtube-channel-check';
 const QUEUE_VIDEO_PROCESSING = 'video-processing';
 const QUEUE_VIDEO_ERROR_RETRY = 'video-error-retry';
+const QUEUE_VIDEO_STUCK_RECOVERY = 'video-stuck-recovery';
 const QUEUE_TIKTOK_POSTING = 'tiktok-posting';
 const QUEUE_POSTING_CLEANUP = 'posting-cleanup';
 const QUEUE_DRIVE_EXPORT = 'drive-export';
@@ -26,6 +28,7 @@ async function start(boss) {
   await boss.createQueue(QUEUE_CHANNEL_CHECK);
   await boss.createQueue(QUEUE_VIDEO_PROCESSING);
   await boss.createQueue(QUEUE_VIDEO_ERROR_RETRY);
+  await boss.createQueue(QUEUE_VIDEO_STUCK_RECOVERY);
   await boss.createQueue(QUEUE_TIKTOK_POSTING);
   await boss.createQueue(QUEUE_POSTING_CLEANUP);
   await boss.createQueue(QUEUE_DRIVE_EXPORT);
@@ -39,6 +42,12 @@ async function start(boss) {
 
   await boss.schedule(QUEUE_VIDEO_ERROR_RETRY, '*/15 * * * *');
   logger.info('Retry automatico de video com erro agendado a cada 15 minutos.');
+
+  // Recupera video preso numa etapa em andamento cujo worker morreu (deploy,
+  // crash). Seguro rodar de 5 em 5 min porque a deteccao e por sinal de vida,
+  // nao por tempo puro - ver videoStuckRecoveryJob.
+  await boss.schedule(QUEUE_VIDEO_STUCK_RECOVERY, '*/5 * * * *');
+  logger.info('Recuperacao de video travado agendada a cada 5 minutos.');
 
   // Publicacao no TikTok e exportacao pro Drive precisam ler o arquivo do
   // corte em disco - por isso rodam aqui (video-worker ja tem acesso ao
@@ -72,6 +81,10 @@ async function start(boss) {
 
   await boss.work(QUEUE_VIDEO_ERROR_RETRY, async () => {
     await videoErrorRetryJob.run();
+  });
+
+  await boss.work(QUEUE_VIDEO_STUCK_RECOVERY, async () => {
+    await videoStuckRecoveryJob.run({ boss });
   });
 
   await boss.work(QUEUE_TIKTOK_POSTING, async () => {

@@ -264,7 +264,52 @@ async function markClipSelectionCompleted(id) {
 }
 
 async function markProcessingStarted(id) {
-  await pool.query('UPDATE source_videos SET processing_started_at = now() WHERE id = $1', [id]);
+  await pool.query(
+    'UPDATE source_videos SET processing_started_at = now(), processing_heartbeat_at = now() WHERE id = $1',
+    [id]
+  );
+}
+
+// Sinal de vida do worker que esta processando este video AGORA. Chamado a
+// cada ~60s enquanto o pipeline roda (ver processVideoJob). NAO mexe em
+// updated_at de proposito: updated_at e usado por outras consultas (retry
+// automatico, por exemplo) e ficaria poluido por um heartbeat de minuto em
+// minuto.
+async function touchProcessingHeartbeat(id) {
+  await pool.query('UPDATE source_videos SET processing_heartbeat_at = now() WHERE id = $1', [id]);
+}
+
+// Videos presos numa etapa "em andamento" cujo worker parou de dar sinal de
+// vida ha mais de staleMinutes - o processo que os segurava morreu (deploy,
+// crash, OOM). Como o heartbeat e de 60s, qualquer staleMinutes >= 5 da uma
+// margem enorme; quem ainda esta vivo (inclusive o container antigo durante um
+// deploy start-first) continua batendo e nunca aparece aqui.
+async function findStuckProcessing(staleMinutes = 10) {
+  const { rows } = await pool.query(
+    `SELECT * FROM source_videos
+     WHERE status IN ('downloading', 'transcribing', 'selecting_clips', 'cutting')
+       AND COALESCE(processing_heartbeat_at, processing_started_at, updated_at) < now() - ($1 || ' minutes')::interval`,
+    [String(staleMinutes)]
+  );
+  return rows;
+}
+
+// Devolve um video travado pro inicio do pipeline. Nao perde trabalho: o
+// processVideoJob pula download/transcricao/cortes ja concluidos (a retomada
+// e a mesma usada pelo pausar/retomar). Retorna null se ja estourou o limite
+// de ressurreicoes - nesse caso o chamador marca como erro de verdade.
+async function markRecoveredFromStuck(id, maxRecoveries = 3) {
+  const { rows } = await pool.query(
+    `UPDATE source_videos
+     SET status = 'detected',
+         stuck_recovery_count = stuck_recovery_count + 1,
+         processing_heartbeat_at = NULL,
+         updated_at = now()
+     WHERE id = $1 AND stuck_recovery_count < $2
+     RETURNING *`,
+    [id, maxRecoveries]
+  );
+  return rows[0] || null;
 }
 
 // Lista videos-fonte de um cliente (via canal ou colados manualmente), com
@@ -379,6 +424,9 @@ module.exports = {
   resumeByIdOwnedByClient,
   findTransientErrorsForAutoRetry,
   findStuckDetected,
+  touchProcessingHeartbeat,
+  findStuckProcessing,
+  markRecoveredFromStuck,
   findAwaitingCreditsByClientId,
   resumeAwaitingCredits,
   updateStatus,

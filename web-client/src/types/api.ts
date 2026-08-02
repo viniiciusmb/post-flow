@@ -116,6 +116,13 @@ export interface AdminMetricsResponse {
     history: { sampledAt: string; loadAvg1m: number; cpuCores: number; memUsedMb: number; memTotalMb: number }[]
   }
   tunnels: { connectedClients: number }
+  backup: {
+    status: "ok" | "atrasado" | "erro" | "nunca"
+    lastAt: string | null
+    ageHours: number | null
+    sizeBytes?: number | null
+    detail: string | null
+  }
   selected: {
     videosDetected: number
     clipsGenerated: number

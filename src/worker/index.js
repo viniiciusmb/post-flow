@@ -7,8 +7,11 @@ const pool = require('../db/pool');
 const logger = require('../lib/logger');
 const queueService = require('../services/queueService');
 const { startHeartbeat } = require('../lib/heartbeat');
+const processGuard = require('../lib/processGuard');
 const scheduler = require('./scheduler');
 const metricsScheduler = require('./metricsScheduler');
+
+processGuard.install('worker', { onShutdown: () => queueService.stopBoss() });
 
 async function main() {
   await pool.query('SELECT 1');

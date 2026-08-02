@@ -50,6 +50,27 @@ async function checkPaused(sourceVideoId) {
   }
 }
 
+// Sinal de vida: enquanto este job roda, toca processing_heartbeat_at de
+// minuto em minuto. E o que permite ao videoStuckRecoveryJob diferenciar
+// "video travado porque o worker morreu" de "video demorando porque o video e
+// longo" - sem isso, qualquer deteccao por tempo puro correria o risco de
+// resetar um video que ainda esta sendo processado de verdade (os deploys sao
+// start-first: por alguns minutos o container ANTIGO ainda esta trabalhando).
+const HEARTBEAT_MS = 60_000;
+
+function startProcessingHeartbeat(sourceVideoId) {
+  const beat = () =>
+    sourceVideosRepository.touchProcessingHeartbeat(sourceVideoId).catch((err) => {
+      // Uma falha transitoria de banco aqui nao pode derrubar o pipeline: no
+      // pior caso o video e considerado travado e retomado do ponto em que
+      // parou, que e exatamente o comportamento seguro.
+      logger.error(`Falha ao gravar sinal de vida do video ${sourceVideoId} (seguindo):`, err.message);
+    });
+  const interval = setInterval(beat, HEARTBEAT_MS);
+  interval.unref();
+  return interval;
+}
+
 async function run(sourceVideoId) {
   const sourceVideo = await sourceVideosRepository.findById(sourceVideoId);
   if (!sourceVideo) return;
@@ -77,6 +98,7 @@ async function run(sourceVideoId) {
     : sourceVideo.client_user_id;
   let settings = await clientVideoSettingsRepository.findByClientId(clientUserId);
   const checkCancelled = () => isCancelRequested(sourceVideo.id);
+  const heartbeat = startProcessingHeartbeat(sourceVideo.id);
 
   try {
     await sourceVideosRepository.markProcessingStarted(sourceVideo.id);
@@ -331,6 +353,11 @@ async function run(sourceVideoId) {
     await creditsService.releaseIfReserved(sourceVideo.id);
     logger.error(`Falha ao processar o video-fonte ${sourceVideo.id}:`, err);
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', { errorMessage: err.message });
+  } finally {
+    // Sempre para o sinal de vida - inclusive nos returns antecipados de
+    // pausa/credito. Um interval esquecido continuaria dizendo que o video
+    // esta sendo processado depois do job ter acabado.
+    clearInterval(heartbeat);
   }
 }
 
