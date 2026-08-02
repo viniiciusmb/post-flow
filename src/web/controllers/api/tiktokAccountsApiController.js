@@ -63,7 +63,7 @@ async function findOwned(req) {
 
 async function deactivate(req, res) {
   const account = await findOwned(req);
-  if (!account) return res.status(404).json({ error: 'Conta nao encontrada.' });
+  if (!account) return res.status(404).json({ error: 'Conta não encontrada.' });
 
   await tiktokAccountsRepository.deactivate(account.id, req.session.user.id);
   res.status(204).end();
@@ -71,7 +71,7 @@ async function deactivate(req, res) {
 
 async function setAutoPost(req, res) {
   const account = await findOwned(req);
-  if (!account) return res.status(404).json({ error: 'Conta nao encontrada.' });
+  if (!account) return res.status(404).json({ error: 'Conta não encontrada.' });
 
   const updated = await tiktokAccountsRepository.setAutoPostEnabled(account.id, Boolean(req.body.enabled));
   res.json({ autoPostEnabled: updated.auto_post_enabled });
@@ -91,7 +91,7 @@ function scheduleToApi(settings) {
 
 async function getSchedule(req, res) {
   const account = await findOwned(req);
-  if (!account) return res.status(404).json({ error: 'Conta nao encontrada.' });
+  if (!account) return res.status(404).json({ error: 'Conta não encontrada.' });
 
   const settings = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(account.id);
   res.json(scheduleToApi(settings));
@@ -99,22 +99,22 @@ async function getSchedule(req, res) {
 
 async function setSchedule(req, res) {
   const account = await findOwned(req);
-  if (!account) return res.status(404).json({ error: 'Conta nao encontrada.' });
+  if (!account) return res.status(404).json({ error: 'Conta não encontrada.' });
 
   const mode = req.body.mode;
   if (!['auto', 'manual'].includes(mode)) {
-    return res.status(400).json({ error: 'Modo de agendamento invalido.' });
+    return res.status(400).json({ error: 'Modo de agendamento inválido.' });
   }
 
   const videosPerDay = Number(req.body.videosPerDay);
   if (!Number.isInteger(videosPerDay) || videosPerDay < 1 || videosPerDay > 20) {
-    return res.status(400).json({ error: 'Videos por dia precisa ser um numero entre 1 e 20.' });
+    return res.status(400).json({ error: 'Vídeos por dia precisa ser um número entre 1 e 20.' });
   }
 
   const manualTimes = Array.isArray(req.body.manualTimes) ? req.body.manualTimes : [];
   if (mode === 'manual') {
     if (manualTimes.length === 0 || !manualTimes.every((t) => TIME_RE.test(t))) {
-      return res.status(400).json({ error: 'Informe pelo menos um horario valido (formato HH:MM).' });
+      return res.status(400).json({ error: 'Informe pelo menos um horario válido (formato HH:MM).' });
     }
   }
 
@@ -124,7 +124,7 @@ async function setSchedule(req, res) {
   if (autoDeleteAfterHours !== null && autoDeleteAfterHours !== undefined) {
     autoDeleteAfterHours = Number(autoDeleteAfterHours);
     if (!Number.isInteger(autoDeleteAfterHours) || autoDeleteAfterHours < 1) {
-      return res.status(400).json({ error: 'Retencao invalida.' });
+      return res.status(400).json({ error: 'Retencao inválida.' });
     }
   } else {
     autoDeleteAfterHours = null;
@@ -150,7 +150,7 @@ async function setSchedule(req, res) {
 // novos posts, mas nao mexe no que ja esta em processamento).
 async function setQueuePaused(req, res) {
   const account = await findOwned(req);
-  if (!account) return res.status(404).json({ error: 'Conta nao encontrada.' });
+  if (!account) return res.status(404).json({ error: 'Conta não encontrada.' });
 
   const updated = await postingScheduleSettingsRepository.setPaused(account.id, Boolean(req.body.paused));
   res.json(scheduleToApi(updated));
@@ -161,7 +161,7 @@ async function setQueuePaused(req, res) {
 // cortes pulados/com erro. So roda quando pedido de proposito.
 async function fixSchedule(req, res) {
   const account = await findOwned(req);
-  if (!account) return res.status(404).json({ error: 'Conta nao encontrada.' });
+  if (!account) return res.status(404).json({ error: 'Conta não encontrada.' });
 
   const count = await postingsRepository.reflowScheduledFor(account.id);
   res.json({ updated: count });
@@ -172,11 +172,11 @@ async function fixSchedule(req, res) {
 // "postar em 1o" tambem valha pro horario mostrado, nao so pra ordem visual.
 async function setQueueOrder(req, res) {
   const account = await findOwned(req);
-  if (!account) return res.status(404).json({ error: 'Conta nao encontrada.' });
+  if (!account) return res.status(404).json({ error: 'Conta não encontrada.' });
 
   const orderedIds = Array.isArray(req.body.orderedIds) ? req.body.orderedIds.map(Number).filter(Number.isFinite) : [];
   if (orderedIds.length === 0) {
-    return res.status(400).json({ error: 'Lista de ordem invalida.' });
+    return res.status(400).json({ error: 'Lista de ordem inválida.' });
   }
 
   await postingsRepository.setQueueOrder(account.id, orderedIds);

@@ -75,7 +75,7 @@ async function updateCaption(req, res) {
   const caption = String(req.body.caption || '').trim();
   const updated = await postingsRepository.updateCaptionOwnedByClient(Number(req.params.id), req.session.user.id, caption);
   if (!updated) {
-    return res.status(404).json({ error: 'Postagem nao encontrada ou ja saiu da fila de espera.' });
+    return res.status(404).json({ error: 'Postagem não encontrada ou já saiu da fila de espera.' });
   }
   res.json({ id: updated.id, caption: updated.caption });
 }
@@ -83,7 +83,7 @@ async function updateCaption(req, res) {
 async function skip(req, res) {
   const updated = await postingsRepository.skipOwnedByClient(Number(req.params.id), req.session.user.id);
   if (!updated) {
-    return res.status(404).json({ error: 'Postagem nao encontrada ou ja saiu da fila de espera.' });
+    return res.status(404).json({ error: 'Postagem não encontrada ou já saiu da fila de espera.' });
   }
   res.status(204).end();
 }
@@ -95,7 +95,7 @@ async function skip(req, res) {
 async function retry(req, res) {
   const updated = await postingsRepository.retryOwnedByClient(Number(req.params.id), req.session.user.id);
   if (!updated) {
-    return res.status(404).json({ error: 'Postagem nao encontrada ou nao esta com erro.' });
+    return res.status(404).json({ error: 'Postagem não encontrada ou não está com erro.' });
   }
   res.status(204).end();
 }
@@ -107,12 +107,12 @@ async function retry(req, res) {
 async function postNow(req, res) {
   const posting = await postingsRepository.findPublishableByIdOwnedByClient(Number(req.params.id), req.session.user.id);
   if (!posting) {
-    return res.status(404).json({ error: 'Postagem nao encontrada ou ja saiu da fila de espera.' });
+    return res.status(404).json({ error: 'Postagem não encontrada ou já saiu da fila de espera.' });
   }
 
   const account = await tiktokAccountsRepository.findActiveByIdAndClient(posting.tiktok_account_id, req.session.user.id);
   if (!account) {
-    return res.status(404).json({ error: 'Conta TikTok nao encontrada.' });
+    return res.status(404).json({ error: 'Conta TikTok não encontrada.' });
   }
 
   await tiktokPostingJob.publish(account, posting);

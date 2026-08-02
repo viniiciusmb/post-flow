@@ -12,7 +12,7 @@ const SALT_ROUNDS = 12;
 async function registerClient({ email, password, businessName, termsVersion }) {
   const existing = await usersRepository.findByEmail(email);
   if (existing) {
-    throw new Error('Ja existe uma conta cadastrada com este e-mail.');
+    throw new Error('Já existe uma conta cadastrada com este e-mail.');
   }
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
@@ -22,7 +22,7 @@ async function registerClient({ email, password, businessName, termsVersion }) {
 async function createAdmin({ email, password }) {
   const existing = await usersRepository.findByEmail(email);
   if (existing) {
-    throw new Error('Ja existe uma conta cadastrada com este e-mail.');
+    throw new Error('Já existe uma conta cadastrada com este e-mail.');
   }
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);

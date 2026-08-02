@@ -7,7 +7,16 @@
 
 const clientSubscriptionsRepository = require('../repositories/clientSubscriptionsRepository');
 
-const NO_PLAN_MESSAGE = 'Voce ainda nao tem um plano ativo - fale com o suporte pra ativar sua assinatura.';
+// As mensagens daqui aparecem direto na tela do cliente, entao sao escritas
+// como frase, com acento e plural de verdade. "1 canal(is) monitorado(s)" era
+// o jeito preguicoso de fugir do plural e denunciava mensagem escrita por
+// desenvolvedor, nao pra quem le.
+const NO_PLAN_MESSAGE =
+  'Você ainda não tem um plano ativo. Fale com o suporte pra ativar sua assinatura.';
+
+function plural(quantidade, singular, plural_) {
+  return `${quantidade} ${quantidade === 1 ? singular : plural_}`;
+}
 
 async function checkChannelLimit(clientUserId, currentCount) {
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
@@ -16,7 +25,7 @@ async function checkChannelLimit(clientUserId, currentCount) {
   if (currentCount >= subscription.max_youtube_channels) {
     return {
       allowed: false,
-      reason: `Seu plano permite ate ${subscription.max_youtube_channels} canal(is) do YouTube monitorado(s). Faca upgrade pra adicionar mais.`,
+      reason: `Seu plano acompanha ${plural(subscription.max_youtube_channels, 'canal', 'canais')} do YouTube. Troque de plano pra adicionar mais.`,
     };
   }
   return { allowed: true };
@@ -29,7 +38,7 @@ async function checkTiktokAccountLimit(clientUserId, currentCount) {
   if (currentCount >= subscription.max_tiktok_accounts) {
     return {
       allowed: false,
-      reason: `Seu plano permite ate ${subscription.max_tiktok_accounts} conta(s) TikTok conectada(s). Faca upgrade pra conectar mais.`,
+      reason: `Seu plano publica em ${plural(subscription.max_tiktok_accounts, 'conta', 'contas')} do TikTok. Troque de plano pra conectar mais.`,
     };
   }
   return { allowed: true };

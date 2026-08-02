@@ -29,7 +29,7 @@ async function resolveChannel(input) {
 
   const channelId = extractChannelId(html, pageUrl);
   if (!channelId) {
-    throw new Error('Nao foi possivel identificar o ID do canal. Confira se o link esta correto.');
+    throw new Error('Não foi possível identificar o ID do canal. Confira se o link está correto.');
   }
 
   const titleMatch = html.match(/<meta property="og:title" content="([^"]*)"/);

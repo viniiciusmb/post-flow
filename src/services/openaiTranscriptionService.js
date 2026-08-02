@@ -42,7 +42,7 @@ async function transcribeAudio(audioFilePath, { language, checkCancelled } = {})
       signal: controller.signal,
     });
   } catch (err) {
-    if (cancelled) throw new PausedError('Transcricao interrompida pelo cliente.');
+    if (cancelled) throw new PausedError('Transcrição interrompida pelo cliente.');
     throw err;
   } finally {
     if (cancelPoll) clearInterval(cancelPoll);

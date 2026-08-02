@@ -9,7 +9,7 @@ async function login(req, res) {
   const user = await authService.verifyLogin(email, password);
 
   if (!user) {
-    return res.status(401).render('auth/login', { title: 'Entrar', error: 'E-mail ou senha invalidos.' });
+    return res.status(401).render('auth/login', { title: 'Entrar', error: 'E-mail ou senha inválidos.' });
   }
 
   req.session.user = { id: user.id, role: user.role, email: user.email };
@@ -31,7 +31,7 @@ async function register(req, res) {
   if (!acceptedTerms) {
     return res.status(400).render('auth/register', {
       title: 'Criar conta',
-      error: 'Voce precisa aceitar os Termos de Uso e a Politica de Privacidade pra criar a conta.',
+      error: 'Você precisa aceitar os Termos de Uso e a Politica de Privacidade pra criar a conta.',
       values,
     });
   }

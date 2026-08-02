@@ -79,12 +79,12 @@ async function updateProfile(req, res) {
   const businessName = String(req.body.businessName || '').trim() || null;
   const email = String(req.body.email || '').trim().toLowerCase();
   if (!email || !email.includes('@')) {
-    return res.status(400).json({ error: 'Informe um e-mail valido.' });
+    return res.status(400).json({ error: 'Informe um e-mail válido.' });
   }
 
   const existing = await usersRepository.findByEmail(email);
   if (existing && existing.id !== req.session.user.id) {
-    return res.status(409).json({ error: 'Ja existe uma conta com esse e-mail.' });
+    return res.status(409).json({ error: 'Já existe uma conta com esse e-mail.' });
   }
 
   const updated = await usersRepository.updateProfile(req.session.user.id, { businessName, email });

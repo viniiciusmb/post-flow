@@ -26,16 +26,16 @@ async function status(req, res) {
 
 async function completePairing(req, res) {
   const pairingCode = String(req.body.pairingCode || '').trim().toUpperCase();
-  if (!pairingCode) return res.status(400).json({ error: 'Informe o codigo de pareamento.' });
+  if (!pairingCode) return res.status(400).json({ error: 'Informe o código de pareamento.' });
 
   const existing = await downloadTunnelsRepository.findByClientId(req.session.user.id);
   if (existing) {
-    return res.status(400).json({ error: 'Voce ja tem um programa conectado. Desconecte o atual antes de parear outro.' });
+    return res.status(400).json({ error: 'Você já tem um programa conectado. Desconecte o atual antes de parear outro.' });
   }
 
   const pending = await downloadTunnelsRepository.findByPairingCode(pairingCode);
   if (!pending) {
-    return res.status(400).json({ error: 'Codigo invalido ou expirado. Gere um novo no programa.' });
+    return res.status(400).json({ error: 'Código inválido ou expirado. Gere um novo no programa.' });
   }
 
   // Autoriza no rele ANTES de vincular ao cliente - se isso falhar, a linha
@@ -46,12 +46,12 @@ async function completePairing(req, res) {
     await sshRelayControlService.authorize(pending.public_key, pending.assigned_port, pending.label);
   } catch (err) {
     logger.error(`Falha ao autorizar o tunel #${pending.id} no rele:`, err);
-    return res.status(502).json({ error: 'Nao consegui autorizar o programa no servidor. Tente de novo em instantes.' });
+    return res.status(502).json({ error: 'Não consegui autorizar o programa no servidor. Tente de novo em instantes.' });
   }
 
   const tunnel = await downloadTunnelsRepository.completePairing(pairingCode, req.session.user.id);
   if (!tunnel) {
-    return res.status(400).json({ error: 'Codigo invalido ou expirado. Gere um novo no programa.' });
+    return res.status(400).json({ error: 'Código inválido ou expirado. Gere um novo no programa.' });
   }
 
   res.json({ tunnel: tunnelToApi(tunnel) });

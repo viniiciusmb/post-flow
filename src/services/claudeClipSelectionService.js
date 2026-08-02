@@ -67,7 +67,7 @@ const SELECT_CLIPS_TOOL = {
 async function selectClips(transcriptWords, { maxClips = 4, minDuration = 25, maxDuration = 90, exact = false } = {}) {
   const transcript = formatTranscriptForPrompt(transcriptWords);
   if (!transcript) {
-    throw new Error('Transcricao vazia - nao ha o que analisar.');
+    throw new Error('Transcrição vazia. Não há o que analisar.');
   }
 
   const countInstruction = exact
@@ -103,13 +103,13 @@ ${countInstruction} que funcionariam bem como cortes verticais pro TikTok: momen
 
   const toolUse = data.content.find((block) => block.type === 'tool_use');
   if (!toolUse) {
-    throw new Error('Claude nao retornou uma selecao de cortes valida.');
+    throw new Error('Claude não retornou uma seleção de cortes válida.');
   }
   if (data.stop_reason === 'max_tokens') {
-    throw new Error('A resposta da IA foi cortada antes de terminar (video com muitos cortes selecionados) - tente de novo.');
+    throw new Error('A resposta da IA foi cortada antes de terminar (vídeo com muitos cortes selecionados). Tente de novo.');
   }
   if (!Array.isArray(toolUse.input.clips)) {
-    throw new Error('Claude retornou uma selecao de cortes incompleta ou invalida.');
+    throw new Error('Claude retornou uma seleção de cortes incompleta ou inválida.');
   }
 
   const inputTokens = data.usage?.input_tokens || 0;

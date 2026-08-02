@@ -11,7 +11,7 @@ async function login(req, res) {
   const user = await authService.verifyLogin(email, password);
 
   if (!user) {
-    return res.status(401).json({ error: 'E-mail ou senha invalidos.' });
+    return res.status(401).json({ error: 'E-mail ou senha inválidos.' });
   }
 
   req.session.user = { id: user.id, role: user.role, email: user.email };

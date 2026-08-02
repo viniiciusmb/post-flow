@@ -33,6 +33,14 @@ function BucketMeter({ label, bucket }: { label: string; bucket: CreditBucketVie
   )
 }
 
+// "1 canal(is)" e "Ilimitado canal(is)" eram o jeito preguiçoso de resolver
+// plural. Some do texto e some a palavra "Ilimitado" antes de um substantivo
+// singular, que nem português é.
+function plural(qtd: number | null, umSo: string, varios: string, semLimite: string) {
+  if (qtd === null || qtd === undefined) return semLimite
+  return `${qtd} ${qtd === 1 ? umSo : varios}`
+}
+
 export function ClientBillingPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const [data, setData] = useState<ClientBillingOverviewResponse | null>(null)
@@ -110,7 +118,7 @@ export function ClientBillingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Créditos normais</CardTitle>
-                <CardDescription>Cota semanal do seu plano - usada quando o download sai pela VPS/proxy.</CardDescription>
+                <CardDescription>Cota semanal do seu plano. É a que roda quando o download sai pela nossa internet.</CardDescription>
               </CardHeader>
               <CardContent>
                 <BucketMeter label="Normais" bucket={data.credits.normal} />
@@ -119,7 +127,7 @@ export function ClientBillingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Créditos bônus</CardTitle>
-                <CardDescription>Cota extra liberada quando o programa de bandeja está instalado e conectado.</CardDescription>
+                <CardDescription>Cota extra, liberada quando o programa do seu computador está conectado.</CardDescription>
               </CardHeader>
               <CardContent>
                 <BucketMeter label="Bônus" bucket={data.credits.bonus} />
@@ -157,10 +165,10 @@ export function ClientBillingPage() {
                       <span className="text-xs font-normal text-muted-foreground">/mês</span>
                     </div>
                     <ul className="flex flex-1 flex-col gap-1 text-xs text-muted-foreground">
-                      <li>{plan.weeklyMinutesNormal} min normais/semana</li>
-                      <li>{plan.weeklyMinutesBonus} min bônus/semana (com app instalado)</li>
-                      <li>{plan.maxYoutubeChannels ?? "Ilimitado"} canal(is) do YouTube</li>
-                      <li>{plan.maxTiktokAccounts ?? "Ilimitado"} conta(s) TikTok</li>
+                      <li>{plan.weeklyMinutesNormal} minutos por semana</li>
+                      <li>{plan.weeklyMinutesBonus} minutos usando sua internet</li>
+                      <li>{plural(plan.maxYoutubeChannels, "canal do YouTube", "canais do YouTube", "Canais do YouTube ilimitados")}</li>
+                      <li>{plural(plan.maxTiktokAccounts, "conta do TikTok", "contas do TikTok", "Contas do TikTok ilimitadas")}</li>
                     </ul>
                     <Button
                       variant={isCurrent ? "outline" : "default"}
@@ -189,8 +197,8 @@ export function ClientBillingPage() {
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="grid gap-2 text-sm sm:grid-cols-2">
-                <div>Taxa pelo caminho VPS/proxy: {formatCents(data.overage.rateCentsNormal)}/min</div>
-                <div>Taxa pelo caminho do seu app: {formatCents(data.overage.rateCentsBonus)}/min</div>
+                <div>Pela nossa internet: {formatCents(data.overage.rateCentsNormal)} por minuto</div>
+                <div>Pela sua internet: {formatCents(data.overage.rateCentsBonus)} por minuto</div>
               </div>
               {data.overage.pendingCents > 0 && (
                 <TonePill tone="danger">Excedente acumulado neste ciclo: {formatCents(data.overage.pendingCents)}</TonePill>

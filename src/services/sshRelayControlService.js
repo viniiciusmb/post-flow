@@ -7,7 +7,7 @@ const config = require('../config');
 
 function baseUrl() {
   const url = config.tunnel.relayControlUrl;
-  if (!url) throw new Error('TUNNEL_RELAY_CONTROL_URL nao configurado.');
+  if (!url) throw new Error('TUNNEL_RELAY_CONTROL_URL não configurado.');
   return url.replace(/\/$/, '');
 }
 

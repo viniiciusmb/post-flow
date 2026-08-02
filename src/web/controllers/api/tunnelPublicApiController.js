@@ -15,7 +15,7 @@ async function registerPending(req, res) {
   const label = String(req.body.label || '').trim();
 
   if (!KEY_LINE_RE.test(publicKey) || publicKey.includes('\n')) {
-    return res.status(400).json({ error: 'publicKey invalida.' });
+    return res.status(400).json({ error: 'publicKey inválida.' });
   }
 
   const tunnel = await downloadTunnelsRepository.createPendingPairing({ publicKey, label });

@@ -110,12 +110,12 @@ async function overview(req, res) {
 // admin, sem depender daqui).
 async function subscribe(req, res) {
   if (!stripeService.isConfigured()) {
-    return res.status(400).json({ error: 'Pagamento por cartao ainda nao esta disponivel - fale com o suporte.' });
+    return res.status(400).json({ error: 'Pagamento por cartão ainda não está disponível. Fale com o suporte.' });
   }
 
   const plan = await subscriptionPlansRepository.findByKey(String(req.body.planKey || ''));
   if (!plan || !plan.stripe_price_id) {
-    return res.status(400).json({ error: 'Plano invalido.' });
+    return res.status(400).json({ error: 'Plano inválido.' });
   }
 
   const clientUserId = req.session.user.id;
@@ -138,7 +138,7 @@ async function subscribe(req, res) {
 // migration 039), nao fica fixo no codigo.
 async function buyPackage(req, res) {
   if (!stripeService.isConfigured()) {
-    return res.status(400).json({ error: 'Pagamento por cartao ainda nao esta disponivel - fale com o suporte.' });
+    return res.status(400).json({ error: 'Pagamento por cartão ainda não está disponível. Fale com o suporte.' });
   }
 
   const bucket = req.body.bucket === 'bonus' ? 'bonus' : 'normal';
@@ -177,7 +177,7 @@ async function buyPackage(req, res) {
 // cobra nada na hora, so guarda o cartao pro overageBillingJob semanal usar).
 async function setupOverageCard(req, res) {
   if (!stripeService.isConfigured()) {
-    return res.status(400).json({ error: 'Cadastro de cartao ainda nao esta disponivel - fale com o suporte.' });
+    return res.status(400).json({ error: 'Cadastro de cartão ainda não está disponível. Fale com o suporte.' });
   }
 
   const clientUserId = req.session.user.id;
@@ -200,7 +200,7 @@ async function setupOverageCard(req, res) {
 // recadastrar o cartao).
 async function disableOverageCard(req, res) {
   const updated = await clientSubscriptionsRepository.setOverageCard(req.session.user.id, { enabled: false });
-  if (!updated) return res.status(404).json({ error: 'Assinatura nao encontrada.' });
+  if (!updated) return res.status(404).json({ error: 'Assinatura não encontrada.' });
   res.json({ overageCardEnabled: updated.overage_card_enabled });
 }
 

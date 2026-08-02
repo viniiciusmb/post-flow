@@ -117,7 +117,7 @@ async function setDefaultPaymentMethod(customerId, paymentMethodId) {
 
 function constructWebhookEvent(rawBody, signature) {
   if (!config.stripe.webhookSecret) {
-    throw new Error('Stripe ainda nao configurado (falta STRIPE_WEBHOOK_SECRET).');
+    throw new Error('Stripe ainda não configurado (falta STRIPE_WEBHOOK_SECRET).');
   }
   const stripe = getClient();
   return stripe.webhooks.constructEvent(rawBody, signature, config.stripe.webhookSecret);

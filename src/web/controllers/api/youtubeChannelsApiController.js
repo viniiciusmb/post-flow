@@ -72,11 +72,11 @@ async function create(req, res) {
   });
 
   if (!channel) {
-    return res.status(409).json({ error: 'Esse canal ja esta cadastrado.' });
+    return res.status(409).json({ error: 'Esse canal já está cadastrado.' });
   }
 
   // Cliente com uma unica conta TikTok: ja vincula sozinho (sem isso ele
-  // teria que ir em Vídeos & Cortes so pra escolher a unica opcao possivel).
+  // teria que ir na tela Cortes so pra escolher a unica opcao possivel).
   const tiktokAccounts = await tiktokAccountsRepository.listActiveByClientId(req.session.user.id);
   if (tiktokAccounts.length === 1) {
     channel = await youtubeChannelsRepository.setTiktokAccount(channel.id, req.session.user.id, tiktokAccounts[0].id);
@@ -127,7 +127,7 @@ async function create(req, res) {
 async function processLatestVideo(req, res) {
   const channel = await youtubeChannelsRepository.findById(Number(req.params.id));
   if (!channel || channel.client_user_id !== req.session.user.id) {
-    return res.status(404).json({ error: 'Canal nao encontrado.' });
+    return res.status(404).json({ error: 'Canal não encontrado.' });
   }
 
   let video;
@@ -138,7 +138,7 @@ async function processLatestVideo(req, res) {
     return res.status(502).json({ error: `Nao foi possivel ler os dados do canal: ${err.message}` });
   }
   if (!video) {
-    return res.status(404).json({ error: 'Esse canal nao tem nenhum video.' });
+    return res.status(404).json({ error: 'Esse canal não tem nenhum vídeo.' });
   }
 
   const sourceVideo = await sourceVideosRepository.createIfNotExists({
@@ -164,7 +164,7 @@ async function processLatestVideo(req, res) {
 async function setTiktokAccount(req, res) {
   const channel = await youtubeChannelsRepository.findById(Number(req.params.id));
   if (!channel || channel.client_user_id !== req.session.user.id) {
-    return res.status(404).json({ error: 'Canal nao encontrado.' });
+    return res.status(404).json({ error: 'Canal não encontrado.' });
   }
 
   const rawId = req.body.tiktokAccountId;
@@ -176,7 +176,7 @@ async function setTiktokAccount(req, res) {
   const tiktokAccountId = Number(rawId);
   const account = await tiktokAccountsRepository.findActiveByIdAndClient(tiktokAccountId, req.session.user.id);
   if (!account) {
-    return res.status(400).json({ error: 'Conta TikTok invalida.' });
+    return res.status(400).json({ error: 'Conta TikTok inválida.' });
   }
 
   const updated = await youtubeChannelsRepository.setTiktokAccount(channel.id, req.session.user.id, account.id);
@@ -189,7 +189,7 @@ async function setActive(req, res) {
     req.session.user.id,
     req.body.isActive === true
   );
-  if (!channel) return res.status(404).json({ error: 'Canal nao encontrado.' });
+  if (!channel) return res.status(404).json({ error: 'Canal não encontrado.' });
   res.json({ channel: { id: channel.id, isActive: channel.is_active } });
 }
 
@@ -204,7 +204,7 @@ async function remove(req, res) {
 async function setExportFolder(req, res) {
   const channel = await youtubeChannelsRepository.findById(Number(req.params.id));
   if (!channel || channel.client_user_id !== req.session.user.id) {
-    return res.status(404).json({ error: 'Canal nao encontrado.' });
+    return res.status(404).json({ error: 'Canal não encontrado.' });
   }
 
   const driveFolderId = extractDriveFolderId(req.body.folderLink);
@@ -242,7 +242,7 @@ async function setExportFolder(req, res) {
 async function setDriveExportMode(req, res) {
   const mode = req.body.mode === 'auto' ? 'auto' : 'manual';
   const channel = await youtubeChannelsRepository.setDriveExportMode(Number(req.params.id), req.session.user.id, mode);
-  if (!channel) return res.status(404).json({ error: 'Canal nao encontrado.' });
+  if (!channel) return res.status(404).json({ error: 'Canal não encontrado.' });
   res.json({ driveExportMode: channel.drive_export_mode });
 }
 

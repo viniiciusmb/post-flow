@@ -311,7 +311,7 @@ async function downloadVideo(videoId, outputDir, { checkCancelled, clientUserId 
 
   const filePath = path.join(outputDir, `${videoId}.mp4`);
   if (!fs.existsSync(filePath)) {
-    throw new Error('Download concluido mas o arquivo esperado nao foi encontrado em disco.');
+    throw new Error('Download concluído mas o arquivo esperado não foi encontrado em disco.');
   }
   return { filePath, egressType: usedCandidate.type, tunnelId: usedCandidate.tunnelId };
 }
