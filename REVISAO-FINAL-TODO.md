@@ -21,9 +21,11 @@ Tudo que dava pra fazer sozinho das seções 1, 2, 3 e 4 foi feito e já está e
   chave limitada a ele, envio usando a API nativa do B2 (`curl`+`jq` — o Ubuntu 24.04 da VPS não
   tem mais `awscli` nos repositórios). Testado de verdade: o arquivo foi baixado DE VOLTA do B2 e
   restaurado, batendo com produção.
-- [ ] **Regenerar a Master Application Key do Backblaze** — ela chegou a ser colada no chat antes
-  de trocarmos pela chave limitada ao bucket. A limitada é a que está em uso; a Master continua
-  válida até ser regenerada no painel (Application Keys → Regenerate Master Application Key).
+- [ ] **Regenerar a Master Application Key do Backblaze — e NÃO compartilhar a nova.** Ela foi
+  regenerada uma vez em 02/08/2026, mas a nova acabou sendo colada no chat também, então precisa
+  de mais uma rodada. Nada quebra ao regenerar: o backup usa a chave `postflow-backup`, limitada
+  ao bucket. A Master serve só pra administrar a conta e nunca precisa sair da mão do fundador.
+  Painel → Application Keys → Regenerate Master Application Key.
 - [ ] **Escolher um serviço de e-mail** (Resend/SendGrid/SES) — continua bloqueando "esqueci minha
   senha" e verificação de e-mail no cadastro (ver seção 8).
 
