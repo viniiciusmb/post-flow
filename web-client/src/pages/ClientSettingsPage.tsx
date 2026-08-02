@@ -316,11 +316,8 @@ export function ClientSettingsPage() {
     <DashboardLayout user={user} onLogout={logout} title="Configurações">
       <PageHeader
         title="Configurações"
-        description="Seus dados de acesso e a conexão com o Google Drive."
+        description="Seus dados de acesso e a conexão com o Google Drive. Qualidade e estilo dos cortes ficam na tela Cortes."
       />
-      <p className="-mt-2 text-sm text-muted-foreground">
-        As configurações de qualidade e estilo dos cortes ficam na tela Cortes.
-      </p>
       <ProfileSection />
       <PasswordSection />
       <DriveSection />

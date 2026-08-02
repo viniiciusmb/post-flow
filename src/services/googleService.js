@@ -12,12 +12,25 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const FILES_URL = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files';
 
-// drive.readonly cobre ler pastas de origem que o cliente aponta (video a
-// processar). drive.file cobre so os arquivos que o proprio Post Flow cria -
-// usado pra exportar os cortes prontos pra uma pasta de destino, sem pedir
-// acesso a arquivos do cliente que a gente nunca tocou.
+// SO escopo nao-sensivel de Drive, de proposito.
+//
+// drive.file da acesso apenas aos arquivos que o proprio Post Flow cria, que e
+// exatamente o que a exportacao de cortes precisa. E, no criterio do Google,
+// escopo NAO SENSIVEL: verificacao basica, sem custo.
+//
+// O drive.readonly foi REMOVIDO em 02/08/2026. Ele e escopo RESTRITO e obriga
+// uma avaliacao de seguranca CASA, feita por laboratorio terceirizado, paga e
+// refeita a cada 12 meses. Servia unicamente pra "pasta de origem" (vigiar uma
+// pasta do cliente esperando video novo) e a producao mostrava ZERO clientes
+// usando esse recurso - as pastas configuradas eram todas de destino, cobertas
+// pelo drive.file. Estavamos prestes a pagar auditoria anual por um recurso que
+// ninguem ligou. Ver docs/aprovacoes-google-tiktok.md.
+//
+// Se um dia a pasta de origem voltar a ser pedida, o caminho SEM escopo
+// restrito e o seletor de arquivos do proprio Google (Google Picker): o cliente
+// escolhe os videos na janela do Google e o drive.file passa a alcancar
+// aqueles arquivos. Perde-se o "vigiar pasta sozinho", nao a funcionalidade.
 const SCOPES = [
-  'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/userinfo.email',
 ];

@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/dashboard/EmptyState"
 import {
   Table,
   TableBody,
@@ -42,14 +43,12 @@ export function PostingsTable({
 }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-        {emptyMessage}
-      </div>
+      <EmptyState title="Nada por aqui ainda" description={emptyMessage} compact />
     )
   }
 
   return (
-    <div className="rounded-lg border border-border">
+    <div className="overflow-hidden rounded-xl border bg-card">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">

@@ -1037,13 +1037,10 @@ export function TikTokAccountPage() {
     <DashboardLayout user={user} onLogout={logout} title="Publicação">
       <PageHeader
         title="Publicação"
-        description="Suas contas do TikTok, a fila de cortes e o horário em que cada um sai."
+        description="Cada conta conectada pode ser vinculada a canais diferentes, com o próprio agendamento."
       />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm text-muted-foreground">
-            Cada conta conectada aqui pode ser vinculada a canais do YouTube diferentes, com seu próprio agendamento.
-          </p>
           {accounts && accounts.length > 0 && (
             <p className="mt-0.5 text-xs text-muted-foreground">
               Se ao conectar outra conta aparecer a mesma de antes, é porque seu navegador continua logado nela no

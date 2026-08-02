@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react"
-import { IconBrandYoutube, IconMovie, IconScissors, IconCircleCheck, IconListCheck } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
-import { PageHeader } from "@/components/dashboard/PageHeader"
+import { PageHeader, SectionLabel } from "@/components/dashboard/PageHeader"
 import { TikTokConnectionCard } from "@/components/dashboard/TikTokConnectionCard"
 import { PostingsTable, type PostingRow } from "@/components/dashboard/PostingsTable"
-import { StatCard } from "@/components/dashboard/StatCard"
+import { StatRow, Stat } from "@/components/dashboard/StatRow"
 import { UsageCard } from "@/components/dashboard/UsageCard"
 import { DateRangeFilter } from "@/components/dashboard/DateRangeFilter"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -79,7 +78,7 @@ export function ClientDashboardPage() {
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Período</h2>
+        <span className="text-xs font-semibold uppercase tracking-[0.07em] text-muted-foreground">Período</span>
         <DateRangeFilter value={range} onChange={setRange} />
       </div>
 
@@ -89,61 +88,41 @@ export function ClientDashboardPage() {
         <Skeleton className="h-24" />
       )}
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-        {data ? (
-          <>
-            <StatCard
-              label="Canais monitorados"
-              value={data.counts.youtubeChannels}
-              icon={<IconBrandYoutube />}
-              tone="danger"
-              href="/client/youtube-channels"
-              hrefLabel="Ver canais"
-            />
-            <StatCard
-              label="Vídeos detectados no período"
-              value={data.counts.videosInRange}
-              icon={<IconMovie />}
-              tone="cyan"
-            />
-            <StatCard
-              label="Cortes gerados no período"
-              value={data.counts.clipsInRange}
-              icon={<IconScissors />}
-              tone="violet"
-            />
-            <StatCard
-              label="Cortes postados no período"
-              value={data.counts.clipsPostedInRange}
-              icon={<IconCircleCheck />}
-              tone="success"
-              href="/client/videos-clips"
-              hrefLabel="Ver cortes"
-            />
-            <StatCard
-              label="Cortes na fila aguardando postar"
-              value={data.counts.pendingInQueue}
-              icon={<IconListCheck />}
-              tone="cyan"
-              href="/client/tiktok-account"
-              hrefLabel="Ver a fila"
-            />
-          </>
-        ) : (
-          <>
-            <Skeleton className="h-24" />
-            <Skeleton className="h-24" />
-            <Skeleton className="h-24" />
-            <Skeleton className="h-24" />
-            <Skeleton className="h-24" />
-          </>
-        )}
-      </div>
+      {data ? (
+        <StatRow>
+          <Stat
+            label="Cortes gerados no período"
+            value={data.counts.clipsInRange}
+            emphasis
+          />
+          <Stat
+            label="Cortes postados no período"
+            value={data.counts.clipsPostedInRange}
+            href="/client/videos-clips"
+            hrefLabel="Ver cortes"
+          />
+          <Stat
+            label="Na fila aguardando postar"
+            value={data.counts.pendingInQueue}
+            href="/client/tiktok-account"
+            hrefLabel="Ver a fila"
+          />
+          <Stat label="Vídeos detectados no período" value={data.counts.videosInRange} />
+          <Stat
+            label="Canais monitorados"
+            value={data.counts.youtubeChannels}
+            href="/client/youtube-channels"
+            hrefLabel="Ver canais"
+          />
+        </StatRow>
+      ) : (
+        <Skeleton className="h-[7.5rem] rounded-xl" />
+      )}
 
       <UsageCard range={range} />
 
-      <div>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Meus vídeos no período</h2>
+      <div className="flex flex-col gap-3">
+        <SectionLabel>Meus vídeos no período</SectionLabel>
         {data ? (
           <PostingsTable
             rows={rows}
