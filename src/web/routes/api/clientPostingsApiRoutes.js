@@ -18,5 +18,8 @@ router.put('/:id/caption', asyncHandler(controller.updateCaption));
 router.post('/:id/skip', asyncHandler(controller.skip));
 router.post('/:id/post-now', asyncHandler(controller.postNow));
 router.post('/:id/retry', asyncHandler(controller.retry));
+// Opcoes de publicacao exigidas pela auditoria da Content Posting API.
+router.get('/accounts/:id/creator-options', asyncHandler(controller.creatorOptions));
+router.put('/:id/options', asyncHandler(controller.saveOptions));
 
 module.exports = router;

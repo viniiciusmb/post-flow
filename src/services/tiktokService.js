@@ -9,6 +9,15 @@ const AUTHORIZE_URL = 'https://www.tiktok.com/v2/auth/authorize/';
 const TOKEN_URL = 'https://open.tiktokapis.com/v2/oauth/token/';
 const USER_INFO_URL = 'https://open.tiktokapis.com/v2/user/info/';
 const PUBLISH_INIT_URL = 'https://open.tiktokapis.com/v2/post/publish/inbox/video/init/';
+// Publicacao DIRETA no perfil. Exige que o app tenha passado na auditoria da
+// Content Posting API - antes disso a TikTok aceita a chamada mas forca tudo
+// como SELF_ONLY (so o proprio criador ve).
+const DIRECT_POST_INIT_URL = 'https://open.tiktokapis.com/v2/post/publish/video/init/';
+// O que a conta do criador permite. A diretriz da TikTok exige que a tela de
+// publicacao busque isso NA HORA, a cada abertura, e nao use valor guardado -
+// o criador pode ter mudado as permissoes dele no aplicativo a qualquer
+// momento, e oferecer uma opcao que ele desativou faz a publicacao falhar.
+const CREATOR_INFO_URL = 'https://open.tiktokapis.com/v2/post/publish/creator_info/query/';
 const PUBLISH_STATUS_URL = 'https://open.tiktokapis.com/v2/post/publish/status/fetch/';
 // Teto de tamanho de chunk da Content Posting API - qualquer corte nosso (15
 // a 180s, vertical) fica bem abaixo disso, entao na pratica e sempre 1 chunk so.
@@ -117,6 +126,68 @@ async function getUserStats(accessToken) {
   return data.data.user;
 }
 
+// Busca o que a conta do criador permite: apelido e foto (que a tela e
+// obrigada a mostrar, pro criador saber em qual conta vai sair), quais niveis
+// de privacidade ele pode escolher, se comentario/duet/juncao estao
+// desativados na conta dele, e a duracao maxima de video que ele pode postar.
+async function queryCreatorInfo(accessToken) {
+  const response = await fetch(CREATOR_INFO_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' },
+  });
+  const data = await response.json();
+  if (!response.ok || data.error?.code !== 'ok') {
+    throw new Error(`Falha ao consultar as opcoes de publicacao no TikTok: ${data.error?.message || response.statusText}`);
+  }
+  const d = data.data || {};
+  return {
+    creatorNickname: d.creator_nickname || null,
+    creatorUsername: d.creator_username || null,
+    creatorAvatarUrl: d.creator_avatar_url || null,
+    privacyLevelOptions: d.privacy_level_options || [],
+    commentDisabled: Boolean(d.comment_disabled),
+    duetDisabled: Boolean(d.duet_disabled),
+    stitchDisabled: Boolean(d.stitch_disabled),
+    maxVideoPostDurationSec: d.max_video_post_duration_sec ?? null,
+  };
+}
+
+// Publicacao DIRETA no perfil. Tudo em post_info vem de escolha manual do
+// criador na nossa tela (ver migration 048): a TikTok reprova app que
+// pre-seleciona privacidade ou que liga comentario/duet/juncao sozinho.
+async function initDirectPost(accessToken, videoSizeBytes, postInfo) {
+  const chunkSize = Math.min(videoSizeBytes, MAX_CHUNK_SIZE_BYTES);
+  const totalChunkCount = Math.max(1, Math.ceil(videoSizeBytes / chunkSize));
+
+  const response = await fetch(DIRECT_POST_INIT_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify({
+      post_info: {
+        title: postInfo.caption || '',
+        privacy_level: postInfo.privacyLevel,
+        disable_comment: postInfo.disableComment,
+        disable_duet: postInfo.disableDuet,
+        disable_stitch: postInfo.disableStitch,
+        brand_content_toggle: postInfo.brandContentToggle,
+        brand_organic_toggle: postInfo.brandOrganicToggle,
+      },
+      source_info: {
+        source: 'FILE_UPLOAD',
+        video_size: videoSizeBytes,
+        chunk_size: chunkSize,
+        total_chunk_count: totalChunkCount,
+      },
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok || data.error?.code !== 'ok') {
+    throw new Error(`TikTok recusou publicar no perfil: ${data.error?.message || response.statusText}`);
+  }
+  return { publishId: data.data.publish_id, uploadUrl: data.data.upload_url, chunkSize, totalChunkCount };
+}
+
 // Inicia a publicacao em modo rascunho/inbox (o app ainda nao foi aprovado
 // pra "Direct Post" - ver migrations/006_create_postings.sql). A TikTok
 // devolve uma URL pra onde mandamos os bytes do video em seguida.
@@ -203,6 +274,8 @@ async function fetchPublishStatus(accessToken, publishId) {
 }
 
 module.exports = {
+  queryCreatorInfo,
+  initDirectPost,
   buildAuthorizeUrl,
   exchangeCodeForToken,
   refreshAccessToken,

@@ -170,9 +170,30 @@ export interface PostingScheduleResponse {
   options: { retentionPresetsHours: number[] }
 }
 
+export interface CreatorOptions {
+  creatorNickname: string | null
+  creatorUsername: string | null
+  creatorAvatarUrl: string | null
+  /** Só o que ESTA conta permite. Oferecer outro nível faz a publicação falhar. */
+  privacyLevelOptions: string[]
+  commentDisabled: boolean
+  duetDisabled: boolean
+  stitchDisabled: boolean
+  maxVideoPostDurationSec: number | null
+  publishMode: "inbox" | "direct"
+}
+
 export interface PostingQueueItem {
   id: number
   clipId: number
+  /** false = o criador ainda não escolheu as opções; a publicação direta não sai. */
+  optionsConfirmed: boolean
+  privacyLevel: string | null
+  disableComment: boolean
+  disableDuet: boolean
+  disableStitch: boolean
+  brandOrganicToggle: boolean
+  brandContentToggle: boolean
   clipTitle: string
   caption: string | null
   thumbnailUrl: string | null

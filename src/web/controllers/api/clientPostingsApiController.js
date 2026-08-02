@@ -3,6 +3,8 @@
 const postingsRepository = require('../../../repositories/postingsRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
 const tiktokPostingJob = require('../../../worker/jobs/tiktokPostingJob');
+const tiktokService = require('../../../services/tiktokService');
+const logger = require('../../../lib/logger');
 
 function thumbnailUrl(row) {
   return row.thumbnail_path ? `/api/client/source-videos/clips/${row.clip_id}/thumbnail` : null;
@@ -28,6 +30,15 @@ async function listQueue(req, res) {
     postings: rows.map((p) => ({
       id: p.id,
       clipId: p.clip_id,
+      // Escolhas de publicacao direta. optionsConfirmed diz se o criador ja
+      // definiu; enquanto for false, a publicacao direta nao sai.
+      optionsConfirmed: Boolean(p.options_confirmed_at),
+      privacyLevel: p.privacy_level,
+      disableComment: p.disable_comment,
+      disableDuet: p.disable_duet,
+      disableStitch: p.disable_stitch,
+      brandOrganicToggle: p.brand_organic_toggle,
+      brandContentToggle: p.brand_content_toggle,
       clipTitle: p.clip_title,
       caption: p.caption ?? p.clip_description,
       thumbnailUrl: thumbnailUrl(p),
@@ -121,4 +132,72 @@ async function postNow(req, res) {
   res.json({ id: updated.id, status: updated.status, errorMessage: updated.error_message });
 }
 
-module.exports = { listQueue, listPosted, listErrors, updateCaption, skip, postNow, retry };
+// Opcoes que a conta do criador permite, buscadas NA HORA no TikTok.
+//
+// A diretriz da Content Posting API exige dados frescos toda vez que a tela de
+// publicacao abre: o criador pode ter desativado comentario ou mudado a
+// privacidade da conta no aplicativo a qualquer momento, e oferecer uma opcao
+// que ele desativou faz a publicacao falhar depois do video ja enviado.
+async function creatorOptions(req, res) {
+  const conta = await tiktokAccountsRepository.findActiveByIdAndClient(
+    Number(req.params.id),
+    req.session.user.id
+  );
+  if (!conta) return res.status(404).json({ error: 'Conta TikTok não encontrada.' });
+
+  try {
+    const token = await tiktokAccountsRepository.getValidAccessToken(tiktokService, conta);
+    const info = await tiktokService.queryCreatorInfo(token);
+    await tiktokAccountsRepository.saveCreatorInfo(conta.id, info);
+    res.json({ ...info, publishMode: conta.publish_mode });
+  } catch (err) {
+    logger.error(`Falha ao consultar opcoes de publicacao da conta ${conta.id}:`, err.message);
+    res.status(502).json({ error: 'Não foi possível falar com o TikTok agora. Tente de novo em instantes.' });
+  }
+}
+
+const PRIVACIDADES = ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'];
+
+// Salva o que o criador escolheu pra UM corte da fila.
+async function saveOptions(req, res) {
+  const {
+    privacyLevel,
+    disableComment,
+    disableDuet,
+    disableStitch,
+    brandOrganicToggle,
+    brandContentToggle,
+  } = req.body;
+
+  // Sem privacidade escolhida nao ha o que salvar: e justamente a escolha que
+  // a TikTok exige que seja manual.
+  if (!PRIVACIDADES.includes(privacyLevel)) {
+    return res.status(400).json({ error: 'Escolha quem pode ver esse vídeo.' });
+  }
+  // Conteudo de parceria paga nao pode ser privado - regra da TikTok. A tela ja
+  // impede, mas quem chama a API direto tambem precisa esbarrar nisso.
+  if (brandContentToggle && privacyLevel === 'SELF_ONLY') {
+    return res.status(400).json({
+      error: 'Conteúdo de parceria paga não pode ficar visível só pra você. Escolha outra privacidade.',
+    });
+  }
+
+  const salvo = await postingsRepository.saveDirectPostOptionsOwnedByClient(
+    Number(req.params.id),
+    req.session.user.id,
+    {
+      privacyLevel,
+      disableComment: Boolean(disableComment),
+      disableDuet: Boolean(disableDuet),
+      disableStitch: Boolean(disableStitch),
+      brandOrganicToggle: Boolean(brandOrganicToggle),
+      brandContentToggle: Boolean(brandContentToggle),
+    }
+  );
+  if (!salvo) return res.status(404).json({ error: 'Corte não encontrado na fila.' });
+  res.json({ ok: true });
+}
+
+module.exports = {
+  creatorOptions,
+  saveOptions, listQueue, listPosted, listErrors, updateCaption, skip, postNow, retry };

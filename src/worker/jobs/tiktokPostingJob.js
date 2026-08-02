@@ -95,10 +95,37 @@ async function publish(account, posting) {
   try {
     const accessToken = await tiktokAccountsRepository.getValidAccessToken(tiktokService, account);
     const videoSizeBytes = posting.file_size_bytes || fs.statSync(posting.local_clip_path).size;
-    const { publishId, uploadUrl, chunkSize, totalChunkCount } = await tiktokService.initInboxVideo(
-      accessToken,
-      videoSizeBytes
-    );
+
+    // Dois caminhos, com exigencias bem diferentes:
+    //
+    //   inbox  - o corte chega como rascunho e o criador finaliza dentro do
+    //            aplicativo do TikTok. Quem coleta privacidade, comentarios e
+    //            duetos e o proprio TikTok, entao nao ha nada a perguntar aqui.
+    //
+    //   direct - vai direto pro perfil. A TikTok exige que privacidade,
+    //            interacoes e divulgacao comercial tenham sido escolhidas
+    //            MANUALMENTE pelo criador antes. Se ninguem escolheu, nao
+    //            publicamos: pular e melhor que publicar com um padrao que a
+    //            pessoa nunca viu.
+    const modoDireto = account.publish_mode === 'direct';
+    if (modoDireto && !posting.options_confirmed_at) {
+      logger.info(
+        `Corte "${posting.clip_title}" (postagem ${posting.id}) esta esperando o cliente escolher as opcoes de publicacao - pulando.`
+      );
+      return;
+    }
+
+    const { publishId, uploadUrl, chunkSize, totalChunkCount } = modoDireto
+      ? await tiktokService.initDirectPost(accessToken, videoSizeBytes, {
+          caption: posting.caption,
+          privacyLevel: posting.privacy_level,
+          disableComment: posting.disable_comment,
+          disableDuet: posting.disable_duet,
+          disableStitch: posting.disable_stitch,
+          brandContentToggle: posting.brand_content_toggle,
+          brandOrganicToggle: posting.brand_organic_toggle,
+        })
+      : await tiktokService.initInboxVideo(accessToken, videoSizeBytes);
     await tiktokService.uploadVideoFile(uploadUrl, posting.local_clip_path, videoSizeBytes, chunkSize, totalChunkCount);
     await postingsRepository.updateStatus(posting.id, { status: 'processing', tiktokPublishId: publishId });
     logger.info(`Corte "${posting.clip_title}" enviado pro TikTok (conta ${account.id}), aguardando confirmacao.`);

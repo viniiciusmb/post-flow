@@ -153,7 +153,42 @@ async function saveStats(id, { followerCount, followingCount, likesCount, videoC
   return rows[0] || null;
 }
 
+// Guarda o retrato mais recente do que a conta do criador permite. E cache de
+// exibicao, nao fonte de verdade: a tela sempre consulta o TikTok de novo ao
+// abrir (exigencia da diretriz), isto so evita tela vazia enquanto carrega.
+async function saveCreatorInfo(id, info) {
+  await pool.query(
+    `UPDATE tiktok_accounts
+     SET creator_nickname = $2, avatar_url = COALESCE($3, avatar_url),
+         privacy_level_options = $4, comment_disabled = $5, duet_disabled = $6,
+         stitch_disabled = $7, max_video_post_duration_sec = $8,
+         creator_info_updated_at = now(), updated_at = now()
+     WHERE id = $1`,
+    [
+      id,
+      info.creatorNickname,
+      info.creatorAvatarUrl,
+      info.privacyLevelOptions,
+      info.commentDisabled,
+      info.duetDisabled,
+      info.stitchDisabled,
+      info.maxVideoPostDurationSec,
+    ]
+  );
+}
+
+async function setPublishMode(id, clientUserId, mode) {
+  const { rows } = await pool.query(
+    `UPDATE tiktok_accounts SET publish_mode = $3, updated_at = now()
+     WHERE id = $1 AND client_user_id = $2 RETURNING *`,
+    [id, clientUserId, mode]
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
+  saveCreatorInfo,
+  setPublishMode,
   findById,
   findActiveByIdAndClient,
   listActiveByClientId,

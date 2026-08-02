@@ -267,6 +267,42 @@ async function listQueueForClient(clientUserId, tiktokAccountId = null) {
   return rows;
 }
 
+// Grava as escolhas de publicacao que o criador fez na tela (privacidade,
+// interacoes, divulgacao comercial). So mexe em postagem PENDENTE dessa conta,
+// e so do proprio cliente.
+//
+// options_confirmed_at e o que libera a publicacao direta: enquanto for NULL,
+// o job pula a postagem. E de proposito - a TikTok exige escolha manual, entao
+// "ninguem escolheu" nao pode virar "publica com o padrao".
+async function saveDirectPostOptionsOwnedByClient(id, clientUserId, opcoes) {
+  const { rows } = await pool.query(
+    `UPDATE postings p
+     SET privacy_level = $3,
+         disable_comment = $4,
+         disable_duet = $5,
+         disable_stitch = $6,
+         brand_organic_toggle = $7,
+         brand_content_toggle = $8,
+         options_confirmed_at = now(),
+         updated_at = now()
+     FROM tiktok_accounts ta
+     WHERE p.id = $1 AND p.tiktok_account_id = ta.id
+       AND ta.client_user_id = $2 AND p.status = 'pending'
+     RETURNING p.*`,
+    [
+      id,
+      clientUserId,
+      opcoes.privacyLevel,
+      opcoes.disableComment,
+      opcoes.disableDuet,
+      opcoes.disableStitch,
+      opcoes.brandOrganicToggle,
+      opcoes.brandContentToggle,
+    ]
+  );
+  return rows[0] || null;
+}
+
 // Grava a ordem que o cliente escolheu arrastando os cortes na tela - so
 // mexe em postagens PENDENTES dessa conta (defesa extra alem do que a tela
 // ja filtra). Numeros pequenos e sequenciais (0,1,2...), sempre menores que
@@ -403,6 +439,7 @@ module.exports = {
   mostRecentPostedAt,
   reflowScheduledFor,
   setQueueOrder,
+  saveDirectPostOptionsOwnedByClient,
   listStaleProcessing,
   listPostedOlderThan,
   listQueueForClient,
