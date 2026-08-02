@@ -334,7 +334,35 @@ async function listForClient(clientUserId, { youtubeChannelId = null } = {}) {
      LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
      WHERE coalesce(yc.client_user_id, sv.client_user_id) = $1
        AND ($2::bigint IS NULL OR yc.id = $2)
-     ORDER BY sv.created_at DESC
+     -- Ordem da tela "Cortes". Antes era so created_at DESC, entao o video que
+     -- estava SENDO PROCESSADO aparecia no fim da lista se tivesse sido
+     -- detectado antes dos outros - justamente o que a pessoa mais quer ver
+     -- ficava escondido embaixo de tudo.
+     --
+     -- Agora manda o ESTADO primeiro:
+     --   0  processando agora  (e o unico que se mexe sozinho na tela)
+     --   1  esperando na fila
+     --   2  parado esperando credito
+     --   3  pausado pelo cliente
+     --   4  com erro           (precisa de atencao, mas nao esta andando)
+     --   5  pronto / cancelado (a aba "Prontos" cuida deles)
+     ORDER BY
+       CASE sv.status
+         WHEN 'downloading' THEN 0
+         WHEN 'transcribing' THEN 0
+         WHEN 'selecting_clips' THEN 0
+         WHEN 'cutting' THEN 0
+         WHEN 'detected' THEN 1
+         WHEN 'aguardando_creditos' THEN 2
+         WHEN 'paused' THEN 3
+         WHEN 'error' THEN 4
+         ELSE 5
+       END,
+       -- Dentro da fila a ordem e de chegada (o primeiro a entrar e o proximo
+       -- a rodar), entao ali o mais ANTIGO vem primeiro. Nos outros grupos o
+       -- mais recente e o mais relevante, entao inverte.
+       CASE WHEN sv.status IN ('detected', 'aguardando_creditos') THEN sv.created_at END ASC,
+       sv.created_at DESC
      LIMIT 100`,
     [clientUserId, youtubeChannelId]
   );

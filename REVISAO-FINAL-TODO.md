@@ -6,33 +6,30 @@
 
 ---
 
-## ⚠️ PENDÊNCIAS QUE DEPENDEM DO USUÁRIO (02/08/2026)
+## ⚠️ PENDÊNCIAS QUE DEPENDEM DO USUÁRIO (atualizado 02/08/2026, fim do dia)
 
-Tudo que dava pra fazer sozinho das seções 1, 2, 3 e 4 foi feito e já está em produção
-(ver "STATUS" em cada seção). Estas três ficaram travadas esperando uma ação humana:
+- [x] ~~Criar o e-mail de contato~~ **FEITO**: `contato@postflowtiktok.com` está no ar e é o
+  contato declarado nas 4 páginas públicas e na submissão.
+- [x] ~~Backblaze B2~~ **FEITO**: backup diário sai da VPS, restore testado.
+- [x] ~~Stripe~~ **PARCIAL**: chaves de TESTE validadas e os 3 planos criados na Stripe
+  (`price_1U074N…`, `price_1U074O…`). Falta: (1) colar as 3 variáveis no EasyPanel nos 3 serviços,
+  (2) criar o endpoint de webhook no dashboard da Stripe e colar o `STRIPE_WEBHOOK_SECRET`,
+  (3) testar assinatura ponta a ponta com cartão de teste `4242 4242 4242 4242`.
+- [ ] **Regenerar a Master Application Key do Backblaze** (e não compartilhar a nova).
+- [ ] **Escolher um serviço de e-mail transacional** (Resend/SendGrid/SES) — continua bloqueando
+  "esqueci minha senha" e verificação de e-mail no cadastro.
 
-- [ ] **Criar o encaminhamento `suporte@postflowtiktok.com`** no painel do domínio, apontando pro
-  e-mail que o fundador lê. **BLOQUEIA a submissão pro Google e pro TikTok** — os dois mandam
-  mensagem de teste pro contato declarado, e caixa inexistente reprova a revisão. O endereço já
-  está publicado na landing, nos Termos, na Privacidade e na página de contato
-  (`src/config/constants.js` → `CONTACT.supportEmail`), então hoje o site anuncia um canal de
-  suporte que não recebe nada.
-- [x] ~~Criar a conta no Backblaze B2~~ **FEITO em 02/08/2026.** Bucket privado `postflow`,
-  chave limitada a ele, envio usando a API nativa do B2 (`curl`+`jq` — o Ubuntu 24.04 da VPS não
-  tem mais `awscli` nos repositórios). Testado de verdade: o arquivo foi baixado DE VOLTA do B2 e
-  restaurado, batendo com produção.
-- [ ] **Regenerar a Master Application Key do Backblaze — e NÃO compartilhar a nova.** Ela foi
-  regenerada uma vez em 02/08/2026, mas a nova acabou sendo colada no chat também, então precisa
-  de mais uma rodada. Nada quebra ao regenerar: o backup usa a chave `postflow-backup`, limitada
-  ao bucket. A Master serve só pra administrar a conta e nunca precisa sair da mão do fundador.
-  Painel → Application Keys → Regenerate Master Application Key.
-- [ ] **Decidir sobre o escopo `drive.readonly`** (ver `docs/aprovacoes-google-tiktok.md`). Ele é
-  escopo RESTRITO do Google e obriga uma avaliação de segurança CASA paga, refeita todo ano. Serve
-  só pra pasta de ORIGEM do Drive, e a produção mostra **0 clientes usando** (as 3 pastas em uso são
-  de destino, cobertas pelo `drive.file`, que é gratuito de verificar). Recomendação: remover antes
-  de submeter ao Google.
-- [ ] **Escolher um serviço de e-mail** (Resend/SendGrid/SES) — continua bloqueando "esqueci minha
-  senha" e verificação de e-mail no cadastro (ver seção 8).
+### Para submeter hoje
+
+- [ ] Gravar o **vídeo de demonstração** (obrigatório nas duas plataformas). Roteiro em
+  `docs/aprovacoes-google-tiktok.md`.
+- [ ] Criar a **conta de teste** para o TikTok (cliente no Post Flow + conta TikTok de teste
+  autorizada no Developer Console).
+- [ ] Google: confirmar que só `drive.file` e `userinfo.email` aparecem em "Acesso a dados"
+  (o `drive.readonly` foi removido do código, mas a lista do console é configurada à parte).
+- [ ] TikTok: decidir entre manter a publicação por **caixa de entrada** (aprova mais rápido, não
+  exige tela nova) ou construir a tela exigida pela **publicação direta**. Ver seção 2 de
+  `docs/aprovacoes-google-tiktok.md`.
 
 ---
 

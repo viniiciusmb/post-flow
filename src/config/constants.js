@@ -22,16 +22,10 @@ const DRIVE_FOLDER_TYPE = Object.freeze({
 // formulario de verificacao do Google e do TikTok, entao tem que bater.
 // Um lugar so pra nao ficar divergindo entre as paginas.
 const CONTACT = Object.freeze({
-  // ===================== PENDENTE (02/08/2026) =====================
-  // Este endereco AINDA NAO EXISTE. Falta criar o encaminhamento no painel do
-  // dominio (postflowtiktok.com) apontando pro e-mail que o fundador le.
-  //
-  // BLOQUEIA a submissao pro Google e pro TikTok: os dois mandam mensagem de
-  // teste pro contato declarado, e uma caixa que volta "usuario inexistente"
-  // reprova a revisao. Enquanto nao existir, o site publico esta anunciando um
-  // canal de suporte que nao recebe nada.
-  // =================================================================
-  supportEmail: 'suporte@postflowtiktok.com',
+  // Criado e funcionando desde 02/08/2026. E o contato declarado na submissao
+  // ao Google e ao TikTok - os dois mandam mensagem de teste pra ele durante a
+  // revisao, entao a caixa precisa continuar recebendo de verdade.
+  supportEmail: 'contato@postflowtiktok.com',
   siteUrl: 'https://postflowtiktok.com',
   responseTime: 'até 2 dias úteis',
 });
