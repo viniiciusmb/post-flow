@@ -8,6 +8,7 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 
 const config = require('../config');
+const { COMPANY, CONTACT } = require('../config/constants');
 const pool = require('../db/pool');
 const publicRoutes = require('./routes/publicRoutes');
 const authRoutes = require('./routes/authRoutes');
@@ -117,9 +118,17 @@ app.use(
 // sessao (guarda o token nela) e antes das rotas. Ver middleware/csrf.js.
 app.use(csrf.middleware);
 
-// Deixa req.session.user disponivel em todas as views (nav, saudacao, etc).
+// Dados sempre disponiveis pra qualquer view renderizada.
+//
+// company/contact ficam aqui, e nao no controller de cada pagina, porque o
+// rodape publico (usado por landing, termos, privacidade, contato, entrar,
+// criar conta e pagina de erro) precisa deles em TODA renderizacao. Passando
+// controller a controller, qualquer pagina nova esqueceria e quebraria na
+// hora de renderizar o rodape.
 app.use((req, res, next) => {
   res.locals.currentUser = req.session.user || null;
+  res.locals.company = COMPANY;
+  res.locals.contact = CONTACT;
   next();
 });
 

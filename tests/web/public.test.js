@@ -9,7 +9,7 @@ const assert = require('node:assert');
 
 const { startServer, stopServer, createAgent } = require('../helpers/http');
 const { pool } = require('../helpers/db');
-const { CONTACT } = require('../../src/config/constants');
+const { CONTACT, COMPANY } = require('../../src/config/constants');
 
 let url;
 
@@ -68,6 +68,30 @@ test('nenhuma pagina publica carrega CSS/script de servidor de terceiro', async 
       .filter((u) => !/myaccount\.google\.com|postflowtiktok\.com/.test(u));
     assert.deepStrictEqual(externos, [], `${rota} esta carregando recurso externo: ${externos.join(', ')}`);
   }
+});
+
+test('as paginas publicas identificam a empresa por tras do produto', async () => {
+  // Site que nao diz quem esta por tras perde confianca de quem vai cadastrar
+  // cartao, e "identidade do desenvolvedor" e item de checagem tanto na
+  // verificacao OAuth do Google quanto na revisao de app do TikTok. Os Termos
+  // ainda precisam disso pra ter parte contratante definida.
+  const anonimo = createAgent(url);
+  for (const rota of ['/', '/termos', '/privacidade']) {
+    const r = await anonimo.get(rota);
+    assert.ok(r.text.includes(COMPANY.cnpj), `${rota} precisa mostrar o CNPJ ${COMPANY.cnpj}`);
+    assert.ok(r.text.includes(COMPANY.legalName), `${rota} precisa mostrar a razao social`);
+  }
+});
+
+test('os Termos deixam claro que a responsabilidade pelo conteudo e do cliente', async () => {
+  // O produto e pra quem automatiza o PROPRIO conteudo. Se essa clausula sumir
+  // numa reescrita, o texto passa a sugerir que serve pra cortar video alheio -
+  // o que muda a leitura do TikTok, do Google e de um juiz.
+  const anonimo = createAgent(url);
+  const r = await anonimo.get('/termos');
+  assert.match(r.text, /nao nos responsabilizamos|não nos responsabilizamos/i);
+  assert.match(r.text, /conte[úu]do de terceiros/i);
+  assert.match(r.text, /autoriza[çc][ãa]o expressa/i);
 });
 
 test('cadastro SEM aceitar os termos e recusado pelo servidor', async () => {

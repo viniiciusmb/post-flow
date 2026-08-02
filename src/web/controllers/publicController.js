@@ -7,7 +7,7 @@
 
 const subscriptionPlansRepository = require('../../repositories/subscriptionPlansRepository');
 const logger = require('../../lib/logger');
-const { CONTACT } = require('../../config/constants');
+const { CONTACT, COMPANY } = require('../../config/constants');
 
 // Data em que os documentos legais foram revisados pela ultima vez. Precisa
 // ser atualizada A MAO sempre que o texto de termos/privacidade mudar - e o
@@ -36,6 +36,7 @@ async function landing(req, res) {
       'O Post Flow acompanha seu canal do YouTube, corta os melhores trechos com IA, legenda no formato vertical e publica no seu TikTok automaticamente.',
     plans,
     contact: CONTACT,
+    company: COMPANY,
   });
 }
 
@@ -45,6 +46,7 @@ function terms(req, res) {
     metaDescription: 'Termos de Uso do Post Flow.',
     updatedAt: LEGAL_UPDATED_AT,
     contact: CONTACT,
+    company: COMPANY,
   });
 }
 
@@ -55,6 +57,7 @@ function privacy(req, res) {
       'Como o Post Flow trata seus dados: o que guardamos, por quanto tempo, com quem compartilhamos e como apagar tudo.',
     updatedAt: LEGAL_UPDATED_AT,
     contact: CONTACT,
+    company: COMPANY,
   });
 }
 
@@ -63,6 +66,7 @@ function contact(req, res) {
     title: 'Contato e suporte',
     metaDescription: 'Fale com o suporte do Post Flow.',
     contact: CONTACT,
+    company: COMPANY,
   });
 }
 

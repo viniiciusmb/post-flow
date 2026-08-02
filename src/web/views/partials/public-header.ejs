@@ -4,14 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><%= title %> · Post Flow</title>
-  <meta name="description" content="<%= locals.metaDescription || 'O Post Flow transforma os vídeos longos do seu canal do YouTube em cortes verticais legendados e publica no TikTok automaticamente.' %>">
+  <meta name="description" content="<%= locals.metaDescription || 'O Post Flow acompanha seu canal do YouTube, corta os melhores trechos com IA e publica no seu TikTok automaticamente.' %>">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b0c0e" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/inter-600.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/css/public.css">
 </head>
 <body>
-  <header class="topbar">
+  <header class="topbar" id="topbar">
     <div class="wrap">
-      <a class="brand" href="/">Post<span>Flow</span></a>
+      <a class="brand" href="/" aria-label="Post Flow, página inicial">
+        <%- include('brand-mark') %>
+        Post Flow
+      </a>
       <nav class="topnav">
         <a class="so-desktop" href="/#como-funciona">Como funciona</a>
         <a class="so-desktop" href="/#planos">Planos</a>
@@ -25,4 +32,16 @@
       </nav>
     </div>
   </header>
+
+  <script>
+    // A barra do topo só ganha a linha divisória depois que a página rola.
+    // Parada no topo ela fica sem moldura, colada no fundo branco.
+    (function () {
+      var barra = document.getElementById('topbar');
+      var marcar = function () { barra.classList.toggle('rolou', window.scrollY > 8); };
+      marcar();
+      window.addEventListener('scroll', marcar, { passive: true });
+    })();
+  </script>
+
   <main>

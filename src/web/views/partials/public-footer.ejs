@@ -1,14 +1,30 @@
   </main>
+
   <footer class="footer">
     <div class="wrap">
-      <div>© <%= new Date().getFullYear() %> Post Flow</div>
-      <nav>
-        <a href="/#como-funciona">Como funciona</a>
-        <a href="/#planos">Planos</a>
-        <a href="/termos">Termos de Uso</a>
-        <a href="/privacidade">Privacidade</a>
-        <a href="/contato">Contato e suporte</a>
-      </nav>
+      <div class="footer-topo">
+        <a class="brand" href="/" style="color: var(--ink)">
+          <%- include('brand-mark') %>
+          Post Flow
+        </a>
+        <nav>
+          <a href="/#como-funciona">Como funciona</a>
+          <a href="/#planos">Planos</a>
+          <a href="/contato">Contato</a>
+          <a href="/termos">Termos de Uso</a>
+          <a href="/privacidade">Privacidade</a>
+        </nav>
+      </div>
+
+      <%# Identificação da empresa. Site que não diz quem está por trás perde
+          confiança de quem vai cadastrar cartão, e é uma das coisas que o
+          Google e o TikTok conferem na revisão do aplicativo. %>
+      <div class="footer-empresa">
+        <%= company.legalName %> · CNPJ <%= company.cnpj %><br>
+        <%= company.address %><br>
+        <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a>
+        · © <%= new Date().getFullYear() %>
+      </div>
     </div>
   </footer>
 </body>

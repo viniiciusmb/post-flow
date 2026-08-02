@@ -1,28 +1,30 @@
 <%- include('../partials/public-header') %>
 
 <div class="wrap">
-  <article class="doc" style="max-width: 26rem;">
-    <h1>Criar conta</h1>
-    <p style="color: var(--muted); margin-bottom: 2rem;">
-      Leva menos de um minuto. Depois é só conectar seu canal do YouTube.
+  <article class="doc" style="max-width: 25rem; padding-top: clamp(2.5rem, 5vw, 4rem)">
+    <h1 style="font-size: clamp(1.75rem, 3.5vw, 2.25rem)">Criar conta</h1>
+    <p style="margin-bottom: 0">
+      Leva menos de um minuto. Depois é só conectar o seu canal.
     </p>
 
     <% if (error) { %>
-      <p class="erro"><%= error %></p>
+      <p class="erro" style="margin-top: 1.5rem"><%= error %></p>
     <% } %>
 
     <form method="post" action="/register" class="form">
       <label>
-        Nome do negócio <span style="color:var(--muted); font-weight:400">(opcional)</span>
-        <input type="text" name="businessName" value="<%= locals.values && locals.values.businessName || '' %>">
+        Nome do negócio <span style="color: var(--muted); font-weight: 400">(opcional)</span>
+        <input type="text" name="businessName" autocomplete="organization"
+               value="<%= locals.values && locals.values.businessName || '' %>">
       </label>
       <label>
         E-mail
-        <input type="email" name="email" required value="<%= locals.values && locals.values.email || '' %>">
+        <input type="email" name="email" required autocomplete="email"
+               value="<%= locals.values && locals.values.email || '' %>">
       </label>
       <label>
         Senha
-        <input type="password" name="password" required minlength="8">
+        <input type="password" name="password" required minlength="8" autocomplete="new-password">
         <small>Pelo menos 8 caracteres.</small>
       </label>
 
@@ -30,54 +32,18 @@
         <input type="checkbox" name="acceptedTerms" value="1" required>
         <span>
           Li e aceito os <a href="/termos" target="_blank" rel="noopener">Termos de Uso</a> e a
-          <a href="/privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.
+          <a href="/privacidade" target="_blank" rel="noopener">Política de Privacidade</a>, e
+          declaro que só vou processar conteúdo do qual tenho os direitos.
         </span>
       </label>
 
       <button type="submit" class="btn btn-primary btn-lg">Criar conta</button>
     </form>
 
-    <p style="margin-top:1.5rem; color:var(--muted)">
-      Já tem conta? <a href="/login">Entrar</a>
+    <p style="margin-top: 1.75rem">
+      Já tem conta? <a href="/login" style="color: var(--signal)">Entrar</a>
     </p>
   </article>
 </div>
-
-<style>
-  .erro {
-    color: #b91c1c;
-    background: #fef2f2;
-    border-radius: var(--radius);
-    padding: 0.75rem 1rem;
-  }
-  @media (prefers-color-scheme: dark) {
-    .erro { color: #fca5a5; background: rgba(220, 38, 38, 0.12); }
-  }
-  .form { display: grid; gap: 1.1rem; }
-  .form label { display: grid; gap: 0.35rem; font-size: 0.9375rem; font-weight: 500; }
-  .form input[type="text"],
-  .form input[type="email"],
-  .form input[type="password"] {
-    font: inherit;
-    font-weight: 400;
-    padding: 0.65rem 0.85rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--card);
-    color: var(--fg);
-    width: 100%;
-  }
-  .form input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-  .form small { color: var(--muted); font-weight: 400; }
-  .form .check {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.6rem;
-    font-weight: 400;
-    color: var(--muted);
-    line-height: 1.5;
-  }
-  .form .check input { margin-top: 0.3rem; accent-color: var(--primary); width: 1rem; height: 1rem; }
-</style>
 
 <%- include('../partials/public-footer') %>

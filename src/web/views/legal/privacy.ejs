@@ -21,13 +21,28 @@
       </p>
     </div>
 
-    <h2>1. Quem é o responsável</h2>
+    <h2>1. Quem é o controlador dos seus dados</h2>
     <p>
-      O Post Flow é operado por Vinícius Moreira. Contato para qualquer assunto de privacidade:
-      <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a>.
+      O Post Flow é operado por <strong><%= company.legalName %></strong>, inscrita no CNPJ sob o
+      nº <strong><%= company.cnpj %></strong>, com sede em <%= company.address %>. Para efeitos da
+      Lei Geral de Proteção de Dados (Lei 13.709/2018), essa é a empresa controladora dos dados
+      tratados aqui.
+    </p>
+    <p>
+      Contato para qualquer assunto de privacidade, incluindo pedidos de acesso, correção ou
+      exclusão: <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a>.
     </p>
 
-    <h2>2. Quais dados guardamos e por quê</h2>
+    <h2>2. Para que o serviço existe</h2>
+    <p>
+      O Post Flow é uma ferramenta de automação para criadores que já produzem o próprio conteúdo.
+      Todo o tratamento de dados descrito abaixo acontece para executar uma tarefa que você pediu:
+      pegar um vídeo <em>que você indicou</em>, cortar e publicar <em>na sua conta</em>. Não
+      buscamos, não indexamos e não sugerimos conteúdo de terceiros, e não usamos seu material para
+      treinar modelo nenhum.
+    </p>
+
+    <h2>3. Quais dados guardamos e por quê</h2>
     <table>
       <thead>
         <tr><th>Dado</th><th>Pra que serve</th><th>Quanto tempo fica</th></tr>
@@ -71,12 +86,12 @@
         <tr>
           <td>Dados de pagamento (cartão)</td>
           <td>Cobrança da assinatura</td>
-          <td><strong>Nunca passam pelos nossos servidores</strong> — ficam só com a Stripe</td>
+          <td><strong>Nunca passam pelos nossos servidores</strong>. Ficam só com a Stripe</td>
         </tr>
       </tbody>
     </table>
 
-    <h2>3. O que pedimos ao Google e por quê</h2>
+    <h2>4. O que pedimos ao Google e por quê</h2>
     <p>
       Quando você conecta o Google Drive, a tela de autorização do próprio Google mostra as
       permissões abaixo. É só isso que pedimos:
@@ -94,7 +109,7 @@
         <tr>
           <td><code>drive.file</code></td>
           <td>Gravar os cortes prontos na <strong>pasta de destino</strong> que você indicar. Esta
-          permissão dá acesso apenas aos arquivos que o próprio Post Flow cria — não abre o resto
+          permissão dá acesso apenas aos arquivos que o próprio Post Flow cria. Não abre o resto
           do seu Drive.</td>
         </tr>
         <tr>
@@ -109,38 +124,38 @@
       dados do seu Drive pra treinar nenhum modelo de inteligência artificial.
     </p>
 
-    <h2>4. O que pedimos ao TikTok e por quê</h2>
+    <h2>5. O que pedimos ao TikTok e por quê</h2>
     <ul>
-      <li><strong>Informações básicas do perfil</strong> — pra mostrar no painel de qual conta se
+      <li><strong>Informações básicas do perfil</strong>. Pra mostrar no painel de qual conta se
       trata (nome de usuário e foto), já que você pode conectar mais de uma.</li>
-      <li><strong>Publicar vídeos</strong> — pra enviar os cortes prontos pra sua conta. Só
+      <li><strong>Publicar vídeos</strong>. Pra enviar os cortes prontos pra sua conta. Só
       publicamos o que foi gerado a partir do conteúdo que você mesmo indicou.</li>
-      <li><strong>Estatísticas das publicações</strong> — pra mostrar no painel como cada corte
+      <li><strong>Estatísticas das publicações</strong>. Pra mostrar no painel como cada corte
       performou.</li>
     </ul>
     <p>Não lemos suas mensagens diretas nem publicamos nada sem ser através do fluxo do sistema.</p>
 
-    <h2>5. Serviços de terceiros que usamos</h2>
-    <p>Pra funcionar, o Post Flow envia dados pra estas empresas — e nada além do necessário:</p>
+    <h2>6. Serviços de terceiros que usamos</h2>
+    <p>Pra funcionar, o Post Flow envia dados pra estas empresas, e nada além do necessário:</p>
     <ul>
-      <li><strong>OpenAI (Whisper)</strong> — recebe o <em>áudio</em> do seu vídeo pra transcrever.</li>
-      <li><strong>Anthropic (Claude)</strong> — recebe a <em>transcrição em texto</em> pra escolher
+      <li><strong>OpenAI (Whisper)</strong>. Recebe o <em>áudio</em> do seu vídeo pra transcrever.</li>
+      <li><strong>Anthropic (Claude)</strong>. Recebe a <em>transcrição em texto</em> pra escolher
       os melhores trechos. Não recebe o vídeo nem o áudio.</li>
-      <li><strong>TikTok</strong> — recebe os cortes que você mandou publicar.</li>
-      <li><strong>Google Drive</strong> — recebe os cortes que você mandou exportar.</li>
-      <li><strong>Stripe</strong> — processa os pagamentos e guarda os dados do cartão.</li>
-      <li><strong>Hostinger</strong> — hospeda o servidor onde o sistema roda.</li>
+      <li><strong>TikTok</strong>. Recebe os cortes que você mandou publicar.</li>
+      <li><strong>Google Drive</strong>. Recebe os cortes que você mandou exportar.</li>
+      <li><strong>Stripe</strong>. Processa os pagamentos e guarda os dados do cartão.</li>
+      <li><strong>Hostinger</strong>. Hospeda o servidor onde o sistema roda.</li>
     </ul>
     <p><strong>Não vendemos seus dados e não usamos rastreamento publicitário de terceiros.</strong></p>
 
-    <h2>6. Cookies</h2>
+    <h2>7. Cookies</h2>
     <p>
-      O Post Flow usa apenas cookies <strong>estritamente necessários</strong> para funcionar — não
+      O Post Flow usa apenas cookies <strong>estritamente necessários</strong> para funcionar. Não
       há Google Analytics, pixel do Facebook nem qualquer rastreador de publicidade no site. São dois:
     </p>
     <ul>
-      <li><code>connect.sid</code> — mantém você logado. Sem ele, você seria deslogado a cada clique.</li>
-      <li><code>csrf_token</code> — protege contra outro site conseguir disparar ações na sua conta
+      <li><code>connect.sid</code>. Mantém você logado. Sem ele, você seria deslogado a cada clique.</li>
+      <li><code>csrf_token</code>. Protege contra outro site conseguir disparar ações na sua conta
       sem você saber.</li>
     </ul>
     <p>
@@ -148,10 +163,10 @@
       navegador simplesmente encerra sua sessão.
     </p>
 
-    <h2>7. O programa de computador (túnel)</h2>
+    <h2>8. O programa de computador (túnel)</h2>
     <p>
       Oferecemos um programinha opcional que fica na bandeja do sistema. Ele serve pra que os
-      downloads dos seus vídeos saiam pela sua própria internet em vez da do nosso servidor — o que
+      downloads dos seus vídeos saiam pela sua própria internet em vez da do nosso servidor. O que
       resolve bloqueios do YouTube e te dá minutos bônus.
     </p>
     <p>
@@ -161,17 +176,17 @@
       qualquer momento.
     </p>
 
-    <h2>8. Segurança</h2>
+    <h2>9. Segurança</h2>
     <ul>
       <li>Todo o tráfego do site é criptografado (HTTPS).</li>
-      <li>Senhas são guardadas como hash bcrypt — nem nós conseguimos lê-las.</li>
+      <li>Senhas são guardadas como hash bcrypt. Nem nós conseguimos lê-las.</li>
       <li>Tokens do TikTok e do Google são criptografados no banco (AES-256-GCM).</li>
       <li>Cada cliente só enxerga os próprios dados; isso é verificado por testes automatizados a
       cada mudança no sistema.</li>
       <li>O banco de dados tem backup diário verificado.</li>
     </ul>
 
-    <h2>9. Seus direitos</h2>
+    <h2>10. Seus direitos</h2>
     <p>De acordo com a LGPD, você pode a qualquer momento:</p>
     <ul>
       <li><strong>Ver</strong> quais dados temos sobre você;</li>
@@ -186,7 +201,7 @@
       cadastrado na sua conta. Respondemos <%= contact.responseTime %>.
     </p>
 
-    <h2>10. Como apagamos tudo</h2>
+    <h2>11. Como apagamos tudo</h2>
     <p>Ao receber um pedido de exclusão, apagamos:</p>
     <ul>
       <li>Seu cadastro (e-mail, senha, nome do negócio);</li>
@@ -198,16 +213,16 @@
     <p>
       Ficam apenas os registros de cobrança que a legislação fiscal obriga a guardar, e só pelo
       prazo exigido. <strong>O que já foi publicado no seu TikTok e o que já foi exportado pro seu
-      Google Drive continua com você</strong> — não temos como (nem devemos) mexer nisso.
+      Google Drive continua com você</strong>. Não temos como (nem devemos) mexer nisso.
     </p>
 
-    <h2>11. Menores de idade</h2>
+    <h2>12. Menores de idade</h2>
     <p>
       O Post Flow não é destinado a menores de 18 anos. Se identificarmos uma conta nessa situação,
       ela será encerrada e os dados apagados.
     </p>
 
-    <h2>12. Mudanças nesta política</h2>
+    <h2>13. Mudanças nesta política</h2>
     <p>
       Se algo mudar, atualizamos a data no topo desta página. Mudanças relevantes serão avisadas no
       painel antes de entrarem em vigor.

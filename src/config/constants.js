@@ -36,4 +36,18 @@ const CONTACT = Object.freeze({
   responseTime: 'até 2 dias úteis',
 });
 
-module.exports = { ROLES, POSTING_STATUS, DRIVE_FOLDER_TYPE, CONTACT };
+// Pessoa jurídica por trás do Post Flow. Aparece no rodapé de todas as páginas
+// públicas e nos documentos legais.
+//
+// Não é burocracia: um site que não diz quem está por trás dele perde confiança
+// de quem vai cadastrar cartão, e "identidade do desenvolvedor" é item de
+// checagem tanto na verificação OAuth do Google quanto na revisão de aplicativo
+// do TikTok. Sem isso, os Termos também não têm parte contratante definida.
+const COMPANY = Object.freeze({
+  legalName: 'Kleos Digital LTDA',
+  cnpj: '62.111.132/0001-48',
+  address: 'Rua Mistral, 332, Edif. The Point, sala 209A · Despraiado · Cuiabá/MT · CEP 78.048-222',
+  city: 'Cuiabá/MT',
+});
+
+module.exports = { ROLES, POSTING_STATUS, DRIVE_FOLDER_TYPE, CONTACT, COMPANY };

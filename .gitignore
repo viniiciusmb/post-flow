@@ -4,3 +4,6 @@ node_modules/
 .DS_Store
 dist/
 coverage/
+
+# Skills instaladas localmente (nao fazem parte do produto)
+.agents/
