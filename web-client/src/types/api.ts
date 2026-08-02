@@ -78,30 +78,33 @@ export interface ClientPosting {
 }
 
 export interface AdminMetricsResponse {
-  range: RangeInfo
+  /** Período que cada painel realmente usou (o servidor devolve a chave já validada). */
+  ranges: { volume: DateRangeKey; pipeline: DateRangeKey; cost: DateRangeKey; ranking: DateRangeKey }
   clients: { active: number; inactive: number }
   volume: {
-    videosDetected7d: number
-    videosDetected30d: number
-    clipsGenerated30d: number
-    clipsPosted30d: number
+    videosDetected: number
+    clipsGenerated: number
+    clipsPosted: number
     aproveitamentoRate: number | null
   }
-  ranking: { name: string; videosCount: number }[]
   pipeline: {
-    errorRate30d: number
-    totalFinished30d: number
+    errorRate: number
+    totalFinished: number
     avgProcessingSeconds: number | null
     avgQueueWaitSeconds: number | null
+    /** Retrato do instante: quantos estão na fila agora. Não tem período. */
     queueDepth: number
   }
   cost: {
-    whisperCostUsd7d: number
-    claudeCostUsd7d: number
-    totalCostUsd7d: number
-    avgCostPerVideo30d: number | null
+    whisperCostUsd: number
+    claudeCostUsd: number
+    totalCostUsd: number
+    avgCostPerVideo: number | null
+    videosWithCost: number
+    /** Sempre com base nos últimos 7 dias: seguir o filtro tornaria a projeção sem sentido. */
     projectedMonthlyUsd: number
   }
+  ranking: { name: string; videosCount: number }[]
   services: { name: string; lastHeartbeatAt: string; isUp: boolean }[]
   system: {
     latest: {
@@ -122,18 +125,6 @@ export interface AdminMetricsResponse {
     ageHours: number | null
     sizeBytes?: number | null
     detail: string | null
-  }
-  selected: {
-    videosDetected: number
-    clipsGenerated: number
-    clipsPosted: number
-    aproveitamentoRate: number | null
-    errorRate: number
-    totalFinished: number
-    avgProcessingSeconds: number | null
-    totalCostUsd: number
-    avgCostPerVideo: number | null
-    ranking: { name: string; videosCount: number }[]
   }
 }
 

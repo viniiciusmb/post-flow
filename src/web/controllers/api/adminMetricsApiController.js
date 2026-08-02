@@ -34,82 +34,93 @@ function buildBackupStatus(raw) {
   };
 }
 
+// Cada painel da tela de metricas tem o SEU proprio filtro de periodo.
+//
+// Antes havia um filtro so no topo, mas os blocos "Clientes e volume", "Saude
+// do pipeline" e "Custo de API" mostravam janelas fixas de 7 e 30 dias e
+// simplesmente ignoravam ele - so o bloco "Periodo selecionado" respondia. Na
+// pratica, escolher "Hoje" nao mudava o custo de IA, o que parecia painel
+// quebrado (e era: o numero na tela nao correspondia ao filtro em cima dele).
+//
+// Agora o front manda uma chave por painel (?volume=today&pipeline=last7days&
+// cost=this_month) e cada bloco responde pelo periodo dele. Numa chamada so,
+// pra nao virar tres requisicoes a cada clique.
+const PAINEIS = ['volume', 'pipeline', 'cost', 'ranking'];
+
 async function overview(req, res) {
-  const since7d = daysAgo(7);
-  const since30d = daysAgo(30);
-  const { range, since, until } = resolveRange(req.query.range);
+  // Cada painel cai no padrao (7 dias) se o front nao mandar nada, e
+  // resolveRange ja ignora chave invalida.
+  const periodos = Object.fromEntries(PAINEIS.map((p) => [p, resolveRange(req.query[p])]));
 
   const [
     clients,
-    volume30d,
-    videos7d,
-    ranking,
+    volume,
     pipeline,
-    cost7d,
-    cost30d,
+    cost,
+    ranking,
+    costPrevisao,
     queueDepth,
     services,
-    volumeSelected,
-    pipelineSelected,
-    costSelected,
-    rankingSelected,
     systemLatest,
     systemHistory,
     connectedTunnels,
     lastBackupRaw,
   ] = await Promise.all([
-    metricsRepository.clientActivity(since30d),
-    metricsRepository.volumeSince(since30d),
-    metricsRepository.volumeSince(since7d),
-    metricsRepository.clientRanking({ since: since30d, limit: 5 }),
-    metricsRepository.pipelineHealthSince(since30d),
-    metricsRepository.costSince(since7d),
-    metricsRepository.costSince(since30d),
+    metricsRepository.clientActivity(daysAgo(30)),
+    metricsRepository.volumeSince(periodos.volume.since, periodos.volume.until),
+    metricsRepository.pipelineHealthSince(periodos.pipeline.since, periodos.pipeline.until),
+    metricsRepository.costSince(periodos.cost.since, periodos.cost.until),
+    metricsRepository.clientRanking({ since: periodos.ranking.since, until: periodos.ranking.until, limit: 5 }),
+    // A projecao mensal e a unica coisa que precisa de janela fixa: ela existe
+    // justamente pra extrapolar a media recente, entao seguir o filtro
+    // tornaria o numero sem sentido ("projecao do mes com base em hoje").
+    metricsRepository.costSince(daysAgo(7)),
     metricsRepository.queueDepth(),
     metricsRepository.listServiceStatus(),
-    metricsRepository.volumeSince(since, until),
-    metricsRepository.pipelineHealthSince(since, until),
-    metricsRepository.costSince(since, until),
-    metricsRepository.clientRanking({ since, until, limit: 5 }),
     metricsRepository.latestSystemMetric(),
     metricsRepository.systemMetricsSince(daysAgo(1)),
     downloadTunnelsRepository.countConnectedClients(),
     settingsRepository.getValue('last_db_backup', null),
   ]);
 
-  const aproveitamentoRate = volume30d.clipsGenerated > 0 ? volume30d.clipsPosted / volume30d.clipsGenerated : null;
-  const avgCostPerVideo = cost30d.videosWithCost > 0 ? cost30d.totalCostUsd / cost30d.videosWithCost : null;
-  const projectedMonthlyUsd = (cost7d.totalCostUsd / 7) * 30;
-  const aproveitamentoRateSelected =
-    volumeSelected.clipsGenerated > 0 ? volumeSelected.clipsPosted / volumeSelected.clipsGenerated : null;
-  const avgCostPerVideoSelected =
-    costSelected.videosWithCost > 0 ? costSelected.totalCostUsd / costSelected.videosWithCost : null;
+  const aproveitamentoRate = volume.clipsGenerated > 0 ? volume.clipsPosted / volume.clipsGenerated : null;
+  const avgCostPerVideo = cost.videosWithCost > 0 ? cost.totalCostUsd / cost.videosWithCost : null;
+  const projectedMonthlyUsd = (costPrevisao.totalCostUsd / 7) * 30;
 
   res.json({
-    range: { key: range, since, until },
+    // Devolve a chave que cada painel realmente usou, pra tela ficar em sincronia
+    // mesmo se alguem mandar uma chave invalida na URL.
+    ranges: Object.fromEntries(PAINEIS.map((p) => [p, periodos[p].range])),
+
     clients: { active: clients.active, inactive: clients.inactive },
+
     volume: {
-      videosDetected7d: videos7d.videosDetected,
-      videosDetected30d: volume30d.videosDetected,
-      clipsGenerated30d: volume30d.clipsGenerated,
-      clipsPosted30d: volume30d.clipsPosted,
+      videosDetected: volume.videosDetected,
+      clipsGenerated: volume.clipsGenerated,
+      clipsPosted: volume.clipsPosted,
       aproveitamentoRate,
     },
-    ranking: ranking.map((r) => ({ name: r.business_name || r.email, videosCount: r.videos_count })),
+
     pipeline: {
-      errorRate30d: pipeline.errorRate,
-      totalFinished30d: pipeline.totalFinished,
+      errorRate: pipeline.errorRate,
+      totalFinished: pipeline.totalFinished,
       avgProcessingSeconds: pipeline.avgProcessingSeconds,
       avgQueueWaitSeconds: pipeline.avgQueueWaitSeconds,
+      // Fila agora e um retrato do instante, nao tem periodo.
       queueDepth,
     },
+
     cost: {
-      whisperCostUsd7d: cost7d.whisperCostUsd,
-      claudeCostUsd7d: cost7d.claudeCostUsd,
-      totalCostUsd7d: cost7d.totalCostUsd,
-      avgCostPerVideo30d: avgCostPerVideo,
+      whisperCostUsd: cost.whisperCostUsd,
+      claudeCostUsd: cost.claudeCostUsd,
+      totalCostUsd: cost.totalCostUsd,
+      avgCostPerVideo,
+      videosWithCost: cost.videosWithCost,
       projectedMonthlyUsd,
     },
+
+    ranking: ranking.map((r) => ({ name: r.business_name || r.email, videosCount: r.videos_count })),
+
     services: services.map((s) => ({
       name: s.service_name,
       lastHeartbeatAt: s.last_heartbeat_at,
@@ -137,21 +148,7 @@ async function overview(req, res) {
         memTotalMb: s.mem_total_mb,
       })),
     },
-    // Numeros recalculados so pro periodo escolhido no filtro (Hoje/Ontem/etc) -
-    // os blocos acima continuam fixos em 7d/30d como referencia de tendencia.
-    selected: {
-      videosDetected: volumeSelected.videosDetected,
-      clipsGenerated: volumeSelected.clipsGenerated,
-      clipsPosted: volumeSelected.clipsPosted,
-      aproveitamentoRate: aproveitamentoRateSelected,
-      errorRate: pipelineSelected.errorRate,
-      totalFinished: pipelineSelected.totalFinished,
-      avgProcessingSeconds: pipelineSelected.avgProcessingSeconds,
-      totalCostUsd: costSelected.totalCostUsd,
-      avgCostPerVideo: avgCostPerVideoSelected,
-      ranking: rankingSelected.map((r) => ({ name: r.business_name || r.email, videosCount: r.videos_count })),
-    },
   });
 }
 
-module.exports = { overview };
+module.exports = { overview, PAINEIS };

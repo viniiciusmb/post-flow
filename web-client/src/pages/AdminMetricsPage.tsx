@@ -2,15 +2,15 @@ import { useEffect, useState } from "react"
 import { IconAlertTriangle, IconCircleCheck, IconCircleX, IconServer } from "@tabler/icons-react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
+import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { DateRangeFilter } from "@/components/dashboard/DateRangeFilter"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
-import { useDateRange } from "@/hooks/useDateRange"
 import { api } from "@/lib/api"
-import type { AdminMetricsResponse } from "@/types/api"
+import type { AdminMetricsResponse, DateRangeKey } from "@/types/api"
 
 const SYSTEM_CHART_CONFIG = {
   cpuPercent: { label: "CPU (carga / núcleos)", color: "var(--tone-danger-ink)" },
@@ -86,11 +86,27 @@ function BackupMetric({ backup }: { backup: AdminMetricsResponse["backup"] }) {
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+// Cada painel carrega o proprio filtro de periodo no cabecalho. Antes havia um
+// filtro so, no topo da tela, e metade dos blocos o ignorava (mostravam janela
+// fixa de 7/30 dias): escolher "Hoje" nao mudava o custo de IA, o que parecia
+// painel quebrado. Com o filtro dentro do bloco, o numero e a janela dele ficam
+// sempre no mesmo lugar, e da pra comparar periodos diferentes lado a lado.
+function Section({
+  title,
+  range,
+  onRangeChange,
+  children,
+}: {
+  title: string
+  range?: DateRangeKey
+  onRangeChange?: (r: DateRangeKey) => void
+  children: React.ReactNode
+}) {
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-wrap items-center justify-between gap-3 has-data-[slot=card-action]:grid-cols-none">
         <CardTitle className="text-base">{title}</CardTitle>
+        {range && onRangeChange && <DateRangeFilter value={range} onChange={onRangeChange} />}
       </CardHeader>
       <CardContent className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4">{children}</CardContent>
     </Card>
@@ -99,20 +115,31 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function AdminMetricsPage() {
   const { user, loading: authLoading, logout } = useAuth()
-  const { range, setRange } = useDateRange()
   const [data, setData] = useState<AdminMetricsResponse | null>(null)
+  // Um periodo por painel. Vao juntos numa chamada so pra nao virar quatro
+  // requisicoes a cada clique.
+  const [rangeVolume, setRangeVolume] = useState<DateRangeKey>("last7days")
+  const [rangePipeline, setRangePipeline] = useState<DateRangeKey>("last7days")
+  const [rangeCost, setRangeCost] = useState<DateRangeKey>("last7days")
+  const [rangeRanking, setRangeRanking] = useState<DateRangeKey>("last7days")
 
   useEffect(() => {
     if (!user) return
-    api.get<AdminMetricsResponse>(`/api/admin/metrics?range=${range}`).then(setData)
-  }, [user, range])
+    const q = new URLSearchParams({
+      volume: rangeVolume,
+      pipeline: rangePipeline,
+      cost: rangeCost,
+      ranking: rangeRanking,
+    })
+    api.get<AdminMetricsResponse>(`/api/admin/metrics?${q}`).then(setData)
+  }, [user, rangeVolume, rangePipeline, rangeCost, rangeRanking])
 
   if (authLoading || !user) return null
 
   const alerts: string[] = []
   if (data) {
-    if (data.pipeline.errorRate30d > ERROR_RATE_WARN) {
-      alerts.push(`Taxa de erro do pipeline em ${pct(data.pipeline.errorRate30d)} nos últimos 30 dias. Acima do esperado.`)
+    if (data.pipeline.errorRate > ERROR_RATE_WARN) {
+      alerts.push(`Taxa de erro do pipeline em ${pct(data.pipeline.errorRate)} no período escolhido. Acima do esperado.`)
     }
     if (data.pipeline.queueDepth > QUEUE_DEPTH_WARN) {
       alerts.push(`${data.pipeline.queueDepth} vídeos acumulados na fila de espera.`)
@@ -125,10 +152,10 @@ export function AdminMetricsPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Métricas">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Período</h2>
-        <DateRangeFilter value={range} onChange={setRange} />
-      </div>
+      <PageHeader
+        title="Métricas"
+        description="Cada painel tem o próprio período, então dá pra comparar janelas diferentes lado a lado."
+      />
 
       {!data ? (
         <div className="grid gap-4">
@@ -149,40 +176,32 @@ export function AdminMetricsPage() {
             </div>
           )}
 
-          <Section title="Período selecionado">
-            <Metric label="Vídeos detectados" value={data.selected.videosDetected} />
-            <Metric label="Cortes gerados" value={data.selected.clipsGenerated} />
-            <Metric label="Cortes postados" value={data.selected.clipsPosted} />
-            <Metric label="Taxa de aproveitamento" value={pct(data.selected.aproveitamentoRate)} />
-            <Metric label="Taxa de erro" value={pct(data.selected.errorRate)} sub={`${data.selected.totalFinished} vídeos concluídos`} />
-            <Metric label="Tempo médio de processamento" value={minutes(data.selected.avgProcessingSeconds)} />
-            <Metric label="Custo total" value={usd(data.selected.totalCostUsd)} />
-            <Metric label="Custo médio por vídeo" value={usd(data.selected.avgCostPerVideo)} />
-          </Section>
-
-          <Section title="Clientes e volume">
-            <Metric label="Clientes ativos (30d)" value={data.clients.active} />
-            <Metric label="Clientes inativos" value={data.clients.inactive} />
-            <Metric label="Vídeos detectados (7d)" value={data.volume.videosDetected7d} />
-            <Metric label="Vídeos detectados (30d)" value={data.volume.videosDetected30d} />
-            <Metric label="Cortes gerados (30d)" value={data.volume.clipsGenerated30d} />
-            <Metric label="Cortes postados (30d)" value={data.volume.clipsPosted30d} />
+          <Section title="Volume" range={rangeVolume} onRangeChange={setRangeVolume}>
+            <Metric label="Vídeos detectados" value={data.volume.videosDetected} />
+            <Metric label="Cortes gerados" value={data.volume.clipsGenerated} />
+            <Metric label="Cortes postados" value={data.volume.clipsPosted} />
             <Metric label="Taxa de aproveitamento" value={pct(data.volume.aproveitamentoRate)} sub="cortes postados / gerados" />
+            <Metric label="Clientes ativos" value={data.clients.active} sub="com atividade nos últimos 30 dias" />
+            <Metric label="Clientes inativos" value={data.clients.inactive} />
           </Section>
 
-          <Section title="Saúde do pipeline">
-            <Metric label="Taxa de erro (30d)" value={pct(data.pipeline.errorRate30d)} sub={`${data.pipeline.totalFinished30d} vídeos concluídos`} />
+          <Section title="Saúde do pipeline" range={rangePipeline} onRangeChange={setRangePipeline}>
+            <Metric label="Taxa de erro" value={pct(data.pipeline.errorRate)} sub={`${data.pipeline.totalFinished} vídeos concluídos`} />
             <Metric label="Tempo médio de processamento" value={minutes(data.pipeline.avgProcessingSeconds)} />
             <Metric label="Tempo médio de espera na fila" value={minutes(data.pipeline.avgQueueWaitSeconds)} />
             <Metric label="Vídeos na fila agora" value={data.pipeline.queueDepth} />
           </Section>
 
-          <Section title="Custo de API">
-            <Metric label="Whisper (7d)" value={usd(data.cost.whisperCostUsd7d)} />
-            <Metric label="Claude (7d)" value={usd(data.cost.claudeCostUsd7d)} />
-            <Metric label="Total (7d)" value={usd(data.cost.totalCostUsd7d)} />
-            <Metric label="Custo médio por vídeo (30d)" value={usd(data.cost.avgCostPerVideo30d)} />
-            <Metric label="Projeção mensal" value={usd(data.cost.projectedMonthlyUsd)} sub="com base nos últimos 7 dias" />
+          <Section title="Custo de IA" range={rangeCost} onRangeChange={setRangeCost}>
+            <Metric label="Whisper (transcrição)" value={usd(data.cost.whisperCostUsd)} />
+            <Metric label="Claude (escolha dos cortes)" value={usd(data.cost.claudeCostUsd)} />
+            <Metric label="Total no período" value={usd(data.cost.totalCostUsd)} />
+            <Metric
+              label="Custo médio por vídeo"
+              value={usd(data.cost.avgCostPerVideo)}
+              sub={`${data.cost.videosWithCost} vídeos com custo registrado`}
+            />
+            <Metric label="Projeção mensal" value={usd(data.cost.projectedMonthlyUsd)} sub="sempre com base nos últimos 7 dias" />
           </Section>
 
           <Card>
@@ -248,11 +267,12 @@ export function AdminMetricsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Ranking de clientes (30d)</CardTitle>
+              <CardTitle className="text-base">Ranking de clientes</CardTitle>
+              <DateRangeFilter value={rangeRanking} onChange={setRangeRanking} />
             </CardHeader>
             <CardContent>
               {data.ranking.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum vídeo processado nos últimos 30 dias ainda.</p>
+                <p className="text-sm text-muted-foreground">Nenhum vídeo processado no período escolhido.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {data.ranking.map((r, i) => (
