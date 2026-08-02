@@ -99,7 +99,7 @@ export function AdminQueuePage() {
   const currentStepIndex = data?.processing ? STEPS.findIndex((s) => s.status === data.processing!.status) : -1
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Fila de Processamento">
+    <DashboardLayout user={user} onLogout={logout} title="Processamento">
       <p className="-mt-2 text-sm text-muted-foreground">
         Cortes de YouTube são processados um vídeo por vez.
       </p>
@@ -161,7 +161,7 @@ export function AdminQueuePage() {
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-              Fila livre — nada sendo processado agora.
+              Fila livre. Nada sendo processado agora.
             </div>
           )}
 
@@ -199,7 +199,7 @@ export function AdminQueuePage() {
             <CardHeader>
               <CardTitle className="text-base">Tempo de processamento (por minuto de vídeo)</CardTitle>
               <CardDescription>
-                Média dos últimos 30 dias, normalizada por minuto de vídeo — ex: "15s" significa 15 segundos dessa
+                Média dos últimos 30 dias, normalizada por minuto de vídeo, ex: "15s" significa 15 segundos dessa
                 etapa pra cada 1 minuto de vídeo original.
                 {data.stageTimings.sampleSize > 0 && ` Baseado em ${data.stageTimings.sampleSize} vídeo(s).`}
               </CardDescription>

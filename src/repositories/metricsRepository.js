@@ -52,16 +52,37 @@ async function volumeSince(since, until = new Date()) {
 
 // ---------- pipeline (saude, fila, tempos) ----------
 
+// Tempo tipico de processamento e tempo de espera na fila.
+//
+// Usa MEDIANA, nao media, e descarta o que passou de 6 horas. Motivo concreto:
+// um unico video que ficou preso (o #1838 ficou 22h em 'cutting' porque o
+// worker morreu no meio) entrava na media e empurrava a estimativa de TODO
+// mundo pra "faltam ~16h" na tela do cliente. Media e fragil a um outlier;
+// mediana ignora. O corte de 6h existe porque acima disso nao e tempo de
+// processamento de verdade, e sim vestigio de travamento - e mesmo com o
+// videoStuckRecoveryJob no ar, os registros antigos continuam no banco.
+const MAX_PLAUSIBLE_PROCESSING_SECONDS = 6 * 60 * 60;
+
 async function pipelineHealthSince(since, until = new Date()) {
   const { rows } = await pool.query(
     `SELECT
        count(*) FILTER (WHERE status = 'ready')::int AS ready,
        count(*) FILTER (WHERE status = 'error')::int AS errors,
-       avg(EXTRACT(EPOCH FROM (updated_at - processing_started_at))) FILTER (WHERE status = 'ready' AND processing_started_at IS NOT NULL) AS avg_processing_seconds,
-       avg(EXTRACT(EPOCH FROM (processing_started_at - created_at))) FILTER (WHERE processing_started_at IS NOT NULL) AS avg_queue_wait_seconds
+       percentile_cont(0.5) WITHIN GROUP (
+         ORDER BY EXTRACT(EPOCH FROM (updated_at - processing_started_at))
+       ) FILTER (
+         WHERE status = 'ready' AND processing_started_at IS NOT NULL
+           AND EXTRACT(EPOCH FROM (updated_at - processing_started_at)) BETWEEN 0 AND $3
+       ) AS avg_processing_seconds,
+       percentile_cont(0.5) WITHIN GROUP (
+         ORDER BY EXTRACT(EPOCH FROM (processing_started_at - created_at))
+       ) FILTER (
+         WHERE processing_started_at IS NOT NULL
+           AND EXTRACT(EPOCH FROM (processing_started_at - created_at)) BETWEEN 0 AND $3
+       ) AS avg_queue_wait_seconds
      FROM source_videos
      WHERE created_at >= $1 AND created_at <= $2 AND status IN ('ready', 'error')`,
-    [since, until]
+    [since, until, MAX_PLAUSIBLE_PROCESSING_SECONDS]
   );
   const row = rows[0];
   const total = row.ready + row.errors;

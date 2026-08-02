@@ -34,7 +34,7 @@ export function AdminDashboardPage() {
     })) ?? []
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Painel do Admin">
+    <DashboardLayout user={user} onLogout={logout} title="Início">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-muted-foreground">Período</h2>
         <DateRangeFilter value={range} onChange={setRange} />

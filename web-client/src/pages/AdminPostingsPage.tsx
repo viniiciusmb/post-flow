@@ -42,7 +42,7 @@ export function AdminPostingsPage() {
   })
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Postagens">
+    <DashboardLayout user={user} onLogout={logout} title="Publicações">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">Todas as postagens, de todos os clientes, no período.</p>
         <div className="flex flex-wrap items-center gap-3">

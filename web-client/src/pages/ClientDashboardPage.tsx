@@ -47,7 +47,7 @@ export function ClientDashboardPage() {
     })) ?? []
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Dashboard">
+    <DashboardLayout user={user} onLogout={logout} title="Início">
       {flash.tiktokConnected && (
         <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
           Conta TikTok conectada com sucesso!
@@ -113,7 +113,7 @@ export function ClientDashboardPage() {
               icon={<IconCircleCheck />}
               tone="success"
               href="/client/videos-clips"
-              hrefLabel="Ver vídeos & cortes"
+              hrefLabel="Ver cortes"
             />
             <StatCard
               label="Cortes na fila aguardando postar"
@@ -121,7 +121,7 @@ export function ClientDashboardPage() {
               icon={<IconListCheck />}
               tone="cyan"
               href="/client/tiktok-account"
-              hrefLabel="Ver contas TikTok"
+              hrefLabel="Ver a fila"
             />
           </>
         ) : (
@@ -144,7 +144,7 @@ export function ClientDashboardPage() {
             rows={rows}
             showOrigin
             showChannel
-            emptyMessage="Nenhum vídeo seu foi processado nesse período. Cadastre um canal do YouTube, cole um link manualmente ou conecte sua pasta do Drive em Vídeos & Cortes."
+            emptyMessage="Nenhum vídeo processado nesse período. Cadastre um canal em Canais e o Post Flow passa a acompanhar os vídeos novos sozinho."
           />
         ) : (
           <Skeleton className="h-64" />

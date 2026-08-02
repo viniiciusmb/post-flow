@@ -82,7 +82,7 @@ export function AdminBillingPage() {
   }
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Planos e crédito">
+    <DashboardLayout user={user} onLogout={logout} title="Assinaturas">
       {!clients || !plans || !overage ? (
         <Skeleton className="h-64" />
       ) : (

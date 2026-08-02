@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { IconRouter, IconCircleCheck, IconCircleX, IconRefresh, IconDownload, IconArrowLeft } from "@tabler/icons-react"
+import { WindowsMark, AppleMark } from "@/components/os-marks"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -35,12 +36,12 @@ function OsPicker({ onSelect }: { onSelect: (os: Os) => void }) {
         <CardDescription>Escolha uma opção pra ver o passo a passo certo pro seu computador.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-3">
-        <Button variant="outline" size="lg" className="h-auto flex-col gap-1 px-8 py-4" onClick={() => onSelect("windows")}>
-          <span className="text-2xl">🪟</span>
+        <Button variant="outline" size="lg" className="h-auto flex-col gap-2 px-10 py-5" onClick={() => onSelect("windows")}>
+          <WindowsMark className="size-6" />
           <span>Windows</span>
         </Button>
-        <Button variant="outline" size="lg" className="h-auto flex-col gap-1 px-8 py-4" onClick={() => onSelect("mac")}>
-          <span className="text-2xl">🍎</span>
+        <Button variant="outline" size="lg" className="h-auto flex-col gap-2 px-10 py-5" onClick={() => onSelect("mac")}>
+          <AppleMark className="size-6" />
           <span>Mac</span>
         </Button>
       </CardContent>
@@ -62,7 +63,7 @@ function UninstallGuide({ os }: { os: Os }) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Quer desinstalar o programa?</CardTitle>
-        <CardDescription>Sem problema — dá pra desinstalar a qualquer momento, sem afetar mais nada.</CardDescription>
+        <CardDescription>Sem problema. Dá pra desinstalar a qualquer momento, sem afetar mais nada.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <StepCard number={1} title="Primeiro, desconecte por aqui">
@@ -75,7 +76,7 @@ function UninstallGuide({ os }: { os: Os }) {
           ) e clique em <strong className="text-foreground">"Sair"</strong>.
         </StepCard>
         <StepCard number={3} title='Se tinha ativado "Iniciar com o sistema", desmarque antes'>
-          Se você marcou essa opção no menu do programa, clique nela de novo pra desmarcar antes de fechar — assim
+          Se você marcou essa opção no menu do programa, clique nela de novo pra desmarcar antes de fechar. Assim
           ele não tenta abrir sozinho da próxima vez que ligar o computador.
         </StepCard>
         <StepCard number={4} title="Apague os arquivos">
@@ -185,7 +186,7 @@ function ConnectedStatus({ tunnel, onChanged }: { tunnel: ClientTunnel; onChange
           {tunnel.label || "Seu programa"}
         </CardTitle>
         <CardDescription>
-          Um teste real: busca o IP de saída direto da VPS e o IP passando pelo seu programa — se forem diferentes,
+          Um teste real: busca o IP de saída direto da VPS e o IP passando pelo seu programa. Se forem diferentes,
           está funcionando de verdade.
         </CardDescription>
       </CardHeader>
@@ -247,7 +248,7 @@ export function ClientTunnelPage() {
   if (authLoading || !user) return null
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Túnel">
+    <DashboardLayout user={user} onLogout={logout} title="Sua conexão">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">O que é isso e pra que serve</CardTitle>
@@ -256,11 +257,11 @@ export function ClientTunnelPage() {
           <p>
             O YouTube bloqueia downloads vindos do nosso servidor (é um IP "de datacenter", e o YouTube desconfia
             desse tipo de IP). Instalando esse programinha no seu computador, os downloads dos SEUS vídeos passam a
-            sair pela sua própria internet — um IP residencial normal não é bloqueado.
+            sair pela sua própria internet. Um IP residencial normal não é bloqueado.
           </p>
           <p>
             Enquanto você não instalar, seus downloads continuam funcionando normalmente (usam uma conexão de
-            reserva) — instalar é opcional, mas ajuda a evitar bloqueios.
+            reserva). Instalar é opcional, mas ajuda a evitar bloqueios.
           </p>
         </CardContent>
       </Card>
@@ -275,7 +276,7 @@ export function ClientTunnelPage() {
             <CardContent className="flex flex-col gap-2 py-4 text-sm">
               <p className="font-semibold">Não se preocupe se você nunca instalou um programa assim antes.</p>
               <p className="text-muted-foreground">
-                O passo a passo explica cada clique. Se travar em algum passo, é só voltar aqui depois — nada quebra,
+                O passo a passo explica cada clique. Se travar em algum passo, é só voltar aqui depois. Nada quebra,
                 e dá pra tentar de novo quantas vezes precisar.
               </p>
             </CardContent>
@@ -287,7 +288,10 @@ export function ClientTunnelPage() {
           {selectedOs === "windows" && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">💻 Instalando no Windows</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <WindowsMark className="size-4 text-muted-foreground" />
+                Instalando no Windows
+              </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
               <StepCard number={1} title="Baixe o programa">
@@ -307,10 +311,10 @@ export function ClientTunnelPage() {
               </StepCard>
               <StepCard number={2} title='"Extraia" o arquivo baixado'>
                 O arquivo baixado tem uma "pasta compactada" dentro dele (é assim que ele fica menor pra baixar mais
-                rápido) — antes de usar, precisa abrir essa compactação. Clique com o{" "}
+                rápido). Antes de usar, precisa abrir essa compactação. Clique com o{" "}
                 <strong className="text-foreground">botão direito do mouse</strong> em cima do arquivo baixado (o nome
                 é parecido com <code className="rounded bg-muted px-1">post-flow-tunnel-windows.zip</code>) e escolha a
-                opção <strong className="text-foreground">"Extrair tudo..."</strong>. Vai abrir uma janela pequena — só
+                opção <strong className="text-foreground">"Extrair tudo..."</strong>. Vai abrir uma janela pequena. Só
                 clique no botão <strong className="text-foreground">"Extrair"</strong> dela, sem mudar nada.
               </StepCard>
               <StepCard number={3} title="Abra a pasta nova e execute o programa">
@@ -322,19 +326,19 @@ export function ClientTunnelPage() {
               <StepCard number={4} title='Se aparecer uma tela azul de aviso, não é vírus'>
                 É bem comum o Windows mostrar uma tela dizendo{" "}
                 <strong className="text-foreground">"O Windows protegeu o computador"</strong>. Isso acontece com
-                qualquer programa novo que ainda não pagou por um "certificado" — não significa que tem vírus. Pra
+                qualquer programa novo que ainda não pagou por um "certificado". Não significa que tem vírus. Pra
                 continuar: clique no texto pequeno{" "}
                 <strong className="text-foreground">"Mais informações"</strong>, e depois no botão que vai aparecer
                 escrito <strong className="text-foreground">"Executar assim mesmo"</strong>.
               </StepCard>
               <StepCard number={5} title="Procure o ícone perto do relógio">
-                O programa não abre uma janela — ele fica rodando "escondido" perto do relógio, no canto inferior
+                O programa não abre uma janela, ele fica rodando "escondido" perto do relógio, no canto inferior
                 direito da tela. Se não ver um ícone novo ali, clique na setinha{" "}
                 <strong className="text-foreground">"^"</strong> pra mostrar os ícones escondidos. Vai ter um círculo
-                colorido novo — esse é o programa.
+                colorido novo, esse é o programa.
               </StepCard>
               <StepCard number={6} title="Veja o código">
-                Clique nesse ícone. Vai aparecer um código curto de 6 letras/números — é esse código que você vai
+                Clique nesse ícone. Vai aparecer um código curto de 6 letras/números. É esse código que você vai
                 colar no campo lá embaixo desta página.
               </StepCard>
             </CardContent>
@@ -345,7 +349,10 @@ export function ClientTunnelPage() {
           {selectedOs === "mac" && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">🍎 Instalando no Mac</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AppleMark className="size-4 text-muted-foreground" />
+                Instalando no Mac
+              </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
               <StepCard number={1} title="Baixe o programa">
@@ -358,7 +365,7 @@ export function ClientTunnelPage() {
                   </a>
                   <p>
                     O arquivo baixado normalmente vai pra pasta{" "}
-                    <strong className="text-foreground">Downloads</strong> — o próprio navegador costuma mostrar um
+                    <strong className="text-foreground">Downloads</strong>. O próprio navegador costuma mostrar um
                     aviso "Download concluído" com um atalho pra ele.
                   </p>
                 </div>
@@ -371,22 +378,22 @@ export function ClientTunnelPage() {
                 É bem comum aparecer uma mensagem tipo{" "}
                 <strong className="text-foreground">"não é possível abrir porque é de um desenvolvedor não
                 identificado"</strong>. Isso acontece com qualquer programa novo que ainda não pagou pela
-                "identificação" da Apple — não significa que tem vírus. Pra resolver: clique no ícone da maçã (canto
+                "identificação" da Apple. Não significa que tem vírus. Pra resolver: clique no ícone da maçã (canto
                 superior esquerdo) → <strong className="text-foreground">Ajustes do Sistema</strong> →{" "}
                 <strong className="text-foreground">Privacidade e Segurança</strong> → role a tela pra baixo até achar
                 uma frase mencionando o programa bloqueado → clique em{" "}
                 <strong className="text-foreground">"Abrir Assim Mesmo"</strong>.
               </StepCard>
               <StepCard number={4} title="Abra o arquivo de novo">
-                Volte na pasta Downloads e dê duplo clique no arquivo mais uma vez — agora ele deve abrir
+                Volte na pasta Downloads e dê duplo clique no arquivo mais uma vez. Agora ele deve abrir
                 normalmente.
               </StepCard>
               <StepCard number={5} title="Procure o ícone no topo da tela">
-                O programa não abre uma janela — ele fica rodando "escondido" na barra de menu, bem no topo da tela
-                (ao lado do relógio, Wi-Fi, etc). Vai ter um círculo colorido novo ali — esse é o programa.
+                O programa não abre uma janela, ele fica rodando "escondido" na barra de menu, bem no topo da tela
+                (ao lado do relógio, Wi-Fi, etc). Vai ter um círculo colorido novo ali, esse é o programa.
               </StepCard>
               <StepCard number={6} title="Veja o código">
-                Clique nesse ícone. Vai aparecer um código curto de 6 letras/números — é esse código que você vai
+                Clique nesse ícone. Vai aparecer um código curto de 6 letras/números. É esse código que você vai
                 colar no campo lá embaixo desta página.
               </StepCard>
             </CardContent>
@@ -409,7 +416,7 @@ export function ClientTunnelPage() {
                 <CardContent className="py-4 text-sm text-muted-foreground">
                   <strong className="text-foreground">Uma coisa importante:</strong> pra isso funcionar, seu
                   computador precisa estar ligado e conectado à internet. Se ele desligar, hibernar ou perder a
-                  internet, não tem problema nenhum — os downloads simplesmente voltam a usar a conexão de reserva
+                  internet, não tem problema nenhum. Os downloads simplesmente voltam a usar a conexão de reserva
                   até seu computador voltar a ficar disponível.
                 </CardContent>
               </Card>

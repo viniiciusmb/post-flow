@@ -205,7 +205,7 @@ function ChannelCard({
             </div>
             {tiktokAccounts.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                Nenhuma conta TikTok conectada ainda —{" "}
+                Nenhuma conta TikTok conectada ainda.{" "}
                 <a href="/client/tiktok-account" className="text-primary hover:underline">
                   conecte uma
                 </a>{" "}
@@ -232,9 +232,9 @@ function ChannelCard({
                 </Select>
                 {linkedAccount && (
                   <p className="text-xs text-muted-foreground">
-                    Postagem automática {linkedAccount.autoPostEnabled ? "ligada" : "desligada"} pra essa conta —{" "}
+                    Postagem automática {linkedAccount.autoPostEnabled ? "ligada" : "desligada"} pra essa conta.{" "}
                     <a href="/client/tiktok-account" className="text-primary hover:underline">
-                      gerenciar em Contas TikTok
+                      gerenciar em Publicação
                     </a>
                     .
                   </p>
@@ -273,7 +273,7 @@ function ChannelCard({
                     <p className="text-xs text-muted-foreground">
                       {channel.driveExportMode === "auto"
                         ? "Todo corte pronto é enviado sozinho."
-                        : "Você escolhe corte a corte em Vídeos & Cortes."}
+                        : "Você escolhe corte a corte na tela Cortes."}
                     </p>
                   </div>
                   <Button
@@ -288,7 +288,7 @@ function ChannelCard({
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Opcional — cada corte pronto gerado desse canal pode ser salvo nessa pasta.
+                  Opcional. Cada corte pronto gerado desse canal pode ser salvo nessa pasta.
                 </p>
               )}
               <form onSubmit={handleSetExportFolder} className="flex flex-col gap-2">
@@ -381,7 +381,7 @@ export function YouTubeChannelsPage() {
         { channelUrl }
       )
       setChannelUrl("")
-      setSuccess('Canal adicionado, ainda "Pausado" — marque "Baixar e cortar automaticamente" abaixo pra ativar.')
+      setSuccess('Canal adicionado, ainda "Pausado". Marque "Baixar e cortar automaticamente" abaixo pra ativar.')
       await load()
       if (created.latestVideo) {
         setLatestVideoPrompt({ channelId: created.channel.id, video: created.latestVideo })
@@ -444,7 +444,7 @@ export function YouTubeChannelsPage() {
   const hasDriveConnection = driveStatus?.connected === true
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Canais do YouTube">
+    <DashboardLayout user={user} onLogout={logout} title="Canais">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Adicionar canal</CardTitle>
@@ -477,7 +477,7 @@ export function YouTubeChannelsPage() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Só entram no corte automático os vídeos publicados depois de adicionar — o histórico do canal não é baixado.
+                  Só entram no corte automático os vídeos publicados depois de adicionar. O histórico do canal não é baixado.
                 </p>
               </Field>
             </FieldGroup>
@@ -530,7 +530,7 @@ export function YouTubeChannelsPage() {
             <DialogTitle>Já começar a usar o Post Flow com esse canal?</DialogTitle>
             <DialogDescription>
               Encontramos o vídeo mais recente desse canal. Quer que a gente já processe ele agora (baixar, cortar e
-              deixar pronto pra postar)? Se preferir não, o canal continua monitorado normalmente — só os próximos
+              deixar pronto pra postar)? Se preferir não, o canal continua monitorado normalmente. Só os próximos
               vídeos publicados a partir de agora entram na fila sozinhos.
             </DialogDescription>
           </DialogHeader>

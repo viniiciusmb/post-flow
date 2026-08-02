@@ -528,7 +528,7 @@ function AddManualVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; 
       })
       setUrl("")
       setSelectedAccounts([])
-      setSuccess(created.message || `"${created.title}" entrou na fila — acompanhe o progresso na lista abaixo.`)
+      setSuccess(created.message || `"${created.title}" entrou na fila. Acompanhe o progresso na lista abaixo.`)
       onAdded()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível cortar esse vídeo.")
@@ -618,7 +618,7 @@ function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tik
         setFile(null)
         setTitle("")
         setSelectedAccounts([])
-        setSuccess(`"${data.title}" enviado — entrou na fila de corte.`)
+        setSuccess(`"${data.title}" enviado, entrou na fila de corte.`)
         onAdded()
       } else {
         try {
@@ -787,7 +787,7 @@ export function VideosClipsPage() {
   const finished = (videos ?? []).filter((v) => !PENDING_STATUSES.includes(v.status))
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Vídeos & Cortes">
+    <DashboardLayout user={user} onLogout={logout} title="Cortes">
       <AddManualVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} />
 
       <div className="flex flex-wrap gap-2">
@@ -847,7 +847,7 @@ export function VideosClipsPage() {
         </div>
       ) : videos.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-          Nenhum vídeo detectado ainda. Cole um link, envie um arquivo, cadastre um canal em "Canais do YouTube" ou conecte sua pasta do Drive em "Configurações".
+          Nenhum corte por aqui ainda. Cole o link de um vídeo acima, ou cadastre um canal em Canais e o Post Flow passa a cortar os vídeos novos sozinho.
         </div>
       ) : (
         <Tabs defaultValue="in-progress">

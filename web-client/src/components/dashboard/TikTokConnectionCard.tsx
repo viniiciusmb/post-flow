@@ -11,7 +11,7 @@ export function TikTokConnectionCard({
   return (
     <Card className="border-border bg-card">
       <CardHeader>
-        <CardTitle className="text-base">Contas TikTok</CardTitle>
+        <CardTitle className="text-base">Publicação no TikTok</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-4">

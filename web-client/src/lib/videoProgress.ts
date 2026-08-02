@@ -19,6 +19,9 @@ const STAGE_CEIL: Partial<Record<SourceVideoStatus, number>> = {
 
 export const ACTIVE_STATUSES: SourceVideoStatus[] = ["downloading", "transcribing", "selecting_clips", "cutting"]
 
+/** Acima disso, não mostramos estimativa nenhuma (ver computeVideoProgress). */
+const MAX_ETA_SECONDS = 2 * 60 * 60
+
 export interface VideoProgress {
   percent: number
   etaSeconds: number | null
@@ -39,7 +42,14 @@ export function computeVideoProgress(
   const elapsedSeconds = (Date.now() - new Date(processingStartedAt).getTime()) / 1000
   const elapsedRatio = avgProcessingSeconds > 0 ? Math.min(1, elapsedSeconds / avgProcessingSeconds) : 0
   const percent = Math.round(Math.min(ceil, Math.max(floor, elapsedRatio * 100)))
-  const etaSeconds = Math.max(0, Math.round(avgProcessingSeconds - elapsedSeconds))
+  const restante = Math.max(0, Math.round(avgProcessingSeconds - elapsedSeconds))
+
+  // Estimativa implausível é pior que estimativa nenhuma: "faltam ~16h" numa
+  // tela de progresso faz a pessoa achar que o sistema travou. Acima de 2h,
+  // preferimos não prometer nada (o texto some e fica só a porcentagem).
+  // O servidor já usa mediana e descarta travamento, mas esta trava vale como
+  // segunda linha de defesa, inclusive pra conta nova sem histórico.
+  const etaSeconds = restante > MAX_ETA_SECONDS ? null : restante
 
   return { percent, etaSeconds }
 }

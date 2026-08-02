@@ -9,120 +9,177 @@
 @import "@fontsource/inter/latin-ext-600.css";
 @import "@fontsource/inter/latin-700.css";
 @import "@fontsource/inter/latin-ext-700.css";
-@import "@fontsource/space-grotesk/latin-500.css";
-@import "@fontsource/space-grotesk/latin-ext-500.css";
-@import "@fontsource/space-grotesk/latin-600.css";
-@import "@fontsource/space-grotesk/latin-ext-600.css";
-@import "@fontsource/space-grotesk/latin-700.css";
-@import "@fontsource/space-grotesk/latin-ext-700.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ===========================================================================
+   Sistema visual do Post Flow
+   ---------------------------------------------------------------------------
+   Direcao: quase monocromatico. A interface e branca, preta e cinza; a UNICA
+   cor forte da tela vem do conteudo do proprio cliente (capa do video do
+   YouTube, avatar do TikTok, o corte renderizado). Isso e uma escolha, nao
+   economia: num produto de video, a interface competir por atencao com o
+   material do criador e ruido.
+
+   Consequencia pratica: o botao de acao principal e PRETO, nao uma cor de
+   marca (no escuro, inverte pra branco). Cor cromatica so aparece como SINAL -
+   link, foco, estado ao vivo, erro - nunca como decoracao.
+
+   Antes daqui havia roxo #4f46e5 com sombras difusas e uma display face
+   diferente do corpo, que e a assinatura visual de template pronto.
+   =========================================================================== */
+
 :root {
-  --radius: 0.625rem;
+  /* 8px: mais preciso que os 10px anteriores. Controles pequenos usam 6px
+     (--radius-md), o que deixa botao e campo com cara de instrumento em vez
+     de bolha. */
+  --radius: 0.5rem;
+
   --font-sans:
     "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-heading: "Space Grotesk", var(--font-sans);
-  --font-mono:
-    ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  /* Mesma familia do corpo de proposito. O peso, o tamanho e o tracking
+     negativo e que criam a hierarquia - e assim que as referencias do brief
+     (Apple, Stripe, OpenAI) tratam titulo. Uma segunda familia decorativa
+     puxaria o produto pra "startup", nao pra "empresa de software". */
+  --font-heading: var(--font-sans);
+  /* Valores produzidos por maquina (horario previsto, progresso, ID, bytes)
+     usam mono. Nao e enfeite: sinaliza "isto o sistema calculou", e alinha
+     em coluna porque o numeral e de largura fixa. */
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
 
-  /* Tema claro (padrao) */
+  /* ---------------- Tema claro ---------------- */
   --background: #ffffff;
-  --foreground: #0b0b14;
+  --foreground: #08090a;
   --card: #ffffff;
-  --card-foreground: #0b0b14;
+  --card-foreground: #08090a;
   --popover: #ffffff;
-  --popover-foreground: #0b0b14;
-  --primary: #4f46e5;
-  --primary-foreground: #fafafa;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #18181b;
-  --muted: #fbfbfd;
-  --muted-foreground: #6b7280;
-  --accent: #f1f1f4;
-  --accent-foreground: #18181b;
-  --destructive: #dc2626;
-  --destructive-foreground: #fafafa;
-  --border: #e7e8ec;
-  --input: #e4e4e7;
-  --ring: rgba(79, 70, 229, 0.5);
-  --cyan: #06b6d4;
+  --popover-foreground: #08090a;
 
-  /* cores de status - mesma paleta usada nas paginas EJS que ainda nao migraram */
-  --status-pending: #8a8f98;
-  --status-queued: #3b82f6;
-  --status-processing: #f59e0b;
-  --status-posted: #16a34a;
-  --status-error: #dc2626;
+  /* Acao principal = tinta, nao cor de marca. */
+  --primary: #08090a;
+  --primary-foreground: #ffffff;
 
-  /* "tons" usados nos badges/pilulas (origem, plano, status de conta etc.) -
-     par wash (fundo) + ink (texto), igual ao design de referencia */
-  --tone-indigo-wash: #eef0ff;
-  --tone-indigo-ink: #4f46e5;
-  --tone-cyan-wash: #e7fbfd;
-  --tone-cyan-ink: #0891b2;
-  --tone-success-wash: #eafaf0;
-  --tone-success-ink: #16a34a;
-  --tone-danger-wash: #fdecec;
-  --tone-danger-ink: #dc2626;
-  --tone-violet-wash: #f2ecfe;
-  --tone-violet-ink: #7c3aed;
-  --tone-neutral-wash: #f1f1f4;
-  --tone-neutral-ink: #6b7280;
+  --secondary: #f5f5f6;
+  --secondary-foreground: #08090a;
+  --muted: #fafafa;
+  --muted-foreground: #6b7075;
+  --accent: #f5f5f6;
+  --accent-foreground: #08090a;
+  --destructive: #d3302f;
+  --destructive-foreground: #ffffff;
 
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --border: #e7e7ea;
+  --input: #dfdfe3;
+  --ring: rgba(8, 9, 10, 0.35);
+
+  /* Sinal cromatico. Aparece em link, estado ao vivo e foco - quase nada
+     mais. Azul porque le como "interativo/sistema" em qualquer cultura, e
+     porque nao pega emprestada a cor de nenhuma plataforma parceira. */
+  --signal: #2f54eb;
+  --cyan: #0b8ea8;
+
+  --status-pending: #83888f;
+  --status-queued: #2f54eb;
+  --status-processing: #b45309;
+  --status-posted: #15803d;
+  --status-error: #d3302f;
+
+  /* Pilulas de status. Fundo lavado + tinta legivel, com saturacao contida:
+     a pilula precisa ser lida, nao vista de longe. */
+  --tone-indigo-wash: #eef1fe;
+  --tone-indigo-ink: #2f54eb;
+  --tone-cyan-wash: #e6f6fa;
+  --tone-cyan-ink: #0b7e95;
+  --tone-success-wash: #e9f7ee;
+  --tone-success-ink: #15803d;
+  --tone-danger-wash: #fdeceb;
+  --tone-danger-ink: #c02826;
+  --tone-violet-wash: #f2effd;
+  --tone-violet-ink: #6d43d4;
+  --tone-neutral-wash: #f2f2f4;
+  --tone-neutral-ink: #6b7075;
+
+  --sidebar: #fafafa;
+  --sidebar-foreground: #3f4348;
+  --sidebar-primary: #08090a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f0f2;
+  --sidebar-accent-foreground: #08090a;
+  --sidebar-border: #e7e7ea;
+  --sidebar-ring: rgba(8, 9, 10, 0.35);
+
+  /* Elevacao: sombra quase invisivel + borda de 1px. Em produto denso a
+     borda e que separa; sombra difusa so borra a grade. */
+  --shadow-flat: 0 1px 2px rgba(8, 9, 10, 0.04);
+  --shadow-raised: 0 1px 2px rgba(8, 9, 10, 0.04), 0 8px 24px -12px rgba(8, 9, 10, 0.12);
+  --shadow-frame: 0 2px 4px rgba(8, 9, 10, 0.03), 0 24px 64px -24px rgba(8, 9, 10, 0.22);
 }
 
+/* ---------------- Tema escuro ----------------
+   Nao e o claro invertido nem preto chapado. E uma pilha de superficies com
+   um leve desvio pro azul (o cinza puro no escuro parece sujo), separadas por
+   branco translucido em vez de linha solida. Preto absoluto so apareceria num
+   painel OLED de propaganda: em tela de trabalho ele cansa e faz o texto
+   branco "vibrar". */
 .dark {
-  --background: #0a0a0b;
-  --foreground: #fafafa;
-  --card: #131316;
-  --card-foreground: #fafafa;
-  --popover: #16161a;
-  --popover-foreground: #fafafa;
-  --primary: #6366f1;
-  --primary-foreground: #fafafa;
-  --secondary: #1c1c1f;
-  --secondary-foreground: #e4e4e7;
-  --muted: #1c1c1f;
-  --muted-foreground: #a1a1aa;
-  --accent: #1c1c1f;
-  --accent-foreground: #fafafa;
-  --destructive: #dc2626;
-  --destructive-foreground: #fafafa;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.12);
-  --ring: rgba(99, 102, 241, 0.5);
-  --cyan: #22d3ee;
+  --background: #0b0c0e;
+  --foreground: #eceef0;
+  --card: #131518;
+  --card-foreground: #eceef0;
+  --popover: #16181c;
+  --popover-foreground: #eceef0;
 
-  --tone-indigo-wash: rgba(129, 140, 248, 0.16);
-  --tone-indigo-ink: #a5b4fc;
-  --tone-cyan-wash: rgba(34, 211, 238, 0.14);
-  --tone-cyan-ink: #67e8f9;
-  --tone-success-wash: rgba(34, 197, 94, 0.16);
-  --tone-success-ink: #4ade80;
-  --tone-danger-wash: rgba(248, 113, 113, 0.16);
-  --tone-danger-ink: #f87171;
-  --tone-violet-wash: rgba(167, 139, 250, 0.16);
-  --tone-violet-ink: #c4b5fd;
-  --tone-neutral-wash: rgba(255, 255, 255, 0.08);
-  --tone-neutral-ink: #a1a1aa;
+  /* No escuro a acao principal inverte: branco sobre a pilha escura. */
+  --primary: #f5f6f7;
+  --primary-foreground: #08090a;
 
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --secondary: #1a1d21;
+  --secondary-foreground: #eceef0;
+  --muted: #16181c;
+  --muted-foreground: #969ba2;
+  --accent: #1a1d21;
+  --accent-foreground: #eceef0;
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.14);
+  --ring: rgba(245, 246, 247, 0.4);
+
+  --signal: #7d94ff;
+  --cyan: #4dd0e8;
+
+  --status-pending: #969ba2;
+  --status-queued: #7d94ff;
+  --status-processing: #f0b45c;
+  --status-posted: #56d68a;
+  --status-error: #e5484d;
+
+  --tone-indigo-wash: rgba(125, 148, 255, 0.15);
+  --tone-indigo-ink: #a3b4ff;
+  --tone-cyan-wash: rgba(77, 208, 232, 0.14);
+  --tone-cyan-ink: #6fdcf0;
+  --tone-success-wash: rgba(86, 214, 138, 0.14);
+  --tone-success-ink: #6ee79b;
+  --tone-danger-wash: rgba(229, 72, 77, 0.16);
+  --tone-danger-ink: #ff8a8d;
+  --tone-violet-wash: rgba(167, 139, 250, 0.15);
+  --tone-violet-ink: #c0aaf7;
+  --tone-neutral-wash: rgba(255, 255, 255, 0.07);
+  --tone-neutral-ink: #969ba2;
+
+  --sidebar: #0f1114;
+  --sidebar-foreground: #b6bbc1;
+  --sidebar-primary: #f5f6f7;
+  --sidebar-primary-foreground: #08090a;
+  --sidebar-accent: #1a1d21;
+  --sidebar-accent-foreground: #eceef0;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: rgba(245, 246, 247, 0.4);
+
+  --shadow-flat: none;
+  --shadow-raised: 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --shadow-frame: 0 24px 64px -24px rgba(0, 0, 0, 0.8);
 }
 
 @theme inline {
@@ -146,6 +203,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
+  --color-signal: var(--signal);
   --color-status-pending: var(--status-pending);
   --color-status-queued: var(--status-queued);
   --color-status-processing: var(--status-processing);
@@ -166,7 +224,7 @@
   --color-tone-neutral-wash: var(--tone-neutral-wash);
   --color-tone-neutral-ink: var(--tone-neutral-ink);
 
-  --radius-sm: calc(var(--radius) - 4px);
+  --radius-sm: calc(var(--radius) - 3px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
@@ -187,4 +245,43 @@
 body {
   @apply bg-background text-foreground antialiased;
   font-family: var(--font-sans);
+  /* cv11 troca o "a" de dois andares por um mais aberto e ss01 arruma o "l";
+     nos dois casos o texto pequeno de painel fica mais legivel. */
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Titulo grande sem tracking negativo parece esparramado. Quanto maior o
+   corpo, mais apertado - e o mesmo ajuste optico que uma fonte de display
+   traria embutida, feito na mao pra poder usar uma familia so. */
+.font-heading {
+  letter-spacing: -0.021em;
+}
+h1.font-heading,
+.text-3xl.font-heading,
+.text-4xl.font-heading {
+  letter-spacing: -0.032em;
+}
+
+/* Numero em tabela/metrica alinha em coluna e nao "dança" quando atualiza
+   sozinho (o painel faz polling de 8 em 8 segundos). */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Acessibilidade: foco sempre visivel pra quem navega por teclado, e nenhuma
+   animacao pra quem pediu menos movimento no sistema. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -1,49 +1,53 @@
 import type { ReactNode } from "react"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Tone } from "@/components/ui/tone-pill"
-import { cn } from "@/lib/utils"
 
-const ICON_TONE_CLASS: Record<Tone, string> = {
-  indigo: "bg-tone-indigo-wash text-tone-indigo-ink",
-  cyan: "bg-tone-cyan-wash text-tone-cyan-ink",
-  success: "bg-tone-success-wash text-tone-success-ink",
-  danger: "bg-tone-danger-wash text-tone-danger-ink",
-  violet: "bg-tone-violet-wash text-tone-violet-ink",
-  neutral: "bg-tone-neutral-wash text-tone-neutral-ink",
-}
-
+/**
+ * Cartão de número do painel.
+ *
+ * O ícone era um quadradinho colorido, com uma cor diferente por cartão. Cinco
+ * deles lado a lado viravam uma fileira de confete: a cor não significava nada
+ * (não indicava bom nem ruim), só disputava atenção com o número, que é a
+ * única coisa que a pessoa vem ler aqui.
+ *
+ * Agora o ícone é discreto e o número fica com todo o contraste. Cor neste
+ * sistema é sinal, não enfeite: aparece em pílula de status e em alerta, onde
+ * de fato quer dizer alguma coisa.
+ */
 export function StatCard({
   label,
   value,
   icon,
-  tone = "indigo",
   href,
   hrefLabel,
 }: {
   label: string
   value: number | string
   icon?: ReactNode
+  /** Mantido por compatibilidade com as chamadas existentes; não pinta mais nada. */
   tone?: Tone
   href?: string
   hrefLabel?: string
 }) {
   return (
-    <Card className="@container/card gap-3 shadow-xs">
-      <CardHeader className="gap-3">
-        {icon && (
-          <div className={cn("flex size-8 items-center justify-center rounded-lg [&_svg]:size-4", ICON_TONE_CLASS[tone])}>
-            {icon}
+    <Card className="@container/card gap-3">
+      <CardHeader className="gap-2">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="font-heading text-3xl font-semibold tabular-nums">
+              {value}
+            </CardTitle>
+            <CardDescription className="mt-1">{label}</CardDescription>
           </div>
-        )}
-        <div>
-          <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            {value}
-          </CardTitle>
-          <CardDescription>{label}</CardDescription>
+          {icon && <div className="mt-1 text-muted-foreground/50 [&_svg]:size-4">{icon}</div>}
         </div>
         {href && (
-          <a href={href} className="-mt-1 text-xs font-semibold text-primary hover:underline">
-            {hrefLabel ?? "Ver mais"} →
+          <a
+            href={href}
+            className="mt-1 inline-flex w-fit items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {hrefLabel ?? "Ver mais"}
+            <span aria-hidden="true">&rarr;</span>
           </a>
         )}
       </CardHeader>

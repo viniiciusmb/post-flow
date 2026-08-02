@@ -112,7 +112,7 @@ export function AdminMetricsPage() {
   const alerts: string[] = []
   if (data) {
     if (data.pipeline.errorRate30d > ERROR_RATE_WARN) {
-      alerts.push(`Taxa de erro do pipeline em ${pct(data.pipeline.errorRate30d)} nos últimos 30 dias — acima do esperado.`)
+      alerts.push(`Taxa de erro do pipeline em ${pct(data.pipeline.errorRate30d)} nos últimos 30 dias. Acima do esperado.`)
     }
     if (data.pipeline.queueDepth > QUEUE_DEPTH_WARN) {
       alerts.push(`${data.pipeline.queueDepth} vídeos acumulados na fila de espera.`)

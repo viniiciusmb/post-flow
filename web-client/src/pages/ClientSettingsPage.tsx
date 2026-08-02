@@ -228,7 +228,7 @@ function DriveSection() {
           Minha pasta do Google Drive
         </CardTitle>
         <CardDescription>
-          Opcional: conecte seu próprio Google Drive e aponte uma pasta com vídeos — eles são postados
+          Opcional: conecte seu próprio Google Drive e aponte uma pasta com vídeos, eles são postados
           automaticamente no seu TikTok, sem precisar de canal do YouTube.
         </CardDescription>
       </CardHeader>
@@ -253,7 +253,7 @@ function DriveSection() {
               <p className="text-sm text-muted-foreground">
                 Pasta atual: <span className="font-medium text-foreground">{status.folder.name ?? status.folder.id}</span>
                 {status.folder.lastPolledAt &&
-                  ` — última checagem em ${new Date(status.folder.lastPolledAt).toLocaleString("pt-BR")}`}
+                  `. Última checagem em ${new Date(status.folder.lastPolledAt).toLocaleString("pt-BR")}`}
               </p>
             )}
 
@@ -281,7 +281,7 @@ function DriveSection() {
                     </Button>
                   </div>
                   <FieldDescription>
-                    A pasta é checada periodicamente — vídeos novos entram na fila de postagem automaticamente.
+                    A pasta é checada periodicamente. Vídeos novos entram na fila de postagem automaticamente.
                   </FieldDescription>
                 </Field>
                 {tiktokAccounts.length > 1 && (
@@ -314,7 +314,7 @@ export function ClientSettingsPage() {
   return (
     <DashboardLayout user={user} onLogout={logout} title="Configurações">
       <p className="-mt-2 text-sm text-muted-foreground">
-        As configurações de qualidade e estilo dos cortes ficam em "Vídeos & Cortes".
+        As configurações de qualidade e estilo dos cortes ficam na tela Cortes.
       </p>
       <ProfileSection />
       <PasswordSection />

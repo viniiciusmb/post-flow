@@ -86,7 +86,7 @@ export function ClientBillingPage() {
   }
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Planos e crédito">
+    <DashboardLayout user={user} onLogout={logout} title="Plano e uso">
       {!data ? (
         <Skeleton className="h-64" />
       ) : (

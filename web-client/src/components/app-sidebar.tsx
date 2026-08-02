@@ -27,28 +27,34 @@ import {
 } from "@/components/ui/sidebar"
 import type { SessionUser } from "@/types/api"
 
+// Os nomes do menu descrevem o que a PESSOA controla, nao como o sistema foi
+// construido. Foi por isso que "Túnel" virou "Sua conexão": tunel e o nome da
+// tecnica (um tunel SSH reverso), nao do beneficio, e ninguem que produz
+// conteudo abre um menu chamado "Túnel esperando entender o que tem la dentro.
+// Mesma logica em "Fila de Processamento" -> "Processamento" e
+// "Vídeos & Cortes" -> "Cortes" (o "&" e a palavra "vídeos" nao acrescentavam
+// nada: o que o cliente vem procurar aqui e o corte).
 const ADMIN_GROUPS: { label?: string; items: NavItem[] }[] = [
   {
-    label: "Menu",
-    items: [{ title: "Painel", url: "/admin", icon: IconLayoutDashboard }],
+    items: [{ title: "Início", url: "/admin", icon: IconLayoutDashboard }],
   },
   {
-    label: "Gestão",
+    label: "Operação",
     items: [
       { title: "Clientes", url: "/admin/clients", icon: IconUsers },
-      { title: "Postagens", url: "/admin/postings", icon: IconListDetails },
-      { title: "Fila de Processamento", url: "/admin/queue", icon: IconListCheck },
+      { title: "Publicações", url: "/admin/postings", icon: IconListDetails },
+      { title: "Processamento", url: "/admin/queue", icon: IconListCheck },
       { title: "Métricas", url: "/admin/metrics", icon: IconChartBar },
-      { title: "Banda", url: "/admin/bandwidth", icon: IconGauge },
-      { title: "Planos e crédito", url: "/admin/billing", icon: IconReceipt2 },
+      { title: "Consumo de banda", url: "/admin/bandwidth", icon: IconGauge },
+      { title: "Assinaturas", url: "/admin/billing", icon: IconReceipt2 },
     ],
   },
   {
     label: "Meu conteúdo",
     items: [
-      { title: "Canais do YouTube", url: "/client/youtube-channels", icon: IconBrandYoutube },
-      { title: "Vídeos & Cortes", url: "/client/videos-clips", icon: IconScissors },
-      { title: "Contas TikTok", url: "/client/tiktok-account", icon: IconBrandTiktok },
+      { title: "Canais", url: "/client/youtube-channels", icon: IconBrandYoutube },
+      { title: "Cortes", url: "/client/videos-clips", icon: IconScissors },
+      { title: "Publicação", url: "/client/tiktok-account", icon: IconBrandTiktok },
       { title: "Configurações", url: "/client/settings", icon: IconSettings },
     ],
   },
@@ -56,14 +62,13 @@ const ADMIN_GROUPS: { label?: string; items: NavItem[] }[] = [
 
 const CLIENT_GROUPS: { label?: string; items: NavItem[] }[] = [
   {
-    label: "Menu",
     items: [
-      { title: "Dashboard", url: "/client", icon: IconLayoutDashboard },
-      { title: "Canais do YouTube", url: "/client/youtube-channels", icon: IconBrandYoutube },
-      { title: "Vídeos & Cortes", url: "/client/videos-clips", icon: IconScissors },
-      { title: "Contas TikTok", url: "/client/tiktok-account", icon: IconBrandTiktok },
-      { title: "Túnel", url: "/client/tunnel", icon: IconRouter },
-      { title: "Planos e crédito", url: "/client/billing", icon: IconReceipt2 },
+      { title: "Início", url: "/client", icon: IconLayoutDashboard },
+      { title: "Canais", url: "/client/youtube-channels", icon: IconBrandYoutube },
+      { title: "Cortes", url: "/client/videos-clips", icon: IconScissors },
+      { title: "Publicação", url: "/client/tiktok-account", icon: IconBrandTiktok },
+      { title: "Sua conexão", url: "/client/tunnel", icon: IconRouter },
+      { title: "Plano e uso", url: "/client/billing", icon: IconReceipt2 },
       { title: "Configurações", url: "/client/settings", icon: IconSettings },
     ],
   },

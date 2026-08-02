@@ -63,7 +63,7 @@ function formatCount(n: number | null | undefined) {
 
 // Botao de emergencia: se algo der errado e os cortes comecarem a sair um
 // atras do outro (ou qualquer outro bug), pausa só o disparo de NOVOS posts
-// dessa conta — o que já estava em processamento não é afetado. Fica bem
+// dessa conta. O que já estava em processamento não é afetado. Fica bem
 // visível de propósito, separado das outras configurações de agendamento.
 function PauseQueueBar({ accountId }: { accountId: number }) {
   const [paused, setPaused] = useState<boolean | null>(null)
@@ -98,7 +98,7 @@ function PauseQueueBar({ accountId }: { accountId: number }) {
   // Sem popup nativo (dava problema em alguns navegadores/apps): primeiro
   // clique em "Pausar fila" só arma a confirmação (o botão muda de texto e
   // cor por alguns segundos), segundo clique dentro da janela pausa de
-  // verdade. Retomar não precisa dessa confirmação — é reversível na hora.
+  // verdade. Retomar não precisa dessa confirmação. É reversível na hora.
   function handlePauseClick() {
     if (!confirming) {
       setConfirming(true)
@@ -209,7 +209,7 @@ function ScheduleCard({ accountId }: { accountId: number }) {
       <CardHeader>
         <CardTitle className="text-base">Agendamento de postagem</CardTitle>
         <CardDescription>
-          O TikTok do Post Flow ainda está em modo de testes (sandbox) — cada corte é enviado como{" "}
+          O TikTok do Post Flow ainda está em modo de testes (sandbox). Cada corte é enviado como{" "}
           <strong>rascunho pra caixa de entrada do seu TikTok</strong>, e você ainda precisa abrir o app e confirmar a
           publicação por lá. O agendamento abaixo controla só quando o rascunho chega na sua caixa de entrada, pra não
           chegar tudo de uma vez.
@@ -533,7 +533,7 @@ function QueueCard({ accountId, accountName }: { accountId: number; accountName:
   }
 
   // Recalcula os horários de toda a fila do zero, preenchendo os buracos
-  // deixados por cortes pulados/com erro — nunca acontece sozinho, só
+  // deixados por cortes pulados/com erro. Nunca acontece sozinho, só
   // quando alguém clica aqui de propósito.
   async function fixSchedule() {
     setFixing(true)
@@ -584,7 +584,7 @@ function QueueCard({ accountId, accountName }: { accountId: number; accountName:
       <CardHeader>
         <CardTitle className="text-base">Fila de prontos aguardando postar</CardTitle>
         <CardDescription>
-          Revise ou edite a legenda antes de sair — arraste pelo ícone à esquerda pra mudar a ordem em que saem.
+          Revise ou edite a legenda antes de sair. Arraste pelo ícone à esquerda pra mudar a ordem em que saem.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -717,7 +717,7 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Deram erro ao postar</CardTitle>
-        <CardDescription>A TikTok recusou publicar esses cortes — não são reenviados sozinhos.</CardDescription>
+        <CardDescription>A TikTok recusou publicar esses cortes. Não são reenviados sozinhos.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {channels.length > 1 && (
@@ -958,7 +958,7 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
     <Card className="border-primary/40">
       <CardHeader>
         <CardTitle className="text-base">Configurar postagens de {account.displayName}</CardTitle>
-        <CardDescription>As configurações abaixo valem só pra essa conta — cada conta tem as suas.</CardDescription>
+        <CardDescription>As configurações abaixo valem só pra essa conta. Cada conta tem as suas.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex items-start gap-3 rounded-lg border border-border p-4">
@@ -972,7 +972,7 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
           <label htmlFor={`autoPost-${account.id}`} className="cursor-pointer">
             <span className="text-sm font-medium">Postar automaticamente</span>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Desligado por padrão — os cortes ficam prontos em "Vídeos & Cortes" mas só entram na fila de postagem
+              Desligado por padrão. Os cortes ficam prontos na tela Cortes mas só entram na fila de postagem
               depois que você ligar isso aqui.
             </p>
           </label>
@@ -1033,7 +1033,7 @@ export function TikTokAccountPage() {
   const selectedAccount = accounts?.find((a) => a.id === selectedAccountId) ?? null
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Contas TikTok">
+    <DashboardLayout user={user} onLogout={logout} title="Publicação">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">
@@ -1042,7 +1042,7 @@ export function TikTokAccountPage() {
           {accounts && accounts.length > 0 && (
             <p className="mt-0.5 text-xs text-muted-foreground">
               Se ao conectar outra conta aparecer a mesma de antes, é porque seu navegador continua logado nela no
-              site do TikTok — saia da conta por lá (ou abra numa aba anônima) antes de conectar de novo.
+              site do TikTok. Saia da conta por lá (ou abra numa aba anônima) antes de conectar de novo.
             </p>
           )}
         </div>

@@ -77,7 +77,7 @@ export function AdminBandwidthPage() {
   const bytesByType = (type: BandwidthEgressType) => data?.byEgress.find((e) => e.egressType === type)?.bytes ?? 0
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Banda">
+    <DashboardLayout user={user} onLogout={logout} title="Consumo de banda">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-muted-foreground">Período</h2>
         <DateRangeFilter value={range} onChange={setRange} />
