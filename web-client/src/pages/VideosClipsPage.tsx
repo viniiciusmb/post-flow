@@ -320,6 +320,7 @@ function VideoRow({
   // acontecendo em segundo plano.
   const [pauseRequested, setPauseRequested] = useState(false)
   const [resumeRequested, setResumeRequested] = useState(false)
+  const [enqueueing, setEnqueueing] = useState(false)
   const { clips, reload: reloadClips } = useClipsPolling(video.id, open, video.status)
 
   const isActive = ACTIVE_STATUSES.includes(video.status)
@@ -348,6 +349,20 @@ function VideoRow({
       onChanged()
     } catch {
       setPauseRequested(false)
+    }
+  }
+
+  // Vídeo parado em "detectado" com a fila livre: o job se perdeu entre a
+  // detecção e o processamento (o worker reinicia numa janela ruim, por
+  // exemplo). O sistema resgata sozinho depois de 30 minutos, mas até lá não
+  // havia nada que o cliente pudesse fazer além de esperar sem saber.
+  async function processarAgora() {
+    setEnqueueing(true)
+    try {
+      await api.post(`/api/client/source-videos/${video.id}/enqueue`, {})
+      onChanged()
+    } finally {
+      setEnqueueing(false)
     }
   }
 
@@ -439,6 +454,18 @@ function VideoRow({
           <Button size="sm" onClick={resume} disabled={resumeRequested} className="h-7 shrink-0 gap-1 text-xs">
             <IconPlayerPlay className="size-3" />
             {resumeRequested ? "Retomando..." : "Retomar"}
+          </Button>
+        )}
+        {video.status === "detected" && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={processarAgora}
+            disabled={enqueueing}
+            className="h-7 shrink-0 gap-1 text-xs"
+          >
+            <IconPlayerPlay className="size-3" />
+            {enqueueing ? "Enviando..." : "Processar agora"}
           </Button>
         )}
         <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title="Remover vídeo">

@@ -274,20 +274,28 @@ function escapeForFilter(filePath) {
 // imagem e esticada pro tamanho final e o video e reduzido pra ocupar
 // `heightPercent` da altura, centralizado horizontalmente e posicionado em
 // `offsetPercent` da vertical (0 = colado no topo, 100 = colado na base).
-function buildTemplateFilter({ w, h, subtitlesFilter, cropZoomPercent, heightPercent, offsetPercent }) {
+function buildTemplateFilter({ w, h, subtitlesFilter, heightPercent, offsetPercent }) {
   const alturaVideo = Math.round((h * Math.max(10, Math.min(100, heightPercent))) / 100);
   // O offset e medido sobre o espaco que sobra, entao 50% sempre centraliza,
   // independente da altura escolhida.
   const sobra = h - alturaVideo;
   const topo = Math.round((sobra * Math.max(0, Math.min(100, offsetPercent))) / 100);
 
-  // O recorte lateral do video segue o mesmo zoom continuo do modo manual.
-  const zoom = Math.max(0, Math.min(100, cropZoomPercent ?? 100)) / 100;
-  const larguraCorte = `iw-(iw-ih*${w}/${alturaVideo})*${zoom}`;
-
   const chain = [
     `[1:v]scale=${w}:${h},setsar=1[fundo]`,
-    `[0:v]crop=${larguraCorte}:ih,scale=${w}:${alturaVideo}:force_original_aspect_ratio=decrease,setsar=1[video]`,
+    // PREENCHE a caixa que o cliente dimensionou, nao "cabe dentro" dela.
+    //
+    // Antes isto usava o zoom do modo manual mais force_original_aspect_ratio=
+    // decrease. Com zoom de 39%, um video 16:9 virava 1080x762 dentro de uma
+    // caixa de 1080x1267: sobravam 505px de vazio entre o video e a arte, que
+    // foi exatamente a faixa branca que apareceu no primeiro corte real.
+    //
+    // O zoom nao faz sentido aqui: quando existe template, quem define o
+    // tamanho do video e o proprio controle de altura, e o editor ate esconde
+    // as alcas de arrastar. Entao a regra e cobrir: amplia ate cobrir a caixa
+    // (increase) e corta o excedente (crop), garantindo o retangulo exato, sem
+    // faixa nenhuma.
+    `[0:v]scale=${w}:${alturaVideo}:force_original_aspect_ratio=increase,crop=${w}:${alturaVideo},setsar=1[video]`,
     // A legenda entra DEPOIS da composicao, pra poder ser posicionada em
     // relacao ao quadro final e nao ao retangulo do video.
     `[fundo][video]overlay=(W-w)/2:${topo}${subtitlesFilter ? `,${subtitlesFilter}` : ''}[outv]`,
@@ -301,7 +309,6 @@ function buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, template
       w,
       h,
       subtitlesFilter,
-      cropZoomPercent,
       heightPercent: template.heightPercent,
       offsetPercent: template.offsetPercent,
     });

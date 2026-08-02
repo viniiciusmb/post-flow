@@ -246,6 +246,37 @@ async function uploadVideo(req, res) {
 
 // Reinicia um video que ficou em erro - ex: video que falhou por causa do
 // bloqueio de bot do YouTube, ja resolvido.
+// Coloca de volta na fila um video que ficou parado em "detectado".
+//
+// Isso acontece quando o job se perde entre a deteccao e o processamento: o
+// worker reinicia (deploy, por exemplo) na janela em que o job ja saiu da fila
+// mas ainda nao comecou. O videoErrorRetryJob resgata sozinho depois de 30
+// minutos, mas ate la o video fica parado na tela sem nada que o cliente possa
+// fazer - e foi exatamente isso que aconteceu na producao.
+//
+// Nao mexe em nada que ja foi feito: so reenfileira. Se o video ja tiver
+// download ou transcricao guardados, o pipeline continua de onde parou.
+async function enqueue(req, res) {
+  const id = Number(req.params.id);
+  const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(id, req.session.user.id);
+  if (!sourceVideo) return res.status(404).json({ error: 'Vídeo não encontrado.' });
+  if (!['detected', 'paused'].includes(sourceVideo.status)) {
+    return res.status(400).json({ error: 'Esse vídeo não está esperando na fila.' });
+  }
+
+  // Um video pausado precisa da flag limpa, senao o worker para de novo no
+  // primeiro checkpoint.
+  if (sourceVideo.status === 'paused') {
+    await sourceVideosRepository.resumeByIdOwnedByClient(id, req.session.user.id);
+  }
+
+  const boss = await queueService.getBoss();
+  const priority = await queuePriorityService.resolveQueuePriorityForClient(req.session.user.id);
+  await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: id }, { priority });
+
+  res.json({ id, status: 'detected' });
+}
+
 async function retry(req, res) {
   const id = Number(req.params.id);
   const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(id, req.session.user.id);
@@ -450,6 +481,7 @@ async function bulkRemove(req, res) {
 }
 
 module.exports = {
+  enqueue,
   list,
   listClips,
   downloadClip,
