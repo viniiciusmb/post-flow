@@ -2,15 +2,26 @@
 
 const pool = require('../db/pool');
 
+// UNIQUE(source_video_id) garante que o mesmo video nunca gere duas cobrancas
+// de excedente. Sem o ON CONFLICT abaixo, porem, a SEGUNDA tentativa lancava
+// erro de constraint: o cliente mandava reprocessar um video que ja tinha sido
+// cobrado, a excecao subia ate o catch do processVideoJob e o video era marcado
+// como ERRO. A protecao contra cobranca dupla funcionava, mas quebrava o
+// reprocessamento.
+//
+// Agora a segunda chamada e silenciosa e devolve a cobranca que ja existia, que
+// e o que o chamador espera: "essa conta ja foi feita, segue o jogo".
 async function create({ clientUserId, sourceVideoId, bucket, minutes, rateCentsPerMin }) {
   const amountCents = Math.round(minutes * rateCentsPerMin);
   const { rows } = await pool.query(
     `INSERT INTO client_overage_charges (client_user_id, source_video_id, bucket, minutes, rate_cents_per_min, amount_cents)
      VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (source_video_id) DO NOTHING
      RETURNING *`,
     [clientUserId, sourceVideoId, bucket, minutes, rateCentsPerMin, amountCents]
   );
-  return rows[0];
+  if (rows[0]) return rows[0];
+  return findBySourceVideoId(sourceVideoId);
 }
 
 async function findBySourceVideoId(sourceVideoId) {

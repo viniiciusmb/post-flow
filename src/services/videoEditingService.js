@@ -412,14 +412,24 @@ async function renderClip({
     const args = [
       '-ss', String(startSeconds),
       '-i', videoPath,
-      '-t', String(duration),
-      // Segunda entrada: a imagem do template (-loop 1 faz a imagem parada
-      // durar o corte inteiro). Precisa vir depois do -i do video pra ser
-      // [1:v] no filtro.
+      // Segunda entrada: a imagem do template. -loop 1 faz a imagem parada
+      // "durar pra sempre"; quem corta e o -t la embaixo.
       ...(template ? ['-loop', '1', '-i', template.path] : []),
       ...(filterComplex
         ? ['-filter_complex', filterComplex, '-map', outputLabel, '-map', '0:a']
         : ['-vf', simpleFilter]),
+      // -t PRECISA ficar aqui, depois de TODAS as entradas.
+      //
+      // No ffmpeg, a posicao mudanica o significado: antes de um -i ele limita
+      // AQUELA ENTRADA; depois da ultima entrada ele limita a SAIDA. Enquanto
+      // so existia uma entrada, o -t ficava logo apos o -i do video e
+      // funcionava como opcao de saida por acidente de posicao. Quando o
+      // template entrou como segunda entrada, o mesmo -t passou a limitar a
+      // IMAGEM, e a saida ficou sem limite nenhum: cada "corte" era
+      // renderizado com o VIDEO INTEIRO por baixo do template. Na producao
+      // isso gerou cortes de 150-200 MB (maiores que o proprio video original)
+      // e renderizacao que nunca terminava.
+      '-t', String(duration),
       '-c:v', 'libx264',
       '-preset', preset,
       '-crf', String(crf),
