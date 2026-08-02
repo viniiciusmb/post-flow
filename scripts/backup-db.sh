@@ -103,5 +103,44 @@ rotate "$BACKUP_ROOT/daily" "$KEEP_DAILY"
 rotate "$BACKUP_ROOT/weekly" "$KEEP_WEEKLY"
 rotate "$BACKUP_ROOT/monthly" "$KEEP_MONTHLY"
 
-record_status "ok" "$(basename "$TARGET")" "$SIZE"
-log "Backup concluido com sucesso."
+# ---------------------------------------------------------------------------
+# Copia fora da VPS (opcional, mas e o que protege contra perder o servidor).
+#
+# Tudo acima protege contra migration ruim, DELETE sem WHERE e bug - mas nao
+# contra o disco da VPS falhar, porque as copias estao NO MESMO disco.
+#
+# Pra ligar, coloque num arquivo /etc/postflow-backup.env (chmod 600):
+#   OFFSITE_BUCKET=s3://meu-bucket/postflow
+#   AWS_ACCESS_KEY_ID=...
+#   AWS_SECRET_ACCESS_KEY=...
+#   AWS_ENDPOINT_URL=https://s3.us-west-004.backblazeb2.com   # so pro B2
+# e instale o cliente: apt-get install -y awscli
+#
+# Sem esse arquivo, o backup local continua funcionando normalmente e so
+# registra um aviso - de proposito: falha no envio pra fora nunca pode fazer
+# parecer que nao houve backup nenhum.
+# ---------------------------------------------------------------------------
+OFFSITE_STATUS="local-apenas"
+[ -f /etc/postflow-backup.env ] && . /etc/postflow-backup.env
+
+if [ -n "${OFFSITE_BUCKET:-}" ]; then
+  if ! command -v aws >/dev/null 2>&1; then
+    log "AVISO: OFFSITE_BUCKET configurado mas o comando 'aws' nao existe (apt-get install -y awscli)."
+    OFFSITE_STATUS="offsite-sem-cliente"
+  else
+    ENDPOINT_ARG=""
+    [ -n "${AWS_ENDPOINT_URL:-}" ] && ENDPOINT_ARG="--endpoint-url $AWS_ENDPOINT_URL"
+    log "Enviando copia pra $OFFSITE_BUCKET ..."
+    # shellcheck disable=SC2086
+    if aws $ENDPOINT_ARG s3 cp "$TARGET" "$OFFSITE_BUCKET/$(basename "$TARGET")" >/dev/null 2>&1; then
+      log "Copia externa enviada."
+      OFFSITE_STATUS="offsite-ok"
+    else
+      log "AVISO: falha ao enviar a copia externa (o backup local esta salvo)."
+      OFFSITE_STATUS="offsite-falhou"
+    fi
+  fi
+fi
+
+record_status "ok" "$(basename "$TARGET") [$OFFSITE_STATUS]" "$SIZE"
+log "Backup concluido com sucesso ($OFFSITE_STATUS)."

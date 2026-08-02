@@ -1,28 +1,170 @@
-<%- include('../partials/header') %>
+<%- include('../partials/public-header') %>
 
-<article style="max-width: 720px; margin: 2rem auto;">
-  <h1>Termos de Serviço</h1>
-  <p><em>Ultima atualizacao: <%= updatedAt %></em></p>
+<div class="wrap">
+  <article class="doc">
+    <h1>Termos de Uso</h1>
+    <p class="atualizado">Última atualização: <%= updatedAt %></p>
 
-  <p>O Post Flow e um sistema de agendamento e postagem automatica de videos no TikTok,
-  a partir de arquivos armazenados no Google Drive, para uso proprio e de clientes autorizados.</p>
+    <p>
+      Estes termos valem para o uso do Post Flow, disponível em
+      <a href="<%= contact.siteUrl %>"><%= contact.siteUrl %></a>. Ao criar uma conta, você
+      concorda com eles. Se não concordar, não use o serviço.
+    </p>
 
-  <h2>1. Uso do servico</h2>
-  <p>Ao conectar sua conta do TikTok ou do Google ao Post Flow, voce autoriza o sistema a
-  publicar/enviar videos em seu nome, conforme as permissoes que voce concede durante o login.
-  Voce pode desconectar sua conta a qualquer momento.</p>
+    <h2>1. O que o Post Flow faz</h2>
+    <p>
+      O Post Flow acompanha canais do YouTube (ou uma pasta do Google Drive) que você indica, baixa
+      os vídeos novos, usa inteligência artificial pra escolher os melhores trechos, corta cada
+      trecho no formato vertical com legenda, e publica no seu TikTok e/ou exporta pro seu Google
+      Drive, conforme você configurar.
+    </p>
 
-  <h2>2. Responsabilidade pelo conteudo</h2>
-  <p>Voce e responsavel pelos videos enviados atraves da sua pasta do Google Drive. O Post Flow
-  nao analisa ou modera o conteudo antes do envio.</p>
+    <h2>2. Sua conta</h2>
+    <ul>
+      <li>Você precisa ter 18 anos ou mais.</li>
+      <li>Os dados de cadastro precisam ser verdadeiros.</li>
+      <li>Você é responsável por manter sua senha em segredo e por tudo que acontecer na sua conta.</li>
+      <li>Uma conta é para uma pessoa ou empresa. Não revenda nem compartilhe seu acesso.</li>
+    </ul>
 
-  <h2>3. Contas de teste (Sandbox)</h2>
-  <p>Enquanto o aplicativo estiver em modo de teste (sandbox) junto ao TikTok, publicacoes podem
-  ficar restritas a rascunho ou visualizacao privada, conforme as regras da propria plataforma TikTok.</p>
+    <h2>3. Conexão com TikTok e Google</h2>
+    <p>
+      Ao conectar sua conta do TikTok ou do Google, você autoriza o Post Flow a agir em seu nome
+      dentro dos limites das permissões que a própria plataforma exibe no momento da autorização —
+      nada além disso. As permissões exatas e o motivo de cada uma estão detalhados na
+      <a href="/privacidade">Política de Privacidade</a>.
+    </p>
+    <p>
+      Você pode desconectar essas contas a qualquer momento, pelo painel ou direto nas
+      configurações do TikTok/Google. Ao desconectar, apagamos os tokens de acesso e o serviço
+      para de agir naquela conta imediatamente.
+    </p>
 
-  <h2>4. Contato</h2>
-  <p>Duvidas sobre estes termos podem ser enviadas para o e-mail de contato informado pelo
-  administrador do sistema.</p>
-</article>
+    <h2>4. Você é responsável pelo conteúdo</h2>
+    <div class="destaque">
+      <p>
+        <strong>Este é o ponto mais importante destes termos.</strong> O Post Flow é uma ferramenta
+        automática: ele processa o vídeo que você mandar, sem julgar o conteúdo. A responsabilidade
+        legal pelo que é processado e publicado é inteiramente sua.
+      </p>
+    </div>
+    <p>Ao usar o serviço, você declara que:</p>
+    <ul>
+      <li>Tem o direito de usar os vídeos que manda processar — porque são seus, ou porque você tem
+      autorização de quem é dono;</li>
+      <li>Tem o direito de publicar esse material no TikTok;</li>
+      <li>O conteúdo não viola direitos autorais, marcas, direito de imagem, nem as regras da
+      plataforma onde será publicado;</li>
+      <li>O conteúdo não é ilegal, não incita ódio ou violência, e não é enganoso.</li>
+    </ul>
+    <p>
+      Não revisamos nem moderamos o conteúdo antes da publicação. Se recebermos denúncia de uso
+      indevido, podemos suspender a conta.
+    </p>
 
-<%- include('../partials/footer') %>
+    <h2>5. Uso proibido</h2>
+    <p>Não é permitido usar o Post Flow para:</p>
+    <ul>
+      <li>Processar conteúdo de terceiros sem autorização;</li>
+      <li>Automatizar spam, engajamento falso ou qualquer coisa que viole as regras do TikTok;</li>
+      <li>Tentar burlar limites de plano, quebrar a segurança do sistema ou acessar dados de outros
+      clientes;</li>
+      <li>Revender o serviço como se fosse seu, sem acordo por escrito.</li>
+    </ul>
+
+    <h2>6. Planos, créditos e cobrança</h2>
+    <ul>
+      <li>O serviço é cobrado por assinatura mensal, e cada plano dá uma quantidade de
+      <strong>minutos de vídeo processado por semana</strong>. Os minutos renovam a cada 7 dias e
+      não acumulam de uma semana pra outra.</li>
+      <li>Você ganha <strong>minutos bônus</strong> ao usar o programa opcional que faz os downloads
+      saírem pela sua própria internet — como isso reduz nosso custo, a economia volta pra você.</li>
+      <li>Se os minutos da semana acabarem, o processamento fica parado até a renovação. Você pode
+      comprar um pacote avulso (que <strong>não expira</strong> e carrega de semana pra semana) ou
+      ligar a cobrança de excedente.</li>
+      <li><strong>Nada é cobrado além da assinatura sem você autorizar explicitamente.</strong> A
+      cobrança de excedente é desligada por padrão.</li>
+      <li>Os minutos são debitados com base na duração do vídeo de origem, e a reserva acontece
+      antes do download começar.</li>
+      <li>Pagamentos são processados pela Stripe. Não guardamos dados do seu cartão.</li>
+    </ul>
+
+    <h2>7. Cancelamento</h2>
+    <p>
+      Você pode cancelar quando quiser, sem multa. O acesso continua até o fim do período já pago,
+      e não fazemos devolução proporcional do período em andamento. Cancelar a assinatura não apaga
+      sua conta — pra isso, peça a exclusão em
+      <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a>.
+    </p>
+
+    <h2>8. Retenção dos arquivos</h2>
+    <p>
+      Os arquivos de vídeo ficam no nosso servidor apenas o tempo necessário pra processar e
+      publicar. O vídeo original é apagado assim que os cortes ficam prontos, e os cortes são
+      apagados automaticamente algum tempo depois de publicados (7 dias por padrão, ajustável por
+      você no painel). <strong>Se você quer guardar os cortes, use a exportação pro Google
+      Drive</strong> — não somos um serviço de armazenamento e não garantimos que o arquivo estará
+      lá depois desse prazo.
+    </p>
+
+    <h2>9. Disponibilidade e limites do serviço</h2>
+    <p>
+      Fazemos o possível pra manter tudo no ar, mas o Post Flow depende de serviços de terceiros
+      (YouTube, TikTok, Google, OpenAI, Anthropic, Stripe) e da infraestrutura de hospedagem.
+      Interrupções, mudanças de política ou bloqueios dessas plataformas podem afetar o
+      funcionamento, e isso está fora do nosso controle.
+    </p>
+    <p>
+      Da mesma forma, a escolha dos trechos é feita por inteligência artificial: o resultado é bom
+      na maior parte das vezes, mas não é garantido nem revisado por uma pessoa. Confira os cortes
+      antes de publicar quando o conteúdo for sensível.
+    </p>
+
+    <h2>10. Modo de aprovação junto ao TikTok</h2>
+    <p>
+      Enquanto nosso aplicativo estiver em fase de revisão junto ao TikTok, as publicações podem
+      chegar como <strong>rascunho</strong> na sua caixa de entrada do app do TikTok, exigindo que
+      você abra e confirme. Isso é uma regra da própria plataforma, não uma limitação nossa. Quando
+      a publicação direta for liberada, ela passa a valer automaticamente.
+    </p>
+
+    <h2>11. Limitação de responsabilidade</h2>
+    <p>
+      O Post Flow é fornecido "como está". Na medida permitida pela lei brasileira, não nos
+      responsabilizamos por lucros cessantes, perda de audiência, suspensão da sua conta em
+      plataformas de terceiros, ou danos indiretos decorrentes do uso do serviço. Nossa
+      responsabilidade total fica limitada ao valor que você pagou nos 3 meses anteriores ao evento.
+    </p>
+    <p>
+      Nada nestes termos afasta os direitos que o Código de Defesa do Consumidor garante a você.
+    </p>
+
+    <h2>12. Suspensão da conta</h2>
+    <p>
+      Podemos suspender ou encerrar uma conta que descumpra estes termos, especialmente nos casos
+      do item 5. Sempre que possível, avisamos antes e damos chance de corrigir.
+    </p>
+
+    <h2>13. Mudanças nestes termos</h2>
+    <p>
+      Se algo mudar, atualizamos a data no topo desta página e avisamos no painel antes de a
+      mudança entrar em vigor. Continuar usando o serviço depois disso significa aceitar a nova
+      versão.
+    </p>
+
+    <h2>14. Lei aplicável</h2>
+    <p>
+      Estes termos são regidos pela lei brasileira, e fica eleito o foro do domicílio do
+      consumidor para resolver qualquer disputa.
+    </p>
+
+    <h2>15. Contato</h2>
+    <p>
+      Dúvidas sobre estes termos:
+      <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a>. Respondemos
+      <%= contact.responseTime %>. Veja também a <a href="/contato">página de contato</a>.
+    </p>
+  </article>
+</div>
+
+<%- include('../partials/public-footer') %>

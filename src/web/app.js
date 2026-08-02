@@ -2,12 +2,14 @@
 
 const path = require('path');
 const express = require('express');
+const compression = require('compression');
 const helmet = require('helmet');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 
 const config = require('../config');
 const pool = require('../db/pool');
+const publicRoutes = require('./routes/publicRoutes');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const clientRoutes = require('./routes/clientRoutes');
@@ -30,6 +32,7 @@ const stripeWebhookApiRoutes = require('./routes/api/stripeWebhookApiRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const csrf = require('./middleware/csrf');
 const rateLimits = require('./middleware/rateLimits');
+const slowRequestLogger = require('./middleware/slowRequestLogger');
 
 const app = express();
 
@@ -41,6 +44,24 @@ app.set('trust proxy', 1);
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+
+// Comprime (gzip/deflate) HTML, CSS, JS e JSON antes de mandar. Como o painel
+// e uma SPA que faz polling de listas em JSON, isso corta bastante byte
+// trafegado - diferenca que aparece principalmente pra cliente com internet
+// ruim. Vem cedo na pilha pra pegar tambem os arquivos estaticos.
+//
+// filter: pula o que ja e comprimido por natureza (video/imagem do corte
+// servidos por download/preview) - recomprimir MP4/JPG so gasta CPU sem
+// diminuir nada.
+app.use(
+  compression({
+    filter: (req, res) => {
+      const tipo = res.getHeader('Content-Type');
+      if (typeof tipo === 'string' && /^(video|image|audio)\//.test(tipo)) return false;
+      return compression.filter(req, res);
+    },
+  })
+);
 
 // img-src precisa liberar https: (nao so 'self') pra thumbnail do YouTube
 // (i.ytimg.com), avatar do canal (yt3.googleusercontent.com) e avatar do
@@ -60,6 +81,7 @@ app.use(
 // parseasse primeiro, os bytes originais se perderiam e a verificacao
 // falharia sempre.
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
+app.use(slowRequestLogger.middleware);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -113,18 +135,11 @@ app.use('/api', (req, res, next) =>
   req.path.startsWith('/stripe/webhook') ? next() : rateLimits.geral(req, res, next)
 );
 
-app.get('/', (req, res) => {
-  if (!req.session.user) return res.redirect('/login');
-  res.redirect(req.session.user.role === 'admin' ? '/admin' : '/client');
-});
-
-const LEGAL_UPDATED_AT = '28/07/2026';
-app.get('/termos', (req, res) => {
-  res.render('legal/terms', { title: 'Termos de Servico', updatedAt: LEGAL_UPDATED_AT });
-});
-app.get('/privacidade', (req, res) => {
-  res.render('legal/privacy', { title: 'Politica de Privacidade', updatedAt: LEGAL_UPDATED_AT });
-});
+// Paginas publicas (landing, termos, privacidade, contato). Nao exigem login
+// de proposito: alem de servirem pra conseguir cliente, o Google e o TikTok
+// pedem um site publico funcionando durante a revisao do app - uma tela de
+// login sozinha nao passa.
+app.use('/', publicRoutes);
 
 app.use('/', authRoutes);
 app.use('/admin', adminRoutes);

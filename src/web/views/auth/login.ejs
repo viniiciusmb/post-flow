@@ -1,25 +1,54 @@
-<%- include('../partials/header') %>
+<%- include('../partials/public-header') %>
 
-<article style="max-width: 420px; margin: 3rem auto;">
-  <h1>Entrar</h1>
+<div class="wrap">
+  <article class="doc" style="max-width: 26rem;">
+    <h1>Entrar</h1>
 
-  <% if (error) { %>
-    <p style="color: var(--pico-del-color);"><%= error %></p>
-  <% } %>
+    <% if (error) { %>
+      <p class="erro"><%= error %></p>
+    <% } %>
 
-  <form method="post" action="/login">
-    <label>
-      E-mail
-      <input type="email" name="email" required autofocus>
-    </label>
-    <label>
-      Senha
-      <input type="password" name="password" required>
-    </label>
-    <button type="submit">Entrar</button>
-  </form>
+    <form method="post" action="/login" class="form">
+      <label>
+        E-mail
+        <input type="email" name="email" required autofocus>
+      </label>
+      <label>
+        Senha
+        <input type="password" name="password" required>
+      </label>
+      <button type="submit" class="btn btn-primary btn-lg">Entrar</button>
+    </form>
 
-  <p>Ainda nao tem conta de cliente? <a href="/register">Criar conta</a></p>
-</article>
+    <p style="margin-top:1.5rem; color:var(--muted)">
+      Ainda não tem conta? <a href="/register">Criar conta</a>
+    </p>
+  </article>
+</div>
 
-<%- include('../partials/footer') %>
+<style>
+  .erro {
+    color: #b91c1c;
+    background: #fef2f2;
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    .erro { color: #fca5a5; background: rgba(220, 38, 38, 0.12); }
+  }
+  .form { display: grid; gap: 1.1rem; }
+  .form label { display: grid; gap: 0.35rem; font-size: 0.9375rem; font-weight: 500; }
+  .form input {
+    font: inherit;
+    font-weight: 400;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+    color: var(--fg);
+    width: 100%;
+  }
+  .form input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+</style>
+
+<%- include('../partials/public-footer') %>

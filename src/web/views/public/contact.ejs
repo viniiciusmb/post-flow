@@ -1,0 +1,60 @@
+<%- include('../partials/public-header') %>
+
+<div class="wrap">
+  <article class="doc">
+    <h1>Contato e suporte</h1>
+    <p class="atualizado">Respondemos <%= contact.responseTime %>.</p>
+
+    <div class="destaque">
+      <p>
+        <strong>E-mail:</strong>
+        <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a>
+      </p>
+      <p>É o mesmo canal pra dúvida, problema técnico, cobrança e pedido de exclusão de dados.</p>
+    </div>
+
+    <h2>Já tem conta?</h2>
+    <p>
+      Se você já usa o Post Flow, o caminho mais rápido é entrar no
+      <a href="/client">seu painel</a> — a maioria das dúvidas se resolve ali:
+    </p>
+    <ul>
+      <li><strong>Vídeo travado ou com erro</strong> — a tela "Vídeos &amp; Cortes" mostra o motivo
+      e tem o botão de tentar de novo.</li>
+      <li><strong>Corte não foi publicado</strong> — a aba "Fila" em "Contas TikTok" mostra o
+      horário previsto de cada publicação, e a aba "Erro" mostra o que a TikTok recusou.</li>
+      <li><strong>Acabaram meus minutos</strong> — a tela "Plano e créditos" mostra o saldo e
+      permite comprar um pacote avulso.</li>
+      <li><strong>Trocar senha ou e-mail</strong> — em "Configurações".</li>
+    </ul>
+
+    <h2>Pedido de exclusão de dados</h2>
+    <p>
+      Você pode pedir a exclusão da sua conta e de tudo que está ligado a ela mandando um e-mail
+      para <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a> do endereço
+      cadastrado na conta, com o assunto <strong>"Excluir minha conta"</strong>. Apagamos os vídeos,
+      os cortes, os tokens de acesso do TikTok e do Google, o histórico de créditos e os dados de
+      cadastro. O que fazemos exatamente está detalhado na
+      <a href="/privacidade">Política de Privacidade</a>.
+    </p>
+
+    <h2>Revogar o acesso sem apagar a conta</h2>
+    <p>
+      Se você só quer que o Post Flow pare de acessar suas contas, não precisa falar com a gente:
+    </p>
+    <ul>
+      <li><strong>TikTok</strong> — no painel, em "Contas TikTok", clique em desconectar. Ou, no
+      app do TikTok: Perfil → Configurações → Segurança → Apps e serviços conectados.</li>
+      <li><strong>Google Drive</strong> — no painel, em "Configurações", desconecte o Drive. Ou em
+      <a href="https://myaccount.google.com/permissions" rel="noopener">myaccount.google.com/permissions</a>.</li>
+    </ul>
+
+    <h2>Documentos</h2>
+    <ul>
+      <li><a href="/termos">Termos de Uso</a></li>
+      <li><a href="/privacidade">Política de Privacidade</a></li>
+    </ul>
+  </article>
+</div>
+
+<%- include('../partials/public-footer') %>

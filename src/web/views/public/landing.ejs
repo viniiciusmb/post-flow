@@ -1,0 +1,182 @@
+<%- include('../partials/public-header') %>
+
+<div class="wrap">
+  <section class="hero plain">
+    <span class="pill">YouTube → cortes com IA → TikTok</span>
+    <h1>Seu canal do YouTube virando<br>cortes no TikTok, sozinho.</h1>
+    <p class="lead">
+      Você conecta seu canal uma vez. A cada vídeo novo, o Post Flow baixa, escolhe os melhores
+      trechos com inteligência artificial, corta no formato vertical, legenda e publica no seu
+      TikTok — sem você abrir nenhum editor.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary btn-lg" href="/register">Criar minha conta</a>
+      <a class="btn btn-ghost btn-lg" href="#como-funciona">Ver como funciona</a>
+    </div>
+  </section>
+
+  <section id="como-funciona">
+    <div class="section-head">
+      <h2>Como funciona</h2>
+      <p>Você configura uma vez. Depois disso, roda sozinho.</p>
+    </div>
+    <div class="flow">
+      <div class="step">
+        <span class="num">1</span>
+        <h3>Conecte seu canal</h3>
+        <p>Cole o link do seu canal do YouTube. O Post Flow passa a acompanhar os vídeos novos
+        automaticamente. Também dá pra enviar um vídeo direto do computador ou colar o link de um
+        vídeo específico.</p>
+      </div>
+      <div class="step">
+        <span class="num">2</span>
+        <h3>A IA escolhe os cortes</h3>
+        <p>O áudio é transcrito e uma IA lê a transcrição inteira pra encontrar os trechos que
+        funcionam sozinhos — começo, gancho e fim. Você escolhe entre "melhores partes", vídeo
+        inteiro ou uma quantidade fixa de cortes.</p>
+      </div>
+      <div class="step">
+        <span class="num">3</span>
+        <h3>Corte, legenda e capa</h3>
+        <p>Cada trecho vira um vídeo vertical 9:16 com legenda queimada, título opcional e capa.
+        No modo manual, você ajusta o enquadramento arrastando e escolhe o estilo da legenda numa
+        galeria visual.</p>
+      </div>
+      <div class="step">
+        <span class="num">4</span>
+        <h3>Publica no TikTok</h3>
+        <p>Os cortes prontos entram numa fila com legenda editável. Você define os horários (ou
+        deixa automático) e o Post Flow publica. Também dá pra mandar tudo pra uma pasta do seu
+        Google Drive.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>O que vem junto</h2>
+      <p>Feito pra quem produz conteúdo e não quer virar editor de vídeo.</p>
+    </div>
+    <div class="features">
+      <div class="feature">
+        <h3>Várias contas do TikTok</h3>
+        <p>Cada canal do YouTube pode publicar numa conta diferente. Útil pra quem gerencia mais
+        de uma marca.</p>
+      </div>
+      <div class="feature">
+        <h3>Agendamento por horário</h3>
+        <p>Escolha os horários do dia em que os cortes devem sair, ou deixe o sistema distribuir
+        sozinho ao longo do dia.</p>
+      </div>
+      <div class="feature">
+        <h3>Exportação pro Google Drive</h3>
+        <p>Prefere revisar antes de publicar? Os cortes prontos podem ir direto pra uma pasta do
+        seu Drive, automaticamente ou com um clique.</p>
+      </div>
+      <div class="feature">
+        <h3>Pausar e retomar de verdade</h3>
+        <p>Pausou no meio de um vídeo longo? O que já foi feito fica salvo. Ao retomar, continua
+        de onde parou em vez de começar tudo de novo.</p>
+      </div>
+      <div class="feature">
+        <h3>Você acompanha tudo</h3>
+        <p>Painel com o andamento de cada vídeo, porcentagem real de cada corte, fila de postagem
+        e o horário previsto de cada publicação.</p>
+      </div>
+      <div class="feature">
+        <h3>Estilo do corte no seu jeito</h3>
+        <p>Enquadramento contínuo, presets de legenda e de título, numeração "Parte 1, Parte 2" e
+        descrição automática ou fixa.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="planos">
+    <div class="section-head">
+      <h2>Planos</h2>
+      <p>
+        Cobrança por minuto de vídeo processado, renovado toda semana. Você ganha
+        <strong>minutos bônus</strong> ao instalar o programinha que faz os downloads saírem pela
+        sua própria internet — sai mais barato pra nós e a economia volta pra você.
+      </p>
+    </div>
+    <div class="plans">
+      <% plans.forEach(function (plan, i) { %>
+        <div class="plan <%= i === 1 ? 'destaque' : '' %>">
+          <% if (i === 1) { %><span class="tag">Mais escolhido</span><% } %>
+          <h3><%= plan.name %></h3>
+          <div class="preco">
+            R$ <%= (plan.price_cents / 100).toFixed(2).replace('.', ',') %><small>/mês</small>
+          </div>
+          <ul>
+            <li><strong><%= plan.weekly_minutes_normal %> minutos</strong> de vídeo por semana</li>
+            <li class="bonus"><strong><%= plan.weekly_minutes_bonus %> minutos</strong> por semana usando sua internet</li>
+            <li>
+              <%= plan.max_youtube_channels ? `Até ${plan.max_youtube_channels} canal${plan.max_youtube_channels > 1 ? 'is' : ''} do YouTube` : 'Canais do YouTube ilimitados' %>
+            </li>
+            <li>
+              <%= plan.max_tiktok_accounts ? `Até ${plan.max_tiktok_accounts} conta${plan.max_tiktok_accounts > 1 ? 's' : ''} do TikTok` : 'Contas do TikTok ilimitadas' %>
+            </li>
+            <li>Corte com IA, legenda, capa e agendamento</li>
+            <li>Exportação pro Google Drive</li>
+          </ul>
+          <a class="btn <%= i === 1 ? 'btn-primary' : 'btn-ghost' %>" href="/register">Começar</a>
+        </div>
+      <% }); %>
+    </div>
+    <p style="text-align:center; color:var(--muted); font-size:0.9375rem; margin-top:1.5rem">
+      Passou dos minutos da semana? Você pode comprar um pacote avulso (que não expira) ou ligar a
+      cobrança de excedente. Nada é cobrado sem você autorizar.
+    </p>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Perguntas frequentes</h2>
+    </div>
+    <div class="faq">
+      <div>
+        <h3>Preciso dar minha senha do YouTube ou do TikTok?</h3>
+        <p>Não. A conexão com o TikTok e com o Google Drive é feita pelo login oficial de cada
+        plataforma (OAuth) — você autoriza na tela deles e o Post Flow nunca vê sua senha. Dá pra
+        revogar o acesso a qualquer momento, aqui no painel ou direto nas configurações da sua
+        conta TikTok/Google.</p>
+      </div>
+      <div>
+        <h3>O que exatamente o Post Flow acessa no meu Google Drive?</h3>
+        <p>Duas coisas, ambas escolhidas por você: a pasta de onde ele pode <em>ler</em> vídeos pra
+        processar, e a pasta onde ele <em>grava</em> os cortes prontos. Ele não varre o resto do seu
+        Drive nem acessa arquivos fora dessas pastas. Detalhes na
+        <a href="/privacidade">Política de Privacidade</a>.</p>
+      </div>
+      <div>
+        <h3>Os cortes ficam guardados pra sempre?</h3>
+        <p>Não. Depois de publicados, os arquivos são apagados do nosso servidor automaticamente
+        (7 dias por padrão, ajustável no painel) pra não acumular. Se você quiser guardar, use a
+        exportação pro Google Drive — lá ficam com você.</p>
+      </div>
+      <div>
+        <h3>E se eu quiser sair?</h3>
+        <p>Você pode desconectar as contas e pedir a exclusão dos seus dados a qualquer momento
+        pela <a href="/contato">página de contato</a>. Apagamos tudo: vídeos, cortes, tokens de
+        acesso e histórico.</p>
+      </div>
+      <div>
+        <h3>O vídeo publicado sai direto ou preciso confirmar?</h3>
+        <p>Depende do estágio de aprovação do nosso aplicativo junto ao TikTok. Hoje o corte chega
+        na sua caixa de rascunhos do app do TikTok pra você dar o toque final e confirmar. Assim
+        que a publicação direta for liberada, ela passa a valer sem você precisar fazer nada.</p>
+      </div>
+    </div>
+  </section>
+
+  <section style="text-align:center">
+    <h2>Pronto pra parar de editar corte na mão?</h2>
+    <p style="color:var(--muted); max-width:34rem; margin:0 auto 2rem">
+      Crie sua conta, conecte um canal e veja o primeiro corte sair.
+    </p>
+    <a class="btn btn-primary btn-lg" href="/register">Criar minha conta</a>
+  </section>
+</div>
+
+<%- include('../partials/public-footer') %>

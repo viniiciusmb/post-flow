@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= title %> · Post Flow</title>
+  <meta name="description" content="<%= locals.metaDescription || 'O Post Flow transforma os vídeos longos do seu canal do YouTube em cortes verticais legendados e publica no TikTok automaticamente.' %>">
+  <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/public.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="/">Post<span>Flow</span></a>
+      <nav class="topnav">
+        <a class="so-desktop" href="/#como-funciona">Como funciona</a>
+        <a class="so-desktop" href="/#planos">Planos</a>
+        <a class="so-desktop" href="/contato">Contato</a>
+        <% if (currentUser) { %>
+          <a class="btn btn-primary" href="<%= currentUser.role === 'admin' ? '/admin' : '/client' %>">Meu painel</a>
+        <% } else { %>
+          <a href="/login">Entrar</a>
+          <a class="btn btn-primary" href="/register">Criar conta</a>
+        <% } %>
+      </nav>
+    </div>
+  </header>
+  <main>

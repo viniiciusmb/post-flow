@@ -12,12 +12,12 @@ async function findById(id) {
   return rows[0] || null;
 }
 
-async function create({ email, passwordHash, role, businessName = null }) {
+async function create({ email, passwordHash, role, businessName = null, termsVersion = null }) {
   const { rows } = await pool.query(
-    `INSERT INTO users (email, password_hash, role, business_name)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO users (email, password_hash, role, business_name, terms_accepted_at, terms_version)
+     VALUES ($1, $2, $3, $4, CASE WHEN $5::text IS NULL THEN NULL ELSE now() END, $5)
      RETURNING *`,
-    [email.toLowerCase(), passwordHash, role, businessName]
+    [email.toLowerCase(), passwordHash, role, businessName, termsVersion]
   );
   return rows[0];
 }

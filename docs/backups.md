@@ -72,18 +72,46 @@ docker service update --force postflow_worker
 docker service update --force postflow_video-worker
 ```
 
-## Limitação conhecida: os backups estão no MESMO disco da produção
+## Cópia fora da VPS (pendente de ligar)
 
-Hoje as cópias ficam em `/var/backups/postflow` na mesma VPS. Isso protege contra:
+As cópias em `/var/backups/postflow` protegem contra:
 
 - migration ruim / `DELETE` sem `WHERE` / bug que corrompeu dados,
 - cliente ou admin apagando algo por engano,
 - upgrade de versão do Postgres que deu errado.
 
-**Não protege** contra o disco da VPS falhar ou a VPS inteira ser perdida. Pra fechar esse
-buraco falta uma cópia fora da VPS (Backblaze B2, S3, Google Drive, ou até uma cópia periódica
-puxada pro Mac do fundador). Isso depende de uma decisão de conta/serviço — está anotado como
-pendência. Como o dump tem ~1,4 MB, praticamente qualquer plano gratuito resolve.
+**Não protegem** contra o disco da VPS falhar ou a VPS inteira ser perdida — estão no mesmo
+disco. O script **já está preparado** para enviar uma cópia pra fora; falta só a conta e as
+credenciais. Como o dump tem ~1,4 MB, qualquer plano gratuito cobre com folga.
+
+### Como ligar (Backblaze B2 — escolhido pelo fundador)
+
+1. Crie a conta em [backblaze.com/b2](https://www.backblaze.com/b2/cloud-storage.html) e um
+   bucket **privado** (ex: `postflow-backups`).
+2. Em "Application Keys", gere uma chave com acesso só a esse bucket. Anote `keyID`,
+   `applicationKey` e o **endpoint** do bucket (aparece na lista de buckets, algo como
+   `s3.us-west-004.backblazeb2.com`).
+3. Na VPS:
+
+```bash
+ssh root@72.61.219.94
+apt-get update && apt-get install -y awscli
+
+cat > /etc/postflow-backup.env <<'FIM'
+OFFSITE_BUCKET=s3://postflow-backups/postflow
+AWS_ACCESS_KEY_ID=SEU_KEY_ID
+AWS_SECRET_ACCESS_KEY=SUA_APPLICATION_KEY
+AWS_ENDPOINT_URL=https://s3.us-west-004.backblazeb2.com
+FIM
+chmod 600 /etc/postflow-backup.env
+
+/usr/local/bin/postflow-backup    # deve terminar com "(offsite-ok)"
+```
+
+Se o envio externo falhar, o backup local continua sendo feito normalmente e o script registra
+um aviso — de propósito: um problema de rede com o Backblaze nunca pode fazer parecer que não
+houve backup nenhum. O status (`local-apenas`, `offsite-ok`, `offsite-falhou`) aparece no painel
+do admin junto com a data do último backup.
 
 ## Se um dia precisar reinstalar do zero
 
