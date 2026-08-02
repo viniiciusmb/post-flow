@@ -45,7 +45,7 @@ export function PageHeader({
  */
 export function SectionLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex items-end justify-between gap-4 border-b pb-2">
+    <div className="flex items-end justify-between gap-4 border-b border-border/70 pb-2">
       <h2 className="text-xs font-semibold uppercase tracking-[0.07em] text-muted-foreground">
         {children}
       </h2>

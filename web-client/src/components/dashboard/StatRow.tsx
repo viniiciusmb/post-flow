@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils"
  */
 export function StatRow({ children }: { children: ReactNode }) {
   return (
-    <div className="grid grid-cols-2 divide-x divide-y overflow-hidden rounded-xl border bg-card sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-5">
+    <div className="grid grid-cols-2 divide-x divide-y divide-border/70 overflow-hidden rounded-xl bg-card shadow-[var(--shadow-flat)] dark:border dark:border-border sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-5">
       {children}
     </div>
   )

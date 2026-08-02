@@ -48,7 +48,7 @@ export function PostingsTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border bg-card">
+    <div className="overflow-hidden rounded-xl bg-card shadow-[var(--shadow-flat)] dark:border dark:border-border">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">

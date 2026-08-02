@@ -30,10 +30,10 @@
    =========================================================================== */
 
 :root {
-  /* 8px: mais preciso que os 10px anteriores. Controles pequenos usam 6px
-     (--radius-md), o que deixa botao e campo com cara de instrumento em vez
-     de bolha. */
-  --radius: 0.5rem;
+  /* 12px nos containers. Raio generoso combina com separacao por sombra: canto
+     duro pede linha, canto macio pede sombra. Controles pequenos ficam em 9px
+     (--radius-md), proporcionais ao tamanho deles. */
+  --radius: 0.75rem;
 
   --font-sans:
     "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -47,8 +47,13 @@
      em coluna porque o numeral e de largura fixa. */
   --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
 
-  /* ---------------- Tema claro ---------------- */
-  --background: #ffffff;
+  /* ---------------- Tema claro ----------------
+     A PAGINA e cinza claro e o CARTAO e branco. Essa diferenca e o que separa
+     os blocos; a borda vira quase invisivel e a sombra faz o resto.
+     Antes os dois eram brancos, entao a unica coisa que delimitava um cartao
+     era a linha - e linha sozinha, sem diferenca de fundo, le como contorno
+     duro desenhado por cima da tela. */
+  --background: #f0f1f3;
   --foreground: #08090a;
   --card: #ffffff;
   --card-foreground: #08090a;
@@ -59,18 +64,20 @@
   --primary: #08090a;
   --primary-foreground: #ffffff;
 
-  --secondary: #f5f5f6;
+  --secondary: #f1f1f3;
   --secondary-foreground: #08090a;
-  --muted: #fafafa;
+  /* Area "afundada" dentro de um cartao branco (lista, cabecalho de tabela,
+     bloco de codigo). Mais escura que o cartao, mais clara que a pagina. */
+  --muted: #f7f7f8;
   --muted-foreground: #6b7075;
-  --accent: #f5f5f6;
+  --accent: #f1f1f3;
   --accent-foreground: #08090a;
   --destructive: #d3302f;
   --destructive-foreground: #ffffff;
 
-  --border: #e7e7ea;
-  --input: #dfdfe3;
-  --ring: rgba(8, 9, 10, 0.35);
+  --border: #e6e7ea;
+  --input: #e0e1e5;
+  --ring: rgba(8, 9, 10, 0.3);
 
   /* Sinal cromatico. Aparece em link, estado ao vivo e foco - quase nada
      mais. Azul porque le como "interativo/sistema" em qualquer cultura, e
@@ -99,20 +106,21 @@
   --tone-neutral-wash: #f2f2f4;
   --tone-neutral-ink: #6b7075;
 
-  --sidebar: #fafafa;
+  --sidebar: #eceef1;
   --sidebar-foreground: #3f4348;
   --sidebar-primary: #08090a;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f0f0f2;
+  --sidebar-accent: #eaeaee;
   --sidebar-accent-foreground: #08090a;
-  --sidebar-border: #e7e7ea;
+  --sidebar-border: #ececef;
   --sidebar-ring: rgba(8, 9, 10, 0.35);
 
-  /* Elevacao: sombra quase invisivel + borda de 1px. Em produto denso a
-     borda e que separa; sombra difusa so borra a grade. */
-  --shadow-flat: 0 1px 2px rgba(8, 9, 10, 0.04);
-  --shadow-raised: 0 1px 2px rgba(8, 9, 10, 0.04), 0 8px 24px -12px rgba(8, 9, 10, 0.12);
-  --shadow-frame: 0 2px 4px rgba(8, 9, 10, 0.03), 0 24px 64px -24px rgba(8, 9, 10, 0.22);
+  /* Elevacao. Duas camadas de sombra: uma curta e quase opaca, que faz o
+     contato com a pagina, e uma longa e bem diluida, que da o volume. Uma
+     sombra so, difusa, borra; duas assim leem como papel apoiado. */
+  --shadow-flat: 0 1px 2px rgba(16, 18, 22, 0.06), 0 1px 3px rgba(16, 18, 22, 0.05);
+  --shadow-raised: 0 1px 2px rgba(16, 18, 22, 0.06), 0 4px 12px -2px rgba(16, 18, 22, 0.06);
+  --shadow-frame: 0 2px 4px rgba(16, 18, 22, 0.04), 0 24px 64px -24px rgba(16, 18, 22, 0.2);
 }
 
 /* ---------------- Tema escuro ----------------
@@ -122,9 +130,12 @@
    painel OLED de propaganda: em tela de trabalho ele cansa e faz o texto
    branco "vibrar". */
 .dark {
-  --background: #0b0c0e;
+  /* Mesma logica do claro, invertida: a pagina e o nivel mais BAIXO e o cartao
+     sobe. No escuro quem faz o degrau e a propria luminosidade da superficie,
+     porque sombra preta sobre fundo preto nao aparece. */
+  --background: #0a0b0d;
   --foreground: #eceef0;
-  --card: #131518;
+  --card: #141619;
   --card-foreground: #eceef0;
   --popover: #16181c;
   --popover-foreground: #eceef0;
@@ -133,17 +144,17 @@
   --primary: #f5f6f7;
   --primary-foreground: #08090a;
 
-  --secondary: #1a1d21;
+  --secondary: #1c1f23;
   --secondary-foreground: #eceef0;
-  --muted: #16181c;
+  --muted: #17191d;
   --muted-foreground: #969ba2;
   --accent: #1a1d21;
   --accent-foreground: #eceef0;
   --destructive: #e5484d;
   --destructive-foreground: #ffffff;
 
-  --border: rgba(255, 255, 255, 0.1);
-  --input: rgba(255, 255, 255, 0.14);
+  --border: rgba(255, 255, 255, 0.07);
+  --input: rgba(255, 255, 255, 0.12);
   --ring: rgba(245, 246, 247, 0.4);
 
   --signal: #7d94ff;
@@ -168,7 +179,7 @@
   --tone-neutral-wash: rgba(255, 255, 255, 0.07);
   --tone-neutral-ink: #969ba2;
 
-  --sidebar: #0f1114;
+  --sidebar: #0d0f11;
   --sidebar-foreground: #b6bbc1;
   --sidebar-primary: #f5f6f7;
   --sidebar-primary-foreground: #08090a;
@@ -177,8 +188,8 @@
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-ring: rgba(245, 246, 247, 0.4);
 
-  --shadow-flat: none;
-  --shadow-raised: 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --shadow-flat: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px -2px rgba(0, 0, 0, 0.35);
   --shadow-frame: 0 24px 64px -24px rgba(0, 0, 0, 0.8);
 }
 
@@ -224,10 +235,14 @@
   --color-tone-neutral-wash: var(--tone-neutral-wash);
   --color-tone-neutral-ink: var(--tone-neutral-ink);
 
-  --radius-sm: calc(var(--radius) - 3px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 5px);
+  --radius-md: calc(var(--radius) - 3px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-flat: var(--shadow-flat);
+  --shadow-raised: var(--shadow-raised);
+  --shadow-frame: var(--shadow-frame);
 
   --font-sans: var(--font-sans);
   --font-heading: var(--font-heading);

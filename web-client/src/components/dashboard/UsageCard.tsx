@@ -22,7 +22,7 @@ export function UsageCard({ range }: { range: DateRangeKey }) {
     // Barra fina, sem moldura própria. O número de vídeos detectados saiu daqui
     // porque já aparece na fileira logo acima: repetir o mesmo dado a 10cm de
     // distância só faz a pessoa conferir duas vezes se são a mesma coisa.
-    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-xl border bg-card px-4 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-xl bg-card shadow-[var(--shadow-flat)] dark:border dark:border-border px-4 py-3">
       <div className="flex items-baseline gap-2">
         <IconClock className="size-3.5 self-center text-muted-foreground" />
         <span className="font-heading text-lg font-semibold tabular-nums">{data.minutesInRange}</span>

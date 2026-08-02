@@ -7,10 +7,12 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card"
       className={cn(
-        // Borda de 1px + sombra quase imperceptivel. Em painel denso e a
-        // BORDA que separa; sombra difusa so borra a grade e faz tudo parecer
-        // adesivo colado na tela.
-        "flex flex-col gap-5 rounded-xl border bg-card py-5 text-card-foreground shadow-[0_1px_2px_rgba(8,9,10,0.04)] dark:shadow-none",
+        // SEM borda. Quem separa o cartao da pagina e a diferenca de fundo
+        // (pagina cinza, cartao branco) mais a sombra. Borda de 1px sobre
+        // fundo quase igual e o que fazia tudo parecer desenhado a caneta.
+        // No escuro a borda volta, bem fraca, porque sombra preta sobre fundo
+        // preto nao aparece e ali o degrau precisa de uma ajuda.
+        "flex flex-col gap-5 rounded-xl bg-card py-5 text-card-foreground shadow-[var(--shadow-flat)] dark:border dark:border-border",
         className
       )}
       {...props}

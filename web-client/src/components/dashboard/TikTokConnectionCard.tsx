@@ -18,7 +18,7 @@ export function TikTokConnectionCard({
   const vazio = accounts.length === 0
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-card shadow-[var(--shadow-flat)] dark:border dark:border-border px-4 py-3">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
         <span className="text-xs font-medium text-muted-foreground">Publica em</span>
         {vazio ? (

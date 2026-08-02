@@ -24,7 +24,7 @@ export function EmptyState({
 }) {
   return (
     <div
-      className={`flex flex-col items-center justify-center rounded-xl border bg-card text-center ${
+      className={`flex flex-col items-center justify-center rounded-xl bg-card shadow-[var(--shadow-flat)] dark:border dark:border-border text-center ${
         compact ? "px-6 py-10" : "px-6 py-16"
       }`}
     >
