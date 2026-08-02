@@ -1,6 +1,13 @@
-// Preferencias de edicao de video por cliente (proporcao, qualidade,
-// legenda, estilo/modo de corte, titulo, descricao). Sem linha no banco =
-// usa DEFAULTS.
+// Preferencias de edicao de video (proporcao, qualidade, legenda, estilo/modo
+// de corte, titulo, descricao, template de fundo).
+//
+// Duas camadas na MESMA tabela:
+//   youtube_channel_id IS NULL  -> configuracao padrao do cliente
+//                                  ("aplicar em todos os canais")
+//   youtube_channel_id = <id>   -> excecao daquele canal
+//
+// Resolucao: canal -> padrao do cliente -> DEFAULTS do codigo. Sem linha
+// nenhuma no banco, tudo cai nos DEFAULTS.
 'use strict';
 
 const pool = require('../db/pool');
@@ -22,69 +29,139 @@ const DEFAULTS = {
   show_part_label: false,
   part_label_position: 'top_right',
   title_style: 'classic',
+  background_template_path: null,
+  background_video_height_percent: 100,
+  background_video_offset_percent: 50,
 };
 
-async function findByClientId(clientUserId) {
-  const { rows } = await pool.query('SELECT * FROM client_video_settings WHERE client_user_id = $1', [clientUserId]);
-  return rows[0] ? { ...DEFAULTS, ...rows[0] } : { client_user_id: clientUserId, ...DEFAULTS };
+const COLUNAS = [
+  'aspect_ratio',
+  'framing',
+  'quality',
+  'caption_style',
+  'clip_length',
+  'clip_mode',
+  'max_clips',
+  'show_title',
+  'title_seconds',
+  'description_mode',
+  'description_template',
+  'crop_style_mode',
+  'crop_zoom_percent',
+  'show_part_label',
+  'part_label_position',
+  'title_style',
+  'background_template_path',
+  'background_video_height_percent',
+  'background_video_offset_percent',
+];
+
+function doCamelParaColuna(entrada) {
+  return {
+    aspect_ratio: entrada.aspectRatio,
+    framing: entrada.framing,
+    quality: entrada.quality,
+    caption_style: entrada.captionStyle,
+    clip_length: entrada.clipLength,
+    clip_mode: entrada.clipMode,
+    max_clips: entrada.maxClips,
+    show_title: entrada.showTitle,
+    title_seconds: entrada.titleSeconds,
+    description_mode: entrada.descriptionMode,
+    description_template: entrada.descriptionTemplate || null,
+    crop_style_mode: entrada.cropStyleMode,
+    crop_zoom_percent: entrada.cropZoomPercent,
+    show_part_label: entrada.showPartLabel,
+    part_label_position: entrada.partLabelPosition,
+    title_style: entrada.titleStyle,
+    background_template_path: entrada.backgroundTemplatePath ?? null,
+    background_video_height_percent: entrada.backgroundVideoHeightPercent ?? 100,
+    background_video_offset_percent: entrada.backgroundVideoOffsetPercent ?? 50,
+  };
 }
 
-async function upsert(
-  clientUserId,
-  {
-    aspectRatio,
-    framing,
-    quality,
-    captionStyle,
-    clipLength,
-    clipMode,
-    maxClips,
-    showTitle,
-    titleSeconds,
-    descriptionMode,
-    descriptionTemplate,
-    cropStyleMode,
-    cropZoomPercent,
-    showPartLabel,
-    partLabelPosition,
-    titleStyle,
-  }
-) {
+// Configuracao "de todos os canais" (a linha com youtube_channel_id NULL).
+async function findByClientId(clientUserId) {
   const { rows } = await pool.query(
-    `INSERT INTO client_video_settings (
-       client_user_id, aspect_ratio, framing, quality, caption_style, clip_length, clip_mode, max_clips,
-       show_title, title_seconds, description_mode, description_template,
-       crop_style_mode, crop_zoom_percent, show_part_label, part_label_position, title_style
-     )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-     ON CONFLICT (client_user_id) DO UPDATE SET
-       aspect_ratio = $2, framing = $3, quality = $4, caption_style = $5, clip_length = $6, clip_mode = $7, max_clips = $8,
-       show_title = $9, title_seconds = $10, description_mode = $11, description_template = $12,
-       crop_style_mode = $13, crop_zoom_percent = $14, show_part_label = $15, part_label_position = $16,
-       title_style = $17,
-       updated_at = now()
+    'SELECT * FROM client_video_settings WHERE client_user_id = $1 AND youtube_channel_id IS NULL',
+    [clientUserId]
+  );
+  return rows[0] ? { ...DEFAULTS, ...rows[0] } : { client_user_id: clientUserId, youtube_channel_id: null, ...DEFAULTS };
+}
+
+// Configuracao de UM canal, sem herdar nada. Devolve null quando aquele canal
+// nao tem excecao propria - e assim que a tela sabe mostrar "usando o padrao".
+async function findChannelOverride(clientUserId, youtubeChannelId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM client_video_settings WHERE client_user_id = $1 AND youtube_channel_id = $2',
+    [clientUserId, youtubeChannelId]
+  );
+  return rows[0] ? { ...DEFAULTS, ...rows[0] } : null;
+}
+
+// O que o pipeline usa de verdade na hora de cortar: excecao do canal se
+// existir, senao o padrao do cliente, senao DEFAULTS. Video avulso (upload ou
+// link colado) nao tem canal, entao cai direto no padrao.
+async function resolveForVideo(clientUserId, youtubeChannelId = null) {
+  if (youtubeChannelId) {
+    const doCanal = await findChannelOverride(clientUserId, youtubeChannelId);
+    if (doCanal) return doCanal;
+  }
+  return findByClientId(clientUserId);
+}
+
+async function listChannelOverrides(clientUserId) {
+  const { rows } = await pool.query(
+    'SELECT youtube_channel_id FROM client_video_settings WHERE client_user_id = $1 AND youtube_channel_id IS NOT NULL',
+    [clientUserId]
+  );
+  return rows.map((r) => Number(r.youtube_channel_id));
+}
+
+// youtubeChannelId null grava o padrao; com id, grava a excecao do canal.
+//
+// ATENCAO: a tabela nao tem mais UNIQUE simples, e sim dois indices unicos
+// PARCIAIS (ver migration 047). Por isso cada ON CONFLICT abaixo repete o
+// predicado do indice correspondente. Sem o predicado, o Postgres nao encontra
+// o indice e o INSERT falha ("no unique or exclusion constraint matching").
+async function upsert(clientUserId, entrada, youtubeChannelId = null) {
+  const valores = doCamelParaColuna(entrada);
+  const listaColunas = COLUNAS.join(', ');
+  // $1 = cliente, $2 = canal, e as colunas comecam em $3.
+  const placeholders = COLUNAS.map((_, i) => `$${i + 3}`).join(', ');
+  const atualizacoes = COLUNAS.map((c, i) => `${c} = $${i + 3}`).join(', ');
+  const parametros = [clientUserId, youtubeChannelId, ...COLUNAS.map((c) => valores[c])];
+
+  const alvoDoConflito =
+    youtubeChannelId === null
+      ? '(client_user_id) WHERE youtube_channel_id IS NULL'
+      : '(client_user_id, youtube_channel_id) WHERE youtube_channel_id IS NOT NULL';
+
+  const { rows } = await pool.query(
+    `INSERT INTO client_video_settings (client_user_id, youtube_channel_id, ${listaColunas})
+     VALUES ($1, $2, ${placeholders})
+     ON CONFLICT ${alvoDoConflito} DO UPDATE SET ${atualizacoes}, updated_at = now()
      RETURNING *`,
-    [
-      clientUserId,
-      aspectRatio,
-      framing,
-      quality,
-      captionStyle,
-      clipLength,
-      clipMode,
-      maxClips,
-      showTitle,
-      titleSeconds,
-      descriptionMode,
-      descriptionTemplate || null,
-      cropStyleMode,
-      cropZoomPercent,
-      showPartLabel,
-      partLabelPosition,
-      titleStyle,
-    ]
+    parametros
   );
   return rows[0];
 }
 
-module.exports = { DEFAULTS, findByClientId, upsert };
+// Apaga a excecao de um canal: ele volta a seguir o padrao do cliente.
+async function removeChannelOverride(clientUserId, youtubeChannelId) {
+  const { rowCount } = await pool.query(
+    'DELETE FROM client_video_settings WHERE client_user_id = $1 AND youtube_channel_id = $2',
+    [clientUserId, youtubeChannelId]
+  );
+  return rowCount > 0;
+}
+
+module.exports = {
+  DEFAULTS,
+  findByClientId,
+  findChannelOverride,
+  resolveForVideo,
+  listChannelOverrides,
+  upsert,
+  removeChannelOverride,
+};

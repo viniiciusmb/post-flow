@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { PausedError } = require('../lib/errors');
+const logger = require('../lib/logger');
 
 const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
 const FFPROBE_PATH = process.env.FFPROBE_PATH || 'ffprobe';
@@ -265,7 +266,47 @@ function escapeForFilter(filePath) {
 // (identico ao framing='blur_pad'), valores no meio interpolam a largura do
 // recorte entre os dois extremos - sempre com o fundo desfocado preenchendo
 // a sobra (que e zero quando zoom=100).
-function buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent }) {
+// Composicao sobre um template de fundo enviado pelo cliente (uma imagem 9:16
+// com a arte dele: moldura, publicidade, marca). O video entra POR CIMA da
+// imagem, com a altura e a posicao vertical que o cliente escolheu no editor.
+//
+// Duas entradas no ffmpeg: [0:v] e o video do corte, [1:v] e a imagem. A
+// imagem e esticada pro tamanho final e o video e reduzido pra ocupar
+// `heightPercent` da altura, centralizado horizontalmente e posicionado em
+// `offsetPercent` da vertical (0 = colado no topo, 100 = colado na base).
+function buildTemplateFilter({ w, h, subtitlesFilter, cropZoomPercent, heightPercent, offsetPercent }) {
+  const alturaVideo = Math.round((h * Math.max(10, Math.min(100, heightPercent))) / 100);
+  // O offset e medido sobre o espaco que sobra, entao 50% sempre centraliza,
+  // independente da altura escolhida.
+  const sobra = h - alturaVideo;
+  const topo = Math.round((sobra * Math.max(0, Math.min(100, offsetPercent))) / 100);
+
+  // O recorte lateral do video segue o mesmo zoom continuo do modo manual.
+  const zoom = Math.max(0, Math.min(100, cropZoomPercent ?? 100)) / 100;
+  const larguraCorte = `iw-(iw-ih*${w}/${alturaVideo})*${zoom}`;
+
+  const chain = [
+    `[1:v]scale=${w}:${h},setsar=1[fundo]`,
+    `[0:v]crop=${larguraCorte}:ih,scale=${w}:${alturaVideo}:force_original_aspect_ratio=decrease,setsar=1[video]`,
+    // A legenda entra DEPOIS da composicao, pra poder ser posicionada em
+    // relacao ao quadro final e nao ao retangulo do video.
+    `[fundo][video]overlay=(W-w)/2:${topo}${subtitlesFilter ? `,${subtitlesFilter}` : ''}[outv]`,
+  ];
+  return { filterComplex: chain.join(';'), outputLabel: '[outv]' };
+}
+
+function buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, template }) {
+  if (template && template.path) {
+    return buildTemplateFilter({
+      w,
+      h,
+      subtitlesFilter,
+      cropZoomPercent,
+      heightPercent: template.heightPercent,
+      offsetPercent: template.offsetPercent,
+    });
+  }
+
   if (cropZoomPercent !== null && cropZoomPercent !== undefined) {
     const zoom = Math.max(0, Math.min(100, cropZoomPercent)) / 100;
     const cropWidthExpr = `iw-(iw-ih*${w}/${h})*${zoom}`;
@@ -321,6 +362,21 @@ async function renderClip({
   // comportamento continua exatamente o de sempre (framing crop/blur_pad).
   const cropZoomPercent = settings.crop_style_mode === 'manual' ? Number(settings.crop_zoom_percent ?? 100) : null;
   const partLabel = settings.show_part_label && partTotal > 1 ? `Parte ${partIndex}` : null;
+  // Template de fundo: so vale se o arquivo ainda existir em disco. Se o
+  // cliente apagou (ou a retencao limpou), renderiza sem template em vez de
+  // derrubar o corte inteiro por causa de uma imagem faltando.
+  const templatePath = settings.background_template_path;
+  const template =
+    templatePath && fs.existsSync(templatePath)
+      ? {
+          path: templatePath,
+          heightPercent: Number(settings.background_video_height_percent ?? 100),
+          offsetPercent: Number(settings.background_video_offset_percent ?? 50),
+        }
+      : null;
+  if (templatePath && !template) {
+    logger.warn(`Template de fundo nao encontrado em ${templatePath} - renderizando sem ele.`);
+  }
 
   const { w, h } = ASPECT_RATIOS[aspectRatio] || ASPECT_RATIOS['9:16'];
   const { crf, preset } = QUALITY_PRESETS[quality] || QUALITY_PRESETS.high;
@@ -350,13 +406,17 @@ async function renderClip({
     subtitlesFilter = `subtitles=${escapeForFilter(assPath)}`;
   }
 
-  const { simpleFilter, filterComplex, outputLabel } = buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent });
+  const { simpleFilter, filterComplex, outputLabel } = buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, template });
 
   try {
     const args = [
       '-ss', String(startSeconds),
       '-i', videoPath,
       '-t', String(duration),
+      // Segunda entrada: a imagem do template (-loop 1 faz a imagem parada
+      // durar o corte inteiro). Precisa vir depois do -i do video pra ser
+      // [1:v] no filtro.
+      ...(template ? ['-loop', '1', '-i', template.path] : []),
       ...(filterComplex
         ? ['-filter_complex', filterComplex, '-map', outputLabel, '-map', '0:a']
         : ['-vf', simpleFilter]),

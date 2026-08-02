@@ -5,8 +5,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { api } from "@/lib/api"
+import { api, csrfToken } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { ClientVideoSettingsResponse, PartLabelPosition, VideoCaptionStyle } from "@/types/api"
 
@@ -30,12 +32,37 @@ function zoomForVideoHeight(height: number) {
   return Math.round(Math.min(100, Math.max(0, z * 100)))
 }
 
-function CropZoomEditor({ value, onChange, onCommit }: { value: number; onChange: (v: number) => void; onCommit: (v: number) => void }) {
+function CropZoomEditor({
+  value,
+  onChange,
+  onCommit,
+  templateUrl,
+  templateHeightPercent,
+  templateOffsetPercent,
+}: {
+  value: number
+  onChange: (v: number) => void
+  onCommit: (v: number) => void
+  /** Imagem de fundo enviada pelo cliente. Quando existe, o vídeo é composto
+      por cima dela e o editor precisa mostrar exatamente isso, senão a pessoa
+      posiciona no escuro e só descobre o resultado depois de renderizar. */
+  templateUrl?: string | null
+  templateHeightPercent?: number
+  templateOffsetPercent?: number
+}) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
-  const videoHeight = videoHeightForZoom(value)
-  const videoWidth = videoHeight * (16 / 9)
+  const comTemplate = Boolean(templateUrl)
+  // Com template, quem manda na altura do vídeo é o controle de altura, não o
+  // zoom: o zoom passa a controlar só o quanto se corta das laterais.
+  const videoHeight = comTemplate
+    ? (FRAME_HEIGHT * Math.max(10, Math.min(100, templateHeightPercent ?? 70))) / 100
+    : videoHeightForZoom(value)
+  const videoWidth = comTemplate ? FRAME_WIDTH : videoHeight * (16 / 9)
   const videoLeftInFrame = (FRAME_WIDTH - videoWidth) / 2
+  const videoTop = comTemplate
+    ? ((FRAME_HEIGHT - videoHeight) * Math.max(0, Math.min(100, templateOffsetPercent ?? 50))) / 100
+    : (FRAME_HEIGHT - videoHeight) / 2
 
   function handlePointerDown(e: React.PointerEvent) {
     e.preventDefault()
@@ -65,20 +92,27 @@ function CropZoomEditor({ value, onChange, onCommit }: { value: number; onChange
       <div ref={wrapperRef} className="relative select-none" style={{ width: WRAPPER_WIDTH, height: FRAME_HEIGHT }}>
         {/* moldura 9:16 fixa - isso e o resultado final, nunca muda de tamanho */}
         <div
-          className="absolute overflow-hidden rounded-md border-2 border-white bg-black"
-          style={{ left: FRAME_LEFT, width: FRAME_WIDTH, height: FRAME_HEIGHT }}
+          className="absolute overflow-hidden rounded-md border-2 border-white bg-black bg-cover bg-center"
+          style={{
+            left: FRAME_LEFT,
+            width: FRAME_WIDTH,
+            height: FRAME_HEIGHT,
+            ...(templateUrl ? { backgroundImage: `url(${templateUrl})` } : {}),
+          }}
         >
           <div
-            className="absolute flex items-center justify-center bg-neutral-700 text-center text-[10px] text-white/70"
-            style={{ width: videoWidth, height: videoHeight, left: videoLeftInFrame, top: (FRAME_HEIGHT - videoHeight) / 2 }}
+            className="absolute flex items-center justify-center bg-neutral-700/95 text-center text-[10px] text-white/70"
+            style={{ width: videoWidth, height: videoHeight, left: videoLeftInFrame, top: videoTop }}
           >
-            vídeo original (16:9)
+            {comTemplate ? "seu vídeo" : "vídeo original (16:9)"}
           </div>
         </div>
 
         {/* Alças de arrastar - fora da moldura (que tem overflow hidden), senao
-            ficariam impossiveis de clicar quando o video passa das bordas. */}
-        <div
+            ficariam impossiveis de clicar quando o video passa das bordas.
+            Com template a largura é travada na moldura, então não há o que
+            arrastar: quem posiciona é o controle de altura/posição. */}
+        {!comTemplate && (<><div
           className="absolute top-1/2 h-10 w-3 -translate-y-1/2 cursor-ew-resize rounded bg-primary shadow"
           style={{ left: FRAME_LEFT + videoLeftInFrame - 6 }}
           onPointerDown={handlePointerDown}
@@ -91,14 +125,16 @@ function CropZoomEditor({ value, onChange, onCommit }: { value: number; onChange
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-        />
+        /></>)}
       </div>
       <p className="max-w-[220px] text-center text-xs text-muted-foreground">
-        {value >= 90
-          ? "Bem apertado - preenche a moldura toda, mostra menos do vídeo original."
+        {comTemplate
+          ? "Seu template ao fundo. Ajuste a altura e a posição do vídeo nos controles abaixo."
+          : value >= 90
+          ? "Bem apertado. Preenche a moldura toda e mostra menos do vídeo original."
           : value <= 10
-            ? "Bem amplo - mostra o vídeo original quase inteiro, com fundo desfocado preenchendo a sobra."
-            : `Zoom em ${value}% - arraste as alças roxas pra ajustar.`}
+            ? "Bem amplo. Mostra o vídeo quase inteiro, com fundo desfocado preenchendo a sobra."
+            : `Zoom em ${value}%. Arraste as alças pra ajustar.`}
       </p>
     </div>
   )
@@ -243,21 +279,35 @@ export function ClipStyleEditorCard() {
   const [zoomDraft, setZoomDraft] = useState(100)
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
+  // "all" = a configuração que vale pra todos os canais. Um id = o estilo
+  // daquele canal só.
+  const [alvo, setAlvo] = useState<string>("all")
+  // Muda a cada upload/remoção pra forçar o navegador a buscar a imagem de
+  // novo (a URL é sempre a mesma, senão ficaria mostrando a antiga do cache).
+  const [versaoTemplate, setVersaoTemplate] = useState(0)
+  const [enviandoTemplate, setEnviandoTemplate] = useState(false)
+  const [erroTemplate, setErroTemplate] = useState<string | null>(null)
+
+  const queryAlvo = alvo === "all" ? "" : `?channelId=${alvo}`
 
   useEffect(() => {
-    api.get<ClientVideoSettingsResponse>("/api/client/video-settings").then((data) => {
+    api.get<ClientVideoSettingsResponse>(`/api/client/video-settings${queryAlvo}`).then((data) => {
       setSettings(data)
       setZoomDraft(data.cropZoomPercent)
+      setVersaoTemplate((v) => v + 1)
     })
-  }, [])
+  }, [queryAlvo])
 
   async function save(next: ClientVideoSettingsResponse) {
     setSettings(next)
     setSaving(true)
     setSavedFlash(false)
     try {
-      const updated = await api.put<ClientVideoSettingsResponse>("/api/client/video-settings", next)
-      setSettings(updated)
+      const corpo = alvo === "all" ? next : { ...next, channelId: Number(alvo) }
+      const updated = await api.put<ClientVideoSettingsResponse>("/api/client/video-settings", corpo)
+      // O PUT devolve só o que foi salvo; a lista de canais e o alvo vêm do
+      // GET, então preservamos pra tela não perder o seletor depois de salvar.
+      setSettings({ ...updated, channels: next.channels, channelId: next.channelId, usesDefault: false })
       setSavedFlash(true)
       setTimeout(() => setSavedFlash(false), 2000)
     } finally {
@@ -265,7 +315,50 @@ export function ClipStyleEditorCard() {
     }
   }
 
+  async function enviarTemplate(arquivo: File) {
+    setEnviandoTemplate(true)
+    setErroTemplate(null)
+    try {
+      const form = new FormData()
+      form.append("image", arquivo)
+      const resposta = await fetch(`/api/client/video-settings/background-template${queryAlvo}`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "X-CSRF-Token": csrfToken() },
+        body: form,
+      })
+      const dados = await resposta.json().catch(() => ({}))
+      if (!resposta.ok) throw new Error(dados.error || "Não foi possível enviar a imagem.")
+      const atualizado = await api.get<ClientVideoSettingsResponse>(`/api/client/video-settings${queryAlvo}`)
+      setSettings(atualizado)
+      setVersaoTemplate((v) => v + 1)
+    } catch (e) {
+      setErroTemplate(e instanceof Error ? e.message : "Não foi possível enviar a imagem.")
+    } finally {
+      setEnviandoTemplate(false)
+    }
+  }
+
+  async function removerTemplate() {
+    await api.delete(`/api/client/video-settings/background-template${queryAlvo}`)
+    const atualizado = await api.get<ClientVideoSettingsResponse>(`/api/client/video-settings${queryAlvo}`)
+    setSettings(atualizado)
+    setVersaoTemplate((v) => v + 1)
+  }
+
+  async function voltarAoPadrao() {
+    await api.delete(`/api/client/video-settings/channel/${alvo}`)
+    const atualizado = await api.get<ClientVideoSettingsResponse>(`/api/client/video-settings${queryAlvo}`)
+    setSettings(atualizado)
+    setZoomDraft(atualizado.cropZoomPercent)
+    setVersaoTemplate((v) => v + 1)
+  }
+
   if (!settings) return <Skeleton className="h-96" />
+
+  const urlTemplate = settings.hasBackgroundTemplate
+    ? `/api/client/video-settings/background-template${queryAlvo}${queryAlvo ? "&" : "?"}v=${versaoTemplate}`
+    : null
 
   return (
     <Card>
@@ -280,6 +373,41 @@ export function ClipStyleEditorCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
+        {/* Onde este estilo se aplica. Fica no topo porque muda o significado
+            de tudo que vem abaixo: sem isso a pessoa edita achando que mexe em
+            um canal e na verdade mexe em todos. */}
+        <Field>
+          <FieldLabel>Aplicar em</FieldLabel>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={alvo} onValueChange={setAlvo}>
+              <SelectTrigger className="w-[19rem]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os canais</SelectItem>
+                {settings.channels.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}
+                    {c.hasOwnStyle ? " (estilo próprio)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {alvo !== "all" && !settings.usesDefault && (
+              <Button variant="outline" size="sm" onClick={voltarAoPadrao}>
+                Voltar a seguir todos os canais
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {alvo === "all"
+              ? "Vale para todo canal que não tenha um estilo próprio, e para vídeos enviados avulsos."
+              : settings.usesDefault
+                ? "Este canal segue a configuração de todos os canais. Mexer em qualquer coisa aqui cria um estilo só dele."
+                : "Este canal tem estilo próprio e ignora a configuração de todos os canais."}
+          </p>
+        </Field>
+
         <ToggleGroup
           type="single"
           variant="outline"
@@ -297,11 +425,88 @@ export function ClipStyleEditorCard() {
         {settings.cropStyleMode === "manual" && (
           <>
             <Field>
+              <FieldLabel>Template de fundo (opcional)</FieldLabel>
+              <p className="text-xs text-muted-foreground">
+                Envie uma imagem 9:16 (1080x1920) com a sua arte: moldura, marca, publicidade. O vídeo
+                é encaixado por cima dela, na altura e na posição que você escolher.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <label>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const arquivo = e.target.files?.[0]
+                      if (arquivo) enviarTemplate(arquivo)
+                      e.target.value = ""
+                    }}
+                  />
+                  <Button asChild variant="outline" size="sm" disabled={enviandoTemplate}>
+                    <span>{enviandoTemplate ? "Enviando..." : settings.hasBackgroundTemplate ? "Trocar imagem" : "Enviar imagem"}</span>
+                  </Button>
+                </label>
+                {settings.hasBackgroundTemplate && (
+                  <Button variant="ghost" size="sm" onClick={removerTemplate}>
+                    Remover
+                  </Button>
+                )}
+              </div>
+              {erroTemplate && <p className="text-xs text-destructive">{erroTemplate}</p>}
+            </Field>
+
+            {settings.hasBackgroundTemplate && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel>Altura do vídeo no template</FieldLabel>
+                  <Input
+                    type="range"
+                    min={10}
+                    max={100}
+                    value={settings.backgroundVideoHeightPercent}
+                    onChange={(e) =>
+                      setSettings({ ...settings, backgroundVideoHeightPercent: Number(e.target.value) })
+                    }
+                    onMouseUp={() => save(settings)}
+                    onTouchEnd={() => save(settings)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {settings.backgroundVideoHeightPercent}% da altura. O resto fica sendo a sua arte.
+                  </p>
+                </Field>
+                <Field>
+                  <FieldLabel>Posição do vídeo</FieldLabel>
+                  <Input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={settings.backgroundVideoOffsetPercent}
+                    onChange={(e) =>
+                      setSettings({ ...settings, backgroundVideoOffsetPercent: Number(e.target.value) })
+                    }
+                    onMouseUp={() => save(settings)}
+                    onTouchEnd={() => save(settings)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {settings.backgroundVideoOffsetPercent <= 15
+                      ? "Colado no topo."
+                      : settings.backgroundVideoOffsetPercent >= 85
+                        ? "Colado na base."
+                        : "No meio."}
+                  </p>
+                </Field>
+              </div>
+            )}
+
+            <Field>
               <FieldLabel>Enquadramento (arraste as alças)</FieldLabel>
               <CropZoomEditor
                 value={zoomDraft}
                 onChange={setZoomDraft}
                 onCommit={(v) => save({ ...settings, cropZoomPercent: v })}
+                templateUrl={urlTemplate}
+                templateHeightPercent={settings.backgroundVideoHeightPercent}
+                templateOffsetPercent={settings.backgroundVideoOffsetPercent}
               />
             </Field>
 

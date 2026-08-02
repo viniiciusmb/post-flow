@@ -6,6 +6,7 @@
 
 const clientVideoSettingsRepository = require('../../../repositories/clientVideoSettingsRepository');
 const videoEditingService = require('../../../services/videoEditingService');
+const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 
 const ASPECT_RATIOS = Object.keys(videoEditingService.ASPECT_RATIOS);
 const QUALITIES = Object.keys(videoEditingService.QUALITY_PRESETS);
@@ -36,6 +37,11 @@ function toApi(settings) {
     showPartLabel: settings.show_part_label,
     partLabelPosition: settings.part_label_position,
     titleStyle: settings.title_style,
+    // Só o fato de existir um template interessa ao front (o arquivo em si é
+    // servido por rota própria, nunca por caminho de disco).
+    hasBackgroundTemplate: Boolean(settings.background_template_path),
+    backgroundVideoHeightPercent: settings.background_video_height_percent ?? 100,
+    backgroundVideoOffsetPercent: settings.background_video_offset_percent ?? 50,
   };
 }
 
@@ -60,9 +66,57 @@ function toApiWithOptions(settings) {
   return { ...toApi(settings), options: OPTIONS_PAYLOAD };
 }
 
+// Resolve pra qual "alvo" a requisição se refere: o padrão do cliente
+// (?channelId ausente) ou um canal específico. Devolve erro pronto quando o
+// canal não é do cliente - é o mesmo cuidado de posse do resto do sistema:
+// nunca confiar no id que veio da URL.
+async function resolverAlvo(req) {
+  const bruto = req.query.channelId ?? req.body?.channelId;
+  if (bruto === undefined || bruto === null || bruto === '' || bruto === 'all') {
+    return { channelId: null };
+  }
+  const id = Number(bruto);
+  if (!Number.isInteger(id)) return { erro: 'Canal inválido.' };
+  const canal = await youtubeChannelsRepository.findById(id);
+  if (!canal || String(canal.client_user_id) !== String(req.session.user.id)) {
+    return { erro: 'Canal não encontrado.' };
+  }
+  return { channelId: id };
+}
+
 async function get(req, res) {
-  const settings = await clientVideoSettingsRepository.findByClientId(req.session.user.id);
-  res.json(toApiWithOptions(settings));
+  const alvo = await resolverAlvo(req);
+  if (alvo.erro) return res.status(404).json({ error: alvo.erro });
+
+  const [padrao, canais, comEstiloProprio] = await Promise.all([
+    clientVideoSettingsRepository.findByClientId(req.session.user.id),
+    youtubeChannelsRepository.listByClientId(req.session.user.id),
+    clientVideoSettingsRepository.listChannelOverrides(req.session.user.id),
+  ]);
+
+  // Quando pedem um canal que ainda não tem estilo próprio, devolvemos o padrão
+  // (é o que ele usa de verdade) marcando usesDefault, pra tela poder dizer
+  // "esse canal segue a configuração de todos".
+  let settings = padrao;
+  let usesDefault = true;
+  if (alvo.channelId) {
+    const doCanal = await clientVideoSettingsRepository.findChannelOverride(req.session.user.id, alvo.channelId);
+    if (doCanal) {
+      settings = doCanal;
+      usesDefault = false;
+    }
+  }
+
+  res.json({
+    ...toApiWithOptions(settings),
+    channelId: alvo.channelId,
+    usesDefault,
+    channels: canais.map((c) => ({
+      id: Number(c.id),
+      name: c.channel_name || c.youtube_channel_id,
+      hasOwnStyle: comEstiloProprio.includes(Number(c.id)),
+    })),
+  });
 }
 
 async function update(req, res) {
@@ -113,7 +167,31 @@ async function update(req, res) {
     return res.status(400).json({ error: 'Escreva a descrição fixa que será usada.' });
   }
 
+  const alvo = await resolverAlvo(req);
+  if (alvo.erro) return res.status(404).json({ error: alvo.erro });
+
+  const backgroundHeight = Number(req.body.backgroundVideoHeightPercent ?? 100);
+  const backgroundOffset = Number(req.body.backgroundVideoOffsetPercent ?? 50);
+  if (!Number.isInteger(backgroundHeight) || backgroundHeight < 10 || backgroundHeight > 100) {
+    return res.status(400).json({ error: 'Altura do vídeo no template inválida (10 a 100).' });
+  }
+  if (!Number.isInteger(backgroundOffset) || backgroundOffset < 0 || backgroundOffset > 100) {
+    return res.status(400).json({ error: 'Posição do vídeo no template inválida (0 a 100).' });
+  }
+
+  // O caminho do template não vem do cliente: é preservado do que já está
+  // gravado, e só muda pelas rotas de upload/remoção. Aceitar caminho de
+  // arquivo vindo do navegador seria deixar o cliente apontar pra qualquer
+  // arquivo do servidor.
+  const atual = alvo.channelId
+    ? (await clientVideoSettingsRepository.findChannelOverride(req.session.user.id, alvo.channelId)) ||
+      (await clientVideoSettingsRepository.findByClientId(req.session.user.id))
+    : await clientVideoSettingsRepository.findByClientId(req.session.user.id);
+
   const saved = await clientVideoSettingsRepository.upsert(req.session.user.id, {
+    backgroundTemplatePath: atual.background_template_path,
+    backgroundVideoHeightPercent: backgroundHeight,
+    backgroundVideoOffsetPercent: backgroundOffset,
     aspectRatio,
     framing,
     quality,
@@ -130,8 +208,19 @@ async function update(req, res) {
     showPartLabel: Boolean(showPartLabel),
     partLabelPosition,
     titleStyle,
-  });
+  }, alvo.channelId);
   res.json(toApiWithOptions(saved));
 }
 
-module.exports = { get, update };
+// Faz o canal voltar a seguir a configuração de todos os canais.
+async function removeChannelStyle(req, res) {
+  const id = Number(req.params.channelId);
+  const canal = await youtubeChannelsRepository.findById(id);
+  if (!canal || String(canal.client_user_id) !== String(req.session.user.id)) {
+    return res.status(404).json({ error: 'Canal não encontrado.' });
+  }
+  await clientVideoSettingsRepository.removeChannelOverride(req.session.user.id, id);
+  res.json({ ok: true });
+}
+
+module.exports = { get, update, removeChannelStyle, resolverAlvo, toApiWithOptions };

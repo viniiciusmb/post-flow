@@ -254,6 +254,9 @@ export interface ClientVideoSettings {
   showPartLabel: boolean
   partLabelPosition: PartLabelPosition
   titleStyle: VideoCaptionStyle
+  hasBackgroundTemplate: boolean
+  backgroundVideoHeightPercent: number
+  backgroundVideoOffsetPercent: number
 }
 
 export interface ClientVideoSettingsResponse extends ClientVideoSettings {
@@ -269,6 +272,11 @@ export interface ClientVideoSettingsResponse extends ClientVideoSettings {
     partLabelPositions: PartLabelPosition[]
     titleStyles: VideoCaptionStyle[]
   }
+  /** null = a configuração de todos os canais. */
+  channelId: number | null
+  /** true quando o canal escolhido ainda não tem estilo próprio. */
+  usesDefault: boolean
+  channels: { id: number; name: string; hasOwnStyle: boolean }[]
 }
 
 export type DriveExportMode = "auto" | "manual"

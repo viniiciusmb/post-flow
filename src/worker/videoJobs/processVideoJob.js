@@ -96,7 +96,13 @@ async function run(sourceVideoId) {
   const clientUserId = sourceVideo.youtube_channel_id
     ? (await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id)).client_user_id
     : sourceVideo.client_user_id;
-  let settings = await clientVideoSettingsRepository.findByClientId(clientUserId);
+  // Estilo do corte: a excecao do canal manda, se o canal tiver uma; senao vale
+  // o padrao do cliente. Video avulso (upload ou link colado) nao tem canal,
+  // entao sempre cai no padrao.
+  let settings = await clientVideoSettingsRepository.resolveForVideo(
+    clientUserId,
+    sourceVideo.youtube_channel_id
+  );
   const checkCancelled = () => isCancelRequested(sourceVideo.id);
   const heartbeat = startProcessingHeartbeat(sourceVideo.id);
 
@@ -241,7 +247,10 @@ async function run(sourceVideoId) {
     // ANTIGO (o que estava valendo quando o job comecou), nao o que aparece
     // selecionado na tela agora. Sem isso era exatamente o bug reportado:
     // "escolhi uma legenda e saiu outra parecida, com cor errada".
-    settings = await clientVideoSettingsRepository.findByClientId(clientUserId);
+    settings = await clientVideoSettingsRepository.resolveForVideo(
+      clientUserId,
+      sourceVideo.youtube_channel_id
+    );
 
     // Canal do YouTube posta numa unica conta (a vinculada a ele); video
     // avulso (upload/link colado) pode ir pra varias, escolhidas pelo
