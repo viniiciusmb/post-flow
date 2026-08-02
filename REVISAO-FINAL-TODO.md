@@ -26,6 +26,11 @@ Tudo que dava pra fazer sozinho das seções 1, 2, 3 e 4 foi feito e já está e
   de mais uma rodada. Nada quebra ao regenerar: o backup usa a chave `postflow-backup`, limitada
   ao bucket. A Master serve só pra administrar a conta e nunca precisa sair da mão do fundador.
   Painel → Application Keys → Regenerate Master Application Key.
+- [ ] **Decidir sobre o escopo `drive.readonly`** (ver `docs/aprovacoes-google-tiktok.md`). Ele é
+  escopo RESTRITO do Google e obriga uma avaliação de segurança CASA paga, refeita todo ano. Serve
+  só pra pasta de ORIGEM do Drive, e a produção mostra **0 clientes usando** (as 3 pastas em uso são
+  de destino, cobertas pelo `drive.file`, que é gratuito de verificar). Recomendação: remover antes
+  de submeter ao Google.
 - [ ] **Escolher um serviço de e-mail** (Resend/SendGrid/SES) — continua bloqueando "esqueci minha
   senha" e verificação de e-mail no cadastro (ver seção 8).
 
