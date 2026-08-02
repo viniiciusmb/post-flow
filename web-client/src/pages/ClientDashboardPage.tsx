@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { IconBrandYoutube, IconMovie, IconScissors, IconCircleCheck, IconListCheck } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
+import { PageHeader } from "@/components/dashboard/PageHeader"
 import { TikTokConnectionCard } from "@/components/dashboard/TikTokConnectionCard"
 import { PostingsTable, type PostingRow } from "@/components/dashboard/PostingsTable"
 import { StatCard } from "@/components/dashboard/StatCard"
@@ -48,6 +49,10 @@ export function ClientDashboardPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Início">
+      <PageHeader
+        title="Início"
+        description="Um resumo do que o Post Flow fez pelos seus canais no período escolhido."
+      />
       {flash.tiktokConnected && (
         <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
           Conta TikTok conectada com sucesso!

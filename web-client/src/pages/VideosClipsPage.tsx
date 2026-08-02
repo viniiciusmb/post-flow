@@ -15,6 +15,7 @@ import {
   IconBrandTiktok,
 } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
+import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -788,6 +789,10 @@ export function VideosClipsPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Cortes">
+      <PageHeader
+        title="Cortes"
+        description="Tudo que está sendo processado e tudo que já ficou pronto pra publicar."
+      />
       <AddManualVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} />
 
       <div className="flex flex-wrap gap-2">

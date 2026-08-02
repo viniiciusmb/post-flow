@@ -25,6 +25,7 @@ import {
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
+import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -1034,6 +1035,10 @@ export function TikTokAccountPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Publicação">
+      <PageHeader
+        title="Publicação"
+        description="Suas contas do TikTok, a fila de cortes e o horário em que cada um sai."
+      />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react"
 import { IconRouter, IconCircleCheck, IconCircleX, IconRefresh, IconDownload, IconArrowLeft } from "@tabler/icons-react"
 import { WindowsMark, AppleMark } from "@/components/os-marks"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
+import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
@@ -249,6 +250,10 @@ export function ClientTunnelPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Sua conexão">
+      <PageHeader
+        title="Sua conexão"
+        description="Faça os downloads saírem pela sua internet e ganhe minutos extras."
+      />
       <Card>
         <CardHeader>
           <CardTitle className="text-base">O que é isso e pra que serve</CardTitle>

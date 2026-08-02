@@ -20,8 +20,12 @@ function NavGroup({ label, items }: { label?: string; items: NavItem[] }) {
 
   return (
     <SidebarGroup>
-      {label && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
-      <SidebarGroupContent className="flex flex-col gap-2">
+      {label && (
+        <SidebarGroupLabel className="text-[0.6875rem] font-semibold uppercase tracking-[0.07em] text-muted-foreground/70">
+          {label}
+        </SidebarGroupLabel>
+      )}
+      <SidebarGroupContent className="flex flex-col gap-0.5">
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>

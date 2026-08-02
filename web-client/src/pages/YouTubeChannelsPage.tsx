@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { IconTrash, IconArrowRight, IconMovie, IconBrandGoogleDrive, IconBrandTiktok } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
+import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -445,6 +446,10 @@ export function YouTubeChannelsPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Canais">
+      <PageHeader
+        title="Canais"
+        description="Os canais que o Post Flow acompanha. Vídeo novo entra na fila sozinho."
+      />
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Adicionar canal</CardTitle>

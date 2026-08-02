@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { IconBrandGoogleDrive, IconUserCircle, IconLock } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
+import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -313,6 +314,10 @@ export function ClientSettingsPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Configurações">
+      <PageHeader
+        title="Configurações"
+        description="Seus dados de acesso e a conexão com o Google Drive."
+      />
       <p className="-mt-2 text-sm text-muted-foreground">
         As configurações de qualidade e estilo dos cortes ficam na tela Cortes.
       </p>

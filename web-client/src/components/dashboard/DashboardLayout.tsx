@@ -28,7 +28,10 @@ export function DashboardLayout({
       <SidebarInset>
         <SiteHeader title={title} />
         <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
+          {/* Largura máxima: linha de texto longa demais cansa de ler, e num
+              monitor grande o conteúdo esticado de ponta a ponta é o que mais
+              denuncia painel improvisado. */}
+          <div className="@container/main mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-5 p-4 pb-16 lg:gap-6 lg:px-8 lg:py-7">
             {children}
           </div>
         </div>

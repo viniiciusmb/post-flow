@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { IconCreditCard, IconCircleCheck } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
+import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -95,6 +96,10 @@ export function ClientBillingPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Plano e uso">
+      <PageHeader
+        title="Plano e uso"
+        description="Quantos minutos você tem, quanto já usou e como conseguir mais."
+      />
       {!data ? (
         <Skeleton className="h-64" />
       ) : (
