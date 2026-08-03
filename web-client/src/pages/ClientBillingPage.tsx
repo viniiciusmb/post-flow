@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { IconCreditCard, IconCircleCheck, IconCoins, IconMinus, IconPlus } from "@tabler/icons-react"
+import { IconCreditCard, IconCircleCheck, IconCoins } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -56,42 +56,49 @@ function RateBox({
   )
 }
 
-function QuantityStepper({
+// input type="range" nativo em vez de um componente novo: ja vem com teclado,
+// leitor de tela e toque funcionando, e o visual sai todo do accent-color, que
+// segue o tema claro/escuro sozinho.
+function MinutosSlider({
   value,
   min,
   max,
+  step,
   onChange,
 }: {
   value: number
   min: number
   max: number
+  step: number
   onChange: (v: number) => void
 }) {
+  const percentual = ((value - min) / (max - min)) * 100
   return (
-    <div className="flex items-center gap-1 rounded-lg border border-border p-1">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-8"
-        disabled={value <= min}
-        aria-label="Diminuir"
-        onClick={() => onChange(Math.max(min, value - 1))}
-      >
-        <IconMinus className="size-4" />
-      </Button>
-      <span className="font-heading w-8 text-center text-base font-semibold tabular-nums">{value}</span>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-8"
-        disabled={value >= max}
-        aria-label="Aumentar"
-        onClick={() => onChange(Math.min(max, value + 1))}
-      >
-        <IconPlus className="size-4" />
-      </Button>
+    <div className="flex flex-col gap-1.5">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        aria-label="Quantos minutos comprar"
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{
+          background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${percentual}%, var(--muted) ${percentual}%, var(--muted) 100%)`,
+        }}
+        className="accent-primary h-2 w-full cursor-pointer appearance-none rounded-full
+          [&::-webkit-slider-thumb]:size-5 [&::-webkit-slider-thumb]:appearance-none
+          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2
+          [&::-webkit-slider-thumb]:border-background [&::-webkit-slider-thumb]:bg-primary
+          [&::-webkit-slider-thumb]:shadow-sm
+          [&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full
+          [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background
+          [&::-moz-range-thumb]:bg-primary"
+      />
+      <div className="flex justify-between text-[11.5px] text-muted-foreground tabular-nums">
+        <span>{min} min</span>
+        <span>{max} min</span>
+      </div>
     </div>
   )
 }
@@ -108,12 +115,21 @@ function plural(qtd: number | null, umSo: string, varios: string, semLimite: str
 // o cliente consegue comparar de cabeça com o vídeo dele.
 const VIDEO_EXEMPLO_MIN = 30
 
+// Traduz minutos em "quantos vídeos". Abaixo do vídeo de exemplo a divisão dá
+// zero, e "cerca de 0 vídeos" logo acima de um botão de compra parece defeito -
+// então nesse caso a frase muda em vez de mostrar o zero.
+function estimativaVideos(minutos: number) {
+  const quantos = Math.floor(minutos / VIDEO_EXEMPLO_MIN)
+  if (quantos < 1) return `Dá pra processar um vídeo de até ${minutos} minutos.`
+  return `Dá pra processar cerca de ${quantos} vídeo${quantos === 1 ? "" : "s"} de ${VIDEO_EXEMPLO_MIN} minutos.`
+}
+
 export function ClientBillingPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const [data, setData] = useState<ClientBillingOverviewResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
-  const [pacotes, setPacotes] = useState(1)
+  const [minutosAvulsos, setMinutosAvulsos] = useState<number | null>(null)
 
   async function load() {
     const res = await api.get<ClientBillingOverviewResponse>("/api/client/billing/overview")
@@ -149,9 +165,9 @@ export function ClientBillingPage() {
     return runAction(`subscribe-${planKey}`, () => api.post("/api/client/billing/subscribe", { planKey }))
   }
 
-  function buyPackage(bucket: CreditBucket, quantity: number) {
+  function buyPackage(bucket: CreditBucket, minutes: number) {
     return runAction(`package-${bucket}`, () =>
-      api.post("/api/client/billing/buy-package", { bucket, quantity })
+      api.post("/api/client/billing/buy-package", { bucket, minutes })
     )
   }
 
@@ -162,6 +178,12 @@ export function ClientBillingPage() {
   function disableOverageCard() {
     return runAction("overage-disable", () => api.post("/api/client/billing/overage-card/disable"))
   }
+
+  // Os limites da barra só chegam com a resposta da API, então o estado começa
+  // em null e cai no mínimo até lá - assim nenhum valor "chutado" aparece na
+  // tela antes de a gente saber o preço de verdade.
+  const minutos = data ? (minutosAvulsos ?? data.package.minMinutes) : 0
+  const totalAvulso = data ? minutos * data.package.centsPerMinute : 0
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Plano e uso">
@@ -304,46 +326,63 @@ export function ClientBillingPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col gap-4">
-                <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-3.5">
-                  <div>
-                    <div className="text-sm font-medium">Quantos pacotes?</div>
-                    <div className="text-xs text-muted-foreground">
-                      {data.package.minutes} min por {formatCents(data.package.priceCents)} cada
+                <div className="rounded-lg border border-border p-4">
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <div className="text-xs text-muted-foreground">Quantos minutos</div>
+                      <div className="font-heading text-3xl leading-tight font-semibold tabular-nums">
+                        {minutos} min
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-muted-foreground">Você paga</div>
+                      <div className="font-heading text-3xl leading-tight font-semibold tabular-nums">
+                        {formatCents(totalAvulso)}
+                      </div>
                     </div>
                   </div>
-                  <QuantityStepper
-                    value={pacotes}
-                    min={1}
-                    max={data.package.maxQuantity}
-                    onChange={setPacotes}
-                  />
+
+                  <div className="mt-4">
+                    <MinutosSlider
+                      value={minutos}
+                      min={data.package.minMinutes}
+                      max={data.package.maxMinutes}
+                      step={data.package.stepMinutes}
+                      onChange={setMinutosAvulsos}
+                    />
+                  </div>
+
+                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                    {formatCents(data.package.centsPerMinute)} por minuto, o mesmo preço do excedente pela nossa
+                    internet. {estimativaVideos(minutos)}
+                  </p>
                 </div>
 
-                <div className="rounded-lg border border-border bg-muted/40 p-3.5">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-sm text-muted-foreground">Você recebe</span>
-                    <span className="font-heading text-xl font-semibold tabular-nums">
-                      {data.package.minutes * pacotes} min
-                    </span>
-                  </div>
-                  <div className="mt-1 flex items-baseline justify-between">
-                    <span className="text-sm text-muted-foreground">Total</span>
-                    <span className="font-heading text-xl font-semibold tabular-nums">
-                      {formatCents(data.package.priceCents * pacotes)}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    Dá pra processar cerca de {Math.floor((data.package.minutes * pacotes) / VIDEO_EXEMPLO_MIN)}{" "}
-                    vídeos de {VIDEO_EXEMPLO_MIN} minutos.
-                  </p>
+                {/* Atalhos pros valores mais pedidos: arrastar até um número
+                    exato é chato, e a barra sozinha deixava um vazio aqui. */}
+                <div className="flex flex-wrap gap-2">
+                  {[25, 100, 250, 500].map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setMinutosAvulsos(v)}
+                      className={`rounded-full border px-3 py-1.5 text-[13px] font-medium tabular-nums transition-colors ${
+                        minutos === v
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {v} min
+                    </button>
+                  ))}
                 </div>
 
                 <Button
                   className="mt-auto"
                   disabled={busyKey === "package-normal"}
-                  onClick={() => buyPackage("normal", pacotes)}
+                  onClick={() => buyPackage("normal", minutos)}
                 >
-                  Comprar {formatCents(data.package.priceCents * pacotes)}
+                  Comprar {minutos} min por {formatCents(totalAvulso)}
                 </Button>
               </CardContent>
             </Card>

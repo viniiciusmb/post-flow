@@ -11,24 +11,34 @@ const clientCreditsRepository = require('../../../repositories/clientCreditsRepo
 const overageChargesRepository = require('../../../repositories/overageChargesRepository');
 const creditPurchasesRepository = require('../../../repositories/creditPurchasesRepository');
 const creditTransactionsRepository = require('../../../repositories/creditTransactionsRepository');
-const settingsRepository = require('../../../repositories/settingsRepository');
 const usersRepository = require('../../../repositories/usersRepository');
 const stripeService = require('../../../services/stripeService');
 const creditsService = require('../../../services/creditsService');
 
-// Teto de pacotes numa compra so. Nao e regra de negocio: e um limite de
-// sanidade pra que um erro de digitacao (ou um POST montado na mao) nao vire
-// uma cobranca de milhares de reais no cartao de alguem.
-const MAX_PACOTES_POR_COMPRA = 20;
+// Credito avulso: o cliente escolhe MINUTOS numa barra, e o preco por minuto e
+// exatamente o mesmo do excedente pela nossa internet. Isso e de proposito: se
+// comprar adiantado saisse mais caro que estourar a cota, ninguem compraria; se
+// saisse muito mais barato, o excedente viraria pegadinha. Um valor so, vindo
+// de creditsService - mudar a taxa la muda os dois juntos, sem chance de
+// desencontrar.
+const CREDITO_MIN_MINUTOS = 25;
+const CREDITO_PASSO_MINUTOS = 25;
+const CREDITO_MAX_MINUTOS = 1000;
 
-// Quantos pacotes comprar de uma vez. Isolada e exportada porque e ela que
-// separa uma compra legitima de uma cobranca errada: o valor vem da tela, e um
-// POST montado na mao poderia mandar 0, -3, 1e9, "abc" ou 2.7. Sem piso, teto e
-// truncamento, isso viraria credito de graca ou uma fatura absurda no cartao.
-function pacotesPedidos(valorRecebido) {
+function centsPorMinutoAvulso() {
+  return creditsService.OVERAGE_RATE_CENTS_PER_MIN.normal;
+}
+
+// Quantos minutos comprar. Isolada e exportada porque e ela que separa uma
+// compra legitima de uma cobranca errada: o numero vem da tela, e um POST
+// montado na mao poderia mandar 0, -50, 1e9, "abc" ou 37. Sem piso, teto e
+// encaixe no passo, isso viraria credito de graca, uma fatura absurda, ou um
+// valor que nao bate com nenhum dos degraus mostrados na barra.
+function minutosPedidos(valorRecebido) {
   const numero = Number(valorRecebido);
-  if (!Number.isFinite(numero)) return 1;
-  return Math.min(Math.max(Math.trunc(numero), 1), MAX_PACOTES_POR_COMPRA);
+  if (!Number.isFinite(numero)) return CREDITO_MIN_MINUTOS;
+  const emPassos = Math.round(numero / CREDITO_PASSO_MINUTOS) * CREDITO_PASSO_MINUTOS;
+  return Math.min(Math.max(emPassos, CREDITO_MIN_MINUTOS), CREDITO_MAX_MINUTOS);
 }
 
 // Cria o customer na Stripe na primeira vez que o cliente faz qualquer
@@ -60,17 +70,14 @@ function bucketView(credits, key) {
 
 async function overview(req, res) {
   const clientUserId = req.session.user.id;
-  const [subscription, credits, plans, pendingOverage, purchases, recentTransactions, packageMinutes, packagePriceCents] =
-    await Promise.all([
-      clientSubscriptionsRepository.getOrCreate(clientUserId),
-      clientCreditsRepository.getOrCreate(clientUserId),
-      subscriptionPlansRepository.listActive(),
-      overageChargesRepository.listPendingByClient(clientUserId),
-      creditPurchasesRepository.listByClientId(clientUserId, { limit: 10 }),
-      creditTransactionsRepository.listByClientId(clientUserId, { limit: 20 }),
-      settingsRepository.getValue('credit_package_minutes', 100),
-      settingsRepository.getValue('credit_package_price_cents', 4990),
-    ]);
+  const [subscription, credits, plans, pendingOverage, purchases, recentTransactions] = await Promise.all([
+    clientSubscriptionsRepository.getOrCreate(clientUserId),
+    clientCreditsRepository.getOrCreate(clientUserId),
+    subscriptionPlansRepository.listActive(),
+    overageChargesRepository.listPendingByClient(clientUserId),
+    creditPurchasesRepository.listByClientId(clientUserId, { limit: 10 }),
+    creditTransactionsRepository.listByClientId(clientUserId, { limit: 20 }),
+  ]);
 
   res.json({
     stripeConfigured: stripeService.isConfigured(),
@@ -98,7 +105,12 @@ async function overview(req, res) {
       rateCentsBonus: creditsService.OVERAGE_RATE_CENTS_PER_MIN.bonus,
       pendingCents: pendingOverage.reduce((sum, c) => sum + c.amount_cents, 0),
     },
-    package: { minutes: packageMinutes, priceCents: packagePriceCents, maxQuantity: MAX_PACOTES_POR_COMPRA },
+    package: {
+      minMinutes: CREDITO_MIN_MINUTOS,
+      stepMinutes: CREDITO_PASSO_MINUTOS,
+      maxMinutes: CREDITO_MAX_MINUTOS,
+      centsPerMinute: centsPorMinutoAvulso(),
+    },
     recentPurchases: purchases.map((p) => ({
       id: p.id,
       bucket: p.bucket,
@@ -149,8 +161,8 @@ async function subscribe(req, res) {
   res.json({ checkoutUrl: session.url });
 }
 
-// Pacote avulso de credito - preco/tamanho vem da tabela settings (ver
-// migration 039), nao fica fixo no codigo.
+// Compra de credito avulso. O preco NAO e mais um pacote fechado vindo da
+// tabela settings: e minutos x a taxa de excedente (ver as constantes no topo).
 async function buyPackage(req, res) {
   if (!stripeService.isConfigured()) {
     return res.status(400).json({ error: 'Pagamento por cartão ainda não está disponível. Fale com o suporte.' });
@@ -158,15 +170,13 @@ async function buyPackage(req, res) {
 
   const bucket = req.body.bucket === 'bonus' ? 'bonus' : 'normal';
   const clientUserId = req.session.user.id;
-  const [subscription, minutosPorPacote, precoPorPacote] = await Promise.all([
-    clientSubscriptionsRepository.getOrCreate(clientUserId),
-    settingsRepository.getValue('credit_package_minutes', 100),
-    settingsRepository.getValue('credit_package_price_cents', 4990),
-  ]);
+  const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
 
-  const quantidade = pacotesPedidos(req.body.quantity);
-  const minutes = minutosPorPacote * quantidade;
-  const priceCents = precoPorPacote * quantidade;
+  // O valor e recalculado AQUI a partir dos minutos, nunca aceito da tela: se
+  // o preco viesse no corpo da requisicao, daria pra comprar 1000 minutos por
+  // um centavo.
+  const minutes = minutosPedidos(req.body.minutes);
+  const priceCents = minutes * centsPorMinutoAvulso();
 
   const customerId = await resolveStripeCustomerId(clientUserId, subscription);
 
@@ -229,7 +239,10 @@ module.exports = {
   buyPackage,
   setupOverageCard,
   disableOverageCard,
-  // Exportadas pro teste: e a trava que impede uma cobranca errada.
-  pacotesPedidos,
-  MAX_PACOTES_POR_COMPRA,
+  // Exportadas pro teste: sao a trava que impede uma cobranca errada.
+  minutosPedidos,
+  centsPorMinutoAvulso,
+  CREDITO_MIN_MINUTOS,
+  CREDITO_PASSO_MINUTOS,
+  CREDITO_MAX_MINUTOS,
 };
