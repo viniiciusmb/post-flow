@@ -26,6 +26,14 @@ async function listBySourceVideoId(sourceVideoId) {
 // Usado pra servir o arquivo do corte (preview/download) - confere que o
 // corte pertence mesmo ao cliente que esta pedindo (via canal ou video
 // manual), mesma logica de posse do sourceVideosRepository.
+// Sem filtro de dono: só o painel de erros do admin usa (pra descobrir de que
+// vídeo é um corte que falhou). As rotas do cliente continuam obrigadas a usar
+// findByIdOwnedByClient, que é o que garante o isolamento entre contas.
+async function findById(id) {
+  const { rows } = await pool.query('SELECT * FROM clips WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
 async function findByIdOwnedByClient(id, clientUserId) {
   const { rows } = await pool.query(
     `SELECT c.* FROM clips c
@@ -140,6 +148,7 @@ async function countPostedByClientSince(clientUserId, since, until = new Date())
 module.exports = {
   createMany,
   listBySourceVideoId,
+  findById,
   findByIdOwnedByClient,
   findByIdWithChannelOwnedByClient,
   updateStatus,

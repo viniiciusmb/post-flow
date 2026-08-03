@@ -6,6 +6,7 @@ const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRep
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
 const ytDlpService = require('../../services/ytDlpService');
 const queuePriorityService = require('../../services/queuePriorityService');
+const errorReportService = require('../../services/errorReportService');
 const logger = require('../../lib/logger');
 
 const QUEUE_VIDEO_PROCESSING = 'video-processing';
@@ -65,6 +66,9 @@ async function run(boss) {
       }
 
       await youtubeChannelsRepository.updatePollState(channel.id, { lastVideoId: videos[0].videoId });
+      // Voltou a funcionar: fecha o erro sozinho, pra lista do painel nao
+      // encher de problema que ja passou.
+      await errorReportService.clear(errorReportService.OPERACOES.CHANNEL_CHECK, 'youtube_channel', channel.id);
     } catch (err) {
       logger.error(`Falha ao checar o canal "${channel.channel_name}" (id ${channel.id}):`, err.message);
       // Grava a falha no proprio canal. Antes isso ia so pro log do servidor, e
@@ -72,6 +76,13 @@ async function run(boss) {
       await youtubeChannelsRepository
         .markCheckFailed(channel.id, err.message)
         .catch((e) => logger.error(`Nao consegui registrar a falha do canal ${channel.id}:`, e.message));
+      await errorReportService.report({
+        operation: errorReportService.OPERACOES.CHANNEL_CHECK,
+        entityType: 'youtube_channel',
+        entityId: channel.id,
+        clientUserId: channel.client_user_id,
+        error: err,
+      });
     }
   }
 }

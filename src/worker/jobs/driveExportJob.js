@@ -10,6 +10,7 @@ const driveConnectionsRepository = require('../../repositories/driveConnectionsR
 const clipsRepository = require('../../repositories/clipsRepository');
 const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRepository');
 const googleService = require('../../services/googleService');
+const errorReportService = require('../../services/errorReportService');
 const logger = require('../../lib/logger');
 
 async function run() {
@@ -19,6 +20,12 @@ async function run() {
       await exportForChannel(folder);
     } catch (err) {
       logger.error(`Falha na exportacao pro Drive do canal ${folder.youtube_channel_id}:`, err);
+      await errorReportService.report({
+        operation: errorReportService.OPERACOES.DRIVE_EXPORT,
+        entityType: 'youtube_channel',
+        entityId: folder.youtube_channel_id,
+        error: err,
+      });
     }
   }
 }
@@ -44,6 +51,13 @@ async function exportForChannel(folder) {
       logger.info(`Corte ${clip.id} exportado pro Drive do canal ${folder.youtube_channel_id}.`);
     } catch (err) {
       logger.error(`Falha ao exportar o corte ${clip.id} pro Drive:`, err);
+      await errorReportService.report({
+        operation: errorReportService.OPERACOES.DRIVE_EXPORT,
+        entityType: 'clip',
+        entityId: clip.id,
+        clientUserId: channel.client_user_id,
+        error: err,
+      });
     }
   }
 }

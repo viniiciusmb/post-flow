@@ -479,8 +479,13 @@ function VideoRow({
 
       {(video.status === "error" || video.status === "cancelled") && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2">
+          {/* Sem mensagem tecnica aqui. O texto cru do erro nao ajuda quem usa
+              o sistema (e assusta), e agora ele vive inteiro no painel de erros
+              do admin - que e quem consegue fazer algo com ele. */}
           <p className="text-xs text-destructive">
-            {video.errorMessage || "Processamento cancelado."}
+            {video.status === "cancelled"
+              ? "Processamento cancelado."
+              : "Não deu pra processar este vídeo. Já foi registrado no nosso painel."}
           </p>
           <Button
             variant="outline"

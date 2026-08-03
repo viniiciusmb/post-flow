@@ -9,6 +9,7 @@ const postingsRepository = require('../../repositories/postingsRepository');
 const postingScheduleSettingsRepository = require('../../repositories/postingScheduleSettingsRepository');
 const tiktokAccountsRepository = require('../../repositories/tiktokAccountsRepository');
 const tiktokService = require('../../services/tiktokService');
+const errorReportService = require('../../services/errorReportService');
 const logger = require('../../lib/logger');
 
 const AUTO_WINDOW_START_HOUR = 8;
@@ -85,7 +86,7 @@ async function publish(account, posting) {
   if (!posting.local_clip_path || !fs.existsSync(posting.local_clip_path)) {
     await postingsRepository.updateStatus(posting.id, {
       status: 'error',
-      errorMessage: 'Arquivo do corte nao foi encontrado no servidor.',
+      errorMessage: null,
     });
     return;
   }
@@ -143,16 +144,28 @@ async function publish(account, posting) {
         return;
       }
       if (result.failed) {
-        await postingsRepository.updateStatus(posting.id, {
-          status: 'error',
-          errorMessage: result.failReason || 'A TikTok recusou a publicacao.',
+        await postingsRepository.updateStatus(posting.id, { status: 'error', errorMessage: null });
+        await errorReportService.report({
+          operation: errorReportService.OPERACOES.TIKTOK_POSTING,
+          entityType: 'posting',
+          entityId: posting.id,
+          clientUserId: account.client_user_id || null,
+          error: new Error(result.failReason || 'A TikTok recusou a publicacao.'),
         });
         return;
       }
     }
   } catch (err) {
     logger.error(`Falha ao publicar posting ${posting.id} no TikTok:`, err);
-    await postingsRepository.updateStatus(posting.id, { status: 'error', errorMessage: err.message });
+    // Sem mensagem tecnica na tela do cliente - ela vive no painel de erros.
+    await postingsRepository.updateStatus(posting.id, { status: 'error', errorMessage: null });
+    await errorReportService.report({
+      operation: errorReportService.OPERACOES.TIKTOK_POSTING,
+      entityType: 'posting',
+      entityId: posting.id,
+      clientUserId: account.client_user_id || null,
+      error: err,
+    });
   }
 }
 
@@ -171,13 +184,23 @@ async function checkStaleProcessing() {
           tiktokPostId: (result.postIds || [])[0] || null,
         });
       } else if (result.failed) {
-        await postingsRepository.updateStatus(posting.id, {
-          status: 'error',
-          errorMessage: result.failReason || 'A TikTok recusou a publicacao.',
+        await postingsRepository.updateStatus(posting.id, { status: 'error', errorMessage: null });
+        await errorReportService.report({
+          operation: errorReportService.OPERACOES.TIKTOK_POSTING,
+          entityType: 'posting',
+          entityId: posting.id,
+          clientUserId: account.client_user_id || null,
+          error: new Error(result.failReason || 'A TikTok recusou a publicacao.'),
         });
       }
     } catch (err) {
       logger.error(`Falha ao checar status da postagem ${posting.id} no TikTok:`, err);
+      await errorReportService.report({
+        operation: errorReportService.OPERACOES.TIKTOK_POSTING,
+        entityType: 'posting',
+        entityId: posting.id,
+        error: err,
+      });
     }
   }
 }

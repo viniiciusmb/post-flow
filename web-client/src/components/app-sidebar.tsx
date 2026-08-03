@@ -11,6 +11,7 @@ import {
   IconGauge,
   IconRouter,
   IconReceipt2,
+  IconAlertTriangle,
 } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
@@ -47,6 +48,7 @@ const ADMIN_GROUPS: { label?: string; items: NavItem[] }[] = [
       { title: "Métricas", url: "/admin/metrics", icon: IconChartBar },
       { title: "Consumo de banda", url: "/admin/bandwidth", icon: IconGauge },
       { title: "Assinaturas", url: "/admin/billing", icon: IconReceipt2 },
+      { title: "Erros", url: "/admin/errors", icon: IconAlertTriangle },
     ],
   },
   {

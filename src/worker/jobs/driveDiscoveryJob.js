@@ -9,6 +9,7 @@ const postingsRepository = require('../../repositories/postingsRepository');
 const tiktokAccountsRepository = require('../../repositories/tiktokAccountsRepository');
 const driveFolderTiktokTargetsRepository = require('../../repositories/driveFolderTiktokTargetsRepository');
 const googleService = require('../../services/googleService');
+const errorReportService = require('../../services/errorReportService');
 const logger = require('../../lib/logger');
 
 async function run() {
@@ -38,6 +39,13 @@ async function processFolder(folder) {
     files = await googleService.listVideosInFolder(accessToken, folder.drive_folder_id);
   } catch (err) {
     logger.error(`Drive discovery: falha ao listar a pasta "${folder.folder_name || folder.drive_folder_id}":`, err.message);
+    await errorReportService.report({
+      operation: errorReportService.OPERACOES.DRIVE_DISCOVERY,
+      entityType: 'drive_folder',
+      entityId: folder.id,
+      clientUserId: folder.client_user_id || null,
+      error: err,
+    });
     return;
   }
 

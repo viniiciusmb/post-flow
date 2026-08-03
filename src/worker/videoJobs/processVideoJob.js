@@ -7,6 +7,7 @@
 const path = require('path');
 const fs = require('fs');
 const config = require('../../config');
+const errorReportService = require('../../services/errorReportService');
 const logger = require('../../lib/logger');
 const { PausedError, AwaitingCreditsError } = require('../../lib/errors');
 const creditsService = require('../../services/creditsService');
@@ -330,7 +331,14 @@ async function run(sourceVideoId) {
         // desvio, toda pausa durante o render marcava o corte como erro.
         if (err instanceof PausedError) throw err;
         logger.error(`Falha ao renderizar o corte ${clip.id}:`, err);
-        await clipsRepository.updateStatus(clip.id, 'error', { errorMessage: err.message });
+        await clipsRepository.updateStatus(clip.id, 'error', { errorMessage: null });
+        await errorReportService.report({
+          operation: errorReportService.OPERACOES.VIDEO_PROCESSING,
+          entityType: 'clip',
+          entityId: clip.id,
+          clientUserId: sourceVideo.owner_client_user_id || sourceVideo.client_user_id || null,
+          error: err,
+        });
       }
     }
 
@@ -361,7 +369,17 @@ async function run(sourceVideoId) {
     // tinha sido confirmado ou nunca reservado, ver releaseIfReserved).
     await creditsService.releaseIfReserved(sourceVideo.id);
     logger.error(`Falha ao processar o video-fonte ${sourceVideo.id}:`, err);
-    await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', { errorMessage: err.message });
+    // A mensagem tecnica nao vai mais pra tela do cliente - ela vive no painel
+    // de erros do admin. O cliente ve so que o video falhou e pode tentar de
+    // novo; a causa e assunto de quem conserta.
+    await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', { errorMessage: null });
+    await errorReportService.report({
+      operation: errorReportService.OPERACOES.VIDEO_PROCESSING,
+      entityType: 'source_video',
+      entityId: sourceVideo.id,
+      clientUserId: sourceVideo.owner_client_user_id || sourceVideo.client_user_id || null,
+      error: err,
+    });
   } finally {
     // Sempre para o sinal de vida - inclusive nos returns antecipados de
     // pausa/credito. Um interval esquecido continuaria dizendo que o video

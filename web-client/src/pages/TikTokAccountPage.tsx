@@ -753,7 +753,10 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
                 <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                   {item.channelName ?? "Vídeo avulso"} <span className="mx-1">·</span> conta <strong className="font-medium">{accountName}</strong>
                 </p>
-                {item.errorMessage && <p className="mt-0.5 text-xs text-muted-foreground">{item.errorMessage}</p>}
+                {/* Idem: o motivo tecnico fica no painel de erros do admin. */}
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Não deu pra publicar. Já foi registrado no nosso painel.
+                </p>
                 {itemError[item.id] && <p className="mt-0.5 text-xs text-destructive">{itemError[item.id]}</p>}
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <Button

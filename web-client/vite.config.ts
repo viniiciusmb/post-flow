@@ -38,6 +38,7 @@ export default defineConfig({
         bandwidth: path.resolve(__dirname, 'bandwidth.html'),
         'client-billing': path.resolve(__dirname, 'client-billing.html'),
         'admin-billing': path.resolve(__dirname, 'admin-billing.html'),
+        'admin-errors': path.resolve(__dirname, 'admin-errors.html'),
       },
     },
   },

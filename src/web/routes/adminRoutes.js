@@ -17,5 +17,6 @@ router.get('/queue', serveSpaPage('admin-queue'));
 router.get('/metrics', serveSpaPage('admin-metrics'));
 router.get('/bandwidth', serveSpaPage('bandwidth'));
 router.get('/billing', serveSpaPage('admin-billing'));
+router.get('/errors', serveSpaPage('admin-errors'));
 
 module.exports = router;

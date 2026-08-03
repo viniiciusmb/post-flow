@@ -492,3 +492,28 @@ export interface LatestChannelVideo {
 export interface AdminOverageSummaryResponse {
   clients: { clientUserId: number; email: string; businessName: string | null; pendingCents: number; billedCents: number }[]
 }
+
+export interface SystemError {
+  id: number
+  operation: string
+  operationLabel: string
+  entityType: string | null
+  entityLabel: string | null
+  entityId: number | null
+  clientName: string | null
+  message: string
+  detail: string | null
+  occurrences: number
+  firstSeenAt: string
+  lastSeenAt: string
+  status: "aberto" | "retentando" | "resolvido"
+  retryCount: number
+  lastRetryAt: string | null
+  /** false = não é uma operação que dê pra refazer sozinha (backup, teste de conexão). */
+  canRetry: boolean
+}
+
+export interface SystemErrorsResponse {
+  errors: SystemError[]
+  counts: { abertos: number; resolvidos: number; ocorrenciasAbertas: number }
+}

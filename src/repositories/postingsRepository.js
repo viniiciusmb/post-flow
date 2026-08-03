@@ -427,6 +427,13 @@ async function skipOwnedByClient(id, clientUserId) {
   return rows[0] || null;
 }
 
+// Sem filtro de dono: só o painel de erros do admin usa. As rotas do cliente
+// continuam obrigadas a usar findByIdOwnedByClient.
+async function findById(id) {
+  const { rows } = await pool.query('SELECT * FROM postings WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
 module.exports = {
   createIfNotExists,
   listForClient,
@@ -448,6 +455,7 @@ module.exports = {
   retryOwnedByClient,
   countByStatusForAccount,
   countPendingForClient,
+  findById,
   findByIdOwnedByClient,
   updateCaptionOwnedByClient,
   skipOwnedByClient,
