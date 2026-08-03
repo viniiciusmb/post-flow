@@ -191,8 +191,18 @@ function runOnce(args, { timeoutMs = 5 * 60 * 1000, proxyUrl = null, playerClien
 // checagem mais rigoroso", que era o motivo de tentar de novo antes).
 // Devolve tambem QUAL candidato funcionou (usedCandidate) - usado pra
 // registrar consumo de banda por origem no painel "Banda".
-async function run(args, { clientUserId, ...opts } = {}) {
+// allowDirect: acrescenta "sair pelo IP da propria VPS" como ULTIMA tentativa.
+// Vale so pras chamadas leves (listar canal, ler metadados): elas funcionam
+// direto da VPS, enquanto o DOWNLOAD e justamente o que o YouTube bloqueia por
+// IP de datacenter - por isso o download nao ganha esse fallback.
+//
+// Isso conserta uma falha real: a checagem de canal saia obrigatoriamente pelo
+// tunel (a internet de casa do dono do sistema). Com o computador dele
+// desligado, a checagem falhava - e ficava 3 dias sem detectar video novo, sem
+// nenhum aviso, mesmo com o YouTube respondendo normalmente pra VPS.
+async function run(args, { clientUserId, allowDirect = false, ...opts } = {}) {
   const candidates = await getCandidates(clientUserId);
+  if (allowDirect) candidates.push({ type: 'direct', tunnelId: null, url: null });
   const candidatesToTry = candidates.length ? candidates : [{ type: 'direct', tunnelId: null, url: null }];
   const playerClientsToTry = getPlayerClientCandidates();
 
@@ -245,13 +255,23 @@ function parseUploadDate(value) {
 
 // Lista os videos recentes de um canal (modo "flat" - rapido, sem baixar nada).
 async function listChannelVideos(channelUrl, { limit = 15 } = {}) {
-  const { stdout } = await run([
-    '--flat-playlist',
-    '--dump-json',
-    '--playlist-end', String(limit),
-    '--no-warnings',
-    `${channelUrl.replace(/\/$/, '')}/videos`,
-  ]);
+  const { stdout } = await run(
+    [
+      '--flat-playlist',
+      '--dump-json',
+      '--playlist-end', String(limit),
+      '--no-warnings',
+      // Com cookie configurado, o yt-dlp faz uma checagem extra de sessao antes
+      // de listar a playlist do canal. Essa checagem falhava sozinha quando a
+      // conexao oscilava e derrubava a listagem inteira com uma mensagem que
+      // nao tem nada a ver ("Playlists that require authentication...") - o
+      // proprio yt-dlp recomenda pular isso quando nao se baixa conteudo
+      // privado, que e o nosso caso.
+      '--extractor-args', 'youtubetab:skip=authcheck',
+      `${channelUrl.replace(/\/$/, '')}/videos`,
+    ],
+    { allowDirect: true }
+  );
 
   return stdout
     .trim()
@@ -276,7 +296,9 @@ function extractVideoId(url) {
 // Busca so os metadados de um video avulso (sem baixar) - usado quando o
 // cliente cola o link manualmente em vez de vir da checagem de um canal.
 async function getVideoMetadata(url) {
-  const { stdout } = await run(['--dump-json', '--no-warnings', '--no-playlist', '--skip-download', url]);
+  const { stdout } = await run(['--dump-json', '--no-warnings', '--no-playlist', '--skip-download', url], {
+    allowDirect: true,
+  });
   const entry = JSON.parse(stdout.trim().split('\n')[0]);
   return {
     videoId: entry.id,

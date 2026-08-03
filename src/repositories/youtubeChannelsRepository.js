@@ -90,13 +90,39 @@ async function setDriveExportMode(id, clientUserId, mode) {
 
 async function updatePollState(id, { lastVideoId }) {
   await pool.query(
-    'UPDATE youtube_channels SET last_polled_at = now(), last_video_id = COALESCE($2, last_video_id) WHERE id = $1',
+    `UPDATE youtube_channels
+        SET last_polled_at = now(),
+            last_video_id = COALESCE($2, last_video_id),
+            last_check_at = now(),
+            last_check_ok = true,
+            last_check_error = NULL,
+            check_fail_count = 0
+      WHERE id = $1`,
     [id, lastVideoId]
+  );
+}
+
+// Registra que a checagem foi TENTADA e falhou. Separado de updatePollState de
+// proposito: last_polled_at continua sendo "a ultima vez que conseguimos ler o
+// canal de verdade", entao nao pode avancar num erro - senao a tela diria que
+// esta tudo em dia enquanto nenhum video novo e detectado ha dias.
+async function markCheckFailed(id, mensagemDeErro) {
+  await pool.query(
+    `UPDATE youtube_channels
+        SET last_check_at = now(),
+            last_check_ok = false,
+            last_check_error = $2,
+            check_fail_count = check_fail_count + 1
+      WHERE id = $1`,
+    // O erro do yt-dlp vem com paginas de saida; guardar tudo so enche o banco
+    // e a tela. O comeco ja identifica o problema.
+    [id, String(mensagemDeErro || '').slice(0, 500)]
   );
 }
 
 module.exports = {
   listActive,
+  markCheckFailed,
   listByClientId,
   findById,
   countByClientId,

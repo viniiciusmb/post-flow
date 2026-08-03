@@ -20,7 +20,13 @@ async function run(boss) {
       // rapida via --flat-playlist nao traz data de upload nenhuma, sempre
       // null, entao comparar por data nunca detectava nada de verdade).
       const videos = await ytDlpService.listChannelVideos(channel.channel_url, { limit: 15 });
-      if (videos.length === 0) continue;
+      if (videos.length === 0) {
+        // Canal sem video nenhum na listagem. Nao e erro, mas TEM que registrar
+        // a tentativa: sem isso a tela mostra a data da ultima checagem que deu
+        // certo e parece que o agendamento parou.
+        await youtubeChannelsRepository.markCheckFailed(channel.id, 'O canal nao devolveu nenhum video na listagem.');
+        continue;
+      }
 
       let newVideos;
       if (!channel.last_video_id) {
@@ -61,6 +67,11 @@ async function run(boss) {
       await youtubeChannelsRepository.updatePollState(channel.id, { lastVideoId: videos[0].videoId });
     } catch (err) {
       logger.error(`Falha ao checar o canal "${channel.channel_name}" (id ${channel.id}):`, err.message);
+      // Grava a falha no proprio canal. Antes isso ia so pro log do servidor, e
+      // um canal podia passar dias sem ser checado sem ninguem perceber.
+      await youtubeChannelsRepository
+        .markCheckFailed(channel.id, err.message)
+        .catch((e) => logger.error(`Nao consegui registrar a falha do canal ${channel.id}:`, e.message));
     }
   }
 }

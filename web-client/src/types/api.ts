@@ -308,7 +308,14 @@ export interface YoutubeChannel {
   channelUrl: string
   avatarUrl: string | null
   isActive: boolean
+  /** Última vez que conseguimos LER o canal (não avança quando a checagem falha). */
   lastPolledAt: string | null
+  /** Última TENTATIVA de checagem, tenha dado certo ou não. */
+  lastCheckAt: string | null
+  lastCheckOk: boolean | null
+  lastCheckError: string | null
+  /** Falhas seguidas. Zera a cada sucesso. */
+  checkFailCount: number
   exportFolder: { id: string; name: string | null } | null
   driveExportMode: DriveExportMode
   tiktokAccountId: number | null

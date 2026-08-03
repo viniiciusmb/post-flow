@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { IconTrash, IconArrowRight, IconMovie, IconBrandGoogleDrive, IconBrandTiktok } from "@tabler/icons-react"
+import { IconTrash, IconArrowRight, IconMovie, IconBrandGoogleDrive, IconBrandTiktok, IconAlertTriangle } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -170,6 +170,19 @@ function ChannelCard({
               {videos.length > 0 ? `${videos.length} vídeo${videos.length > 1 ? "s" : ""} processado${videos.length > 1 ? "s" : ""}` : "Nenhum vídeo ainda"}
               {channel.lastPolledAt && ` · checado ${new Date(channel.lastPolledAt).toLocaleString("pt-BR")}`}
             </p>
+            {/* A checagem roda a cada 20 min. Quando ela falha, a data acima
+                congela e parece que o sistema parou - por isso o aviso diz o
+                que aconteceu de verdade em vez de deixar o cliente adivinhar. */}
+            {channel.isActive && channel.lastCheckOk === false && (
+              <p className="mt-1 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+                <IconAlertTriangle className="mt-px size-3.5 shrink-0" />
+                <span className="min-w-0">
+                  {channel.checkFailCount > 3
+                    ? `A checagem vem falhando (${channel.checkFailCount} vezes seguidas). Vamos continuar tentando a cada 20 minutos.`
+                    : "A última checagem falhou. Vamos tentar de novo em alguns minutos."}
+                </span>
+              </p>
+            )}
           </div>
           <Button variant="ghost" size="icon-sm" onClick={onRemove} title="Remover canal">
             <IconTrash />
