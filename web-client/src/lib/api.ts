@@ -1,8 +1,16 @@
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  /**
+   * Corpo completo da resposta de erro. A mensagem já vem em `message`; isto
+   * aqui serve pros casos em que o servidor manda uma pista extra que muda o
+   * que a tela faz (ex: `expired: true` na redefinição de senha, que troca o
+   * formulário por "peça um link novo" em vez de deixar tentando de novo).
+   */
+  data: Record<string, unknown>
+  constructor(status: number, message: string, data: Record<string, unknown> = {}) {
     super(message)
     this.status = status
+    this.data = data
   }
 }
 
@@ -34,7 +42,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new ApiError(response.status, data.error || "Erro inesperado.")
+    throw new ApiError(response.status, data.error || "Erro inesperado.", data)
   }
 
   return data as T

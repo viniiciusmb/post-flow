@@ -30,47 +30,70 @@ function GoogleIcon() {
   )
 }
 
-function ProductPreview() {
+export function ProductPreview() {
   return (
-    <div className="relative hidden overflow-hidden border-l border-border/60 bg-[#fbfbfd] lg:flex lg:items-center lg:justify-center lg:p-16">
+    // Coluna de verdade (texto em cima, mockup embaixo) em vez de posicionar o
+    // texto por cima: com posicionamento absoluto o cartão cobria o final do
+    // parágrafo em telas mais baixas.
+    <div className="relative hidden overflow-hidden border-l border-border/60 bg-[#fbfbfd] lg:flex lg:flex-col dark:bg-[#0c0d10] lg:items-center lg:justify-center lg:gap-9 lg:p-16">
       <div className="absolute -top-16 -left-16 size-80 rounded-full bg-indigo-600/10 blur-3xl" />
       <div className="absolute -right-10 -bottom-10 size-72 rounded-full bg-cyan-500/15 blur-3xl" />
 
-      <div className="absolute top-16 left-16 max-w-md">
+      <div className="relative z-10 max-w-md text-center">
         <h2 className="font-heading text-2xl leading-tight font-semibold tracking-tight text-foreground">
           Detecte e poste automaticamente, sem tocar em nada.
         </h2>
         <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
-          Conecte sua conta do Google Drive, o Post Flow detecta vídeos novos e
-          publica no TikTok sozinho.
+          Conecte seu canal do YouTube. A cada vídeo novo, o Post Flow corta os
+          melhores trechos e publica no seu TikTok sozinho.
         </p>
       </div>
 
-      <div className="relative z-10 w-[300px] -rotate-2 rounded-[20px] border border-border bg-white p-4 shadow-[0_30px_60px_-20px_rgba(15,15,40,0.18),0_10px_24px_-12px_rgba(15,15,40,0.08)]">
+      <div className="relative z-10 w-[300px] -rotate-2 rounded-[20px] border border-border bg-white p-4 dark:bg-card shadow-[0_30px_60px_-20px_rgba(15,15,40,0.18),0_10px_24px_-12px_rgba(15,15,40,0.08)]">
         <div className="mb-3.5 flex items-center gap-2.5 border-b border-border/70 pb-3.5">
-          <div className="size-8.5 shrink-0 rounded-full bg-gradient-to-br from-indigo-600 to-cyan-500" />
+          <div className="size-8.5 shrink-0 rounded-full bg-foreground/85" />
           <div>
             <div className="text-[13.5px] font-semibold">@seucanal</div>
             <div className="mt-0.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-green-600">
               <span className="size-1.5 animate-pulse rounded-full bg-green-600" />
-              Monitorando Drive
+              Monitorando canal
             </div>
           </div>
         </div>
 
-        <div className="relative mb-4 aspect-[9/13] w-full overflow-hidden rounded-xl bg-gradient-to-br from-[#14141c] via-[#2a2a38] to-[#1a1a24]">
-          <span className="absolute top-2.5 left-2.5 rounded-full bg-black/55 px-2 py-1 text-[10px] font-semibold text-white">
-            Vídeo novo detectado
+        {/* Corte fictício, no formato que o produto realmente entrega: vertical,
+            com a numeração de parte no topo e a legenda queimada embaixo. É um
+            mockup declarado (nada aqui é foto de cliente real), mas usa a mesma
+            linguagem visual da saída de verdade, então mostra o produto em vez
+            de um retângulo com play. */}
+        <div className="relative mb-4 aspect-[9/13] w-full overflow-hidden rounded-xl bg-[#101014]">
+          {/* "Cena" abstrata: só um clima de estúdio, sem fingir ser uma foto. */}
+          <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_0%,#3a3f52_0%,#191c26_55%,#0e1015_100%)]" />
+          <div className="absolute bottom-[24%] left-1/2 size-28 -translate-x-1/2 rounded-full bg-white/[0.07] blur-xl" />
+
+          <span className="absolute top-2.5 left-2.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[9.5px] font-bold text-white">
+            Parte 1
           </span>
-          <div className="absolute top-1/2 left-1/2 flex size-9.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-white/10">
-            <div className="ml-0.5 h-0 w-0 border-y-[6px] border-l-[10px] border-y-transparent border-l-white" />
+
+          {/* Legenda queimada, no estilo "balão escuro" que existe no produto. */}
+          <div className="absolute inset-x-3 bottom-9 flex flex-col items-center gap-1">
+            <span className="rounded bg-black/85 px-1.5 py-0.5 text-[11px] leading-tight font-extrabold text-white">
+              O ERRO QUE QUASE
+            </span>
+            <span className="rounded bg-black/85 px-1.5 py-0.5 text-[11px] leading-tight font-extrabold text-white">
+              TODO MUNDO COMETE
+            </span>
           </div>
+
+          <span className="absolute right-2.5 bottom-2.5 rounded-full bg-white/12 px-2 py-0.5 text-[9.5px] font-semibold text-white/80">
+            0:38
+          </span>
         </div>
 
         <div className="flex flex-col gap-0.5">
           {[
-            { label: "Vídeo baixado do Drive", state: "done" },
-            { label: "Adicionado à fila de postagem", state: "done" },
+            { label: "Vídeo novo detectado", state: "done" },
+            { label: "Adicionado à fila de processamento", state: "done" },
             { label: "Publicando no TikTok...", state: "active" },
           ].map((step, i) => (
             <div
@@ -86,8 +109,8 @@ function ProductPreview() {
         </div>
       </div>
 
-      <div className="absolute right-10 bottom-24 z-20 flex rotate-3 items-center gap-2 rounded-xl border border-border bg-white px-3.5 py-2.5 text-[12.5px] font-semibold shadow-[0_16px_32px_-12px_rgba(15,15,40,0.16)]">
-        <div className="flex size-5 shrink-0 items-center justify-center rounded-md bg-[#0b0b14]">
+      <div className="absolute right-10 bottom-24 z-20 flex rotate-3 items-center gap-2 rounded-xl border border-border bg-white px-3.5 py-2.5 text-[12.5px] font-semibold dark:bg-card shadow-[0_16px_32px_-12px_rgba(15,15,40,0.16)]">
+        <div className="flex size-5 shrink-0 items-center justify-center rounded-md bg-[#0b0b14] dark:ring-1 dark:ring-white/15">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
             <path
               d="M16.5 3c.3 2.4 1.8 4 4.5 4.2v3c-1.7.1-3.2-.4-4.5-1.4v6.7c0 3.5-2.8 6.3-6.3 6.3S4 18.9 4 15.4s2.8-6.3 6.3-6.3c.4 0 .8 0 1.1.1v3.2c-.4-.1-.7-.2-1.1-.2-1.8 0-3.2 1.4-3.2 3.2s1.4 3.2 3.2 3.2 3.3-1.3 3.3-3.1V3h3.1z"
@@ -209,7 +232,7 @@ export function LoginPage() {
                   />
                   Lembrar de mim
                 </label>
-                <a href="#" className="font-medium text-primary hover:underline">
+                <a href="/esqueci-senha" className="font-medium text-primary hover:underline">
                   Esqueceu a senha?
                 </a>
               </div>

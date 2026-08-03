@@ -90,6 +90,13 @@ const config = {
   // deixar o SDK explodir. Sem required() de proposito: a ausencia dessas
   // variaveis nao pode travar o boot do servidor, so deixa a integracao com
   // a Stripe indisponivel ate configurar.
+  // Envio de e-mail transacional (recuperacao de senha). Sem a chave, o
+  // sistema continua funcionando normalmente e so a recuperacao de senha fica
+  // indisponivel - emailService recusa com mensagem clara em vez de explodir.
+  resend: {
+    apiKey: process.env.RESEND_API_KEY || '',
+  },
+
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY || '',
     publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',

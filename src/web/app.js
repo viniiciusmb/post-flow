@@ -136,7 +136,10 @@ app.use((req, res, next) => {
 // importa: o mais especifico primeiro, o teto geral por ultimo. O webhook da
 // Stripe fica de fora - quem chama e a Stripe, que pode legitimamente mandar
 // varios eventos de uma vez, e a rota ja e autenticada por assinatura.
-app.use(['/login', '/register', '/api/auth/login'], rateLimits.auth);
+app.use(
+  ['/login', '/register', '/api/auth/login', '/api/auth/forgot-password', '/api/auth/reset-password'],
+  rateLimits.auth
+);
 app.use('/api/tunnel', rateLimits.publicApi);
 app.use(['/api/client/billing', '/api/admin/billing'], rateLimits.billing);
 app.use('/api/client/source-videos/upload', rateLimits.upload);
