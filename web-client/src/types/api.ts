@@ -451,7 +451,7 @@ export interface ClientBillingOverviewResponse {
   credits: { normal: CreditBucketView; bonus: CreditBucketView }
   plans: BillingPlan[]
   overage: { rateCentsNormal: number; rateCentsBonus: number; pendingCents: number }
-  package: { minutes: number; priceCents: number }
+  package: { minutes: number; priceCents: number; maxQuantity: number }
   recentPurchases: { id: number; bucket: CreditBucket; minutes: number; amountCents: number; status: string; createdAt: string }[]
   recentTransactions: CreditTransactionView[]
 }

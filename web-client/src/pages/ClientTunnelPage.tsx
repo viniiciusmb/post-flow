@@ -36,12 +36,15 @@ function OsPicker({ onSelect }: { onSelect: (os: Os) => void }) {
         <CardTitle className="text-base">Qual é o sistema do seu computador?</CardTitle>
         <CardDescription>Escolha uma opção pra ver o passo a passo certo pro seu computador.</CardDescription>
       </CardHeader>
+      {/* w-32 nos dois: sem largura fixa, cada botão se ajusta ao próprio texto
+          e "Windows" sai bem maior que "Mac" - dois quadrados de tamanhos
+          diferentes lado a lado. */}
       <CardContent className="flex flex-wrap gap-3">
-        <Button variant="outline" size="lg" className="h-auto flex-col gap-2 px-10 py-5" onClick={() => onSelect("windows")}>
+        <Button variant="outline" size="lg" className="h-auto w-32 flex-col gap-2 px-0 py-5" onClick={() => onSelect("windows")}>
           <WindowsMark className="size-6" />
           <span>Windows</span>
         </Button>
-        <Button variant="outline" size="lg" className="h-auto flex-col gap-2 px-10 py-5" onClick={() => onSelect("mac")}>
+        <Button variant="outline" size="lg" className="h-auto w-32 flex-col gap-2 px-0 py-5" onClick={() => onSelect("mac")}>
           <AppleMark className="size-6" />
           <span>Mac</span>
         </Button>

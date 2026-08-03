@@ -16,6 +16,21 @@ const usersRepository = require('../../../repositories/usersRepository');
 const stripeService = require('../../../services/stripeService');
 const creditsService = require('../../../services/creditsService');
 
+// Teto de pacotes numa compra so. Nao e regra de negocio: e um limite de
+// sanidade pra que um erro de digitacao (ou um POST montado na mao) nao vire
+// uma cobranca de milhares de reais no cartao de alguem.
+const MAX_PACOTES_POR_COMPRA = 20;
+
+// Quantos pacotes comprar de uma vez. Isolada e exportada porque e ela que
+// separa uma compra legitima de uma cobranca errada: o valor vem da tela, e um
+// POST montado na mao poderia mandar 0, -3, 1e9, "abc" ou 2.7. Sem piso, teto e
+// truncamento, isso viraria credito de graca ou uma fatura absurda no cartao.
+function pacotesPedidos(valorRecebido) {
+  const numero = Number(valorRecebido);
+  if (!Number.isFinite(numero)) return 1;
+  return Math.min(Math.max(Math.trunc(numero), 1), MAX_PACOTES_POR_COMPRA);
+}
+
 // Cria o customer na Stripe na primeira vez que o cliente faz qualquer
 // acao de pagamento (assinar, comprar avulso, cadastrar cartao) e guarda o
 // id pra reaproveitar dai em diante.
@@ -83,7 +98,7 @@ async function overview(req, res) {
       rateCentsBonus: creditsService.OVERAGE_RATE_CENTS_PER_MIN.bonus,
       pendingCents: pendingOverage.reduce((sum, c) => sum + c.amount_cents, 0),
     },
-    package: { minutes: packageMinutes, priceCents: packagePriceCents },
+    package: { minutes: packageMinutes, priceCents: packagePriceCents, maxQuantity: MAX_PACOTES_POR_COMPRA },
     recentPurchases: purchases.map((p) => ({
       id: p.id,
       bucket: p.bucket,
@@ -143,11 +158,15 @@ async function buyPackage(req, res) {
 
   const bucket = req.body.bucket === 'bonus' ? 'bonus' : 'normal';
   const clientUserId = req.session.user.id;
-  const [subscription, minutes, priceCents] = await Promise.all([
+  const [subscription, minutosPorPacote, precoPorPacote] = await Promise.all([
     clientSubscriptionsRepository.getOrCreate(clientUserId),
     settingsRepository.getValue('credit_package_minutes', 100),
     settingsRepository.getValue('credit_package_price_cents', 4990),
   ]);
+
+  const quantidade = pacotesPedidos(req.body.quantity);
+  const minutes = minutosPorPacote * quantidade;
+  const priceCents = precoPorPacote * quantidade;
 
   const customerId = await resolveStripeCustomerId(clientUserId, subscription);
 
@@ -204,4 +223,13 @@ async function disableOverageCard(req, res) {
   res.json({ overageCardEnabled: updated.overage_card_enabled });
 }
 
-module.exports = { overview, subscribe, buyPackage, setupOverageCard, disableOverageCard };
+module.exports = {
+  overview,
+  subscribe,
+  buyPackage,
+  setupOverageCard,
+  disableOverageCard,
+  // Exportadas pro teste: e a trava que impede uma cobranca errada.
+  pacotesPedidos,
+  MAX_PACOTES_POR_COMPRA,
+};
