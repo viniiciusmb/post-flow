@@ -2,11 +2,20 @@
 
 <section class="hero">
   <div class="wrap">
-    <h1>Você grava uma vez.<br>O resto acontece sozinho.</h1>
+    <p class="selo-hero">
+      <%- include('../partials/logo-youtube') %>
+      YouTube
+      <span class="selo-seta" aria-hidden="true">→</span>
+      <%- include('../partials/logo-tiktok') %>
+      TikTok
+      <span class="selo-texto">100% automático</span>
+    </p>
+
+    <h1>Você grava uma vez.<br>O resto acontece <em>sozinho</em>.</h1>
     <p class="lead">
-      O Post Flow acompanha o seu canal do YouTube, encontra os melhores trechos de cada vídeo
-      novo, corta no formato vertical com legenda e publica no seu TikTok. Você configura uma vez
-      e volta a fazer o que já fazia.
+      Publicou no YouTube, o Post Flow percebe na hora. Ele baixa o vídeo, a IA lê a transcrição
+      inteira e escolhe os melhores trechos, corta no vertical com legenda queimada e publica no
+      seu TikTok. <strong>Sem você abrir editor, sem você abrir o TikTok.</strong>
     </p>
     <div class="cta-linha">
       <a class="btn btn-primary btn-lg" href="/register">Criar conta</a>
@@ -34,6 +43,38 @@
             alt="A mesma tela de cortes aberta no celular"
             width="1170" height="2532">
         </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="secao secao-fluxo">
+  <div class="wrap">
+    <div class="fluxo">
+      <div class="fluxo-passo fluxo-youtube">
+        <span class="fluxo-marca"><%- include('../partials/logo-youtube') %></span>
+        <h3>Você publica no YouTube</h3>
+        <p>Um vídeo longo: podcast, live, aula, entrevista. Do jeito que você já faz hoje.</p>
+      </div>
+
+      <span class="fluxo-seta" aria-hidden="true">
+        <svg viewBox="0 0 40 12"><path d="M0 6h33M28 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+
+      <div class="fluxo-passo fluxo-postflow">
+        <span class="fluxo-marca fluxo-marca-pf"><%- include('../partials/brand-mark') %></span>
+        <h3>O Post Flow faz o trabalho</h3>
+        <p>Detecta, transcreve, escolhe os trechos, corta no vertical e legenda. Sem ninguém clicar em nada.</p>
+      </div>
+
+      <span class="fluxo-seta" aria-hidden="true">
+        <svg viewBox="0 0 40 12"><path d="M0 6h33M28 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+
+      <div class="fluxo-passo fluxo-tiktok">
+        <span class="fluxo-marca"><%- include('../partials/logo-tiktok') %></span>
+        <h3>Sai no seu TikTok</h3>
+        <p>Publicado direto no seu perfil, no horário que você escolheu. Você só acompanha.</p>
       </div>
     </div>
   </div>
@@ -82,7 +123,7 @@
   </div>
 </section>
 
-<section class="secao secao-mist">
+<section class="secao secao-mist" id="recursos">
   <div class="wrap">
     <div class="narrow" style="margin-bottom: 3rem">
       <p class="eyebrow">O que dá pra fazer</p>
@@ -200,75 +241,54 @@
   </div>
 </section>
 
-<section class="secao">
+<section class="secao" id="perguntas">
   <div class="wrap">
     <div class="narrow" style="margin-bottom: 2.5rem">
       <p class="eyebrow">Perguntas frequentes</p>
       <h2>O que costumam perguntar</h2>
     </div>
 
+    <%#
+      As perguntas vêm do controller, do mesmo array que gera o FAQPage nos
+      dados estruturados. Escrever nos dois lugares garantiria que um dia iam
+      divergir - e resposta diferente da que está na página é justamente o que
+      faz o Google desconfiar do dado estruturado.
+    %>
     <div class="faq">
-      <div>
-        <h3>O Post Flow serve para cortar vídeo de outra pessoa?</h3>
-        <p>
-          Não. A ferramenta existe para quem já produz o próprio conteúdo e quer automatizar a
-          etapa de recortar e publicar. Você declara, ao usar o serviço, que tem direito sobre o
-          material que manda processar. Não moderamos conteúdo antes da publicação e não nos
-          responsabilizamos por uso indevido de material de terceiros. Está escrito nos
-          <a href="/termos" style="color:var(--signal)">Termos de Uso</a>.
-        </p>
-      </div>
-      <div>
-        <h3>Preciso dar minha senha do YouTube ou do TikTok?</h3>
-        <p>
-          Não. A conexão com o TikTok e com o Google Drive usa o login oficial de cada plataforma.
-          Você autoriza na tela deles e o Post Flow nunca vê sua senha. Dá para revogar quando
-          quiser, aqui no painel ou nas configurações da sua conta.
-        </p>
-      </div>
-      <div>
-        <h3>O que exatamente vocês acessam no meu Google Drive?</h3>
-        <p>
-          Duas pastas, ambas escolhidas por você: uma de onde o sistema pode ler vídeos para
-          processar, e outra onde ele grava os cortes prontos. Nada fora dessas pastas. Os detalhes
-          estão na <a href="/privacidade" style="color:var(--signal)">Política de Privacidade</a>.
-        </p>
-      </div>
-      <div>
-        <h3>Os cortes ficam guardados para sempre?</h3>
-        <p>
-          Não. Depois de publicados eles são apagados do nosso servidor automaticamente, num prazo
-          que você define. Se quiser guardar, use a exportação para o Google Drive, onde os
-          arquivos ficam com você.
-        </p>
-      </div>
-      <div>
-        <h3>O vídeo sai publicado direto ou preciso confirmar?</h3>
-        <p>
-          Depende do estágio de aprovação do nosso aplicativo junto ao TikTok. Hoje o corte chega
-          nos seus rascunhos do aplicativo do TikTok para você dar o toque final. Quando a
-          publicação direta for liberada, ela passa a valer sem você precisar mudar nada.
-        </p>
-      </div>
-      <div>
-        <h3>Posso cancelar quando quiser?</h3>
-        <p>
-          Pode, sem multa e sem falar com ninguém. O acesso continua até o fim do período já pago.
-          Para apagar a conta e todos os dados, é só escrever para
-          <a href="mailto:<%= contact.supportEmail %>" style="color:var(--signal)"><%= contact.supportEmail %></a>.
-        </p>
-      </div>
+      <% perguntas.forEach(function (item) { %>
+        <details class="faq-item">
+          <summary>
+            <%= item.p %>
+            <svg class="faq-seta" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </summary>
+          <p><%= item.r %></p>
+        </details>
+      <% }); %>
     </div>
+
+    <p class="faq-rodape">
+      Ficou alguma dúvida? Escreva para
+      <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a> —
+      respondemos <%= contact.responseTime %>.
+    </p>
   </div>
 </section>
 
-<section class="secao secao-mist" style="text-align:center">
+<section class="secao secao-final">
   <div class="wrap">
-    <h2>Conecte um canal e veja o primeiro corte sair</h2>
-    <p style="color:var(--muted); max-width:34rem; margin:0 auto 2.25rem">
-      A configuração leva alguns minutos. Depois disso o sistema trabalha sem você.
-    </p>
-    <a class="btn btn-primary btn-lg" href="/register">Criar conta</a>
+    <div class="final-caixa">
+      <p class="eyebrow" style="color:rgba(255,255,255,.6)">Comece hoje</p>
+      <h2>Cole o link do seu canal e veja o primeiro corte sair</h2>
+      <p>
+        A configuração leva alguns minutos. Depois disso, todo vídeo novo do seu canal vira corte
+        publicado sem você tocar em nada.
+      </p>
+      <div class="cta-linha" style="justify-content:center">
+        <a class="btn btn-invertido btn-lg" href="/register">Criar conta</a>
+        <a class="btn btn-fantasma-claro btn-lg" href="/contato">Falar com a gente</a>
+      </div>
+      <p class="final-nota">Sem fidelidade. Cancele quando quiser.</p>
+    </div>
   </div>
 </section>
 

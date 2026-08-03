@@ -3,14 +3,94 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <%#
+    SEO e AEO/GEO (o que faz uma IA entender e citar o site).
+    Regras que valem pra toda página pública:
+      - `title` e `description` são passados por cada controller. Nada de texto
+        genérico repetido: página com o mesmo título de outra compete consigo
+        mesma na busca.
+      - `canonical` sempre absoluto. Sem ele, a mesma página acessível com e sem
+        barra final, ou com parâmetro de campanha, vira várias páginas duplicadas
+        aos olhos do buscador.
+      - Open Graph e Twitter existem pro link ter cara de coisa séria quando
+        alguém cola no WhatsApp, no X ou no Slack.
+  %>
   <title><%= title %> · Post Flow</title>
   <meta name="description" content="<%= locals.metaDescription || 'O Post Flow acompanha seu canal do YouTube, corta os melhores trechos com IA e publica no seu TikTok automaticamente.' %>">
+  <link rel="canonical" href="<%= locals.canonical || 'https://postflowtiktok.com' + (typeof pageUrl !== 'undefined' ? pageUrl : '/') %>">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Post Flow">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:title" content="<%= locals.ogTitle || title + ' · Post Flow' %>">
+  <meta property="og:description" content="<%= locals.metaDescription || 'Cortes automáticos do seu canal do YouTube publicados no seu TikTok.' %>">
+  <meta property="og:url" content="<%= locals.canonical || 'https://postflowtiktok.com' + (typeof pageUrl !== 'undefined' ? pageUrl : '/') %>">
+  <meta property="og:image" content="https://postflowtiktok.com/img/og/post-flow-og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Post Flow: do vídeo do YouTube ao corte publicado no TikTok, automático.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="<%= locals.ogTitle || title + ' · Post Flow' %>">
+  <meta name="twitter:description" content="<%= locals.metaDescription || 'Cortes automáticos do seu canal do YouTube publicados no seu TikTok.' %>">
+  <meta name="twitter:image" content="https://postflowtiktok.com/img/og/post-flow-og.png">
+
   <%# Páginas públicas são só no tema claro - ver o comentário no topo de public.css. %>
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/img/marca/post-flow-logo-256.png">
   <link rel="preload" href="/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/inter-600.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/css/public.css">
+
+  <%#
+    Dados estruturados. É o que permite a uma IA (e ao Google) responder "o que
+    é o Post Flow, quanto custa, quem é o dono" sem ter que adivinhar lendo o
+    texto. Vai em toda página porque a identidade da empresa vale em todas;
+    schema específico de página (preço, FAQ) cada página adiciona por conta.
+  %>
+  <script type="application/ld+json">
+  <%- JSON.stringify({
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Organization',
+        '@id': 'https://postflowtiktok.com/#organizacao',
+        name: 'Post Flow',
+        legalName: 'Kleos Digital LTDA',
+        url: 'https://postflowtiktok.com',
+        logo: 'https://postflowtiktok.com/img/marca/post-flow-logo-512.png',
+        email: 'contato@postflowtiktok.com',
+        taxID: '62.111.132/0001-48',
+        address: {
+          '@type': 'PostalAddress',
+          streetAddress: 'Rua Mistral, 332, Edif. The Point, sala 209A, Despraiado',
+          addressLocality: 'Cuiabá',
+          addressRegion: 'MT',
+          postalCode: '78048-222',
+          addressCountry: 'BR'
+        },
+        contactPoint: {
+          '@type': 'ContactPoint',
+          contactType: 'Atendimento ao cliente',
+          email: 'contato@postflowtiktok.com',
+          availableLanguage: ['Portuguese']
+        }
+      },
+      {
+        '@type': 'WebSite',
+        '@id': 'https://postflowtiktok.com/#site',
+        url: 'https://postflowtiktok.com',
+        name: 'Post Flow',
+        inLanguage: 'pt-BR',
+        publisher: { '@id': 'https://postflowtiktok.com/#organizacao' }
+      }
+    ]
+  }) %>
+  </script>
+
+  <%- locals.structuredData || '' %>
 </head>
 <body>
   <header class="topbar" id="topbar">
@@ -21,8 +101,9 @@
       </a>
       <nav class="topnav">
         <a class="so-desktop" href="/#como-funciona">Como funciona</a>
+        <a class="so-desktop" href="/#recursos">Recursos</a>
         <a class="so-desktop" href="/#planos">Planos</a>
-        <a class="so-desktop" href="/contato">Contato</a>
+        <a class="so-desktop" href="/#perguntas">Dúvidas</a>
         <% if (currentUser) { %>
           <a class="btn btn-primary" href="<%= currentUser.role === 'admin' ? '/admin' : '/client' %>">Meu painel</a>
         <% } else { %>

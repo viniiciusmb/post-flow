@@ -93,6 +93,14 @@
   --mist: #fafafa;
   --mist-2: #f4f4f5;
   --signal: #2f54eb;
+  /* Cor entra em conta-gotas, e sempre significando alguma coisa: vermelho é
+     YouTube, ciano/rosa é TikTok, índigo é o Post Flow. Fundo colorido chapado
+     numa página que mostra vídeo colorido brigaria com o próprio produto. */
+  --yt: #ff0000;
+  --tt-ciano: #25f4ee;
+  --tt-rosa: #fe2c55;
+  --acento: #4f46e5;
+  --acento-lavagem: #eef0ff;
   --success-ink: #15803d;
   --radius: 0.5rem;
   --max: 1140px;
@@ -934,3 +942,207 @@ strong {
   line-height: 1.6;
   color: var(--muted);
 }
+
+
+/* ============================================================
+   Marcas das plataformas, selo do hero e o fluxo YouTube → TikTok
+   ============================================================ */
+
+.marca-plataforma {
+  height: 1em;
+  width: auto;
+  display: block;
+  flex: none;
+}
+
+/* Selo acima do título: diz em dois ícones o que a página inteira explica. */
+.selo-hero {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 auto 1.5rem;
+  padding: 0.4rem 0.85rem 0.4rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: 0 1px 2px rgba(8, 9, 10, 0.04);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.selo-hero .marca-plataforma { height: 0.95em; }
+.selo-seta { color: var(--muted); }
+.selo-texto {
+  margin-left: 0.35rem;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--line);
+  color: var(--acento);
+}
+
+.hero h1 em {
+  font-style: normal;
+  /* O sublinhado sai por baixo da linha de base, então não corta a perna do
+     "z" nem do "g" como um border-bottom cortaria. */
+  background-image: linear-gradient(transparent 62%, var(--acento-lavagem) 62%);
+}
+
+/* ---------- fluxo em três etapas ---------- */
+
+.secao-fluxo {
+  padding-top: 0;
+}
+.fluxo {
+  display: grid;
+  gap: 1rem;
+  align-items: stretch;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 900px) {
+  .fluxo {
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 1.25rem;
+  }
+}
+
+.fluxo-passo {
+  position: relative;
+  padding: 1.75rem 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow: 0 1px 2px rgba(8, 9, 10, 0.03);
+}
+/* Uma faixa fina no topo com a cor da plataforma. É o suficiente pra saber de
+   qual etapa se trata sem ler - e não colore o cartão inteiro. */
+.fluxo-passo::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  border-radius: 14px 14px 0 0;
+  background: var(--cor-etapa, var(--line));
+}
+.fluxo-youtube { --cor-etapa: var(--yt); }
+.fluxo-postflow { --cor-etapa: var(--acento); }
+.fluxo-tiktok { --cor-etapa: linear-gradient(90deg, var(--tt-ciano), var(--tt-rosa)); }
+
+.fluxo-marca {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--mist);
+  font-size: 1.4rem;
+}
+.fluxo-marca svg { width: 1.4rem; height: auto; }
+.fluxo-marca-pf { background: var(--ink); color: var(--paper); }
+.fluxo-marca-pf svg { width: 1.15rem; }
+
+.fluxo-passo h3 { margin-bottom: 0.4rem; }
+.fluxo-passo p {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.fluxo-seta {
+  display: none;
+  align-self: center;
+  color: var(--line);
+}
+.fluxo-seta svg { width: 2.5rem; height: auto; display: block; }
+@media (min-width: 900px) {
+  .fluxo-seta { display: block; }
+}
+
+/* ---------- perguntas frequentes ---------- */
+
+.faq {
+  display: grid;
+  gap: 0;
+  max-width: 48rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.faq-item + .faq-item { border-top: 1px solid var(--line); }
+
+.faq-item summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.15rem 1.35rem;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: -0.015em;
+  transition: background-color 0.15s ease;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary:hover { background: var(--mist); }
+.faq-seta {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.2s ease;
+}
+.faq-item[open] .faq-seta { transform: rotate(180deg); }
+.faq-item[open] summary { background: var(--mist); }
+
+.faq-item p {
+  margin: 0;
+  padding: 0 1.35rem 1.35rem;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.faq-rodape {
+  margin-top: 1.75rem;
+  font-size: 0.9375rem;
+  color: var(--muted);
+}
+.faq-rodape a { color: var(--signal); }
+
+/* ---------- fechamento ---------- */
+
+.final-caixa {
+  padding: clamp(2.5rem, 6vw, 4.5rem) clamp(1.5rem, 4vw, 3rem);
+  border-radius: 20px;
+  background: var(--ink);
+  color: #fff;
+  text-align: center;
+}
+.final-caixa h2 { color: #fff; }
+.final-caixa > p {
+  max-width: 34rem;
+  margin: 0 auto 2rem;
+  color: rgba(255, 255, 255, 0.66);
+}
+.final-nota {
+  margin: 1.5rem 0 0;
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.btn-invertido {
+  background: #fff;
+  color: var(--ink);
+  border-color: #fff;
+}
+.btn-invertido:hover { background: rgba(255, 255, 255, 0.88); }
+
+.btn-fantasma-claro {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.24);
+}
+.btn-fantasma-claro:hover { background: rgba(255, 255, 255, 0.08); }
