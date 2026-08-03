@@ -989,7 +989,10 @@ strong {
 /* ---------- fluxo em três etapas ---------- */
 
 .secao-fluxo {
-  padding-top: 0;
+  /* Um respiro só, não a distância cheia entre seções: o fluxo é a legenda da
+     imagem do hero, não um assunto novo. Colado nela (como estava, com
+     padding-top zero) os cartões pareciam parte do notebook. */
+  padding-top: clamp(3.5rem, 7vw, 5.5rem);
 }
 .fluxo {
   display: grid;
