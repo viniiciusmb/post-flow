@@ -9,7 +9,7 @@ const fs = require('fs');
 const config = require('../../config');
 const errorReportService = require('../../services/errorReportService');
 const logger = require('../../lib/logger');
-const { PausedError, AwaitingCreditsError } = require('../../lib/errors');
+const { PausedError, AwaitingCreditsError, ChargeFailedError } = require('../../lib/errors');
 const creditsService = require('../../services/creditsService');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../repositories/clipsRepository');
@@ -124,6 +124,9 @@ async function run(sourceVideoId) {
       if (uploadCharge.outcome === 'blocked') {
         throw new AwaitingCreditsError('Sem credito disponivel pra processar este upload.');
       }
+      if (uploadCharge.outcome === 'charge_failed') {
+        throw new ChargeFailedError(uploadCharge.motivo);
+      }
       fs.mkdirSync(workDir, { recursive: true });
     } else if (videoPath && fs.existsSync(videoPath)) {
       // Ja baixado numa execucao anterior (retomando de uma pausa) - pula o
@@ -134,6 +137,12 @@ async function run(sourceVideoId) {
       const reserveOutcome = await creditsService.reserveBeforeDownload(sourceVideo, clientUserId);
       if (reserveOutcome.outcome === 'blocked') {
         throw new AwaitingCreditsError('Sem credito disponivel pra baixar este video.');
+      }
+      // Cartao recusado: nada foi processado ainda, entao o video so espera.
+      // Cobrar ANTES e o que garante isso - se a cobranca fosse depois, o custo
+      // do download e da IA ja teria sido gasto sem como recuperar.
+      if (reserveOutcome.outcome === 'charge_failed') {
+        throw new ChargeFailedError(reserveOutcome.motivo);
       }
 
       await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
@@ -361,7 +370,25 @@ async function run(sourceVideoId) {
     }
     if (err instanceof AwaitingCreditsError) {
       logger.info(`Video-fonte ${sourceVideo.id} aguardando credito - ${err.message}`);
-      await sourceVideosRepository.updateStatus(sourceVideo.id, 'aguardando_creditos');
+      await sourceVideosRepository.updateStatus(sourceVideo.id, 'aguardando_creditos', {
+        billingBlockReason: 'sem_credito',
+      });
+      return;
+    }
+    if (err instanceof ChargeFailedError) {
+      logger.warn(`Video-fonte ${sourceVideo.id} parado: cobranca recusada - ${err.message}`);
+      await sourceVideosRepository.updateStatus(sourceVideo.id, 'aguardando_creditos', {
+        billingBlockReason: 'cobranca_falhou',
+      });
+      // Vai pro painel de erros do admin com o motivo tecnico da recusa; o
+      // cliente ve so "nao consegui cobrar seu cartao".
+      await errorReportService.report({
+        operation: errorReportService.OPERACOES.CREDIT_CHARGE,
+        entityType: 'source_video',
+        entityId: sourceVideo.id,
+        clientUserId,
+        error: err,
+      });
       return;
     }
     // Download nao chegou a completar (ou qualquer outra falha antes da

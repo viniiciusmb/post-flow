@@ -12,6 +12,7 @@ const creditTransactionsRepository = require('../repositories/creditTransactions
 const overageChargesRepository = require('../repositories/overageChargesRepository');
 const downloadTunnelsRepository = require('../repositories/downloadTunnelsRepository');
 const usersRepository = require('../repositories/usersRepository');
+const stripeService = require('./stripeService');
 const logger = require('../lib/logger');
 const { ROLES } = require('../config/constants');
 
@@ -44,6 +45,28 @@ function bucketForEgressType(egressType) {
 async function resolveBucketForClient(clientUserId) {
   const hasTunnel = await downloadTunnelsRepository.hasConnectedClientTunnel(clientUserId);
   return hasTunnel ? 'bonus' : 'normal';
+}
+
+// Cobra um video avulso no cartao ja salvo. Isolada porque e o unico ponto do
+// sistema que tira dinheiro sem ninguem clicar em nada - tudo que ela precisa
+// conferir fica visivel aqui.
+async function cobrarAgora({ subscription, clientUserId, sourceVideo, minutes, amountCents }) {
+  if (!stripeService.isConfigured()) {
+    return { ok: false, motivo: 'Cobranca por cartao ainda nao esta configurada no sistema.' };
+  }
+  if (!subscription.stripe_customer_id || !subscription.stripe_default_payment_method_id) {
+    return { ok: false, motivo: 'Nao ha cartao salvo pra cobrar.' };
+  }
+
+  return stripeService.chargeNow({
+    customerId: subscription.stripe_customer_id,
+    paymentMethodId: subscription.stripe_default_payment_method_id,
+    amountCents,
+    description: `Post Flow - processamento de ${minutes} min de video`,
+    // Amarra a cobranca ao video, pra conferir depois no painel da Stripe de
+    // onde veio cada valor.
+    metadata: { clientUserId: String(clientUserId), sourceVideoId: String(sourceVideo.id) },
+  });
 }
 
 // Chamado antes de iniciar o download de verdade (video de canal ou link
@@ -88,10 +111,33 @@ async function reserveBeforeDownload(sourceVideo, clientUserId) {
   }
 
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  if (subscription.overage_card_enabled) {
-    return { outcome: 'overage', bucket, minutes };
+  if (!subscription.overage_card_enabled) return { outcome: 'blocked' };
+
+  // Sem saldo, mas com cartao cadastrado: cobra AGORA, antes de processar.
+  //
+  // Antes o excedente era acumulado e faturado depois, de hora em hora. Isso
+  // significava processar primeiro e cobrar torcendo pra dar certo - se o
+  // cartao fosse recusado, o custo (download, transcricao, IA, render) ja tinha
+  // sido gasto e nao havia como desfazer. Cobrando antes, o pior caso e o video
+  // esperar, nao o prejuizo.
+  const rateCentsPerMin = OVERAGE_RATE_CENTS_PER_MIN[bucket];
+  const amountCents = Math.round(minutes * rateCentsPerMin);
+  const cobranca = await cobrarAgora({ subscription, clientUserId, sourceVideo, minutes, amountCents });
+
+  if (!cobranca.ok) {
+    logger.warn(`Cobranca do video ${sourceVideo.id} recusada: ${cobranca.motivo}`);
+    return { outcome: 'charge_failed', motivo: cobranca.motivo, amountCents };
   }
-  return { outcome: 'blocked' };
+
+  await overageChargesRepository.createAlreadyPaid({
+    clientUserId,
+    sourceVideoId: sourceVideo.id,
+    bucket,
+    minutes,
+    rateCentsPerMin,
+    stripePaymentIntentId: cobranca.id,
+  });
+  return { outcome: 'charged', bucket, minutes, amountCents };
 }
 
 // Chamado depois que o download terminou com sucesso, quando
@@ -106,16 +152,9 @@ async function confirmAfterDownload(sourceVideo, clientUserId, reserveOutcome, d
 
   const realBucket = bucketForEgressType(downloadResult.egressType);
 
-  if (reserveOutcome.outcome === 'overage') {
-    await overageChargesRepository.create({
-      clientUserId,
-      sourceVideoId: sourceVideo.id,
-      bucket: realBucket,
-      minutes: reserveOutcome.minutes,
-      rateCentsPerMin: OVERAGE_RATE_CENTS_PER_MIN[realBucket],
-    });
-    return;
-  }
+  // O excedente ja foi cobrado no cartao ANTES do download (ver
+  // reserveBeforeDownload), entao nao ha nada a faturar aqui.
+  if (reserveOutcome.outcome === 'charged') return;
 
   // outcome === 'reserved'
   if (reserveOutcome.bucket === realBucket) {
@@ -172,6 +211,8 @@ async function releaseIfReserved(sourceVideoId) {
 // sempre bolso normal (Whisper/Claude/ffmpeg continuam custando mesmo sem
 // egress de banda), reserva e confirma no mesmo instante.
 async function chargeForUpload(sourceVideo, clientUserId) {
+  if (await isento(clientUserId)) return { outcome: 'isento' };
+
   const existing = await creditTransactionsRepository.findBySourceVideoId(sourceVideo.id);
   if (existing && existing.status === 'confirmado') return { outcome: 'already_charged' };
 
@@ -192,17 +233,27 @@ async function chargeForUpload(sourceVideo, clientUserId) {
   }
 
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  if (subscription.overage_card_enabled) {
-    await overageChargesRepository.create({
-      clientUserId,
-      sourceVideoId: sourceVideo.id,
-      bucket: 'normal',
-      minutes,
-      rateCentsPerMin: OVERAGE_RATE_CENTS_PER_MIN.normal,
-    });
-    return { outcome: 'overage' };
+  if (!subscription.overage_card_enabled) return { outcome: 'blocked' };
+
+  // Mesma regra do video de canal: cobra antes de processar (ver
+  // reserveBeforeDownload). Aqui o arquivo ja esta em disco, mas o caro vem
+  // depois - transcricao, IA e render.
+  const amountCents = Math.round(minutes * OVERAGE_RATE_CENTS_PER_MIN.normal);
+  const cobranca = await cobrarAgora({ subscription, clientUserId, sourceVideo, minutes, amountCents });
+  if (!cobranca.ok) {
+    logger.warn(`Cobranca do upload ${sourceVideo.id} recusada: ${cobranca.motivo}`);
+    return { outcome: 'charge_failed', motivo: cobranca.motivo, amountCents };
   }
-  return { outcome: 'blocked' };
+
+  await overageChargesRepository.createAlreadyPaid({
+    clientUserId,
+    sourceVideoId: sourceVideo.id,
+    bucket: 'normal',
+    minutes,
+    rateCentsPerMin: OVERAGE_RATE_CENTS_PER_MIN.normal,
+    stripePaymentIntentId: cobranca.id,
+  });
+  return { outcome: 'charged', bucket: 'normal', minutes, amountCents };
 }
 
 module.exports = {

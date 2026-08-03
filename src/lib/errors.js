@@ -11,4 +11,15 @@ class PausedError extends Error {}
 // automatico, fica parado ate o cliente comprar avulso ou ligar o cartao).
 class AwaitingCreditsError extends Error {}
 
-module.exports = { PausedError, AwaitingCreditsError };
+// Cartao recusado na cobranca do video. Separado de AwaitingCreditsError
+// porque a saida pro cliente e outra: la e comprar credito, aqui e trocar o
+// cartao. Carrega o motivo pra ele aparecer no painel de erros do admin.
+class ChargeFailedError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ChargeFailedError';
+  }
+}
+
+module.exports = {
+  ChargeFailedError, PausedError, AwaitingCreditsError };

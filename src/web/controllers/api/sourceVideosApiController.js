@@ -70,6 +70,7 @@ async function list(req, res) {
       durationSeconds: v.duration_seconds,
       status: v.status,
       errorMessage: v.error_message,
+      billingBlockReason: v.billing_block_reason,
       clipCount: v.clip_count,
       readyClipCount: v.ready_clip_count,
       processingStartedAt: v.processing_started_at,

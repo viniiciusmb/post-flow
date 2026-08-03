@@ -184,6 +184,37 @@ async function createInvoiceItemsAndPay({ customerId, paymentMethodId, items }) 
   return stripe.invoices.pay(finalized.id, { off_session: true });
 }
 
+// Cobranca imediata de UM video, no cartao ja salvo, sem ninguem na frente da
+// tela. Diferente de createInvoiceItemsAndPay (que junta o excedente acumulado
+// numa fatura): aqui e um pagamento so, avulso, cobrado ANTES de processar.
+//
+// Devolve { ok, id, motivo }. Nao lanca excecao em recusa de cartao: cartao
+// recusado e um resultado esperado do fluxo (o video fica esperando e o cliente
+// e avisado), nao um erro de programa.
+async function chargeNow({ customerId, paymentMethodId, amountCents, description, metadata = {} }) {
+  const stripe = getClient();
+  try {
+    const intent = await stripe.paymentIntents.create({
+      customer: customerId,
+      payment_method: paymentMethodId,
+      amount: amountCents,
+      currency: 'brl',
+      description,
+      metadata,
+      // Ninguem esta olhando a tela: se o banco pedir confirmacao (3-D Secure),
+      // nao ha como responder. A Stripe entao recusa com um erro claro em vez
+      // de deixar o pagamento pendurado esperando alguem que nao vai aparecer.
+      off_session: true,
+      confirm: true,
+    });
+    if (intent.status === 'succeeded') return { ok: true, id: intent.id };
+    return { ok: false, id: intent.id, motivo: `Pagamento ficou em "${intent.status}".` };
+  } catch (err) {
+    // Recusa de cartao chega como excecao no SDK, mas e resultado, nao falha.
+    return { ok: false, id: err.raw?.payment_intent?.id || null, motivo: err.message };
+  }
+}
+
 async function createProductAndPrice({ name, priceCents, intervalMonths }) {
   const stripe = getClient();
   const product = await stripe.products.create({ name });
@@ -197,6 +228,7 @@ async function createProductAndPrice({ name, priceCents, intervalMonths }) {
 }
 
 module.exports = {
+  chargeNow,
   isConfigured,
   ensureCustomer,
   createCheckoutSessionForSubscription,

@@ -502,11 +502,18 @@ function VideoRow({
 
       {video.status === "aguardando_creditos" && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2">
+          {/* Duas saídas diferentes: sem crédito é comprar/esperar a semana
+              virar; cartão recusado é trocar o cartão. Uma mensagem só mandaria
+              metade das pessoas pro lugar errado. */}
           <p className="text-xs text-destructive">
-            Sem crédito disponível pra processar este vídeo agora.
+            {video.billingBlockReason === "cobranca_falhou"
+              ? "Não consegui cobrar seu cartão pra processar este vídeo. Assim que o cartão for atualizado, ele volta pra fila."
+              : "Sem crédito disponível pra processar este vídeo agora."}
           </p>
           <Button variant="outline" size="sm" asChild className="h-7 shrink-0 gap-1 text-xs">
-            <a href="/client/billing">Ver planos e crédito</a>
+            <a href="/client/billing">
+              {video.billingBlockReason === "cobranca_falhou" ? "Atualizar cartão" : "Ver planos e crédito"}
+            </a>
           </Button>
         </div>
       )}

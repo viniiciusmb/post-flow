@@ -325,6 +325,9 @@ export interface YoutubeChannel {
   tiktokAccountName: string | null
 }
 
+/** Por que um vídeo está parado esperando cobrança. Só vem preenchido junto de `aguardando_creditos`. */
+export type BillingBlockReason = "sem_credito" | "cobranca_falhou"
+
 export type SourceVideoStatus =
   | "detected"
   | "downloading"
@@ -347,6 +350,7 @@ export interface SourceVideo {
   durationSeconds: number | null
   status: SourceVideoStatus
   errorMessage: string | null
+  billingBlockReason: BillingBlockReason | null
   clipCount: number
   readyClipCount: number
   processingStartedAt: string | null

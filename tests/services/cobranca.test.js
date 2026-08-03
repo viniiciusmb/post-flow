@@ -12,9 +12,30 @@ const creditos = require('../../src/services/creditsService');
 const saldoRepo = require('../../src/repositories/clientCreditsRepository');
 const excedenteRepo = require('../../src/repositories/overageChargesRepository');
 const assinaturaRepo = require('../../src/repositories/clientSubscriptionsRepository');
+const stripeService = require('../../src/services/stripeService');
 const { pool, createClient, closePool } = require('../helpers/db');
 
 test.after(() => closePool());
+
+// A cobranca do excedente passou a acontecer ANTES do processamento, direto no
+// cartao. Estes testes trocam a Stripe por uma resposta controlada - bater na
+// Stripe de verdade aqui deixaria o teste dependente de credencial e de rede.
+function comStripeAprovando(fn) {
+  const configuradoOriginal = stripeService.isConfigured;
+  const cobrarOriginal = stripeService.chargeNow;
+  stripeService.isConfigured = () => true;
+  stripeService.chargeNow = async () => ({ ok: true, id: 'pi_teste' });
+  return fn().finally(() => {
+    stripeService.isConfigured = configuradoOriginal;
+    stripeService.chargeNow = cobrarOriginal;
+  });
+}
+
+// O lancamento agora nasce PAGO (o dinheiro entra antes de processar), entao
+// nao aparece mais na lista de pendentes.
+async function excedenteDoVideo(sourceVideoId) {
+  return excedenteRepo.findBySourceVideoId(sourceVideoId);
+}
 
 async function videoDe(clientUserId, minutos) {
   const { rows } = await pool.query(
@@ -66,10 +87,13 @@ test('sem saldo e com cartão, cobra minutos x valor por minuto', async () => {
   await comCartaoDeExcedente(cliente.id);
 
   const video = await videoDe(cliente.id, 8);
-  const reserva = await creditos.reserveBeforeDownload(video, cliente.id);
-  await creditos.confirmAfterDownload(video, cliente.id, reserva, { egressType: 'proxy' });
+  await comStripeAprovando(async () => {
+    const reserva = await creditos.reserveBeforeDownload(video, cliente.id);
+    assert.strictEqual(reserva.outcome, 'charged');
+    await creditos.confirmAfterDownload(video, cliente.id, reserva, { egressType: 'proxy' });
+  });
 
-  const [cobranca] = await excedenteRepo.listPendingByClient(cliente.id);
+  const cobranca = await excedenteDoVideo(video.id);
   assert.ok(cobranca, 'deveria ter gerado uma cobrança de excedente');
   assert.strictEqual(Number(cobranca.minutes), 8);
   assert.strictEqual(Number(cobranca.rate_cents_per_min), 25, 'saindo pela nossa internet, R$0,25/min');
@@ -78,20 +102,30 @@ test('sem saldo e com cartão, cobra minutos x valor por minuto', async () => {
     8 * 25,
     'o valor tem que ser exatamente minutos x tarifa'
   );
+  assert.strictEqual(cobranca.status, 'pago', 'a cobrança acontece antes de processar');
 });
 
-test('saindo pela internet do cliente, a tarifa é a menor', async () => {
+test('com o programa do cliente conectado, a tarifa é a menor', async () => {
   // É a contrapartida de quem instala o programa: baixa o nosso custo, então
-  // o excedente dele é mais barato.
+  // o excedente dele é mais barato. Como a cobrança agora é ANTES do download,
+  // quem decide a tarifa é o túnel estar conectado na hora de cobrar - não mais
+  // o caminho que o download acabou tomando.
   const cliente = await createClient();
   await saldoRepo.getOrCreate(cliente.id);
   await comCartaoDeExcedente(cliente.id);
+  await pool.query(
+    `INSERT INTO download_tunnels (owner_type, client_user_id, label, public_key, assigned_port, connected, enabled)
+     VALUES ('client', $1, 'PC do cliente', 'chave-de-teste', 29999, true, true)`,
+    [cliente.id]
+  );
 
   const video = await videoDe(cliente.id, 8);
-  const reserva = await creditos.reserveBeforeDownload(video, cliente.id);
-  await creditos.confirmAfterDownload(video, cliente.id, reserva, { egressType: 'client_tunnel' });
+  await comStripeAprovando(async () => {
+    const reserva = await creditos.reserveBeforeDownload(video, cliente.id);
+    assert.strictEqual(reserva.outcome, 'charged');
+  });
 
-  const [cobranca] = await excedenteRepo.listPendingByClient(cliente.id);
+  const cobranca = await excedenteDoVideo(video.id);
   assert.strictEqual(cobranca.bucket, 'bonus');
   assert.strictEqual(Number(cobranca.rate_cents_per_min), 15, 'pela internet do cliente, R$0,15/min');
   assert.strictEqual(Number(cobranca.amount_cents), 8 * 15);
@@ -107,12 +141,14 @@ test('reprocessar um vídeo já cobrado não cobra de novo, e não quebra o víd
   await comCartaoDeExcedente(cliente.id);
 
   const video = await videoDe(cliente.id, 8);
-  const primeira = await creditos.reserveBeforeDownload(video, cliente.id);
-  await creditos.confirmAfterDownload(video, cliente.id, primeira, { egressType: 'proxy' });
+  await comStripeAprovando(async () => {
+    const primeira = await creditos.reserveBeforeDownload(video, cliente.id);
+    await creditos.confirmAfterDownload(video, cliente.id, primeira, { egressType: 'proxy' });
 
-  // Não pode lançar.
-  const segunda = await creditos.reserveBeforeDownload(video, cliente.id);
-  await creditos.confirmAfterDownload(video, cliente.id, segunda, { egressType: 'proxy' });
+    // Não pode lançar.
+    const segunda = await creditos.reserveBeforeDownload(video, cliente.id);
+    await creditos.confirmAfterDownload(video, cliente.id, segunda, { egressType: 'proxy' });
+  });
 
   const { rows } = await pool.query(
     'SELECT count(*)::int AS total FROM client_overage_charges WHERE source_video_id = $1',

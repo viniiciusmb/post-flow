@@ -54,6 +54,31 @@ async function markInvoiced(ids, stripeInvoiceId) {
   );
 }
 
+// Lancamento que ja nasce pago: a cobranca acontece ANTES do processamento,
+// entao quando chega aqui o dinheiro ja entrou. O ON CONFLICT garante que
+// reprocessar um video nunca cria um segundo lancamento.
+async function createAlreadyPaid({
+  clientUserId,
+  sourceVideoId,
+  bucket,
+  minutes,
+  rateCentsPerMin,
+  stripePaymentIntentId,
+}) {
+  const amountCents = Math.round(minutes * rateCentsPerMin);
+  const { rows } = await pool.query(
+    `INSERT INTO client_overage_charges
+       (client_user_id, source_video_id, bucket, minutes, rate_cents_per_min, amount_cents,
+        status, stripe_payment_intent_id, charged_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'pago', $7, now())
+     ON CONFLICT (source_video_id) DO NOTHING
+     RETURNING *`,
+    [clientUserId, sourceVideoId, bucket, minutes, rateCentsPerMin, amountCents, stripePaymentIntentId]
+  );
+  if (rows[0]) return rows[0];
+  return findBySourceVideoId(sourceVideoId);
+}
+
 async function markPaid(ids) {
   if (ids.length === 0) return;
   await pool.query(`UPDATE client_overage_charges SET status = 'pago', updated_at = now() WHERE id = ANY($1)`, [ids]);
@@ -80,6 +105,7 @@ async function summaryByClient() {
 
 module.exports = {
   create,
+  createAlreadyPaid,
   findBySourceVideoId,
   listPendingByClient,
   listClientsWithPending,

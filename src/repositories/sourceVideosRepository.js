@@ -213,10 +213,19 @@ async function findStuckDetected() {
   return rows;
 }
 
-async function updateStatus(id, status, { errorMessage = null } = {}) {
+// billingBlockReason so faz sentido junto de 'aguardando_creditos'. Qualquer
+// outro status limpa o motivo: sem isso, um video que voltou a processar
+// continuaria carregando "cartao recusado" e a tela mostraria o aviso antigo.
+async function updateStatus(id, status, { errorMessage = null, billingBlockReason = null } = {}) {
   const { rows } = await pool.query(
-    `UPDATE source_videos SET status = $2, error_message = $3, updated_at = now() WHERE id = $1 RETURNING *`,
-    [id, status, errorMessage]
+    `UPDATE source_videos
+        SET status = $2,
+            error_message = $3,
+            billing_block_reason = CASE WHEN $2 = 'aguardando_creditos' THEN $4::text ELSE NULL END,
+            updated_at = now()
+      WHERE id = $1
+      RETURNING *`,
+    [id, status, errorMessage, billingBlockReason]
   );
   return rows[0] || null;
 }

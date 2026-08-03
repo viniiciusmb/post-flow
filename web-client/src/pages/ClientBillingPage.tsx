@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { IconCreditCard, IconCircleCheck, IconCoins } from "@tabler/icons-react"
+import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -274,28 +274,58 @@ export function ClientBillingPage() {
                   />
                 </div>
 
-                <div className="rounded-lg border border-border bg-muted/40 p-3.5 text-sm">
-                  <p className="font-medium">Como a conta é feita</p>
-                  <p className="mt-1 leading-relaxed text-muted-foreground">
-                    A cobrança é por <strong className="text-foreground">minuto de vídeo processado</strong>, e
-                    acontece a cada vídeo. Não importa quantos cortes saírem dele: um vídeo de{" "}
-                    {VIDEO_EXEMPLO_MIN} minutos que vira 3 cortes custa o mesmo que um que vira 12.
-                  </p>
-                  <div className="mt-2.5 flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
-                    <span>
-                      Vídeo de {VIDEO_EXEMPLO_MIN} min, nossa internet:{" "}
-                      <strong className="tabular-nums">
-                        {formatCents(data.overage.rateCentsNormal * VIDEO_EXEMPLO_MIN)}
-                      </strong>
-                    </span>
-                    <span>
-                      Pela sua internet:{" "}
-                      <strong className="tabular-nums">
-                        {formatCents(data.overage.rateCentsBonus * VIDEO_EXEMPLO_MIN)}
-                      </strong>
-                    </span>
+                {/* Fechado por padrão: quem só quer saber o preço já viu os dois
+                    valores acima. Isto aqui é pra quem tem a pergunta seguinte
+                    ("quando exatamente me cobram?") - e essa merece resposta
+                    completa, não uma linha espremida. */}
+                <details className="group rounded-lg border border-border">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3.5 text-sm font-medium [&::-webkit-details-marker]:hidden">
+                    Como os gastos são processados
+                    <IconChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                  </summary>
+
+                  <div className="flex flex-col gap-3 border-t border-border p-3.5 text-sm leading-relaxed text-muted-foreground">
+                    <p>
+                      A cobrança é <strong className="text-foreground">vídeo por vídeo</strong>, e o valor sai
+                      do <strong className="text-foreground">minuto do vídeo original</strong> — não da
+                      quantidade de cortes. Um vídeo de {VIDEO_EXEMPLO_MIN} minutos que vira 3 cortes custa
+                      exatamente o mesmo que um que vira 12.
+                    </p>
+
+                    <p>
+                      Ela acontece <strong className="text-foreground">antes</strong> do processamento
+                      começar. O sistema vê a duração do vídeo, cobra no cartão e só então baixa e corta. Se o
+                      cartão não passar, nada é processado e você recebe o aviso pra atualizar o cartão — o
+                      vídeo fica esperando, sem cobrança nenhuma.
+                    </p>
+
+                    <div className="rounded-md bg-muted/60 p-3">
+                      <p className="text-xs font-medium text-foreground">Exemplo</p>
+                      <p className="mt-1 text-[13px]">
+                        Um vídeo de {VIDEO_EXEMPLO_MIN} minutos entra na fila e sua cota já acabou. Antes de
+                        qualquer processamento, é feita uma cobrança de{" "}
+                        <strong className="text-foreground tabular-nums">
+                          {formatCents(data.overage.rateCentsNormal * VIDEO_EXEMPLO_MIN)}
+                        </strong>{" "}
+                        no cartão cadastrado ({VIDEO_EXEMPLO_MIN} min ×{" "}
+                        {formatCents(data.overage.rateCentsNormal)}). Deu certo, o vídeo é processado e sai
+                        quantos cortes a IA achar que valem a pena.
+                      </p>
+                      <p className="mt-2 text-[13px]">
+                        Com o programa instalado no seu computador, o mesmo vídeo custaria{" "}
+                        <strong className="text-foreground tabular-nums">
+                          {formatCents(data.overage.rateCentsBonus * VIDEO_EXEMPLO_MIN)}
+                        </strong>
+                        .
+                      </p>
+                    </div>
+
+                    <p className="text-xs">
+                      Enquanto houver cota do plano disponível, ela é usada primeiro e nada é cobrado no
+                      cartão.
+                    </p>
                   </div>
-                </div>
+                </details>
 
                 {data.overage.pendingCents > 0 && (
                   <TonePill tone="danger">
