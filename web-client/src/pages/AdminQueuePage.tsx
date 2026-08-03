@@ -189,6 +189,9 @@ export function AdminQueuePage() {
                     </div>
                   </div>
                   {v.status === "aguardando_creditos" && <TonePill tone="danger">Sem crédito</TonePill>}
+                  {v.status === "aguardando_conexao" && (
+                    <TonePill tone="cyan">Esperando o computador do cliente</TonePill>
+                  )}
                   <div className="shrink-0 text-xs text-muted-foreground">{timeAgo(v.createdAt)}</div>
                 </div>
               ))}

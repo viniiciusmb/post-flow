@@ -191,6 +191,27 @@ async function resumeAwaitingCredits(id) {
   return rows[0] || null;
 }
 
+// Videos parados esperando o computador do cliente voltar (ele escolheu so
+// baixar pela internet dele). Mesmo par de consultas do fluxo de credito.
+async function findAwaitingTunnelByClientId(clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT sv.* FROM source_videos sv
+     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+     WHERE coalesce(yc.client_user_id, sv.client_user_id) = $1 AND sv.status = 'aguardando_conexao'`,
+    [clientUserId]
+  );
+  return rows;
+}
+
+async function resumeAwaitingTunnel(id) {
+  const { rows } = await pool.query(
+    `UPDATE source_videos SET status = 'detected', updated_at = now()
+      WHERE id = $1 AND status = 'aguardando_conexao' RETURNING *`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
 // Erros que parecem transitorios (proxy/rede) e ainda nao esgotaram as
 // tentativas automaticas, parados ha tempo suficiente pra nao brigar com um
 // retry manual que o cliente acabou de disparar.
@@ -466,6 +487,8 @@ module.exports = {
   markRecoveredFromStuck,
   findAwaitingCreditsByClientId,
   resumeAwaitingCredits,
+  findAwaitingTunnelByClientId,
+  resumeAwaitingTunnel,
   updateStatus,
   saveDownload,
   saveTranscript,

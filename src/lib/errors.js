@@ -21,5 +21,16 @@ class ChargeFailedError extends Error {
   }
 }
 
+// O cliente pediu pra so baixar com o computador dele ligado, e ele esta
+// desligado agora. Nao e erro nem pausa: e uma escolha dele, e o video volta
+// sozinho quando o computador reconectar.
+class WaitingForTunnelError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'WaitingForTunnelError';
+  }
+}
+
 module.exports = {
+  WaitingForTunnelError,
   ChargeFailedError, PausedError, AwaitingCreditsError };

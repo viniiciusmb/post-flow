@@ -10,6 +10,7 @@ const https = require('https');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 const config = require('../../config');
 const downloadTunnelsRepository = require('../../repositories/downloadTunnelsRepository');
+const creditsUnlockService = require('../../services/creditsUnlockService');
 const logger = require('../../lib/logger');
 
 const IP_CHECK_URL = 'https://api.ipify.org?format=json';
@@ -59,8 +60,18 @@ async function testTunnel(tunnel) {
     result.success = false;
   }
 
+  const estavaConectado = tunnel.connected === true;
   await downloadTunnelsRepository.markTestResult(tunnel.id, { connected: result.success, result });
   logger.info(`Teste do tunel #${tunnel.id} (${tunnel.owner_type}) concluido: ${JSON.stringify(result)}`);
+
+  // Acabou de VOLTAR: devolve pra fila o que estava esperando por ele. So na
+  // transicao (desconectado -> conectado) pra nao reenfileirar a cada teste.
+  if (tunnel.owner_type === 'client' && tunnel.client_user_id && result.success && !estavaConectado) {
+    await creditsUnlockService
+      .unlockAwaitingTunnelForClient(tunnel.client_user_id)
+      .catch((err) => logger.error(`Falha ao destravar videos do cliente ${tunnel.client_user_id}:`, err.message));
+  }
+
   return result;
 }
 

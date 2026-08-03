@@ -339,6 +339,7 @@ export type SourceVideoStatus =
   | "cancelled"
   | "paused"
   | "aguardando_creditos"
+  | "aguardando_conexao"
 
 export interface SourceVideo {
   id: number
@@ -393,6 +394,8 @@ export interface ClientTunnel {
   lastCheckedAt: string | null
   lastTestResult: TunnelTestResult | null
   paired: boolean
+  /** true = só baixar com o computador do cliente ligado; false = usar nossa banda quando ele estiver desligado. */
+  requireClientTunnel: boolean
 }
 
 export interface ClientTunnelResponse {

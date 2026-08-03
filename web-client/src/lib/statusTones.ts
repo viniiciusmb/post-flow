@@ -21,6 +21,7 @@ export const SOURCE_VIDEO_STATUS_TONE: Record<SourceVideoStatus, { tone: Tone; l
   cancelled: { tone: "neutral", label: "Cancelado" },
   paused: { tone: "neutral", label: "Pausado" },
   aguardando_creditos: { tone: "danger", label: "Aguardando crédito" },
+  aguardando_conexao: { tone: "cyan", label: "Esperando seu computador" },
 }
 
 export const CLIP_STATUS_TONE: Record<ClipStatus, { tone: Tone; label: string; spin?: boolean }> = {

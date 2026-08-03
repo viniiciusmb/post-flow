@@ -14,6 +14,7 @@ router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 router.get('/', asyncHandler(controller.status));
 router.post('/pair', asyncHandler(controller.completePairing));
 router.post('/test', asyncHandler(controller.test));
+router.put('/require-tunnel', asyncHandler(controller.setRequireTunnel));
 router.delete('/', asyncHandler(controller.disconnect));
 
 module.exports = router;

@@ -500,6 +500,18 @@ function VideoRow({
         </div>
       )}
 
+      {video.status === "aguardando_conexao" && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2">
+          <p className="text-xs text-muted-foreground">
+            Você escolheu baixar só pela sua internet. Este vídeo começa assim que o seu computador
+            estiver ligado e conectado.
+          </p>
+          <Button variant="outline" size="sm" asChild className="h-7 shrink-0 gap-1 text-xs">
+            <a href="/client/tunnel">Ver minha conexão</a>
+          </Button>
+        </div>
+      )}
+
       {video.status === "aguardando_creditos" && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2">
           {/* Duas saídas diferentes: sem crédito é comprar/esperar a semana
@@ -731,7 +743,7 @@ function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tik
   )
 }
 
-const PENDING_STATUSES = ["detected", "paused", "aguardando_creditos", ...ACTIVE_STATUSES]
+const PENDING_STATUSES = ["detected", "paused", "aguardando_creditos", "aguardando_conexao", ...ACTIVE_STATUSES]
 const STAGE_PRIORITY: Record<string, number> = {
   paused: -1,
   cutting: 0,
@@ -740,6 +752,7 @@ const STAGE_PRIORITY: Record<string, number> = {
   downloading: 3,
   detected: 4,
   aguardando_creditos: 5,
+  aguardando_conexao: 5,
 }
 
 export function VideosClipsPage() {

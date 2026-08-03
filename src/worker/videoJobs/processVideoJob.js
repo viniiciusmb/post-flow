@@ -8,8 +8,9 @@ const path = require('path');
 const fs = require('fs');
 const config = require('../../config');
 const errorReportService = require('../../services/errorReportService');
+const downloadTunnelsRepository = require('../../repositories/downloadTunnelsRepository');
 const logger = require('../../lib/logger');
-const { PausedError, AwaitingCreditsError, ChargeFailedError } = require('../../lib/errors');
+const { PausedError, AwaitingCreditsError, ChargeFailedError, WaitingForTunnelError } = require('../../lib/errors');
 const creditsService = require('../../services/creditsService');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../repositories/clipsRepository');
@@ -132,6 +133,16 @@ async function run(sourceVideoId) {
       // Ja baixado numa execucao anterior (retomando de uma pausa) - pula o
       // download de novo.
     } else {
+      // O cliente pode ter pedido pra so baixar com o computador dele ligado.
+      // Conferir ANTES de cobrar credito: cobrar e depois descobrir que nao da
+      // pra baixar deixaria o credito reservado a toa.
+      const politica = await downloadTunnelsRepository.clientTunnelPolicy(clientUserId);
+      if (politica.exige && !politica.conectado) {
+        throw new WaitingForTunnelError(
+          'O cliente escolheu baixar so pela internet dele, e o computador dele nao esta conectado agora.'
+        );
+      }
+
       // Reserva o credito ANTES de baixar - se nao houver saldo (e sem
       // cartao de excedente ligado), nao inicia o download nenhum.
       const reserveOutcome = await creditsService.reserveBeforeDownload(sourceVideo, clientUserId);
@@ -373,6 +384,13 @@ async function run(sourceVideoId) {
       await sourceVideosRepository.updateStatus(sourceVideo.id, 'aguardando_creditos', {
         billingBlockReason: 'sem_credito',
       });
+      return;
+    }
+    if (err instanceof WaitingForTunnelError) {
+      logger.info(`Video-fonte ${sourceVideo.id} esperando o computador do cliente - ${err.message}`);
+      // Nao e erro: nao vai pro painel de erros e nao conta como falha. O
+      // tunnelTestJob devolve pra fila quando o computador voltar.
+      await sourceVideosRepository.updateStatus(sourceVideo.id, 'aguardando_conexao');
       return;
     }
     if (err instanceof ChargeFailedError) {

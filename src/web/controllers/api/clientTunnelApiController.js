@@ -3,6 +3,7 @@
 const downloadTunnelsRepository = require('../../../repositories/downloadTunnelsRepository');
 const sshRelayControlService = require('../../../services/sshRelayControlService');
 const queueService = require('../../../services/queueService');
+const creditsUnlockService = require('../../../services/creditsUnlockService');
 const logger = require('../../../lib/logger');
 
 const QUEUE_TUNNEL_TEST_ONE = 'tunnel-test-one';
@@ -16,12 +17,39 @@ function tunnelToApi(tunnel) {
     lastCheckedAt: tunnel.last_checked_at,
     lastTestResult: tunnel.last_test_result,
     paired: !tunnel.pairing_code,
+    // true = só baixar com o computador dele ligado; false = deixar sair pela
+    // nossa banda quando ele estiver desligado.
+    requireClientTunnel: tunnel.require_client_tunnel === true,
   };
 }
 
 async function status(req, res) {
   const tunnel = await downloadTunnelsRepository.findByClientId(req.session.user.id);
   res.json({ tunnel: tunnelToApi(tunnel) });
+}
+
+// Escolha do cliente: esperar o computador dele, ou deixar o download sair pela
+// nossa banda quando ele estiver desligado. Só faz sentido pra quem já tem o
+// programa pareado - por isso devolve 404 sem túnel, em vez de criar um.
+async function setRequireTunnel(req, res) {
+  const tunnel = await downloadTunnelsRepository.findByClientId(req.session.user.id);
+  if (!tunnel) return res.status(404).json({ error: 'Você ainda não conectou o programa.' });
+
+  const atualizado = await downloadTunnelsRepository.setRequireClientTunnel(
+    req.session.user.id,
+    req.body.requireClientTunnel === true
+  );
+
+  // Desligou a exigência: o que estava esperando o computador dele pode sair
+  // agora pela nossa banda. Sem isso, o vídeo ficaria parado até o computador
+  // voltar mesmo depois de a pessoa ter dito que não quer mais esperar.
+  if (atualizado && !atualizado.require_client_tunnel) {
+    await creditsUnlockService
+      .unlockAwaitingTunnelForClient(req.session.user.id)
+      .catch((err) => logger.error('Falha ao destravar videos que esperavam a conexao:', err.message));
+  }
+
+  res.json({ tunnel: tunnelToApi(atualizado) });
 }
 
 async function completePairing(req, res) {
@@ -79,4 +107,5 @@ async function disconnect(req, res) {
   res.status(204).end();
 }
 
-module.exports = { status, completePairing, test, disconnect };
+module.exports = {
+  setRequireTunnel, status, completePairing, test, disconnect };

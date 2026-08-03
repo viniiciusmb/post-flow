@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown } from "@tabler/icons-react"
+import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -238,8 +238,17 @@ export function ClientBillingPage() {
                 <CardTitle className="text-base">Créditos bônus</CardTitle>
                 <CardDescription>Cota extra, liberada quando o programa do seu computador está conectado.</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex flex-col gap-3">
                 <BucketMeter label="Bônus" bucket={data.credits.bonus} />
+                {/* Quem chega aqui e vê "0 min disponíveis" no bônus precisa
+                    saber onde ligar isso. Sem o caminho, a cota bônus vira um
+                    número sem explicação. */}
+                <Button variant="outline" size="sm" asChild className="w-fit gap-1.5">
+                  <a href="/client/tunnel">
+                    <IconRouter className="size-4" />
+                    Configurar minha conexão
+                  </a>
+                </Button>
               </CardContent>
             </Card>
           </div>

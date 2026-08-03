@@ -95,6 +95,39 @@ async function hasConnectedClientTunnel(clientUserId) {
   return rows.length > 0;
 }
 
+// O cliente pediu pra so baixar quando o computador dele estiver ligado?
+// Devolve tambem se ele esta conectado agora, porque quem chama precisa dos
+// dois pra decidir (esperar x baixar pela nossa banda).
+async function clientTunnelPolicy(clientUserId) {
+  if (!clientUserId) return { exige: false, conectado: false, temTunel: false };
+  const { rows } = await pool.query(
+    `SELECT connected, enabled, require_client_tunnel
+       FROM download_tunnels
+      WHERE client_user_id = $1 AND owner_type = 'client'
+      LIMIT 1`,
+    [clientUserId]
+  );
+  const t = rows[0];
+  if (!t) return { exige: false, conectado: false, temTunel: false };
+  return {
+    // Tunel desligado no painel do admin nao pode segurar a fila do cliente:
+    // ele nao tem como saber que foi desligado nem como religar.
+    exige: t.require_client_tunnel && t.enabled,
+    conectado: t.connected === true,
+    temTunel: true,
+  };
+}
+
+async function setRequireClientTunnel(clientUserId, exigir) {
+  const { rows } = await pool.query(
+    `UPDATE download_tunnels SET require_client_tunnel = $2
+      WHERE client_user_id = $1 AND owner_type = 'client'
+      RETURNING *`,
+    [clientUserId, Boolean(exigir)]
+  );
+  return rows[0] || null;
+}
+
 async function countConnectedClients() {
   const { rows } = await pool.query(
     "SELECT count(*)::int AS count FROM download_tunnels WHERE owner_type = 'client' AND connected = true"
@@ -127,6 +160,8 @@ module.exports = {
   markTestResult,
   listAll,
   hasConnectedClientTunnel,
+  clientTunnelPolicy,
+  setRequireClientTunnel,
   countConnectedClients,
   removeByClientId,
   setEnabled,

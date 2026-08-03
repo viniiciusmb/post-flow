@@ -32,4 +32,26 @@ async function unlockAwaitingCreditsForClient(clientUserId) {
   return unlocked;
 }
 
-module.exports = { unlockAwaitingCreditsForClient };
+// Mesma ideia, pro video que estava esperando o computador do cliente voltar.
+// Chamado pelo tunnelTestJob assim que o tunel daquele cliente reconecta.
+async function unlockAwaitingTunnelForClient(clientUserId) {
+  const stuck = await sourceVideosRepository.findAwaitingTunnelByClientId(clientUserId);
+  if (stuck.length === 0) return 0;
+
+  const boss = await queueService.getBoss();
+  const priority = await queuePriorityService.resolveQueuePriorityForClient(clientUserId);
+
+  let unlocked = 0;
+  for (const sourceVideo of stuck) {
+    const updated = await sourceVideosRepository.resumeAwaitingTunnel(sourceVideo.id);
+    if (!updated) continue;
+    await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: sourceVideo.id }, { priority });
+    unlocked += 1;
+  }
+  if (unlocked > 0) {
+    logger.info(`Destravado(s) ${unlocked} video(s) que esperavam a conexao do cliente ${clientUserId}.`);
+  }
+  return unlocked;
+}
+
+module.exports = { unlockAwaitingCreditsForClient, unlockAwaitingTunnelForClient };

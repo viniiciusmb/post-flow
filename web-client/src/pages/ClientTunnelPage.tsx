@@ -149,6 +149,8 @@ function PairingForm({ onPaired }: { onPaired: () => void }) {
 function ConnectedStatus({ tunnel, onChanged }: { tunnel: ClientTunnel; onChanged: () => void }) {
   const [testing, setTesting] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [requireTunnel, setRequireTunnel] = useState(tunnel.requireClientTunnel)
+  const [savingPolicy, setSavingPolicy] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
@@ -168,6 +170,21 @@ function ConnectedStatus({ tunnel, onChanged }: { tunnel: ClientTunnel; onChange
         onChanged()
       }
     }, 2000)
+  }
+
+  useEffect(() => {
+    setRequireTunnel(tunnel.requireClientTunnel)
+  }, [tunnel.requireClientTunnel])
+
+  async function handlePolicy(valor: boolean) {
+    setSavingPolicy(true)
+    setRequireTunnel(valor)
+    try {
+      await api.put("/api/client/tunnel/require-tunnel", { requireClientTunnel: valor })
+      onChanged()
+    } finally {
+      setSavingPolicy(false)
+    }
   }
 
   async function handleDisconnect() {
@@ -220,6 +237,54 @@ function ConnectedStatus({ tunnel, onChanged }: { tunnel: ClientTunnel; onChange
             </p>
           </div>
         )}
+
+        {/* A parte que mais gera dúvida: o túnel não é "ligado pra sempre". Ele
+            existe só enquanto o computador está ligado, conectado e com o
+            programa aberto. Quem não entende isso descobre pela fatura. */}
+        <div className="rounded-lg border border-border p-4">
+          <p className="text-sm font-medium">Quando a sua internet é usada</p>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            Só enquanto o seu computador estiver <strong className="text-foreground">ligado, conectado
+            à internet e com o programa aberto</strong>. O download acontece na hora em que o vídeo
+            entra na fila — se nesse momento o computador estiver desligado, dormindo ou sem
+            internet, não dá pra usar a sua conexão.
+          </p>
+
+          <div className="mt-4 flex flex-col gap-2">
+            <p className="text-sm font-medium">O que fazer quando isso acontecer</p>
+            {(
+              [
+                {
+                  valor: false,
+                  titulo: "Baixar mesmo assim, pela internet do Post Flow",
+                  texto:
+                    "O vídeo não espera. Como não sai pela sua conexão, ele consome crédito normal (a tarifa maior) em vez do crédito bônus.",
+                },
+                {
+                  valor: true,
+                  titulo: "Esperar o meu computador ligar",
+                  texto:
+                    "O vídeo fica na fila até o programa reconectar, e aí baixa pela sua internet, consumindo crédito bônus. Nada é processado enquanto isso.",
+                },
+              ] as const
+            ).map((op) => (
+              <button
+                key={String(op.valor)}
+                type="button"
+                disabled={savingPolicy}
+                onClick={() => handlePolicy(op.valor)}
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  requireTunnel === op.valor
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:bg-muted/60"
+                }`}
+              >
+                <span className="text-sm font-medium">{op.titulo}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{op.texto}</span>
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={handleTest} disabled={testing} className="w-fit gap-2">
