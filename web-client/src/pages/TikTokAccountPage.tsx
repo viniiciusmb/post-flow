@@ -149,7 +149,7 @@ function PauseQueueBar({ accountId }: { accountId: number }) {
   )
 }
 
-function ScheduleCard({ accountId }: { accountId: number }) {
+function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMode: "inbox" | "direct" }) {
   const [settings, setSettings] = useState<PostingScheduleResponse | null>(null)
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
@@ -209,11 +209,23 @@ function ScheduleCard({ accountId }: { accountId: number }) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Agendamento de postagem</CardTitle>
+        {/* O texto acompanha o modo escolhido logo acima. Deixar a explicação
+            de rascunho fixa aqui contradizia a opção "direto no perfil" na
+            mesma tela. */}
         <CardDescription>
-          O TikTok do Post Flow ainda está em modo de testes (sandbox). Cada corte é enviado como{" "}
-          <strong>rascunho pra caixa de entrada do seu TikTok</strong>, e você ainda precisa abrir o app e confirmar a
-          publicação por lá. O agendamento abaixo controla só quando o rascunho chega na sua caixa de entrada, pra não
-          chegar tudo de uma vez.
+          {publishMode === "direct" ? (
+            <>
+              Cada corte é publicado <strong>direto no seu perfil do TikTok</strong>, depois que você confirmar as
+              opções dele na fila abaixo. O agendamento controla a que horas cada um sai, pra não sair tudo de uma
+              vez.
+            </>
+          ) : (
+            <>
+              Cada corte é enviado como <strong>rascunho pra caixa de entrada do seu TikTok</strong>, e você abre o
+              app pra confirmar a publicação por lá. O agendamento controla só quando o rascunho chega, pra não
+              chegar tudo de uma vez.
+            </>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -942,10 +954,24 @@ function AccountBox({
 function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSummary; onChanged: () => void }) {
   const [savingAutoPost, setSavingAutoPost] = useState(false)
   const [autoPostEnabled, setAutoPostEnabled] = useState(account.autoPostEnabled)
+  const [publishMode, setPublishMode] = useState(account.publishMode)
+  const [savingMode, setSavingMode] = useState(false)
 
   useEffect(() => {
     setAutoPostEnabled(account.autoPostEnabled)
-  }, [account.id, account.autoPostEnabled])
+    setPublishMode(account.publishMode)
+  }, [account.id, account.autoPostEnabled, account.publishMode])
+
+  async function trocarModo(mode: "inbox" | "direct") {
+    setSavingMode(true)
+    setPublishMode(mode)
+    try {
+      await api.put(`/api/client/tiktok-accounts/${account.id}/publish-mode`, { mode })
+      onChanged()
+    } finally {
+      setSavingMode(false)
+    }
+  }
 
   async function toggleAutoPost(checked: boolean) {
     setSavingAutoPost(true)
@@ -982,10 +1008,56 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
           </label>
         </div>
 
+        {/* Rascunho x publicação direta. É decisão do dono da conta, não nossa:
+            no rascunho o TikTok pergunta privacidade e interações dentro do
+            aplicativo dele; na direta essas escolhas passam a ser feitas aqui,
+            corte a corte, antes de qualquer coisa sair. */}
+        <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+          <div>
+            <p className="text-sm font-medium">Como o corte chega no TikTok</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Você pode trocar quando quiser. Vale só pra esta conta.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(
+              [
+                {
+                  valor: "inbox" as const,
+                  titulo: "Como rascunho",
+                  texto:
+                    "O corte cai nos rascunhos do aplicativo do TikTok e você finaliza por lá, escolhendo privacidade e legenda no próprio app.",
+                },
+                {
+                  valor: "direct" as const,
+                  titulo: "Direto no perfil",
+                  texto:
+                    "O corte é publicado sem você abrir o TikTok. Antes de cada um sair, você escolhe aqui quem pode ver, o que as pessoas podem fazer e se há divulgação comercial.",
+                },
+              ]
+            ).map((op) => (
+              <button
+                key={op.valor}
+                type="button"
+                disabled={savingMode}
+                onClick={() => trocarModo(op.valor)}
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  publishMode === op.valor
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:bg-muted/60"
+                }`}
+              >
+                <span className="text-sm font-medium">{op.titulo}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{op.texto}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {autoPostEnabled && (
           <>
             <PauseQueueBar accountId={account.id} />
-            <ScheduleCard accountId={account.id} />
+            <ScheduleCard accountId={account.id} publishMode={publishMode} />
             <Tabs defaultValue="queue">
               <TabsList>
                 <TabsTrigger value="queue">Fila</TabsTrigger>

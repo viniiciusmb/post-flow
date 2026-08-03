@@ -14,6 +14,7 @@ router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 router.get('/', asyncHandler(controller.list));
 router.post('/:id/deactivate', asyncHandler(controller.deactivate));
 router.put('/:id/auto-post', asyncHandler(controller.setAutoPost));
+router.put('/:id/publish-mode', asyncHandler(controller.setPublishMode));
 router.get('/:id/schedule', asyncHandler(controller.getSchedule));
 router.put('/:id/schedule', asyncHandler(controller.setSchedule));
 router.put('/:id/queue-pause', asyncHandler(controller.setQueuePaused));

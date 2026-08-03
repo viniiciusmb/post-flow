@@ -130,7 +130,10 @@ const PENDING_ORDER = 'COALESCE(p.queue_order, p.id) ASC';
 // o job de publicacao pega quando ha espaco na cota do dia.
 async function findOldestPendingForAccount(tiktokAccountId) {
   const { rows } = await pool.query(
-    `SELECT p.*, c.local_clip_path, c.title AS clip_title, v.file_size_bytes
+    `SELECT p.*, c.local_clip_path, c.title AS clip_title, v.file_size_bytes,
+            -- Usados pra conferir o limite de duracao da conta ANTES de subir o
+            -- arquivo inteiro (regra da Content Posting API).
+            c.start_seconds AS clip_start_seconds, c.end_seconds AS clip_end_seconds
      FROM postings p
      ${CLIP_FILE_JOIN}
      WHERE p.tiktok_account_id = $1 AND p.status = 'pending'

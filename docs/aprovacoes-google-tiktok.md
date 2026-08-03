@@ -7,15 +7,20 @@ frequência**: antes de submeter, confira de novo nos links do fim desta página
 
 ## Resumo: onde o Post Flow está hoje
 
+> **Atualizado em 03/08/2026.** O roteiro de gravação dos vídeos ficou numa página própria:
+> [`docs/roteiro-video-aprovacao.md`](roteiro-video-aprovacao.md).
+
 | Item | Situação |
 |---|---|
 | Site público, termos, privacidade, contato | ✅ Prontos |
 | Identificação da empresa (Kleos Digital, CNPJ) | ✅ Nas 3 páginas |
 | Justificativa de cada escopo | ✅ Escrita na Política de Privacidade |
-| **Escopo `drive.readonly`** | ⚠️ **Custa uma auditoria de segurança paga por ano** |
-| **Publicação direta no TikTok** | ⚠️ **Falta a tela de opções que o TikTok exige** |
-| E-mail de suporte que recebe mensagem | ❌ Pendente |
-| Vídeo de demonstração | ❌ Pendente |
+| Escopo `drive.readonly` | ✅ **Removido.** Sobraram só escopos não sensíveis |
+| Publicação direta no TikTok | ✅ Tela de opções construída e conferida item por item |
+| Escolha rascunho x publicação direta | ✅ Do cliente, na tela de Publicação |
+| E-mail de suporte que recebe mensagem | ✅ `contato@postflowtiktok.com` |
+| Vídeo de demonstração do TikTok | ❌ Pendente (roteiro pronto) |
+| Vídeo de demonstração do Google | ⚪ Provavelmente desnecessário — ver o roteiro |
 
 ---
 

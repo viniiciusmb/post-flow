@@ -149,6 +149,9 @@ export interface TikTokAccountSummary extends TikTokAccountStats {
   avatarUrl: string | null
   connectedAt: string
   autoPostEnabled: boolean
+  /** 'inbox' = chega como rascunho no app do TikTok; 'direct' = vai direto pro perfil. */
+  publishMode: "inbox" | "direct"
+
   pendingCount: number
   postedCount: number
   errorCount: number

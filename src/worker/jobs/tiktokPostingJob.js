@@ -116,6 +116,26 @@ async function publish(account, posting) {
       return;
     }
 
+    // A TikTok recusa video mais longo do que a conta aceita - e recusa DEPOIS
+    // do upload inteiro ter subido. Conferir antes economiza banda e tempo, e
+    // e o que as diretrizes pedem ("check max_video_post_duration_sec before
+    // posting"). O limite vem do creator_info, guardado na conta.
+    const limiteSegundos = account.max_video_post_duration_sec;
+    const duracaoCorte = posting.clip_end_seconds - posting.clip_start_seconds;
+    if (modoDireto && limiteSegundos && duracaoCorte > limiteSegundos) {
+      await postingsRepository.updateStatus(posting.id, { status: 'error', errorMessage: null });
+      await errorReportService.report({
+        operation: errorReportService.OPERACOES.TIKTOK_POSTING,
+        entityType: 'posting',
+        entityId: posting.id,
+        clientUserId: account.client_user_id || null,
+        error: new Error(
+          `Corte de ${Math.round(duracaoCorte)}s excede o maximo de ${limiteSegundos}s que a conta do TikTok aceita.`
+        ),
+      });
+      return;
+    }
+
     const { publishId, uploadUrl, chunkSize, totalChunkCount } = modoDireto
       ? await tiktokService.initDirectPost(accessToken, videoSizeBytes, {
           caption: posting.caption,

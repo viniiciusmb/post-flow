@@ -40,6 +40,7 @@ function accountToApi(account, counts) {
     videoCount: account.video_count,
     statsUpdatedAt: account.stats_updated_at,
     autoPostEnabled: account.auto_post_enabled,
+    publishMode: account.publish_mode,
     pendingCount: counts.pending,
     postedCount: counts.posted,
     errorCount: counts.error,
@@ -75,6 +76,20 @@ async function setAutoPost(req, res) {
 
   const updated = await tiktokAccountsRepository.setAutoPostEnabled(account.id, Boolean(req.body.enabled));
   res.json({ autoPostEnabled: updated.auto_post_enabled });
+}
+
+// Rascunho no aplicativo do TikTok x publicacao direta no perfil. Quem escolhe
+// e o dono da conta, nao nos: as diretrizes da TikTok tratam isso como decisao
+// do criador, e sao dois fluxos com exigencias diferentes (o direto so sai
+// depois que ele preenche privacidade, interacoes e divulgacao corte a corte).
+async function setPublishMode(req, res) {
+  const account = await findOwned(req);
+  if (!account) return res.status(404).json({ error: 'Conta não encontrada.' });
+
+  const mode = req.body.mode === 'direct' ? 'direct' : 'inbox';
+  const updated = await tiktokAccountsRepository.setPublishMode(account.id, account.client_user_id, mode);
+  if (!updated) return res.status(404).json({ error: 'Conta não encontrada.' });
+  res.json({ publishMode: updated.publish_mode });
 }
 
 function scheduleToApi(settings) {
@@ -185,6 +200,7 @@ async function setQueueOrder(req, res) {
 }
 
 module.exports = {
+  setPublishMode,
   list,
   deactivate,
   setAutoPost,

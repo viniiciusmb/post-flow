@@ -78,9 +78,22 @@ export function DirectPostOptions({
   if (!opcoes) return <Skeleton className="h-64" />
 
   const parceriaBloqueiaPrivado = parceriaPaga
-  const listaDePrivacidade = opcoes.privacyLevelOptions.filter(
-    (nivel) => !(parceriaBloqueiaPrivado && nivel === "SELF_ONLY")
-  )
+  // A regra do TikTok é DESABILITAR "só você" com o motivo à vista, não sumir
+  // com a opção: quem procura por ela precisa entender por que não pode.
+  const listaDePrivacidade = opcoes.privacyLevelOptions
+
+  // Vídeo mais longo do que a conta aceita é recusado pelo TikTok depois do
+  // upload inteiro já ter subido. Barrar aqui evita gastar banda e tempo pra
+  // receber um "não" no fim.
+  const duracaoSegundos = Math.max(0, Math.round(item.endSeconds - item.startSeconds))
+  const limite = opcoes.maxVideoPostDurationSec
+  const longoDemais = limite !== null && duracaoSegundos > limite
+
+  // A divulgação comercial exige escolher pelo menos um tipo. Com o interruptor
+  // ligado e nenhum marcado, a regra manda o botão de publicar ficar desligado.
+  const divulgacaoIncompleta = divulgacao && !marcaPropria && !parceriaPaga
+
+  const podeSalvar = Boolean(privacidade) && !divulgacaoIncompleta && !longoDemais
 
   async function salvar() {
     setSalvando(true)
@@ -120,6 +133,18 @@ export function DirectPostOptions({
         </div>
       </div>
 
+      {/* Exigido: o criador tem que ver o vídeo antes de autorizar a publicação. */}
+      <div>
+        <p className="mb-1.5 text-xs font-medium text-muted-foreground">Prévia do que vai ser publicado</p>
+        <video
+          src={`/api/client/source-videos/clips/${item.clipId}/download`}
+          controls
+          preload="metadata"
+          poster={item.thumbnailUrl ?? undefined}
+          className="aspect-[9/16] w-40 rounded-md bg-black"
+        />
+      </div>
+
       <Field>
         <FieldLabel>Quem pode ver este vídeo</FieldLabel>
         <Select value={privacidade} onValueChange={setPrivacidade}>
@@ -127,16 +152,24 @@ export function DirectPostOptions({
             <SelectValue placeholder="Escolha uma opção" />
           </SelectTrigger>
           <SelectContent>
-            {listaDePrivacidade.map((nivel) => (
-              <SelectItem key={nivel} value={nivel}>
-                {NOMES_DE_PRIVACIDADE[nivel] ?? nivel}
-              </SelectItem>
-            ))}
+            {listaDePrivacidade.map((nivel) => {
+              const bloqueado = parceriaBloqueiaPrivado && nivel === "SELF_ONLY"
+              return (
+                <SelectItem
+                  key={nivel}
+                  value={nivel}
+                  disabled={bloqueado}
+                  title={bloqueado ? "Conteúdo de parceria não pode ficar visível só pra você." : undefined}
+                >
+                  {NOMES_DE_PRIVACIDADE[nivel] ?? nivel}
+                </SelectItem>
+              )
+            })}
           </SelectContent>
         </Select>
         {parceriaBloqueiaPrivado && (
           <p className="text-xs text-muted-foreground">
-            Conteúdo de parceria paga não pode ficar visível só pra você.
+            Conteúdo de parceria não pode ficar visível só pra você.
           </p>
         )}
       </Field>
@@ -247,14 +280,32 @@ export function DirectPostOptions({
         .
       </p>
 
+      {longoDemais && (
+        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Este corte tem {duracaoSegundos}s e sua conta do TikTok aceita no máximo {limite}s. Gere um corte
+          mais curto pra publicar por aqui.
+        </p>
+      )}
+
       {erro && <p className="text-sm text-destructive">{erro}</p>}
 
-      <div className="flex items-center gap-3">
-        <Button size="sm" onClick={salvar} disabled={!privacidade || salvando}>
+      {/* Exigido: avisar que a publicação não aparece na hora. */}
+      <p className="text-xs text-muted-foreground">
+        Depois de publicar, o TikTok pode levar alguns minutos pra processar o vídeo antes de ele
+        aparecer no perfil.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" onClick={salvar} disabled={!podeSalvar || salvando}>
           {salvando ? "Salvando..." : item.optionsConfirmed ? "Atualizar opções" : "Confirmar e liberar publicação"}
         </Button>
         {!privacidade && (
           <span className="text-xs text-muted-foreground">Escolha quem pode ver o vídeo pra continuar.</span>
+        )}
+        {divulgacaoIncompleta && (
+          <span className="text-xs text-muted-foreground">
+            Marque se é a sua marca, uma parceria, ou desligue a divulgação.
+          </span>
         )}
       </div>
     </div>
