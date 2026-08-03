@@ -81,6 +81,9 @@ async function overview(req, res) {
 
   res.json({
     stripeConfigured: stripeService.isConfigured(),
+    // O dono do sistema nao gasta credito (ver creditsService). A tela precisa
+    // saber disso, senao mostra cota e plano pra quem nao esta sujeito a eles.
+    isExempt: req.session.user.role === 'admin',
     subscription: {
       planKey: subscription.plan_key || null,
       planName: subscription.plan_name || null,

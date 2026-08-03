@@ -197,6 +197,19 @@ export function ClientBillingPage() {
         <>
           {error && <p className="text-sm text-destructive">{error}</p>}
 
+          {data.isExempt && (
+            <Card>
+              <CardContent className="py-4">
+                <p className="text-sm font-medium">Esta conta não consome crédito.</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Você é o dono do sistema: seus vídeos são processados sem descontar cota e sem
+                  depender de plano. Os números abaixo são só pra você ver como a tela aparece pros
+                  seus clientes.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {!data.stripeConfigured && (
             <TonePill tone="neutral">Pagamento por cartão ainda não está disponível - fale com o suporte.</TonePill>
           )}

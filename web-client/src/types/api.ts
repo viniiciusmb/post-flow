@@ -459,6 +459,8 @@ export interface ClientBillingOverviewResponse {
     overageCardEnabled: boolean
   }
   credits: { normal: CreditBucketView; bonus: CreditBucketView }
+  /** true = conta do dono do sistema: não gasta crédito nem depende de plano. */
+  isExempt: boolean
   plans: BillingPlan[]
   overage: { rateCentsNormal: number; rateCentsBonus: number; pendingCents: number }
   package: { minMinutes: number; stepMinutes: number; maxMinutes: number; centsPerMinute: number }

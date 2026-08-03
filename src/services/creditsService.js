@@ -11,12 +11,25 @@ const clientSubscriptionsRepository = require('../repositories/clientSubscriptio
 const creditTransactionsRepository = require('../repositories/creditTransactionsRepository');
 const overageChargesRepository = require('../repositories/overageChargesRepository');
 const downloadTunnelsRepository = require('../repositories/downloadTunnelsRepository');
+const usersRepository = require('../repositories/usersRepository');
 const logger = require('../lib/logger');
+const { ROLES } = require('../config/constants');
 
 // R$0,25/min (caminho VPS/proxy) ou R$0,15/min (caminho app do cliente) -
 // valores do pedido original, snapshotados em cada cobranca (client_overage_charges.rate_cents_per_min)
 // pra nao mudar retroativamente se um dia forem ajustados.
 const OVERAGE_RATE_CENTS_PER_MIN = { normal: 25, bonus: 15 };
+
+// O dono do sistema nao gasta credito. O motor de credito existe pra medir e
+// cobrar CLIENTE; aplicar a mesma cota a quem e dono do servidor nao mede nada
+// e ainda cria um jeito de o proprio sistema se travar - foi o que aconteceu:
+// a conta de admin, com plano Pro, bateu a cota semanal testando e ficou sem
+// conseguir processar nada.
+async function isento(clientUserId) {
+  if (!clientUserId) return false;
+  const user = await usersRepository.findById(clientUserId);
+  return Boolean(user && user.role === ROLES.ADMIN);
+}
 
 function minutesFor(durationSeconds) {
   return Math.max(1, Math.ceil((durationSeconds || 0) / 60));
@@ -45,6 +58,8 @@ async function resolveBucketForClient(clientUserId) {
 //                     um erro em etapa posterior) - ja foi debitado antes,
 //                     nao cobra de novo, so segue o download.
 async function reserveBeforeDownload(sourceVideo, clientUserId) {
+  if (await isento(clientUserId)) return { outcome: 'isento' };
+
   const existing = await creditTransactionsRepository.findBySourceVideoId(sourceVideo.id);
   if (existing) {
     if (existing.status === 'confirmado') return { outcome: 'already_charged' };
@@ -85,6 +100,8 @@ async function reserveBeforeDownload(sourceVideo, clientUserId) {
 // entre resolveBucketForClient e o egress escolhido de verdade pelo
 // ytDlpService) e confirma a cobranca definitiva.
 async function confirmAfterDownload(sourceVideo, clientUserId, reserveOutcome, downloadResult) {
+  // Nada foi reservado, entao nao ha o que confirmar nem o que faturar.
+  if (reserveOutcome.outcome === 'isento') return;
   if (reserveOutcome.outcome === 'already_charged') return;
 
   const realBucket = bucketForEgressType(downloadResult.egressType);

@@ -9,7 +9,11 @@ const { ROLES } = require('../../../config/constants');
 
 const router = express.Router();
 
-router.use(requireAuthApi, requireRoleApi(ROLES.CLIENT));
+// CLIENT + ADMIN, igual a todas as outras rotas /api/client/*. Esta era a
+// unica que excluia o admin, e o efeito era a tela "Plano e uso" abrir e nao
+// carregar nada pra ele: a PAGINA ja permitia admin, so a API e que recusava.
+// O admin tambem e dono de canais e usa o proprio sistema.
+router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 
 router.get('/overview', asyncHandler(controller.overview));
 router.post('/subscribe', asyncHandler(controller.subscribe));
