@@ -116,10 +116,20 @@
 
 html {
   scroll-behavior: smooth;
+  /* Trava de segurança contra rolagem lateral. Um único elemento largo demais
+     numa página faz a página INTEIRA deslizar pro lado no celular, e o efeito
+     aparece longe de onde está a causa - o que torna esse defeito difícil de
+     achar e péssimo de usar. Bloqueia aqui e resolve o elemento no lugar dele.
+     Tabelas e blocos de código continuam rolando dentro do próprio quadro. */
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
+  /* Palavra que não cabe (e-mail, URL, CNPJ) quebra em vez de empurrar a
+     largura da página. Sem isso, "contato@postflowtiktok.com" sozinho já
+     estourava 320px. */
+  overflow-wrap: anywhere;
   background: var(--paper);
   color: var(--ink);
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -731,4 +741,181 @@ strong {
   .footer nav {
     gap: 1rem 1.5rem;
   }
+}
+
+/* ============================================================
+   Molduras de dispositivo (MacBook e iPhone)
+   ============================================================
+   Feitas em CSS, não desenhadas dentro do PNG. Assim a captura de tela
+   continua sendo só a captura (dá pra trocar sem refazer arte), a moldura
+   fica nítida em qualquer densidade de tela, e as duas acompanham o tema
+   claro/escuro sozinhas.
+
+   O truque de proporção é o `aspect-ratio` na área da tela: a imagem entra
+   com `object-fit: cover` e `object-position: top`, então uma captura mais
+   alta que a tela mostra a parte de cima (que é onde está o conteúdo que
+   importa) em vez de espremer tudo. */
+
+.macbook {
+  --macbook-borda: #3a3d42;
+  margin: clamp(3rem, 6vw, 4.5rem) auto 0;
+  max-width: 980px;
+}
+@media (prefers-color-scheme: dark) {
+  .macbook { --macbook-borda: #55585e; }
+}
+
+.macbook-tampa {
+  position: relative;
+  border: 1px solid var(--macbook-borda);
+  /* A borda de baixo some porque a base entra logo abaixo, encostada. */
+  border-radius: 14px 14px 4px 4px;
+  background: #16181c;
+  padding: 10px 10px 12px;
+  box-shadow: var(--shadow-frame);
+}
+
+/* Ilha da câmera: uma faixa fina no topo da tela, do jeito que aparece no
+   MacBook de verdade. Sem isso a moldura vira só um retângulo escuro. */
+.macbook-tampa::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 68px;
+  height: 4px;
+  border-radius: 0 0 4px 4px;
+  background: #26292e;
+}
+
+.macbook-tela {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--paper);
+}
+.macbook-tela img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+/* Base: um trapézio achatado. A alça é o entalhe semicircular do meio. */
+.macbook-base {
+  position: relative;
+  height: 12px;
+  /* A base do notebook e mais larga que a tampa, como no aparelho de verdade.
+     O quanto ela avanca pra fora e limitado a 1rem de cada lado: o respiro
+     lateral da pagina e 1.5rem, entao ela nunca encosta na borda da tela nem
+     cria rolagem lateral no celular (a versao anterior avancava 27px de cada
+     lado e vazava 3px em 390px de largura). */
+  width: calc(100% + 24px);
+  margin-left: -12px;
+  border-radius: 0 0 10px 10px;
+  background: linear-gradient(180deg, #d5d7db 0%, #a9adb4 55%, #85898f 100%);
+}
+@media (prefers-color-scheme: dark) {
+  .macbook-base { background: linear-gradient(180deg, #4a4d53 0%, #35383d 55%, #26282c 100%); }
+}
+.macbook-base::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 96px;
+  height: 6px;
+  border-radius: 0 0 8px 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+/* ---------- iPhone ---------- */
+
+.iphone {
+  --iphone-borda: #1d1f23;
+  position: relative;
+  width: 260px;
+  flex: none;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  border-radius: 40px;
+  background: var(--iphone-borda);
+  padding: 9px;
+  box-shadow: var(--shadow-frame);
+}
+@media (prefers-color-scheme: dark) {
+  .iphone { border-color: rgba(255, 255, 255, 0.14); }
+}
+
+.iphone-tela {
+  position: relative;
+  aspect-ratio: 390 / 844;
+  overflow: hidden;
+  border-radius: 32px;
+  background: var(--paper);
+}
+.iphone-tela img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+/* Ilha dinâmica. Fica por cima da captura, então a captura não precisa
+   reservar espaço nenhum pra ela. */
+.iphone-tela::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 78px;
+  height: 22px;
+  border-radius: 12px;
+  background: #0b0c0e;
+}
+
+/* Botões laterais: dois traços finos, só pra silhueta não ficar chapada. */
+.iphone::before,
+.iphone::after {
+  content: "";
+  position: absolute;
+  width: 2px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.35);
+}
+.iphone::before { left: -3px; top: 108px; height: 54px; }
+.iphone::after { right: -3px; top: 132px; height: 76px; }
+@media (prefers-color-scheme: dark) {
+  .iphone::before,
+  .iphone::after { background: rgba(255, 255, 255, 0.18); }
+}
+
+/* ---------- os dois lado a lado ---------- */
+
+.duo {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  margin: clamp(3rem, 6vw, 4.5rem) auto 0;
+  max-width: 1040px;
+}
+.duo .macbook { margin: 0; flex: 1 1 auto; min-width: 0; }
+
+/* No celular, dois aparelhos lado a lado ficam pequenos demais pra enxergar
+   qualquer coisa - então sobra um só. E o que sobra é o CELULAR, não o
+   notebook: a captura de tela dele já foi feita em 390px, então aqui ela
+   aparece a ~67% do tamanho real e dá pra ler. A do notebook, espremida na
+   mesma largura, ficaria a 24% - um retângulo cinza que não informa nada.
+   Quem entra pelo celular também vê o produto no formato em que vai usar. */
+@media (max-width: 720px) {
+  .duo { gap: 0; }
+  .duo .macbook { display: none; }
+  .duo .iphone { width: min(260px, 72vw); }
 }

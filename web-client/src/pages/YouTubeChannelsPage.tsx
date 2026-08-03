@@ -248,9 +248,8 @@ function ChannelCard({
                   <p className="text-xs text-muted-foreground">
                     Postagem automática {linkedAccount.autoPostEnabled ? "ligada" : "desligada"} pra essa conta.{" "}
                     <a href="/client/tiktok-account" className="text-primary hover:underline">
-                      gerenciar em Publicação
+                      Gerenciar em Publicação
                     </a>
-                    .
                   </p>
                 )}
                 <a href="/client/tiktok-account" className="text-xs font-semibold text-primary hover:underline">

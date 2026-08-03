@@ -391,12 +391,12 @@ function VideoRow({
 
   return (
     <Card>
-      <div className="flex w-full items-center gap-4 p-4">
+      <div className="flex w-full flex-wrap items-center gap-3 p-4 sm:flex-nowrap sm:gap-4">
         <Checkbox checked={selected} onCheckedChange={onToggleSelect} className="shrink-0" />
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-4 text-left"
+          className="flex min-w-0 items-center gap-3 text-left sm:gap-4"
           disabled={video.clipCount === 0 && video.status !== "ready"}
         >
           {video.clipCount > 0 || video.status === "ready" ? (
@@ -440,6 +440,9 @@ function VideoRow({
           </p>
         </div>
 
+        {/* Status e acoes num grupo so: no celular ele cai inteiro pra segunda
+            linha em vez de espremer (ou estourar) a linha do titulo. */}
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">
         <TonePill tone={SOURCE_VIDEO_STATUS_TONE[video.status].tone} spin={SOURCE_VIDEO_STATUS_TONE[video.status].spin}>
           {SOURCE_VIDEO_STATUS_TONE[video.status].label}
         </TonePill>
@@ -471,10 +474,11 @@ function VideoRow({
         <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title="Remover vídeo">
           <IconTrash className="size-4" />
         </Button>
+        </div>
       </div>
 
       {(video.status === "error" || video.status === "cancelled") && (
-        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2">
           <p className="text-xs text-destructive">
             {video.errorMessage || "Processamento cancelado."}
           </p>
@@ -492,7 +496,7 @@ function VideoRow({
       )}
 
       {video.status === "aguardando_creditos" && (
-        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2">
           <p className="text-xs text-destructive">
             Sem crédito disponível pra processar este vídeo agora.
           </p>
@@ -829,7 +833,12 @@ export function VideosClipsPage() {
         </Button>
         <Button variant="outline" size="sm" onClick={() => setShowSettings((v) => !v)} className="gap-2">
           <IconAdjustmentsHorizontal className="size-4" />
-          {showSettings ? "Ocultar configurações de corte" : "Configurar qualidade e estilo dos cortes"}
+          <span className="truncate">
+            <span className="sm:hidden">{showSettings ? "Ocultar configurações" : "Configurar cortes"}</span>
+            <span className="hidden sm:inline">
+              {showSettings ? "Ocultar configurações de corte" : "Configurar qualidade e estilo dos cortes"}
+            </span>
+          </span>
         </Button>
         <Button variant="outline" size="sm" onClick={() => setShowStyleEditor((v) => !v)} className="gap-2">
           <IconAdjustmentsHorizontal className="size-4" />

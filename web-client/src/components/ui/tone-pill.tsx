@@ -28,18 +28,22 @@ export function TonePill({
   className?: string
 }) {
   return (
+    // max-w-full + wrap: a pilha é usada tanto pra rótulo curto ("Pronto")
+    // quanto pra aviso de frase inteira. Com whitespace-nowrap fixo, o aviso
+    // longo virava uma faixa de 434px que empurrava a página inteira pro lado
+    // no celular. O ícone/bolinha não encolhe, só o texto quebra.
     <span
       className={cn(
-        "inline-flex w-fit shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold",
+        "inline-flex w-fit max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
         TONE_CLASS[tone],
         className,
       )}
     >
       {icon}
       {dot && !icon && (
-        <span className={cn("size-1.5 rounded-full bg-current", spin && "animate-pulse")} />
+        <span className={cn("size-1.5 shrink-0 rounded-full bg-current", spin && "animate-pulse")} />
       )}
-      {children}
+      <span className="min-w-0">{children}</span>
     </span>
   )
 }
