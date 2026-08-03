@@ -12,12 +12,14 @@ imagina ter.
 
 Isto mudou quando removemos o escopo `drive.readonly`.
 
-O Post Flow hoje pede exatamente dois escopos do Google:
+O Post Flow pede quatro escopos do Google, e **os quatro são não sensíveis**:
 
 | Escopo | Classificação oficial |
 |---|---|
-| `https://www.googleapis.com/auth/drive.file` | **Não sensível** |
+| `openid` | **Não sensível** |
 | `https://www.googleapis.com/auth/userinfo.email` | **Não sensível** |
+| `https://www.googleapis.com/auth/userinfo.profile` | **Não sensível** |
+| `https://www.googleapis.com/auth/drive.file` | **Não sensível** |
 
 A documentação do Drive diz, sobre o `drive.file`: *"only require basic OAuth App Verification"*. E
 o Google é explícito: **app que usa só escopos não sensíveis não precisa passar pela verificação**,
@@ -30,15 +32,95 @@ vídeo é solicitado *só se* a equipe do Google achar necessário durante a an�
 
 **O que isso significa na prática:**
 
-1. Envie a verificação de marca primeiro. O resultado automático costuma sair em minutos; quando cai
-   em análise manual, 2 a 3 dias úteis.
-2. **Só grave o vídeo do Google se eles pedirem.** Se pedirem, o roteiro está na Parte 2 desta
+1. **Publique o app** (Testing → In production). Não há análise nenhuma nesse caminho — o passo a
+   passo está na próxima seção.
+2. A verificação de marca só é necessária se você quiser o **logo** na tela de consentimento.
+3. **Só grave o vídeo do Google se eles pedirem.** Se pedirem, o roteiro está na Parte 2 desta
    página, pronto.
-3. O vídeo do **TikTok é obrigatório de qualquer jeito.** Se você só tiver fôlego pra um, é esse.
+4. O vídeo do **TikTok é obrigatório de qualquer jeito.** Se você só tiver fôlego pra um, é esse.
 
 > Se algum dia o recurso de "pasta de origem do Drive" voltar, ele exige o `drive.readonly`, que é
 > escopo **restrito**: aí volta a verificação completa, com vídeo **e** uma auditoria de segurança
 > paga refeita todo ano. Ver `docs/aprovacoes-google-tiktok.md`.
+
+---
+
+## Passo a passo: o que fazer no Google Cloud Console
+
+Escrito em 03/08/2026, para o console novo ("Google Auth Platform"). Os quatro escopos que o Post
+Flow pede são **todos não sensíveis**, e é isso que torna este caminho curto.
+
+### Antes: por que os escopos "somem"
+
+Na página **Data Access** (Acesso a dados), adicionar escopo tem **dois** cliques de confirmação, e
+é aí que a maioria se perde:
+
+1. **Add or remove scopes** → marque os escopos → **UPDATE** (dentro do painel lateral)
+2. De volta na página, **SAVE** no rodapé
+
+Fechar a aba, ou sair da página, depois do UPDATE e antes do SAVE, descarta tudo. Se sumir de novo,
+é quase certo que foi isso.
+
+A outra causa possível: escopo de uma API que não está **ativada** no projeto. Confira em **APIs e
+serviços → Biblioteca** que a **Google Drive API** está ativada.
+
+### Os escopos que devem estar lá (e só eles)
+
+| Escopo | Para quê |
+|---|---|
+| `openid` | Entrar com Google |
+| `.../auth/userinfo.email` | Saber o e-mail de quem entrou / de qual conta o Drive é |
+| `.../auth/userinfo.profile` | Nome da pessoa, no cadastro por Google |
+| `.../auth/drive.file` | Gravar o corte pronto na pasta que o cliente escolheu |
+
+**Nenhum deles pode aparecer com o selo "Sensitive" ou "Restricted"** na tela. Se aparecer, tem
+escopo sobrando — o `drive.readonly` foi removido do código justamente por ser restrito.
+
+### Os dois endereços de retorno
+
+Em **Clients → (seu cliente OAuth) → URIs de redirecionamento autorizados**, os dois precisam
+estar cadastrados:
+
+```
+https://postflowtiktok.com/auth/google/callback
+https://postflowtiktok.com/auth/google/login/callback
+```
+
+O primeiro é o Drive, o segundo é o "Entrar com Google". Faltando o segundo, o Google recusa com
+`redirect_uri_mismatch`.
+
+### Publicar (é isto que "envia", e não tem análise)
+
+Em **Audience** (Público-alvo):
+
+1. Confirme que o tipo é **External**.
+2. Clique em **PUBLISH APP** / **Publicar app** e confirme.
+3. O status vira **In production**.
+
+Pronto. **Com escopos só não sensíveis, não existe fila de análise:** o Google só exige verificação
+para escopo sensível ou restrito. Não haverá tela de "app não verificado" nem limite de 100
+usuários.
+
+> **Isto conserta um problema silencioso.** Enquanto o app fica em **Testing**, o Google **expira o
+> refresh token em 7 dias**. Na prática: a conexão do Google Drive dos seus clientes quebraria toda
+> semana, e eles teriam que reconectar. Publicar resolve isso.
+
+### Verificação de marca — só se quiser o logo
+
+Se você quiser o **logo** do Post Flow na tela de consentimento, aí sim existe um pedido: a
+*verificação de marca*. Ela é leve — pede domínio verificado no Search Console, site público e
+política de privacidade — e **não pede vídeo** (só se a equipe do Google resolver pedir).
+
+Sem ela, a tela de consentimento continua funcionando; aparece o nome do app sem o logo.
+
+### Checklist final
+
+- [ ] Google Drive API ativada no projeto
+- [ ] Os 4 escopos salvos (UPDATE **e** SAVE), nenhum marcado como sensível
+- [ ] Os 2 endereços de retorno cadastrados
+- [ ] App **publicado** (In production)
+- [ ] Domínio verificado no Search Console *(só se for pedir verificação de marca)*
+- [ ] Testar: entrar com Google numa janela anônima, e conectar o Drive por dentro do sistema
 
 ---
 
