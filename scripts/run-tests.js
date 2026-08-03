@@ -85,6 +85,9 @@ async function main() {
         SESSION_SECRET: 'test-secret',
         APP_ENCRYPTION_KEY: 'a'.repeat(64),
         NODE_ENV: 'test',
+        // Login com Google: o endereco de retorno e derivado deste. Sem ele os
+        // testes exercitariam so o caminho de fallback.
+        GOOGLE_REDIRECT_URI: 'https://postflowtiktok.com/auth/google/callback',
       }
     );
   } finally {

@@ -150,7 +150,11 @@ export function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // O login com Google acontece fora da página (sai pro Google e volta), então
+  // o que deu errado chega na URL, não numa resposta de fetch.
+  const [error, setError] = useState<string | null>(
+    new URLSearchParams(window.location.search).get("erro")
+  )
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(event: FormEvent) {
@@ -250,9 +254,13 @@ export function LoginPage() {
               <Button
                 type="button"
                 variant="outline"
-                disabled
-                title="Em breve"
                 className="w-full"
+                onClick={() => {
+                  // Navegação de página inteira, não fetch: o Google recusa ser
+                  // aberto dentro de um iframe ou por XHR, e o retorno precisa
+                  // cair no nosso servidor pra criar a sessão.
+                  window.location.href = "/auth/google/login"
+                }}
               >
                 <GoogleIcon />
                 Entrar com Google

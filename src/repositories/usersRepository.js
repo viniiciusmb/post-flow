@@ -22,6 +22,38 @@ async function create({ email, passwordHash, role, businessName = null, termsVer
   return rows[0];
 }
 
+async function findByGoogleSub(googleSub) {
+  const { rows } = await pool.query('SELECT * FROM users WHERE google_sub = $1', [googleSub]);
+  return rows[0] || null;
+}
+
+// Liga uma conta Google a uma conta que ja existe aqui. So e chamada depois de
+// o Google confirmar que o e-mail e verificado - e essa checagem que impede
+// alguem de assumir a conta de outra pessoa.
+async function linkGoogleAccount(id, { sub, email }) {
+  const { rows } = await pool.query(
+    `UPDATE users SET google_sub = $2, google_email = $3, updated_at = now()
+      WHERE id = $1 RETURNING *`,
+    [id, sub, email]
+  );
+  return rows[0] || null;
+}
+
+// Conta criada na hora pelo login com Google. Sem senha (password_hash fica
+// NULL): quem entra por aqui nao tem senha pra vazar. Se um dia quiser entrar
+// por senha, usa o "esqueci minha senha" e define uma.
+async function createFromGoogle({ email, businessName, googleSub, termsVersion = null }) {
+  const { rows } = await pool.query(
+    `INSERT INTO users (email, password_hash, role, business_name, google_sub, google_email,
+                        terms_accepted_at, terms_version)
+     VALUES ($1, NULL, 'client', $2, $3, $1,
+             CASE WHEN $4::text IS NULL THEN NULL ELSE now() END, $4)
+     RETURNING *`,
+    [email.toLowerCase(), businessName, googleSub, termsVersion]
+  );
+  return rows[0];
+}
+
 async function listByRole(role) {
   const { rows } = await pool.query(
     'SELECT * FROM users WHERE role = $1 ORDER BY created_at DESC',
@@ -72,6 +104,9 @@ async function listClientsWithStats() {
 }
 
 module.exports = {
+  findByGoogleSub,
+  linkGoogleAccount,
+  createFromGoogle,
   findByEmail,
   findById,
   create,

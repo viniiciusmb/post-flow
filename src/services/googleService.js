@@ -6,6 +6,7 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const config = require('../config');
+const { CONTACT } = require('../config/constants');
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -34,6 +35,76 @@ const SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/userinfo.email',
 ];
+
+// Entrar com Google e conectar o Drive sao dois consentimentos diferentes, com
+// escopos diferentes, e por isso tem endereco de retorno proprio. Ele e
+// derivado do que ja esta configurado em vez de virar mais uma variavel de
+// ambiente pra colar em 3 servicos - o dominio e o mesmo, so o caminho muda.
+// ATENCAO: este endereco precisa estar cadastrado no Google Cloud Console, na
+// lista de "URIs de redirecionamento autorizados" do mesmo cliente OAuth.
+function loginRedirectUri() {
+  // Se o retorno do Drive nao estiver configurado, cai no endereco publico do
+  // site. Sem essa saida, uma variavel de ambiente faltando derrubava a rota de
+  // login com um "Invalid URL" que nao explica nada.
+  const base = config.google.redirectUri || CONTACT.siteUrl;
+  return new URL('/auth/google/login/callback', base).toString();
+}
+
+// So identidade: nome, e-mail e o identificador permanente da conta. Nenhum
+// acesso a arquivo - quem quiser exportar pro Drive conecta o Drive depois,
+// numa autorizacao separada. Pedir tudo de uma vez faria a primeira tela de
+// login assustar sem necessidade.
+const LOGIN_SCOPES = ['openid', 'email', 'profile'];
+
+function buildLoginUrl(state) {
+  const params = new URLSearchParams({
+    client_id: config.google.clientId,
+    redirect_uri: loginRedirectUri(),
+    response_type: 'code',
+    scope: LOGIN_SCOPES.join(' '),
+    // Sem access_type=offline: login nao precisa de refresh token, e pedir
+    // acesso permanente pra so identificar alguem e pedir mais do que precisa.
+    // "select_account" faz o Google perguntar QUAL conta usar mesmo com uma
+    // sessao ja aberta - sem isso, quem tem duas contas entra sempre na
+    // primeira sem perceber.
+    prompt: 'select_account',
+    state,
+  });
+  return `${AUTHORIZE_URL}?${params.toString()}`;
+}
+
+function exchangeLoginCode(code) {
+  return requestToken(
+    new URLSearchParams({
+      code,
+      client_id: config.google.clientId,
+      client_secret: config.google.clientSecret,
+      redirect_uri: loginRedirectUri(),
+      grant_type: 'authorization_code',
+    })
+  );
+}
+
+// Perfil de quem acabou de entrar. O `sub` e o identificador permanente da
+// conta Google - e ele que fica gravado, nao o e-mail.
+async function getLoginProfile(accessToken) {
+  const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(`Falha ao buscar o perfil da conta Google: ${data.error?.message || response.statusText}`);
+  }
+  return {
+    sub: data.sub,
+    email: data.email,
+    // O Google marca se o endereco foi mesmo confirmado. Entrar com um e-mail
+    // NAO confirmado permitiria assumir a conta de outra pessoa que ja usa
+    // aquele endereco no Post Flow.
+    emailVerified: data.email_verified === true || data.email_verified === 'true',
+    name: data.name || null,
+  };
+}
 
 function buildAuthorizeUrl(state) {
   const params = new URLSearchParams({
@@ -159,6 +230,10 @@ async function uploadFile(accessToken, folderId, filePath, filename, mimeType) {
 }
 
 module.exports = {
+  buildLoginUrl,
+  exchangeLoginCode,
+  getLoginProfile,
+  loginRedirectUri,
   buildAuthorizeUrl,
   exchangeCodeForToken,
   refreshAccessToken,
