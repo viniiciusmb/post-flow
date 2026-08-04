@@ -222,6 +222,20 @@ module.exports = {
     },
   ],
 
+  cadastro: {
+    titulo: 'Criar conta',
+    subtitulo: 'Leva menos de um minuto. Depois é só conectar o seu canal.',
+    nomeNegocio: 'Nome do negócio',
+    opcional: '(opcional)',
+    email: 'E-mail',
+    senha: 'Senha',
+    peloMenos8: 'Pelo menos 8 caracteres.',
+    aceite: 'Li e aceito os <a href="/termos" target="_blank" rel="noopener">Termos de Uso</a> e a <a href="/privacidade" target="_blank" rel="noopener">Política de Privacidade</a>, e declaro que só vou processar conteúdo do qual tenho os direitos.',
+    precisaAceitar: 'Você precisa aceitar os Termos de Uso e a Política de Privacidade pra criar a conta.',
+    jaTemConta: 'Já tem conta?',
+    entrar: 'Entrar',
+  },
+
   contato: {
     titulo: 'Contato e suporte',
     respondemos: 'Respondemos {tempo}.',

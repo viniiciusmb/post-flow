@@ -1,3 +1,4 @@
+import { data } from "@/lib/formatoLocal"
 import { useEffect, useState } from "react"
 import {
   IconBrandTiktok,
@@ -45,6 +46,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
+import { useT, type ChaveDeTraducao } from "@/i18n"
 import type {
   ErrorPostingItem,
   PostedItem,
@@ -55,11 +57,12 @@ import type {
   YoutubeChannel,
 } from "@/types/api"
 
-const RETENTION_LABELS: Record<number, string> = {
-  24: "1 dia",
-  72: "3 dias",
-  168: "7 dias",
-  720: "30 dias",
+// Rótulo em dias. Era um mapa fixo com o texto em português; virou função
+// porque "1 dia"/"1 day"/"1 día" mudam com o idioma, e o mapa é montado uma vez
+// no carregamento do módulo, antes de existir idioma escolhido.
+function rotuloRetencao(horas: number, t: (c: ChaveDeTraducao, v?: Record<string, string | number>) => string) {
+  const dias = horas / 24
+  return dias === 1 ? t("pub.umDia") : t("pub.nDias", { n: dias })
 }
 
 function formatCount(n: number | null | undefined) {
@@ -74,6 +77,7 @@ function formatCount(n: number | null | undefined) {
 // dessa conta. O que já estava em processamento não é afetado. Fica bem
 // visível de propósito, separado das outras configurações de agendamento.
 function PauseQueueBar({ accountId }: { accountId: number }) {
+  const t = useT()
   const [paused, setPaused] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -85,7 +89,7 @@ function PauseQueueBar({ accountId }: { accountId: number }) {
     api
       .get<PostingScheduleResponse>(`/api/client/tiktok-accounts/${accountId}/schedule`)
       .then((data) => setPaused(data.paused))
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Não foi possível carregar."))
+      .catch((err) => setError(err instanceof ApiError ? err.message : t("pub.naoFoiPossivelCarregar")))
   }, [accountId])
 
   async function setPausedOnServer(next: boolean) {
@@ -97,14 +101,14 @@ function PauseQueueBar({ accountId }: { accountId: number }) {
       })
       setPaused(updated.paused)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível salvar. Tente de novo.")
+      setError(err instanceof ApiError ? err.message : t("pub.naoFoiPossivelSalvarTenteDeNovo"))
     } finally {
       setSaving(false)
     }
   }
 
   // Sem popup nativo (dava problema em alguns navegadores/apps): primeiro
-  // clique em "Pausar fila" só arma a confirmação (o botão muda de texto e
+  // clique em t("pub.pausarFila") só arma a confirmação (o botão muda de texto e
   // cor por alguns segundos), segundo clique dentro da janela pausa de
   // verdade. Retomar não precisa dessa confirmação. É reversível na hora.
   function handlePauseClick() {
@@ -128,18 +132,18 @@ function PauseQueueBar({ accountId }: { accountId: number }) {
       <div className="flex items-start gap-2 text-sm">
         {paused && <IconAlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />}
         <div>
-          <p className="font-medium">{paused ? "Fila de postagem pausada" : "Fila de postagem ativa"}</p>
+          <p className="font-medium">{paused ? t("pub.filaPausada") : t("pub.filaAtiva")}</p>
           <p className="text-xs text-muted-foreground">
             {paused
-              ? "Nenhum corte novo sai pro TikTok até você retomar a postagem automática."
-              : "Use isso se algo der errado e os cortes começarem a sair rápido demais ou fora do esperado."}
+              ? t("pub.nenhumCorteNovoSai")
+              : t("pub.useIssoSeAlgoDerErrado")}
           </p>
           {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
         </div>
       </div>
       {paused ? (
         <Button size="sm" variant="default" onClick={() => setPausedOnServer(false)} disabled={saving} className="shrink-0">
-          {saving ? "Retomando..." : "Retomar postagem automática"}
+          {saving ? "Retomando..." : t("pub.retomarPostagem")}
         </Button>
       ) : (
         <Button
@@ -149,7 +153,7 @@ function PauseQueueBar({ accountId }: { accountId: number }) {
           disabled={saving}
           className="shrink-0"
         >
-          {saving ? "Pausando..." : confirming ? "Confirmar pausa da fila?" : "Pausar fila"}
+          {saving ? "Pausando..." : confirming ? t("pub.confirmarPausa") : t("pub.pausarFila")}
         </Button>
       )}
     </div>
@@ -171,6 +175,7 @@ function PublishDefaultsCard({
   accountId: number
   onChange: (d: PublishDefaults) => void
 }) {
+  const t = useT()
   const [defaults, setDefaults] = useState<PublishDefaults | null>(null)
   const [editando, setEditando] = useState(false)
 
@@ -190,46 +195,41 @@ function PublishDefaultsCard({
   if (!defaults) return <Skeleton className="h-40" />
 
   const permitidos = [
-    !defaults.disableComment && "comentar",
-    !defaults.disableDuet && "dueto",
-    !defaults.disableStitch && "junção",
+    !defaults.disableComment && t("pub.comentar"),
+    !defaults.disableDuet && t("pub.dueto"),
+    !defaults.disableStitch && t("pub.juncao"),
   ].filter(Boolean) as string[]
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Opções de publicação</CardTitle>
-        <CardDescription>
-          Escolha uma vez e vale pra todos os cortes desta conta. Se algum precisar sair diferente,
-          dá pra editar só ele na fila.
-        </CardDescription>
+        <CardTitle className="text-base">{t("pub.opcoesTitulo")}</CardTitle>
+        <CardDescription>{t("pub.opcoesDescricao")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {/* Aparece mesmo com o formulário aberto: é o que explica por que ele
             abriu sozinho e por que a fila está parada. */}
         {!defaults.definido && (
-          <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-500">
-            Nenhum corte é publicado enquanto você não definir estas opções. É uma vez só.
-          </p>
+          <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-500">{t("pub.nenhumPublicadoAte")}</p>
         )}
 
         {defaults.definido && !editando && (
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
             <span>
-              <span className="text-muted-foreground">Quem pode ver: </span>
-              <strong>{nomeDaPrivacidade(defaults.privacyLevel)}</strong>
+              <span className="text-muted-foreground">{t("pub.quemPodeVer")}</span>
+              <strong>{nomeDaPrivacidade(defaults.privacyLevel, t)}</strong>
             </span>
             <span>
-              <span className="text-muted-foreground">Pessoas podem: </span>
-              <strong>{permitidos.length ? permitidos.join(", ") : "nada"}</strong>
+              <span className="text-muted-foreground">{t("pub.pessoasPodem")}</span>
+              <strong>{permitidos.length ? permitidos.join(", ") : t("pub.nada")}</strong>
             </span>
             <span>
-              <span className="text-muted-foreground">Divulgação comercial: </span>
+              <span className="text-muted-foreground">{t("pub.divulgacaoComercial")}</span>
               <strong>
                 {defaults.brandContentToggle
-                  ? "parceria paga"
+                  ? t("pub.parceriaPaga")
                   : defaults.brandOrganicToggle
-                    ? "sua marca"
+                    ? t("pub.suaMarca")
                     : "não"}
               </strong>
             </span>
@@ -250,7 +250,7 @@ function PublishDefaultsCard({
           <div>
             <Button size="sm" variant="outline" onClick={() => setEditando(true)} className="gap-1.5">
               <IconSettings className="size-3.5" />
-              {defaults.definido ? "Alterar opções de publicação" : "Definir opções de publicação"}
+              {defaults.definido ? t("pub.alterarOpcoes") : t("pub.definirOpcoes")}
             </Button>
           </div>
         )}
@@ -260,6 +260,7 @@ function PublishDefaultsCard({
 }
 
 function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMode: "inbox" | "direct" }) {
+  const t = useT()
   const [settings, setSettings] = useState<PostingScheduleResponse | null>(null)
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
@@ -297,7 +298,7 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
       setSavedFlash(true)
       setTimeout(() => setSavedFlash(false), 2000)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível salvar.")
+      setError(err instanceof ApiError ? err.message : t("pub.naoFoiPossivelSalvar"))
     } finally {
       setSaving(false)
     }
@@ -318,21 +319,20 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Agendamento de postagem</CardTitle>
+        <CardTitle className="text-base">{t("pub.agendamentoTitulo")}</CardTitle>
         {/* O texto acompanha o modo escolhido logo acima. Deixar a explicação
-            de rascunho fixa aqui contradizia a opção "direto no perfil" na
+            de rascunho fixa aqui contradizia a opção t("pub.diretoNoPerfilMinusculo") na
             mesma tela. */}
         <CardDescription>
           {publishMode === "direct" ? (
             <>
-              Cada corte é publicado <strong>direto no seu perfil do TikTok</strong>, com as opções que você
-              definiu acima. O agendamento controla a que horas cada um sai, pra não sair tudo de uma vez.
+              {t("pub.agendaDiretoA")} <strong>{t("pub.agendaDiretoForte")}</strong>
+              {t("pub.agendaDiretoB")}
             </>
           ) : (
             <>
-              Cada corte é enviado como <strong>rascunho pra caixa de entrada do seu TikTok</strong>, e você abre o
-              app pra confirmar a publicação por lá. O agendamento controla só quando o rascunho chega, pra não
-              chegar tudo de uma vez.
+              {t("pub.agendaRascunhoA")} <strong>{t("pub.agendaRascunhoForte")}</strong>
+              {t("pub.agendaRascunhoB")}
             </>
           )}
         </CardDescription>
@@ -345,24 +345,20 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
         )}
 
         <Field>
-          <FieldLabel>Como escolher os horários</FieldLabel>
+          <FieldLabel>{t("pub.comoEscolherHorarios")}</FieldLabel>
           <ToggleGroup
             type="single"
             variant="outline"
             value={settings.mode}
             onValueChange={(next) => next && save({ ...settings, mode: next as "auto" | "manual" })}
           >
-            <ToggleGroupItem value="auto" className="text-xs">
-              Automático
-            </ToggleGroupItem>
-            <ToggleGroupItem value="manual" className="text-xs">
-              Eu escolho os horários
-            </ToggleGroupItem>
+            <ToggleGroupItem value="auto" className="text-xs">{t("pub.automatico")}</ToggleGroupItem>
+            <ToggleGroupItem value="manual" className="text-xs">{t("pub.euEscolho")}</ToggleGroupItem>
           </ToggleGroup>
         </Field>
 
         <Field>
-          <FieldLabel htmlFor={`videosPerDay-${accountId}`}>Quantos por dia</FieldLabel>
+          <FieldLabel htmlFor={`videosPerDay-${accountId}`}>{t("pub.quantosPorDia")}</FieldLabel>
           <Input
             id={`videosPerDay-${accountId}`}
             type="number"
@@ -379,7 +375,7 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
 
         {settings.mode === "manual" && (
           <Field>
-            <FieldLabel>Horários (formato 24h)</FieldLabel>
+            <FieldLabel>{t("pub.horarios24h")}</FieldLabel>
             <div className="flex flex-col gap-2">
               {manualTimesDraft.map((time, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -404,14 +400,13 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
                 </div>
               ))}
               <Button variant="outline" size="sm" className="w-fit" onClick={addManualTime}>
-                <IconPlus /> Adicionar horário
-              </Button>
+                <IconPlus />{t("pub.adicionarHorario")}</Button>
             </div>
           </Field>
         )}
 
         <Field>
-          <FieldLabel>Excluir automaticamente depois de postado</FieldLabel>
+          <FieldLabel>{t("pub.excluirDepoisPostado")}</FieldLabel>
           <ToggleGroup
             type="single"
             variant="outline"
@@ -422,11 +417,11 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
             className="flex-wrap"
           >
             <ToggleGroupItem value="never" className="text-xs">
-              Nunca
+              {t("pub.nunca")}
             </ToggleGroupItem>
             {settings.options.retentionPresetsHours.map((h) => (
               <ToggleGroupItem key={h} value={String(h)} className="text-xs">
-                {RETENTION_LABELS[h] ?? `${h}h`}
+                {rotuloRetencao(h, t)}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
@@ -455,6 +450,7 @@ function formatScheduledFor(iso: string | null) {
 // Painel lateral do botão "Ver": mostra o corte tocando de verdade e a
 // legenda que vai sair junto no TikTok, embaixo do vídeo.
 function ViewClipSheet({ item, onClose }: { item: PostingQueueItem; onClose: () => void }) {
+  const t = useT()
   const videoUrl = `/api/client/source-videos/clips/${item.clipId}/download`
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -470,8 +466,8 @@ function ViewClipSheet({ item, onClose }: { item: PostingQueueItem; onClose: () 
             className="aspect-[9/16] w-full rounded-md bg-black"
           />
           <div>
-            <p className="mb-1 text-xs font-medium text-muted-foreground">Legenda que vai no TikTok</p>
-            <p className="whitespace-pre-wrap text-sm">{item.caption || "Sem legenda."}</p>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">{t("pub.legendaQueVai")}</p>
+            <p className="whitespace-pre-wrap text-sm">{item.caption || t("pub.semLegenda")}</p>
           </div>
         </div>
       </SheetContent>
@@ -513,6 +509,7 @@ function QueueRow({
   onPostNow: () => void
   onView: () => void
 }) {
+  const t = useT()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
   const [abrirOpcoes, setAbrirOpcoes] = useState(false)
   const downloadUrl = `/api/client/source-videos/clips/${item.clipId}/download`
@@ -533,7 +530,7 @@ function QueueRow({
         {...attributes}
         {...listeners}
         className="hidden shrink-0 cursor-grab items-center justify-center self-stretch rounded-md text-muted-foreground hover:bg-accent active:cursor-grabbing sm:flex"
-        title="Arraste pra reordenar a fila"
+        title={t("pub.arrastarParaReordenar")}
       >
         <IconGripVertical className="size-4" />
       </button>
@@ -543,7 +540,7 @@ function QueueRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{item.clipTitle}</p>
         <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-          {item.channelName ?? "Vídeo avulso"} <span className="mx-1">·</span> vai postar em <strong className="font-medium">{accountName}</strong>
+          {item.channelName ?? t("pub.videoAvulso")} <span className="mx-1">·</span>{t("pub.vaiPostarEm")}<strong className="font-medium">{accountName}</strong>
         </p>
         {item.scheduledFor && (
           <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -572,20 +569,17 @@ function QueueRow({
                 className="gap-1 px-1.5 text-muted-foreground"
               >
                 <IconSettings className="size-3" />
-                {abrirOpcoes ? "Fechar opções deste corte" : "Editar opções deste corte"}
+                {abrirOpcoes ? t("pub.fecharOpcoesDesteCorte") : t("pub.editarOpcoesDesteCorte")}
               </Button>
               {item.optionsCustom && (
                 <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                  opções próprias
-                  {nomeDaPrivacidade(item.privacyLevel) ? `: ${nomeDaPrivacidade(item.privacyLevel)}` : ""}
+                  {t("pub.opcoesProprias")}
+                  {nomeDaPrivacidade(item.privacyLevel, t) ? `: ${nomeDaPrivacidade(item.privacyLevel, t)}` : ""}
                 </span>
               )}
             </div>
             {semPadrao && !abrirOpcoes && (
-              <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-500">
-                Nenhum corte sai enquanto as opções de publicação da conta não forem definidas, lá em
-                cima.
-              </p>
+              <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-500">{t("pub.nenhumCorteSaiEnquanto")}</p>
             )}
             {abrirOpcoes && (
               <div className="mt-2">
@@ -612,7 +606,7 @@ function QueueRow({
             variant="outline"
             onClick={onPostNow}
             disabled={postingNow || semPadrao}
-            title={semPadrao ? "Defina as opções de publicação da conta primeiro" : undefined}
+            title={semPadrao ? t("pub.definaOpcoesPrimeiro") : undefined}
             className="gap-1"
           >
             <IconSend className="size-3" />
@@ -654,6 +648,7 @@ function QueueCard({
   publishMode: "inbox" | "direct"
   padraoDefinido: boolean
 }) {
+  const t = useT()
   const [items, setItems] = useState<PostingQueueItem[] | null>(null)
   const [drafts, setDrafts] = useState<Record<number, string>>({})
   const [fixing, setFixing] = useState(false)
@@ -708,7 +703,7 @@ function QueueCard({
       await api.post(`/api/client/postings/${id}/skip`, {})
       await load()
     } catch (err) {
-      setSkipError(err instanceof ApiError ? err.message : "Não foi possível remover esse corte da fila.")
+      setSkipError(err instanceof ApiError ? err.message : t("pub.naoFoiPossivelRemover"))
     } finally {
       setSkippingId(null)
     }
@@ -724,7 +719,7 @@ function QueueCard({
       }
       await load()
     } catch (err) {
-      setPostNowError(err instanceof ApiError ? err.message : "Não foi possível postar agora.")
+      setPostNowError(err instanceof ApiError ? err.message : t("pub.naoFoiPossivelPostarAgora"))
     } finally {
       setPostingNowId(null)
     }
@@ -742,7 +737,7 @@ function QueueCard({
       setFixedFlash(`${result.updated} horário(s) recalculado(s).`)
       await load()
     } catch (err) {
-      setFixError(err instanceof ApiError ? err.message : "Não foi possível corrigir os horários. Tente de novo.")
+      setFixError(err instanceof ApiError ? err.message : t("pub.naoFoiPossivelCorrigirHorarios"))
     } finally {
       setFixing(false)
     }
@@ -768,7 +763,7 @@ function QueueCard({
       await api.put(`/api/client/tiktok-accounts/${accountId}/queue-order`, { orderedIds: reordered.map((i) => i.id) })
       await load()
     } catch (err) {
-      setOrderError(err instanceof ApiError ? err.message : "Não foi possível salvar a nova ordem.")
+      setOrderError(err instanceof ApiError ? err.message : t("pub.naoFoiPossivelSalvarOrdem"))
       await load()
     } finally {
       setReordering(false)
@@ -780,14 +775,12 @@ function QueueCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Fila de prontos aguardando postar</CardTitle>
-        <CardDescription>
-          Revise ou edite a legenda antes de sair. Arraste pelo ícone à esquerda pra mudar a ordem em que saem.
-        </CardDescription>
+        <CardTitle className="text-base">{t("pub.filaTitulo")}</CardTitle>
+        <CardDescription>{t("pub.filaDescricao")}</CardDescription>
       </CardHeader>
       <CardContent>
         {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum corte esperando na fila agora.</p>
+          <p className="text-sm text-muted-foreground">{t("pub.filaVazia")}</p>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
@@ -822,7 +815,7 @@ function QueueCard({
         {postNowError && <p className="mt-2 text-xs text-destructive">{postNowError}</p>}
         <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
           <Button size="xs" variant="ghost" className="text-muted-foreground" onClick={fixSchedule} disabled={fixing}>
-            {fixing ? "Corrigindo..." : "Corrigir horários de posts"}
+            {fixing ? "Corrigindo..." : t("pub.corrigirHorarios")}
           </Button>
           {fixedFlash && <span className="text-xs text-muted-foreground">{fixedFlash}</span>}
           {fixError && <span className="text-xs text-destructive">{fixError}</span>}
@@ -834,6 +827,7 @@ function QueueCard({
 }
 
 function ErrorCard({ accountId, accountName }: { accountId: number; accountName: string }) {
+  const t = useT()
   const [items, setItems] = useState<ErrorPostingItem[] | null>(null)
   // Canais monitorados do cliente (todos, nao so os que tem erro agora) -
   // sem isso, o filtro so mostrava como opcao o canal que ja tinha erro
@@ -861,7 +855,7 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId])
 
-  // "Enviar pra fila novamente": so volta pro status pendente.
+  // t("pub.enviarProFilaNovamente"): so volta pro status pendente.
   async function requeue(id: number) {
     setRequeueingId(id)
     setItemError((prev) => ({ ...prev, [id]: "" }))
@@ -869,7 +863,7 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
       await api.post(`/api/client/postings/${id}/retry`, {})
       await load()
     } catch (err) {
-      setItemError((prev) => ({ ...prev, [id]: err instanceof ApiError ? err.message : "Não foi possível reenviar pra fila." }))
+      setItemError((prev) => ({ ...prev, [id]: err instanceof ApiError ? err.message : t("pub.naoFoiPossivelReenviar") }))
     } finally {
       setRequeueingId(null)
     }
@@ -884,11 +878,11 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
       await api.post(`/api/client/postings/${id}/retry`, {})
       const result = await api.post<{ status: string; errorMessage: string | null }>(`/api/client/postings/${id}/post-now`, {})
       if (result.status === "error") {
-        setItemError((prev) => ({ ...prev, [id]: result.errorMessage || "A TikTok recusou publicar esse corte de novo." }))
+        setItemError((prev) => ({ ...prev, [id]: result.errorMessage || t("pub.tiktokRecusouDeNovo") }))
       }
       await load()
     } catch (err) {
-      setItemError((prev) => ({ ...prev, [id]: err instanceof ApiError ? err.message : "Não foi possível tentar postar agora." }))
+      setItemError((prev) => ({ ...prev, [id]: err instanceof ApiError ? err.message : t("pub.naoFoiPossivelTentarPostar") }))
     } finally {
       setRetryingNowId(null)
     }
@@ -899,16 +893,14 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
   const channels = Array.from(
     new Map<string, string>([
       ...allChannels.map((c): [string, string] => [String(c.id), c.channelName ?? "Canal"]),
-      ...items.map((i): [string, string] => [String(i.channelId ?? "none"), i.channelName ?? "Vídeo avulso"]),
+      ...items.map((i): [string, string] => [String(i.channelId ?? "none"), i.channelName ?? t("pub.videoAvulso")]),
     ]).entries()
   )
 
   if (items.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          Nenhum corte com erro de postagem.
-        </CardContent>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">{t("pub.semErro")}</CardContent>
       </Card>
     )
   }
@@ -918,8 +910,8 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Deram erro ao postar</CardTitle>
-        <CardDescription>A TikTok recusou publicar esses cortes. Não são reenviados sozinhos.</CardDescription>
+        <CardTitle className="text-base">{t("pub.deramErro")}</CardTitle>
+        <CardDescription>{t("pub.tiktokRecusou")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {channels.length > 1 && (
@@ -952,12 +944,10 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
                   <TonePill tone="danger">Erro</TonePill>
                 </div>
                 <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                  {item.channelName ?? "Vídeo avulso"} <span className="mx-1">·</span> conta <strong className="font-medium">{accountName}</strong>
+                  {item.channelName ?? t("pub.videoAvulso")} <span className="mx-1">·</span> conta <strong className="font-medium">{accountName}</strong>
                 </p>
                 {/* Idem: o motivo tecnico fica no painel de erros do admin. */}
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Não deu pra publicar. Já foi registrado no nosso painel.
-                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{t("pub.naoDeuPublicar")}</p>
                 {itemError[item.id] && <p className="mt-0.5 text-xs text-destructive">{itemError[item.id]}</p>}
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <Button
@@ -978,12 +968,12 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
                     className="gap-1"
                   >
                     <IconRefresh className="size-3" />
-                    {requeueingId === item.id ? "Enviando..." : "Enviar pra fila novamente"}
+                    {requeueingId === item.id ? "Enviando..." : t("pub.enviarProFilaNovamente")}
                   </Button>
                 </div>
               </div>
               <span className="shrink-0 text-xs text-muted-foreground">
-                {new Date(item.updatedAt).toLocaleDateString("pt-BR")}
+                {data(item.updatedAt)}
               </span>
             </div>
           ))}
@@ -994,6 +984,7 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
 }
 
 function PostedCard({ accountId }: { accountId: number }) {
+  const t = useT()
   const [items, setItems] = useState<PostedItem[] | null>(null)
 
   useEffect(() => {
@@ -1015,7 +1006,7 @@ function PostedCard({ accountId }: { accountId: number }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Já postados</CardTitle>
+        <CardTitle className="text-base">{t("pub.jaPostados")}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-2">
@@ -1026,7 +1017,7 @@ function PostedCard({ accountId }: { accountId: number }) {
               </div>
               <p className="min-w-0 flex-1 truncate text-sm">{item.clipTitle}</p>
               <span className="shrink-0 text-xs text-muted-foreground">
-                {new Date(item.postedAt).toLocaleDateString("pt-BR")}
+                {data(item.postedAt)}
               </span>
             </div>
           ))}
@@ -1037,7 +1028,7 @@ function PostedCard({ accountId }: { accountId: number }) {
 }
 
 // Caixa fechada da conta - so informação e resumo, nada aberto/editável
-// aqui. Clicar em "Configurar postagens dessa conta" que seleciona ela e
+// aqui. Clicar em t("pub.configurarPostagens") que seleciona ela e
 // revela o painel de configuração embaixo da lista inteira.
 function AccountBox({
   account,
@@ -1050,6 +1041,7 @@ function AccountBox({
   onSelect: () => void
   onChanged: () => void
 }) {
+  const t = useT()
   const [deactivating, setDeactivating] = useState(false)
   const hasStats = account.followerCount !== null && account.followerCount !== undefined
 
@@ -1083,16 +1075,16 @@ function AccountBox({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold">{account.displayName}</span>
-                <TonePill tone="success">Conectada</TonePill>
+                <TonePill tone="success">{t("pub.conectada")}</TonePill>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Conectada em {new Date(account.connectedAt).toLocaleDateString("pt-BR")}.
+                Conectada em {data(account.connectedAt)}.
               </p>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={disconnect} disabled={deactivating} className="gap-1.5 text-destructive hover:text-destructive">
             <IconTrash className="size-4" />
-            {deactivating ? "Desconectando..." : "Desconectar"}
+            {deactivating ? "Desconectando..." : t("pub.desconectar")}
           </Button>
         </div>
 
@@ -1111,7 +1103,7 @@ function AccountBox({
             <span className="flex items-center gap-1.5 tabular-nums">
               <IconMovie className="size-4 text-muted-foreground" />
               <span className="font-semibold">{formatCount(account.videoCount)}</span>
-              <span className="text-muted-foreground">vídeos no perfil</span>
+              <span className="text-muted-foreground">{t("pub.videosNoPerfil")}</span>
             </span>
           </div>
         )}
@@ -1119,17 +1111,15 @@ function AccountBox({
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span>
-              <strong className="font-semibold text-foreground">{account.pendingCount}</strong> na fila
-            </span>
+              <strong className="font-semibold text-foreground">{account.pendingCount}</strong>{t("pub.naFila")}</span>
             <span>
               <strong className="font-semibold text-foreground">{account.postedCount}</strong> postados
             </span>
             <span className={account.errorCount > 0 ? "text-destructive" : undefined}>
-              <strong className="font-semibold">{account.errorCount}</strong> com erro
-            </span>
+              <strong className="font-semibold">{account.errorCount}</strong>{t("pub.comErro")}</span>
           </div>
           <Button size="sm" variant={selected ? "default" : "outline"} onClick={onSelect}>
-            {selected ? "Fechar configurações" : "Configurar postagens dessa conta"}
+            {selected ? t("pub.fecharConfiguracoes") : t("pub.configurarPostagens")}
           </Button>
         </div>
       </CardContent>
@@ -1141,6 +1131,7 @@ function AccountBox({
 // caixas, uma unica vez embaixo de tudo (nao dentro de cada card), pra
 // deixar claro que so uma conta por vez esta sendo editada.
 function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSummary; onChanged: () => void }) {
+  const t = useT()
   const [savingAutoPost, setSavingAutoPost] = useState(false)
   const [autoPostEnabled, setAutoPostEnabled] = useState(account.autoPostEnabled)
   const [publishMode, setPublishMode] = useState(account.publishMode)
@@ -1180,7 +1171,7 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
     <Card className="border-primary/40">
       <CardHeader>
         <CardTitle className="text-base">Configurar postagens de {account.displayName}</CardTitle>
-        <CardDescription>As configurações abaixo valem só pra essa conta. Cada conta tem as suas.</CardDescription>
+        <CardDescription>{t("pub.configValemSo")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex items-start gap-3 rounded-lg border border-border p-4">
@@ -1192,7 +1183,7 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
             className="mt-0.5"
           />
           <label htmlFor={`autoPost-${account.id}`} className="cursor-pointer">
-            <span className="text-sm font-medium">Postar automaticamente</span>
+            <span className="text-sm font-medium">{t("pub.postarAutomaticamente")}</span>
             <p className="mt-0.5 text-xs text-muted-foreground">
               Desligado por padrão. Os cortes ficam prontos na tela Cortes mas só entram na fila de postagem
               depois que você ligar isso aqui.
@@ -1206,25 +1197,23 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
             corte a corte, antes de qualquer coisa sair. */}
         <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
           <div>
-            <p className="text-sm font-medium">Como o corte chega no TikTok</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Você pode trocar quando quiser. Vale só pra esta conta.
-            </p>
+            <p className="text-sm font-medium">{t("pub.comoOCorteChega")}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t("pub.podeTrocarQuandoQuiser")}</p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {(
               [
                 {
                   valor: "inbox" as const,
-                  titulo: "Como rascunho",
+                  titulo: t("pub.comoRascunho"),
                   texto:
-                    "O corte cai nos rascunhos do aplicativo do TikTok e você finaliza por lá, escolhendo privacidade e legenda no próprio app.",
+                    t("pub.comoRascunhoTexto"),
                 },
                 {
                   valor: "direct" as const,
-                  titulo: "Direto no perfil",
+                  titulo: t("pub.diretoNoPerfil"),
                   texto:
-                    "O corte é publicado sem você abrir o TikTok. Você escolhe uma vez quem pode ver, o que as pessoas podem fazer e se há divulgação comercial — e vale pra todos os cortes.",
+                    t("pub.diretoNoPerfilTexto"),
                 },
               ]
             ).map((op) => (
@@ -1285,6 +1274,7 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
 }
 
 export function TikTokAccountPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const [accounts, setAccounts] = useState<TikTokAccountSummary[] | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
@@ -1312,17 +1302,16 @@ export function TikTokAccountPage() {
   const selectedAccount = accounts?.find((a) => a.id === selectedAccountId) ?? null
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Publicação">
+    <DashboardLayout user={user} onLogout={logout} title={t("pub.titulo")}>
       <PageHeader
-        title="Publicação"
-        description="Cada conta conectada pode ser vinculada a canais diferentes, com o próprio agendamento."
+        title={t("pub.titulo")}
+        description={t("pub.descricao")}
       />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           {accounts && accounts.length > 0 && (
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Se ao conectar outra conta aparecer a mesma de antes, é porque seu navegador continua logado nela no
-              site do TikTok. Saia da conta por lá (ou abra numa aba anônima) antes de conectar de novo.
+              {t("pub.avisoMesmaConta")}
             </p>
           )}
         </div>

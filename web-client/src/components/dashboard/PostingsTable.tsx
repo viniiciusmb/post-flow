@@ -1,3 +1,5 @@
+import { dataHora } from "@/lib/formatoLocal"
+import { useT } from "@/i18n"
 import { EmptyState } from "@/components/dashboard/EmptyState"
 import {
   Table,
@@ -23,7 +25,7 @@ export interface PostingRow {
 }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleString("pt-BR")
+  return dataHora(iso)
 }
 
 export function PostingsTable({
@@ -41,9 +43,10 @@ export function PostingsTable({
   showTiktokProfile?: boolean
   emptyMessage: string
 }) {
+  const t = useT()
   if (rows.length === 0) {
     return (
-      <EmptyState title="Nada por aqui ainda" description={emptyMessage} compact />
+      <EmptyState title={t("tabela.vazio")} description={emptyMessage} compact />
     )
   }
 
@@ -52,13 +55,13 @@ export function PostingsTable({
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            {showClient && <TableHead>Cliente</TableHead>}
-            <TableHead>Vídeo</TableHead>
-            {showChannel && <TableHead>Canal</TableHead>}
-            {showOrigin && <TableHead>Origem</TableHead>}
+            {showClient && <TableHead>{t("tabela.cliente")}</TableHead>}
+            <TableHead>{t("tabela.video")}</TableHead>
+            {showChannel && <TableHead>{t("tabela.canal")}</TableHead>}
+            {showOrigin && <TableHead>{t("tabela.origem")}</TableHead>}
             {showTiktokProfile && <TableHead>Perfil TikTok</TableHead>}
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Data</TableHead>
+            <TableHead>{t("tabela.status")}</TableHead>
+            <TableHead className="text-right">{t("tabela.data")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

@@ -4,8 +4,10 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { AuthShell, AuthErro } from "@/pages/AuthShell"
 import { api, ApiError } from "@/lib/api"
+import { useT } from "@/i18n"
 
 export function ForgotPasswordPage() {
+  const t = useT()
   const [email, setEmail] = useState("")
   const [erro, setErro] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -21,7 +23,7 @@ export function ForgotPasswordPage() {
       // tela não sirva pra descobrir quem é cliente do Post Flow.
       setMensagem(r.message)
     } catch (err) {
-      setErro(err instanceof ApiError ? err.message : "Não foi possível enviar o e-mail agora.")
+      setErro(err instanceof ApiError ? err.message : t("auth.naoFoiPossivelEnviar"))
     } finally {
       setEnviando(false)
     }
@@ -29,17 +31,17 @@ export function ForgotPasswordPage() {
 
   if (mensagem) {
     return (
-      <AuthShell titulo="Verifique seu e-mail" descricao={mensagem}>
+      <AuthShell titulo={t("auth.verifiqueEmail")} descricao={mensagem}>
         <div className="space-y-4">
           <p className="text-[14.5px] leading-relaxed text-muted-foreground">
-            O link vale por 30 minutos e só pode ser usado uma vez.
+            {t("auth.linkVale30min")}
           </p>
           <Button variant="outline" className="w-full" onClick={() => setMensagem(null)}>
-            Usar outro e-mail
+            {t("auth.usarOutroEmail")}
           </Button>
           <p className="text-center text-[13.5px] text-muted-foreground">
             <a href="/login" className="font-medium text-primary hover:underline">
-              Voltar para entrar
+              {t("auth.voltarParaEntrar")}
             </a>
           </p>
         </div>
@@ -49,19 +51,19 @@ export function ForgotPasswordPage() {
 
   return (
     <AuthShell
-      titulo="Esqueceu a senha?"
-      descricao="Escreva o e-mail da sua conta. Enviamos um link para você criar uma senha nova."
+      titulo={t("auth.esqueceuTitulo")}
+      descricao={t("auth.esqueceuTexto")}
     >
       <form onSubmit={handleSubmit}>
         <FieldGroup>
           {erro && <AuthErro>{erro}</AuthErro>}
 
           <Field>
-            <FieldLabel htmlFor="email">E-mail</FieldLabel>
+            <FieldLabel htmlFor="email">{t("auth.email")}</FieldLabel>
             <Input
               id="email"
               type="email"
-              placeholder="voce@exemplo.com"
+              placeholder={t("auth.emailPlaceholder")}
               autoComplete="email"
               autoFocus
               required
@@ -72,14 +74,14 @@ export function ForgotPasswordPage() {
 
           <Field>
             <Button type="submit" disabled={enviando}>
-              {enviando ? "Enviando..." : "Enviar o link"}
+              {enviando ? t("auth.enviando") : t("auth.enviarOLink")}
             </Button>
           </Field>
 
           <p className="text-center text-[13.5px] text-muted-foreground">
-            Lembrou a senha?{" "}
+            {t("auth.lembrouASenha")}{" "}
             <a href="/login" className="font-medium text-primary hover:underline">
-              Entrar
+              {t("auth.entrar")}
             </a>
           </p>
         </FieldGroup>

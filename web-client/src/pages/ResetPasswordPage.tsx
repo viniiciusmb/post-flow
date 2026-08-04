@@ -4,10 +4,12 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { AuthShell, AuthErro } from "@/pages/AuthShell"
 import { api, ApiError } from "@/lib/api"
+import { useT } from "@/i18n"
 
 const SENHA_MINIMA = 8
 
 export function ResetPasswordPage() {
+  const t = useT()
   const token = new URLSearchParams(window.location.search).get("token") || ""
 
   // "checando" evita mostrar o formulário por um instante antes de descobrir
@@ -44,7 +46,7 @@ export function ResetPasswordPage() {
       return
     }
     if (senha !== repetir) {
-      setErro("As duas senhas não são iguais.")
+      setErro(t("auth.senhasDiferentes"))
       return
     }
 
@@ -60,7 +62,7 @@ export function ResetPasswordPage() {
       } else if (err instanceof ApiError && (err.data as { expired?: boolean }).expired) {
         setEstado("expirado")
       } else {
-        setErro(err instanceof ApiError ? err.message : "Não foi possível salvar a senha nova.")
+        setErro(err instanceof ApiError ? err.message : t("auth.naoFoiPossivelSalvarSenha"))
       }
       setSalvando(false)
     }
@@ -68,7 +70,7 @@ export function ResetPasswordPage() {
 
   if (estado === "checando") {
     return (
-      <AuthShell titulo="Um instante" descricao="Conferindo o link...">
+      <AuthShell titulo={t("auth.umInstante")} descricao={t("auth.conferindoLink")}>
         <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
           <div className="h-full w-1/3 animate-pulse rounded-full bg-primary/40" />
         </div>
@@ -79,8 +81,8 @@ export function ResetPasswordPage() {
   if (estado === "muitas") {
     return (
       <AuthShell
-        titulo="Muitas tentativas"
-        descricao="Tivemos tentativas demais vindas daqui nos últimos minutos. Espere alguns minutos e abra o link de novo - ele continua valendo."
+        titulo={t("auth.muitasTentativas")}
+        descricao={t("auth.muitasTentativasTexto")}
       >
         <Button variant="outline" className="w-full" onClick={() => window.location.reload()}>
           Tentar de novo
@@ -92,16 +94,16 @@ export function ResetPasswordPage() {
   if (estado === "expirado") {
     return (
       <AuthShell
-        titulo="Link expirado"
-        descricao="Esse link já foi usado ou passou dos 30 minutos de validade. Peça um novo, leva um segundo."
+        titulo={t("auth.linkExpirado")}
+        descricao={t("auth.linkExpiradoTexto")}
       >
         <div className="space-y-4">
           <Button className="w-full" onClick={() => (window.location.href = "/esqueci-senha")}>
-            Pedir um link novo
+            {t("auth.pedirNovoLink")}
           </Button>
           <p className="text-center text-[13.5px] text-muted-foreground">
             <a href="/login" className="font-medium text-primary hover:underline">
-              Voltar para entrar
+              {t("auth.voltarParaEntrar")}
             </a>
           </p>
         </div>
@@ -112,11 +114,11 @@ export function ResetPasswordPage() {
   if (estado === "pronto") {
     return (
       <AuthShell
-        titulo="Senha alterada"
-        descricao="Sua senha nova já está valendo. Por segurança, as outras sessões abertas foram encerradas."
+        titulo={t("auth.senhaAlterada")}
+        descricao={t("auth.senhaAlteradaTexto")}
       >
         <Button className="w-full" onClick={() => (window.location.href = "/login")}>
-          Entrar agora
+          {t("auth.entrar")}
         </Button>
       </AuthShell>
     )
@@ -124,15 +126,15 @@ export function ResetPasswordPage() {
 
   return (
     <AuthShell
-      titulo="Criar uma nova senha"
-      descricao="Escolha uma senha que você ainda não usa em outro lugar."
+      titulo={t("auth.criarNovaSenha")}
+      descricao={t("auth.criarNovaSenhaTexto")}
     >
       <form onSubmit={handleSubmit}>
         <FieldGroup>
           {erro && <AuthErro>{erro}</AuthErro>}
 
           <Field>
-            <FieldLabel htmlFor="senha">Nova senha</FieldLabel>
+            <FieldLabel htmlFor="senha">{t("auth.novaSenha")}</FieldLabel>
             <Input
               id="senha"
               type="password"
@@ -143,11 +145,11 @@ export function ResetPasswordPage() {
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
             />
-            <p className="text-[12.5px] text-muted-foreground">Pelo menos {SENHA_MINIMA} caracteres.</p>
+            <p className="text-[12.5px] text-muted-foreground">{t("auth.peloMenosCaracteres", { n: SENHA_MINIMA })}</p>
           </Field>
 
           <Field>
-            <FieldLabel htmlFor="repetir">Repita a nova senha</FieldLabel>
+            <FieldLabel htmlFor="repetir">{t("auth.repitaNovaSenha")}</FieldLabel>
             <Input
               id="repetir"
               type="password"
@@ -161,7 +163,7 @@ export function ResetPasswordPage() {
 
           <Field>
             <Button type="submit" disabled={salvando}>
-              {salvando ? "Salvando..." : "Salvar a nova senha"}
+              {salvando ? t("comum.salvando") : t("auth.salvarNovaSenha")}
             </Button>
           </Field>
         </FieldGroup>

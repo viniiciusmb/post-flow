@@ -1,3 +1,4 @@
+import { data } from "@/lib/formatoLocal"
 import { useEffect, useState, type FormEvent } from "react"
 import {
   IconChevronDown,
@@ -31,6 +32,7 @@ import { api, ApiError, csrfToken } from "@/lib/api"
 import { CLIP_STATUS_TONE, SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
 import { ACTIVE_STATUSES, computeVideoProgress, formatEta } from "@/lib/videoProgress"
 import type { Clip, SourceVideo, SourceVideoStatus, TikTokAccountSummary, YoutubeChannel } from "@/types/api"
+import { useT } from "@/i18n"
 
 // So aparece quando o cliente tem 2+ contas TikTok - com 0 ou 1, o backend
 // resolve sozinho (ver resolveTiktokAccountIds no sourceVideosApiController).
@@ -43,6 +45,7 @@ function TiktokAccountPicker({
   selected: number[]
   onChange: (ids: number[]) => void
 }) {
+  const t = useT()
   if (accounts.length < 2) return null
 
   function toggle(id: number) {
@@ -51,7 +54,7 @@ function TiktokAccountPicker({
 
   return (
     <Field>
-      <FieldLabel>Postar cortes nessa(s) conta(s)</FieldLabel>
+      <FieldLabel>{t("cortes.postarNessasContas")}</FieldLabel>
       <div className="flex flex-wrap gap-3">
         {accounts.map((a) => (
           <label key={a.id} className="flex items-center gap-1.5 text-xs">
@@ -82,6 +85,7 @@ function ClipCard({
   onExported: () => void
   onFolderSet: () => void
 }) {
+  const t = useT()
   const [playing, setPlaying] = useState(false)
   const [showPasteFolder, setShowPasteFolder] = useState(false)
   const [folderLink, setFolderLink] = useState("")
@@ -98,7 +102,7 @@ function ClipCard({
       await api.post(`/api/client/source-videos/clips/${clip.id}/export-to-drive`, {})
       onExported()
     } catch (err) {
-      setDriveError(err instanceof ApiError ? err.message : "Falha ao enviar pro Drive.")
+      setDriveError(err instanceof ApiError ? err.message : t("cortes.falhaEnviarDrive"))
     } finally {
       setUploading(false)
     }
@@ -115,7 +119,7 @@ function ClipCard({
       setFolderLink("")
       onFolderSet()
     } catch (err) {
-      setDriveError(err instanceof ApiError ? err.message : "Não foi possível salvar a pasta.")
+      setDriveError(err instanceof ApiError ? err.message : t("cortes.naoFoiPossivelSalvarPasta"))
     } finally {
       setSavingFolder(false)
     }
@@ -151,7 +155,7 @@ function ClipCard({
             </div>
           ) : (
             <TonePill tone={CLIP_STATUS_TONE[clip.status].tone} spin={CLIP_STATUS_TONE[clip.status].spin} className="relative px-2 py-0.5 text-[10px]">
-              {CLIP_STATUS_TONE[clip.status].label}
+              {t(CLIP_STATUS_TONE[clip.status].label)}
             </TonePill>
           )}
         </div>
@@ -188,7 +192,7 @@ function ClipCard({
                 className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline disabled:opacity-50"
               >
                 <IconBrandGoogleDrive className="size-3" />
-                {uploading ? "Enviando..." : "Fazer upload no Drive"}
+                {uploading ? "Enviando..." : t("cortes.fazerUploadDrive")}
               </button>
             ) : (
               <>
@@ -205,7 +209,7 @@ function ClipCard({
                     <Input
                       value={folderLink}
                       onChange={(e) => setFolderLink(e.target.value)}
-                      placeholder="Link da pasta do Drive"
+                      placeholder={t("cortes.linkDaPastaDrive")}
                       required
                       className="h-7 text-[11px]"
                     />
@@ -229,6 +233,7 @@ function ClipCard({
 }
 
 function ExportAllToDriveButton({ videoId, onExported }: { videoId: number; onExported: () => void }) {
+  const t = useT()
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -243,7 +248,7 @@ function ExportAllToDriveButton({ videoId, onExported }: { videoId: number; onEx
         {},
       )
       if (data.total === 0) {
-        setResult("Todos os cortes já foram enviados pro Drive.")
+        setResult(t("cortes.todosJaEnviados"))
       } else if (data.failed > 0) {
         setResult(`${data.exported} de ${data.total} cortes enviados (${data.failed} falharam).`)
       } else {
@@ -251,7 +256,7 @@ function ExportAllToDriveButton({ videoId, onExported }: { videoId: number; onEx
       }
       onExported()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Falha ao enviar os cortes pro Drive.")
+      setError(err instanceof ApiError ? err.message : t("cortes.falhaEnviarCortes"))
     } finally {
       setSending(false)
     }
@@ -261,7 +266,7 @@ function ExportAllToDriveButton({ videoId, onExported }: { videoId: number; onEx
     <div className="flex flex-wrap items-center gap-2">
       <Button type="button" variant="outline" size="sm" onClick={handleClick} disabled={sending} className="gap-1.5">
         <IconBrandGoogleDrive className="size-3.5" />
-        {sending ? "Enviando cortes..." : "Exportar todos os cortes pro Drive"}
+        {sending ? "Enviando cortes..." : t("cortes.exportarTodos")}
       </Button>
       {result && <span className="text-xs text-muted-foreground">{result}</span>}
       {error && <span className="text-xs text-destructive">{error}</span>}
@@ -309,6 +314,7 @@ function VideoRow({
   selected: boolean
   onToggleSelect: () => void
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -426,16 +432,16 @@ function VideoRow({
           <p className="truncate text-sm font-medium">{video.title}</p>
           <p className="text-xs text-muted-foreground">
             {video.channelName ?? "Link avulso / upload"} · {formatDuration(video.durationSeconds)}
-            {video.publishedAt && ` · ${new Date(video.publishedAt).toLocaleDateString("pt-BR")}`}
-            {video.clipCount > 0 && ` · ${video.readyClipCount}/${video.clipCount} cortes concluídos`}
-            {progress && progress.etaSeconds !== null && ` · faltam ~${formatEta(progress.etaSeconds)}`}
+            {video.publishedAt && ` · ${data(video.publishedAt)}`}
+            {video.clipCount > 0 && ` · ${t("cortes.cortesConcluidos", { prontos: video.readyClipCount, total: video.clipCount })}`}
+            {progress && progress.etaSeconds !== null && ` · ${t("cortes.faltam", { tempo: formatEta(progress.etaSeconds, t) })}`}
           </p>
           <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
             <IconBrandTiktok className="size-3" />
             {video.tiktokAccountNames.length > 0 ? (
               <>Postar em: {video.tiktokAccountNames.join(", ")}</>
             ) : (
-              <span className="text-amber-600 dark:text-amber-400">Sem conta TikTok vinculada</span>
+              <span className="text-amber-600 dark:text-amber-400">{t("cortes.semContaVinculada")}</span>
             )}
           </p>
         </div>
@@ -444,7 +450,7 @@ function VideoRow({
             linha em vez de espremer (ou estourar) a linha do titulo. */}
         <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">
         <TonePill tone={SOURCE_VIDEO_STATUS_TONE[video.status].tone} spin={SOURCE_VIDEO_STATUS_TONE[video.status].spin}>
-          {SOURCE_VIDEO_STATUS_TONE[video.status].label}
+          {t(SOURCE_VIDEO_STATUS_TONE[video.status].label)}
         </TonePill>
 
         {isActive && (
@@ -471,7 +477,7 @@ function VideoRow({
             {enqueueing ? "Enviando..." : "Processar agora"}
           </Button>
         )}
-        <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title="Remover vídeo">
+        <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title={t("cortes.removerVideo")}>
           <IconTrash className="size-4" />
         </Button>
         </div>
@@ -485,7 +491,7 @@ function VideoRow({
           <p className="text-xs text-destructive">
             {video.status === "cancelled"
               ? "Processamento cancelado."
-              : "Não deu pra processar este vídeo. Já foi registrado no nosso painel."}
+              : t("cortes.naoDeuProcessar")}
           </p>
           <Button
             variant="outline"
@@ -507,7 +513,7 @@ function VideoRow({
             estiver ligado e conectado.
           </p>
           <Button variant="outline" size="sm" asChild className="h-7 shrink-0 gap-1 text-xs">
-            <a href="/client/tunnel">Ver minha conexão</a>
+            <a href="/client/tunnel">{t("cortes.verMinhaConexao")}</a>
           </Button>
         </div>
       )}
@@ -519,12 +525,12 @@ function VideoRow({
               metade das pessoas pro lugar errado. */}
           <p className="text-xs text-destructive">
             {video.billingBlockReason === "cobranca_falhou"
-              ? "Não consegui cobrar seu cartão pra processar este vídeo. Assim que o cartão for atualizado, ele volta pra fila."
-              : "Sem crédito disponível pra processar este vídeo agora."}
+              ? t("cortes.naoConsegiCobrar")
+              : t("cortes.semCredito")}
           </p>
           <Button variant="outline" size="sm" asChild className="h-7 shrink-0 gap-1 text-xs">
             <a href="/client/billing">
-              {video.billingBlockReason === "cobranca_falhou" ? "Atualizar cartão" : "Ver planos e crédito"}
+              {video.billingBlockReason === "cobranca_falhou" ? t("cortes.atualizarCartao") : t("cortes.verPlanosECredito")}
             </a>
           </Button>
         </div>
@@ -566,6 +572,7 @@ function VideoRow({
 }
 
 function AddManualVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tiktokAccounts: TikTokAccountSummary[] }) {
+  const t = useT()
   const [url, setUrl] = useState("")
   const [selectedAccounts, setSelectedAccounts] = useState<number[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -587,7 +594,7 @@ function AddManualVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; 
       setSuccess(created.message || `"${created.title}" entrou na fila. Acompanhe o progresso na lista abaixo.`)
       onAdded()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível cortar esse vídeo.")
+      setError(err instanceof ApiError ? err.message : t("cortes.naoFoiPossivelCortar"))
     } finally {
       setSubmitting(false)
     }
@@ -597,9 +604,7 @@ function AddManualVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; 
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <IconLink className="size-4 text-muted-foreground" />
-          Cortar vídeo por link
-        </CardTitle>
+          <IconLink className="size-4 text-muted-foreground" />{t("cortes.cortarPorLink")}</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit}>
@@ -615,7 +620,7 @@ function AddManualVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; 
               </p>
             )}
             <Field>
-              <FieldLabel htmlFor="videoUrl">Link do vídeo no YouTube</FieldLabel>
+              <FieldLabel htmlFor="videoUrl">{t("cortes.linkDoVideo")}</FieldLabel>
               <div className="flex gap-2">
                 <Input
                   id="videoUrl"
@@ -638,6 +643,7 @@ function AddManualVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; 
 }
 
 function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tiktokAccounts: TikTokAccountSummary[] }) {
+  const t = useT()
   const [file, setFile] = useState<File | null>(null)
   const [title, setTitle] = useState("")
   const [selectedAccounts, setSelectedAccounts] = useState<number[]>([])
@@ -678,15 +684,15 @@ function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tik
         onAdded()
       } else {
         try {
-          setError(JSON.parse(xhr.responseText).error || "Não foi possível enviar o vídeo.")
+          setError(JSON.parse(xhr.responseText).error || t("cortes.naoFoiPossivelEnviarVideo"))
         } catch {
-          setError("Não foi possível enviar o vídeo.")
+          setError(t("cortes.naoFoiPossivelEnviarVideo"))
         }
       }
     }
     xhr.onerror = () => {
       setUploading(false)
-      setError("Falha de conexão ao enviar o vídeo.")
+      setError(t("cortes.falhaConexaoEnviar"))
     }
     xhr.send(formData)
   }
@@ -695,9 +701,7 @@ function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tik
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <IconUpload className="size-4 text-muted-foreground" />
-          Enviar vídeo do computador/celular
-        </CardTitle>
+          <IconUpload className="size-4 text-muted-foreground" />{t("cortes.enviarDoComputador")}</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit}>
@@ -713,7 +717,7 @@ function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tik
               </p>
             )}
             <Field>
-              <FieldLabel htmlFor="videoFile">Arquivo de vídeo</FieldLabel>
+              <FieldLabel htmlFor="videoFile">{t("cortes.arquivoDeVideo")}</FieldLabel>
               <Input
                 id="videoFile"
                 type="file"
@@ -722,16 +726,16 @@ function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tik
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="videoTitle">Título (opcional)</FieldLabel>
+              <FieldLabel htmlFor="videoTitle">{t("cortes.tituloOpcional")}</FieldLabel>
               <div className="flex gap-2">
                 <Input
                   id="videoTitle"
-                  placeholder="Ex: Live de sábado"
+                  placeholder={t("cortes.exemploTitulo")}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />
                 <Button type="submit" disabled={!file || uploading}>
-                  {uploading ? `Enviando... ${progress}%` : "Enviar e cortar"}
+                  {uploading ? `Enviando... ${progress}%` : t("cortes.enviarECortar")}
                 </Button>
               </div>
             </Field>
@@ -756,6 +760,7 @@ const STAGE_PRIORITY: Record<string, number> = {
 }
 
 export function VideosClipsPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const [videos, setVideos] = useState<SourceVideo[] | null>(null)
   const [channels, setChannels] = useState<YoutubeChannel[]>([])
@@ -844,30 +849,30 @@ export function VideosClipsPage() {
   const finished = (videos ?? []).filter((v) => !PENDING_STATUSES.includes(v.status))
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Cortes">
+    <DashboardLayout user={user} onLogout={logout} title={t("cortes.titulo")}>
       <PageHeader
-        title="Cortes"
-        description="Tudo que está sendo processado e tudo que já ficou pronto pra publicar."
+        title={t("cortes.titulo")}
+        description={t("cortes.descricao")}
       />
       <AddManualVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} />
 
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={() => setShowUpload((v) => !v)} className="gap-2">
           <IconUpload className="size-4" />
-          {showUpload ? "Ocultar envio de arquivo" : "Enviar vídeo por arquivo"}
+          {showUpload ? t("cortes.ocultarEnvioArquivo") : t("cortes.enviarVideoPorArquivo")}
         </Button>
         <Button variant="outline" size="sm" onClick={() => setShowSettings((v) => !v)} className="gap-2">
           <IconAdjustmentsHorizontal className="size-4" />
           <span className="truncate">
-            <span className="sm:hidden">{showSettings ? "Ocultar configurações" : "Configurar cortes"}</span>
+            <span className="sm:hidden">{showSettings ? t("cortes.ocultarConfiguracoes") : t("cortes.configurarCortes")}</span>
             <span className="hidden sm:inline">
-              {showSettings ? "Ocultar configurações de corte" : "Configurar qualidade e estilo dos cortes"}
+              {showSettings ? t("cortes.ocultarConfigCorte") : t("cortes.configurarQualidade")}
             </span>
           </span>
         </Button>
         <Button variant="outline" size="sm" onClick={() => setShowStyleEditor((v) => !v)} className="gap-2">
           <IconAdjustmentsHorizontal className="size-4" />
-          {showStyleEditor ? "Ocultar estilo visual" : "Estilo visual do corte"}
+          {showStyleEditor ? "Ocultar estilo visual" : t("cortes.estiloVisual")}
         </Button>
       </div>
       {showUpload && <UploadVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} />}
@@ -897,8 +902,7 @@ export function VideosClipsPage() {
       )}
 
       {channelIdFilter && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          Mostrando só vídeos de <span className="font-medium text-foreground">{filteredChannelName ?? "canal selecionado"}</span>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">{t("cortes.mostrandoSoVideosDe")}<span className="font-medium text-foreground">{filteredChannelName ?? "canal selecionado"}</span>
           <a href="/client/videos-clips" className="font-semibold text-primary hover:underline">
             limpar filtro
           </a>
@@ -912,9 +916,7 @@ export function VideosClipsPage() {
           <Skeleton className="h-20" />
         </div>
       ) : videos.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-          Nenhum corte por aqui ainda. Cole o link de um vídeo acima, ou cadastre um canal em Canais e o Post Flow passa a cortar os vídeos novos sozinho.
-        </div>
+        <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">{t("cortes.vazio")}</div>
       ) : (
         <Tabs defaultValue="in-progress">
           <TabsList>
@@ -923,9 +925,7 @@ export function VideosClipsPage() {
           </TabsList>
           <TabsContent value="in-progress" className="flex flex-col gap-3">
             {inProgress.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-                Nenhum vídeo em andamento agora.
-              </div>
+              <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">{t("cortes.nenhumEmAndamento")}</div>
             ) : (
               inProgress.map((video) => (
                 <VideoRow
@@ -943,9 +943,7 @@ export function VideosClipsPage() {
           </TabsContent>
           <TabsContent value="finished" className="flex flex-col gap-3">
             {finished.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-                Nenhum vídeo pronto ainda.
-              </div>
+              <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">{t("cortes.nenhumPronto")}</div>
             ) : (
               finished.map((video) => (
                 <VideoRow

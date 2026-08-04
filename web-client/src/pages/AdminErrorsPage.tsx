@@ -1,3 +1,4 @@
+import { dataHora } from "@/lib/formatoLocal"
 import { useEffect, useState } from "react"
 import { IconRefresh, IconCheck, IconCopy, IconAlertTriangle } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
@@ -14,7 +15,7 @@ import type { SystemError, SystemErrorsResponse } from "@/types/api"
 type Filtro = "abertos" | "resolvidos" | "todos"
 
 function quando(iso: string) {
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+  return dataHora(iso)
 }
 
 function ErrorRow({

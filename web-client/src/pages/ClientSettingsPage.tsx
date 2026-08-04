@@ -1,3 +1,5 @@
+import { useT } from "@/i18n"
+import { dataHora } from "@/lib/formatoLocal"
 import { useEffect, useState, type FormEvent } from "react"
 import { IconBrandGoogleDrive, IconUserCircle, IconLock } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
@@ -14,6 +16,7 @@ import { api, ApiError } from "@/lib/api"
 import type { ClientProfileResponse, DriveStatusResponse, TikTokAccountSummary } from "@/types/api"
 
 function ProfileSection() {
+  const t = useT()
   const [profile, setProfile] = useState<ClientProfileResponse | null>(null)
   const [businessName, setBusinessName] = useState("")
   const [email, setEmail] = useState("")
@@ -40,7 +43,7 @@ function ProfileSection() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível salvar.")
+      setError(err instanceof ApiError ? err.message : t("pub.naoFoiPossivelSalvar"))
     } finally {
       setSaving(false)
     }
@@ -53,7 +56,7 @@ function ProfileSection() {
           <IconUserCircle className="size-4 text-muted-foreground" />
           Perfil
         </CardTitle>
-        <CardDescription>Nome e e-mail usados pra entrar no Post Flow.</CardDescription>
+        <CardDescription>{t("config.perfilDescricao")}</CardDescription>
       </CardHeader>
       <CardContent>
         {!profile ? (
@@ -71,7 +74,7 @@ function ProfileSection() {
                 <Input id="businessName" value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
               </Field>
               <Field>
-                <FieldLabel htmlFor="email">E-mail</FieldLabel>
+                <FieldLabel htmlFor="email">{t("auth.email")}</FieldLabel>
                 <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </Field>
               <div className="flex items-center gap-3">
@@ -89,6 +92,7 @@ function ProfileSection() {
 }
 
 function PasswordSection() {
+  const t = useT()
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -101,7 +105,7 @@ function PasswordSection() {
     setError(null)
     setSaved(false)
     if (newPassword !== confirmPassword) {
-      setError("A confirmação não bate com a nova senha.")
+      setError(t("config.confirmacaoNaoBate"))
       return
     }
     setSaving(true)
@@ -113,7 +117,7 @@ function PasswordSection() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível trocar a senha.")
+      setError(err instanceof ApiError ? err.message : t("config.naoFoiPossivelTrocarSenha"))
     } finally {
       setSaving(false)
     }
@@ -181,6 +185,7 @@ function PasswordSection() {
 }
 
 function DriveSection() {
+  const t = useT()
   const [status, setStatus] = useState<DriveStatusResponse | null>(null)
   const [tiktokAccounts, setTiktokAccounts] = useState<TikTokAccountSummary[]>([])
   const [folderLink, setFolderLink] = useState("")
@@ -211,7 +216,7 @@ function DriveSection() {
       setFolderLink("")
       await load()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível salvar a pasta.")
+      setError(err instanceof ApiError ? err.message : t("cortes.naoFoiPossivelSalvarPasta"))
     } finally {
       setSaving(false)
     }
@@ -225,9 +230,7 @@ function DriveSection() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <IconBrandGoogleDrive className="size-4 text-muted-foreground" />
-          Minha pasta do Google Drive
-        </CardTitle>
+          <IconBrandGoogleDrive className="size-4 text-muted-foreground" />{t("config.minhaPasta")}</CardTitle>
         <CardDescription>
           Opcional: conecte seu próprio Google Drive e aponte uma pasta com vídeos, eles são postados
           automaticamente no seu TikTok, sem precisar de canal do YouTube.
@@ -246,7 +249,7 @@ function DriveSection() {
               <TonePill tone="success">Conectado</TonePill>
               <span className="text-muted-foreground">{status.googleAccountEmail}</span>
               <Button asChild variant="ghost" size="sm" className="ml-auto">
-                <a href="/auth/google/connect">Trocar de conta</a>
+                <a href="/auth/google/connect">{t("config.trocarDeConta")}</a>
               </Button>
             </div>
 
@@ -254,7 +257,7 @@ function DriveSection() {
               <p className="text-sm text-muted-foreground">
                 Pasta atual: <span className="font-medium text-foreground">{status.folder.name ?? status.folder.id}</span>
                 {status.folder.lastPolledAt &&
-                  `. Última checagem em ${new Date(status.folder.lastPolledAt).toLocaleString("pt-BR")}`}
+                  `. Última checagem em ${dataHora(status.folder.lastPolledAt)}`}
               </p>
             )}
 
@@ -267,7 +270,7 @@ function DriveSection() {
                 )}
                 <Field>
                   <FieldLabel htmlFor="folderLink">
-                    {status.folder ? "Trocar pasta" : "Link ou ID da pasta compartilhada"}
+                    {status.folder ? "Trocar pasta" : t("config.linkOuIdPastaCompartilhada")}
                   </FieldLabel>
                   <div className="flex gap-2">
                     <Input
@@ -281,13 +284,11 @@ function DriveSection() {
                       {saving ? "Salvando..." : "Salvar"}
                     </Button>
                   </div>
-                  <FieldDescription>
-                    A pasta é checada periodicamente. Vídeos novos entram na fila de postagem automaticamente.
-                  </FieldDescription>
+                  <FieldDescription>{t("config.pastaChecada")}</FieldDescription>
                 </Field>
                 {tiktokAccounts.length > 1 && (
                   <Field>
-                    <FieldLabel>Postar vídeos dessa pasta nessa(s) conta(s)</FieldLabel>
+                    <FieldLabel>{t("config.postarDessaPasta")}</FieldLabel>
                     <div className="flex flex-wrap gap-3">
                       {tiktokAccounts.map((a) => (
                         <label key={a.id} className="flex items-center gap-1.5 text-xs">
@@ -308,15 +309,16 @@ function DriveSection() {
 }
 
 export function ClientSettingsPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
 
   if (authLoading || !user) return null
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Configurações">
+    <DashboardLayout user={user} onLogout={logout} title={t("config.titulo")}>
       <PageHeader
-        title="Configurações"
-        description="Seus dados de acesso e a conexão com o Google Drive. Qualidade e estilo dos cortes ficam na tela Cortes."
+        title={t("config.titulo")}
+        description={t("config.descricao")}
       />
       <ProfileSection />
       <PasswordSection />

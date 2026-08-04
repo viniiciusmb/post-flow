@@ -1,3 +1,4 @@
+import { data } from "@/lib/formatoLocal"
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -97,7 +98,7 @@ export function AdminClientsPage() {
                     </a>
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
-                    {new Date(c.createdAt).toLocaleDateString("pt-BR")}
+                    {data(c.createdAt)}
                   </TableCell>
                   <TableCell>
                     <TonePill tone={c.isActive ? "success" : "neutral"}>

@@ -1,12 +1,15 @@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { DateRangeKey } from "@/types/api"
+import { useT, type ChaveDeTraducao } from "@/i18n"
 
-const OPTIONS: { key: DateRangeKey; label: string }[] = [
-  { key: "today", label: "Hoje" },
-  { key: "yesterday", label: "Ontem" },
-  { key: "last7days", label: "Últimos 7 dias" },
-  { key: "this_month", label: "Este mês" },
-  { key: "last_month", label: "Mês passado" },
+// Guarda a CHAVE, não o texto: este array é montado uma vez quando o módulo
+// carrega, antes de existir idioma escolhido.
+const OPTIONS: { key: DateRangeKey; label: ChaveDeTraducao }[] = [
+  { key: "today", label: "comum.hoje" },
+  { key: "yesterday", label: "comum.ontem" },
+  { key: "last7days", label: "periodo.ultimos7" },
+  { key: "this_month", label: "periodo.esteMes" },
+  { key: "last_month", label: "periodo.mesPassado" },
 ]
 
 export function DateRangeFilter({
@@ -16,6 +19,7 @@ export function DateRangeFilter({
   value: DateRangeKey
   onChange: (range: DateRangeKey) => void
 }) {
+  const t = useT()
   return (
     // No celular os 5 botões não cabem numa linha. Deixar quebrar linha ficava
     // feio de um jeito específico: este controle junta as bordas dos vizinhos
@@ -33,7 +37,7 @@ export function DateRangeFilter({
       >
         {OPTIONS.map((o) => (
           <ToggleGroupItem key={o.key} value={o.key} className="shrink-0 text-xs">
-            {o.label}
+            {t(o.label)}
           </ToggleGroupItem>
         ))}
       </ToggleGroup>

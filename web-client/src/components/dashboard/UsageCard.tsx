@@ -1,3 +1,4 @@
+import { useT } from "@/i18n"
 import { useEffect, useState } from "react"
 import { IconClock } from "@tabler/icons-react"
 import { api } from "@/lib/api"
@@ -8,6 +9,7 @@ function formatDay(iso: string) {
 }
 
 export function UsageCard({ range }: { range: DateRangeKey }) {
+  const t = useT()
   const [data, setData] = useState<ClientUsageResponse | null>(null)
 
   useEffect(() => {
@@ -26,7 +28,7 @@ export function UsageCard({ range }: { range: DateRangeKey }) {
       <div className="flex items-baseline gap-2">
         <IconClock className="size-3.5 self-center text-muted-foreground" />
         <span className="font-heading text-lg font-semibold tabular-nums">{data.minutesInRange}</span>
-        <span className="text-xs text-muted-foreground">minutos de vídeo processados no período</span>
+        <span className="text-xs text-muted-foreground">{t("uso.minutosProcessados")}</span>
       </div>
 
       {activeDays.length > 0 && (

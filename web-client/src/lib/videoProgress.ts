@@ -54,9 +54,14 @@ export function computeVideoProgress(
   return { percent, etaSeconds }
 }
 
-export function formatEta(etaSeconds: number | null): string {
+// Recebe o `t` em vez de importar um hook: esta função é chamada de dentro de
+// template string, onde hook não pode entrar.
+export function formatEta(
+  etaSeconds: number | null,
+  t: (chave: "cortes.menosDeUmMin") => string
+): string {
   if (etaSeconds === null) return ""
-  if (etaSeconds < 60) return "menos de 1min"
+  if (etaSeconds < 60) return t("cortes.menosDeUmMin")
   const minutes = Math.round(etaSeconds / 60)
   if (minutes < 60) return `${minutes}min`
   const hours = Math.floor(minutes / 60)

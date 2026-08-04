@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { api, ApiError } from "@/lib/api"
 import type { CreatorOptions, PostingQueueItem, PublishDefaults } from "@/types/api"
+import { useT, type ChaveDeTraducao } from "@/i18n"
 
 /**
  * Opções de publicação exigidas pelo TikTok na publicação direta.
@@ -35,16 +36,19 @@ import type { CreatorOptions, PostingQueueItem, PublishDefaults } from "@/types/
  * O mesmo formulário serve pra tratar um corte específico diferente do padrão.
  */
 
-const NOMES_DE_PRIVACIDADE: Record<string, string> = {
-  PUBLIC_TO_EVERYONE: "Todo mundo",
-  MUTUAL_FOLLOW_FRIENDS: "Amigos (quem se segue mútuo)",
-  FOLLOWER_OF_CREATOR: "Seus seguidores",
-  SELF_ONLY: "Só você",
+// Guarda a CHAVE de tradução: o mapa é montado no carregamento do módulo,
+// antes de existir idioma escolhido.
+const NOMES_DE_PRIVACIDADE: Record<string, ChaveDeTraducao> = {
+  PUBLIC_TO_EVERYONE: "opc.todoMundo",
+  MUTUAL_FOLLOW_FRIENDS: "opc.amigos",
+  FOLLOWER_OF_CREATOR: "opc.seusSeguidores",
+  SELF_ONLY: "opc.soVoce",
 }
 
-export function nomeDaPrivacidade(nivel: string | null) {
+export function nomeDaPrivacidade(nivel: string | null, t: (c: ChaveDeTraducao) => string) {
   if (!nivel) return null
-  return NOMES_DE_PRIVACIDADE[nivel] ?? nivel
+  const chave = NOMES_DE_PRIVACIDADE[nivel]
+  return chave ? t(chave) : nivel
 }
 
 type Valores = {
@@ -72,7 +76,7 @@ export function PublishDefaultsForm({
       // Nada pré-selecionado enquanto o criador não tiver escolhido: é
       // exatamente isso que a auditoria procura na primeira vez.
       valores={defaults.definido ? defaults : null}
-      rotuloSalvar={defaults.definido ? "Salvar opções" : "Confirmar e liberar publicação"}
+      rotuloSalvar={defaults.definido ? "opc.salvarOpcoes" : "opc.confirmarELiberar"}
       salvar={async (v) => {
         const novo = await api.put<PublishDefaults>(
           `/api/client/tiktok-accounts/${accountId}/publish-defaults`,
@@ -101,7 +105,7 @@ export function DirectPostOptions({
       accountId={accountId}
       item={item}
       valores={item.optionsCustom ? item : null}
-      rotuloSalvar={item.optionsCustom ? "Salvar opções deste corte" : "Usar estas opções só neste corte"}
+      rotuloSalvar={item.optionsCustom ? "opc.salvarOpcoesDesteCorte" : "opc.usarSoNesteCorte"}
       salvar={async (v) => {
         await api.put(`/api/client/postings/${item.id}/options`, v)
         onSaved()
@@ -129,10 +133,11 @@ function FormularioDeOpcoes({
   accountId: number
   item?: PostingQueueItem
   valores: Valores | null
-  rotuloSalvar: string
+  rotuloSalvar: ChaveDeTraducao
   salvar: (v: Valores) => Promise<void>
   voltarAoPadrao?: () => Promise<void>
 }) {
+  const t = useT()
   const [opcoes, setOpcoes] = useState<CreatorOptions | null>(null)
   const [erroCarregar, setErroCarregar] = useState<string | null>(null)
 
@@ -159,7 +164,7 @@ function FormularioDeOpcoes({
     api
       .get<CreatorOptions>(`/api/client/postings/accounts/${accountId}/creator-options`)
       .then(setOpcoes)
-      .catch((e) => setErroCarregar(e instanceof ApiError ? e.message : "Não foi possível falar com o TikTok."))
+      .catch((e) => setErroCarregar(e instanceof ApiError ? e.message : t("opc.naoFoiPossivelFalarTikTok")))
   }, [accountId])
 
   if (erroCarregar) {
@@ -200,7 +205,7 @@ function FormularioDeOpcoes({
         brandContentToggle: divulgacao && parceriaPaga,
       })
     } catch (e) {
-      setErro(e instanceof ApiError ? e.message : "Não foi possível salvar.")
+      setErro(e instanceof ApiError ? e.message : t("comum.erroGenerico"))
     } finally {
       setSalvando(false)
     }
@@ -213,7 +218,7 @@ function FormularioDeOpcoes({
     try {
       await voltarAoPadrao()
     } catch (e) {
-      setErro(e instanceof ApiError ? e.message : "Não foi possível voltar ao padrão.")
+      setErro(e instanceof ApiError ? e.message : t("opc.naoFoiPossivelVoltarPadrao"))
     } finally {
       setVoltando(false)
     }
@@ -232,7 +237,7 @@ function FormularioDeOpcoes({
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{opcoes.creatorNickname ?? opcoes.creatorUsername}</p>
           <p className="text-xs text-muted-foreground">
-            {item ? "Vai publicar nesta conta" : "Vale pra todos os cortes desta conta"}
+            {item ? t("opc.vaiPublicarNestaConta") : t("opc.valeProTodos")}
           </p>
         </div>
       </div>
@@ -240,7 +245,7 @@ function FormularioDeOpcoes({
       {/* Exigido: o criador tem que ver o vídeo antes de autorizar a publicação. */}
       {item && (
         <div>
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Prévia do que vai ser publicado</p>
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("opc.previa")}</p>
           <video
             src={`/api/client/source-videos/clips/${item.clipId}/download`}
             controls
@@ -252,23 +257,23 @@ function FormularioDeOpcoes({
       )}
 
       <Field>
-        <FieldLabel>{item ? "Quem pode ver este vídeo" : "Quem pode ver os vídeos"}</FieldLabel>
+        <FieldLabel>{item ? t("opc.quemPodeVerEsteVideo") : t("opc.quemPodeVerOsVideos")}</FieldLabel>
         <Select value={privacidade} onValueChange={setPrivacidade}>
           <SelectTrigger className="w-full sm:w-80">
-            <SelectValue placeholder="Escolha uma opção" />
+            <SelectValue placeholder={t("opc.escolhaUmaOpcao")} />
           </SelectTrigger>
           <SelectContent>
             {listaDePrivacidade.map((nivel) => {
               const bloqueado = parceriaBloqueiaPrivado && nivel === "SELF_ONLY"
               return (
                 <SelectItem key={nivel} value={nivel} disabled={bloqueado}>
-                  {NOMES_DE_PRIVACIDADE[nivel] ?? nivel}
+                  {NOMES_DE_PRIVACIDADE[nivel] ? t(NOMES_DE_PRIVACIDADE[nivel]) : nivel}
                   {/* O motivo fica escrito na própria linha, não num tooltip:
                       quem só olha a tela (inclusive quem revisa o app) precisa
                       enxergar por que a opção está apagada. */}
                   {bloqueado && (
                     <span className="text-xs text-muted-foreground">
-                      — parceria paga não pode ficar privada
+                      {t("opc.motivoParceriaPrivada")}
                     </span>
                   )}
                 </SelectItem>
@@ -278,13 +283,13 @@ function FormularioDeOpcoes({
         </Select>
         {parceriaBloqueiaPrivado && (
           <p className="text-xs text-muted-foreground">
-            Conteúdo de parceria não pode ficar visível só pra você.
+            {t("opc.parceriaNaoPodeSoVoce")}
           </p>
         )}
       </Field>
 
       <Field>
-        <FieldLabel>O que as pessoas podem fazer</FieldLabel>
+        <FieldLabel>{t("opc.oQuePodemFazer")}</FieldLabel>
         <div className="flex flex-col gap-2.5">
           <label className="flex items-center gap-2.5 text-sm">
             <Checkbox
@@ -292,9 +297,9 @@ function FormularioDeOpcoes({
               disabled={opcoes.commentDisabled}
               onCheckedChange={(v) => setPermitirComentario(v === true)}
             />
-            Comentar
+            {t("opc.comentar")}
             {opcoes.commentDisabled && (
-              <span className="text-xs text-muted-foreground">(desativado na sua conta do TikTok)</span>
+              <span className="text-xs text-muted-foreground">{t("opc.desativadoNaConta")}</span>
             )}
           </label>
           <label className="flex items-center gap-2.5 text-sm">
@@ -303,9 +308,9 @@ function FormularioDeOpcoes({
               disabled={opcoes.duetDisabled}
               onCheckedChange={(v) => setPermitirDuet(v === true)}
             />
-            Fazer dueto
+            {t("opc.fazerDueto")}
             {opcoes.duetDisabled && (
-              <span className="text-xs text-muted-foreground">(desativado na sua conta do TikTok)</span>
+              <span className="text-xs text-muted-foreground">{t("opc.desativadoNaConta")}</span>
             )}
           </label>
           <label className="flex items-center gap-2.5 text-sm">
@@ -314,9 +319,9 @@ function FormularioDeOpcoes({
               disabled={opcoes.stitchDisabled}
               onCheckedChange={(v) => setPermitirJuncao(v === true)}
             />
-            Fazer junção (stitch)
+            {t("opc.fazerJuncao")}
             {opcoes.stitchDisabled && (
-              <span className="text-xs text-muted-foreground">(desativado na sua conta do TikTok)</span>
+              <span className="text-xs text-muted-foreground">{t("opc.desativadoNaConta")}</span>
             )}
           </label>
         </div>
@@ -325,15 +330,13 @@ function FormularioDeOpcoes({
       <Field>
         <label className="flex items-center gap-2.5 text-sm font-medium">
           <Checkbox checked={divulgacao} onCheckedChange={(v) => setDivulgacao(v === true)} />
-          {item
-            ? "Este vídeo divulga uma marca, produto ou serviço"
-            : "Meus vídeos divulgam uma marca, produto ou serviço"}
+          {item ? t("opc.esteVideoDivulga") : t("opc.meusVideosDivulgam")}
         </label>
         {divulgacao && (
           <div className="mt-1 flex flex-col gap-2.5 pl-6">
             <label className="flex items-center gap-2.5 text-sm">
               <Checkbox checked={marcaPropria} onCheckedChange={(v) => setMarcaPropria(v === true)} />
-              Sua marca
+              {t("opc.suaMarca")}
             </label>
             <label className="flex items-center gap-2.5 text-sm">
               <Checkbox
@@ -347,13 +350,13 @@ function FormularioDeOpcoes({
                   if (marcado && privacidade === "SELF_ONLY") setPrivacidade("")
                 }}
               />
-              Conteúdo de parceria (marca de outra pessoa)
+              {t("opc.conteudoParceria")}
             </label>
             {(marcaPropria || parceriaPaga) && (
               <p className="text-xs text-muted-foreground">
-                {item ? "Seu vídeo será marcado" : "Seus vídeos serão marcados"} como{" "}
+                {item ? t("opc.seuVideoSeraMarcado") : t("opc.seusVideosSeraoMarcados")}{" "}
                 <strong className="text-foreground">
-                  {parceriaPaga ? "Parceria paga" : "Conteúdo promocional"}
+                  {parceriaPaga ? t("opc.parceriaPagaRotulo") : t("opc.conteudoPromocional")}
                 </strong>
                 .
               </p>
@@ -364,27 +367,27 @@ function FormularioDeOpcoes({
 
       {/* Frase obrigatória antes de publicar. */}
       <p className="text-xs text-muted-foreground">
-        Ao publicar, você concorda com a{" "}
+        {t("opc.aoPublicarConcorda")}{" "}
         <a
           href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en"
           target="_blank"
           rel="noopener noreferrer"
           className="underline"
         >
-          Confirmação de Uso de Música
+          {t("opc.confirmacaoMusica")}
         </a>{" "}
-        do TikTok
+        {t("opc.doTikTok")}
         {parceriaPaga && (
           <>
             {" "}
-            e com a{" "}
+            {t("opc.eComA")}{" "}
             <a
               href="https://www.tiktok.com/legal/page/global/bc-policy/en"
               target="_blank"
               rel="noopener noreferrer"
               className="underline"
             >
-              Política de Conteúdo de Parceria
+              {t("opc.politicaParceria")}
             </a>
           </>
         )}
@@ -393,8 +396,7 @@ function FormularioDeOpcoes({
 
       {longoDemais && (
         <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          Este corte tem {duracaoSegundos}s e sua conta do TikTok aceita no máximo {limite}s. Gere um corte
-          mais curto pra publicar por aqui.
+          {t("opc.longoDemais", { duracao: duracaoSegundos ?? 0, limite: limite ?? 0 })}
         </p>
       )}
 
@@ -402,27 +404,26 @@ function FormularioDeOpcoes({
 
       {/* Exigido: avisar que a publicação não aparece na hora. */}
       <p className="text-xs text-muted-foreground">
-        Depois de publicar, o TikTok pode levar alguns minutos pra processar o vídeo antes de ele
-        aparecer no perfil.
+        {t("opc.depoisDePublicar")}
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
         <Button size="sm" onClick={aoSalvar} disabled={!podeSalvar || salvando}>
-          {salvando ? "Salvando..." : rotuloSalvar}
+          {salvando ? t("comum.salvando") : t(rotuloSalvar)}
         </Button>
         {voltarAoPadrao && (
           <Button size="sm" variant="outline" onClick={aoVoltarAoPadrao} disabled={voltando}>
-            {voltando ? "Voltando..." : "Voltar ao padrão da conta"}
+            {voltando ? t("opc.voltando") : t("opc.voltarAoPadrao")}
           </Button>
         )}
         {!privacidade && (
           <span className="text-xs text-muted-foreground">
-            Escolha quem pode ver {item ? "o vídeo" : "os vídeos"} pra continuar.
+            {item ? t("opc.escolhaQuemPodeVerVideo") : t("opc.escolhaQuemPodeVerVideos")}
           </span>
         )}
         {divulgacaoIncompleta && (
           <span className="text-xs text-muted-foreground">
-            Marque se é a sua marca, uma parceria, ou desligue a divulgação.
+            {t("opc.marqueSeEhSuaMarca")}
           </span>
         )}
       </div>

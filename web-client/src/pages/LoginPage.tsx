@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { BrandMark } from "@/components/brand-mark"
 import { api, ApiError } from "@/lib/api"
 import type { SessionUser } from "@/types/api"
+import { useT } from "@/i18n"
 
 function GoogleIcon() {
   return (
@@ -31,6 +32,7 @@ function GoogleIcon() {
 }
 
 export function ProductPreview() {
+  const t = useT()
   return (
     // Coluna de verdade (texto em cima, mockup embaixo) em vez de posicionar o
     // texto por cima: com posicionamento absoluto o cartão cobria o final do
@@ -41,11 +43,10 @@ export function ProductPreview() {
 
       <div className="relative z-10 max-w-md text-center">
         <h2 className="font-heading text-2xl leading-tight font-semibold tracking-tight text-foreground">
-          Detecte e poste automaticamente, sem tocar em nada.
+          {t("auth.previaTitulo")}
         </h2>
         <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
-          Conecte seu canal do YouTube. A cada vídeo novo, o Post Flow corta os
-          melhores trechos e publica no seu TikTok sozinho.
+          {t("auth.previaTexto")}
         </p>
       </div>
 
@@ -56,7 +57,7 @@ export function ProductPreview() {
             <div className="text-[13.5px] font-semibold">@seucanal</div>
             <div className="mt-0.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-green-600">
               <span className="size-1.5 animate-pulse rounded-full bg-green-600" />
-              Monitorando canal
+              {t("auth.monitorandoCanal")}
             </div>
           </div>
         </div>
@@ -92,9 +93,9 @@ export function ProductPreview() {
 
         <div className="flex flex-col gap-0.5">
           {[
-            { label: "Vídeo novo detectado", state: "done" },
-            { label: "Adicionado à fila de processamento", state: "done" },
-            { label: "Publicando no TikTok...", state: "active" },
+            { label: t("auth.videoNovoDetectado"), state: "done" },
+            { label: t("auth.adicionadoAFila"), state: "done" },
+            { label: t("auth.publicandoNoTikTok"), state: "active" },
           ].map((step, i) => (
             <div
               key={step.label}
@@ -147,6 +148,7 @@ function cnStepNum(state: string) {
 }
 
 export function LoginPage() {
+  const t = useT()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
@@ -170,7 +172,7 @@ export function LoginPage() {
       })
       window.location.href = user.role === "admin" ? "/admin" : "/client"
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Nao foi possivel entrar.")
+      setError(err instanceof ApiError ? err.message : t("auth.naoFoiPossivelEntrar"))
       setLoading(false)
     }
   }
@@ -186,10 +188,10 @@ export function LoginPage() {
         <div className="mx-auto w-full max-w-[340px]">
           <div className="mb-8">
             <h1 className="font-heading text-[28px] font-semibold tracking-tight">
-              Bem-vindo de volta
+              {t("auth.bemVindo")}
             </h1>
             <p className="mt-2 text-[14.5px] leading-relaxed text-muted-foreground">
-              Entre para acompanhar as postagens automáticas dos seus canais.
+              {t("auth.bemVindoTexto")}
             </p>
           </div>
 
@@ -202,11 +204,11 @@ export function LoginPage() {
               )}
 
               <Field>
-                <FieldLabel htmlFor="email">E-mail</FieldLabel>
+                <FieldLabel htmlFor="email">{t("auth.email")}</FieldLabel>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="voce@exemplo.com"
+                  placeholder={t("auth.emailPlaceholder")}
                   autoComplete="email"
                   autoFocus
                   required
@@ -216,7 +218,7 @@ export function LoginPage() {
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="password">Senha</FieldLabel>
+                <FieldLabel htmlFor="password">{t("auth.senha")}</FieldLabel>
                 <Input
                   id="password"
                   type="password"
@@ -234,21 +236,21 @@ export function LoginPage() {
                     checked={rememberMe}
                     onCheckedChange={(checked) => setRememberMe(checked === true)}
                   />
-                  Lembrar de mim
+                  {t("auth.lembrarDeMim")}
                 </label>
                 <a href="/esqueci-senha" className="font-medium text-primary hover:underline">
-                  Esqueceu a senha?
+                  {t("auth.esqueceuSenha")}
                 </a>
               </div>
 
               <Field>
                 <Button type="submit" disabled={loading}>
-                  {loading ? "Entrando..." : "Entrar"}
+                  {loading ? t("auth.entrando") : t("auth.entrar")}
                 </Button>
               </Field>
 
               <div className="flex items-center gap-3 text-[12.5px] text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
-                ou continue com
+                {t("auth.ouContinueCom")}
               </div>
 
               <Button
@@ -263,13 +265,13 @@ export function LoginPage() {
                 }}
               >
                 <GoogleIcon />
-                Entrar com Google
+                {t("auth.entrarComGoogle")}
               </Button>
 
               <p className="text-center text-[13.5px] text-muted-foreground">
-                Ainda não tem conta?{" "}
+                {t("auth.aindaNaoTemConta")}{" "}
                 <a href="/register" className="font-medium text-primary hover:underline">
-                  Criar conta grátis
+                  {t("auth.criarContaGratis")}
                 </a>
               </p>
             </FieldGroup>
@@ -277,15 +279,15 @@ export function LoginPage() {
         </div>
 
         <p className="mx-auto max-w-[340px] text-center text-xs leading-relaxed text-muted-foreground/70">
-          Ao entrar, você concorda com os{" "}
+          {t("auth.rodapeA")}{" "}
           <a href="/termos" className="underline">
-            Termos de Uso
+            {t("auth.rodapeTermos")}
           </a>{" "}
-          e a{" "}
+          {t("auth.rodapeE")}{" "}
           <a href="/privacidade" className="underline">
-            Política de Privacidade
+            {t("auth.rodapePrivacidade")}
           </a>{" "}
-          do Post Flow.
+          {t("auth.rodapeFim")}
         </p>
       </div>
 

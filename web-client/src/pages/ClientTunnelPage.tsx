@@ -1,3 +1,4 @@
+import { dataHora } from "@/lib/formatoLocal"
 import { useEffect, useRef, useState, type FormEvent } from "react"
 import { IconRouter, IconCircleCheck, IconCircleX, IconRefresh, IconDownload, IconArrowLeft } from "@tabler/icons-react"
 import { WindowsMark, AppleMark } from "@/components/os-marks"
@@ -225,7 +226,7 @@ function ConnectedStatus({ tunnel, onChanged }: { tunnel: ClientTunnel; onChange
                 </TonePill>
               )}
               <span className="text-xs text-muted-foreground">
-                último teste: {new Date(result.testedAt).toLocaleString("pt-BR")}
+                último teste: {dataHora(result.testedAt)}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">

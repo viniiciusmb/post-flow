@@ -1,3 +1,4 @@
+import { dataHora } from "@/lib/formatoLocal"
 import { useEffect, useState, type FormEvent } from "react"
 import { IconTrash, IconArrowRight, IconMovie, IconBrandGoogleDrive, IconBrandTiktok, IconAlertTriangle } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
@@ -23,6 +24,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
 import type { DriveStatusResponse, LatestChannelVideo, SourceVideo, TikTokAccountSummary, YoutubeChannel } from "@/types/api"
+import { useT } from "@/i18n"
 
 function formatDuration(seconds: number | null) {
   if (!seconds) return null
@@ -36,6 +38,7 @@ function initials(name: string) {
 }
 
 function ChannelVideoThumb({ video }: { video: SourceVideo }) {
+  const t = useT()
   const tone = SOURCE_VIDEO_STATUS_TONE[video.status]
   return (
     <a
@@ -53,7 +56,7 @@ function ChannelVideoThumb({ video }: { video: SourceVideo }) {
         )}
         <div className="absolute right-1 top-1">
           <TonePill tone={tone.tone} spin={tone.spin} className="px-1.5 py-0.5 text-[9px]">
-            {tone.label}
+            {t(tone.label)}
           </TonePill>
         </div>
       </div>
@@ -86,6 +89,7 @@ function ChannelCard({
   onSetDriveExportMode: (mode: "auto" | "manual") => Promise<void>
   onRemove: () => void
 }) {
+  const t = useT()
   const recent = videos.slice(0, 6)
   const [savingActive, setSavingActive] = useState(false)
   const [savingTiktokAccount, setSavingTiktokAccount] = useState(false)
@@ -104,7 +108,7 @@ function ChannelCard({
     try {
       await onToggleActive(!channel.isActive)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível salvar. Tente de novo.")
+      setError(err instanceof ApiError ? err.message : t("canais.naoFoiPossivelSalvar"))
     } finally {
       setSavingActive(false)
     }
@@ -116,7 +120,7 @@ function ChannelCard({
     try {
       await onSetTiktokAccount(value === "none" ? null : Number(value))
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível salvar. Tente de novo.")
+      setError(err instanceof ApiError ? err.message : t("canais.naoFoiPossivelSalvar"))
     } finally {
       setSavingTiktokAccount(false)
     }
@@ -131,7 +135,7 @@ function ChannelCard({
       setExportFolderLink("")
       setAutoModeOnCreate(false)
     } catch (err) {
-      setExportError(err instanceof ApiError ? err.message : "Não foi possível salvar a pasta.")
+      setExportError(err instanceof ApiError ? err.message : t("canais.naoFoiPossivelSalvarPasta"))
     } finally {
       setSavingExportFolder(false)
     }
@@ -143,7 +147,7 @@ function ChannelCard({
     try {
       await onSetDriveExportMode(channel.driveExportMode === "auto" ? "manual" : "auto")
     } catch (err) {
-      setExportError(err instanceof ApiError ? err.message : "Não foi possível salvar.")
+      setExportError(err instanceof ApiError ? err.message : t("canais.naoFoiPossivelSalvar"))
     } finally {
       setSavingExportMode(false)
     }
@@ -167,8 +171,12 @@ function ChannelCard({
               {channel.channelName || channel.channelUrl}
             </a>
             <p className="text-xs text-muted-foreground">
-              {videos.length > 0 ? `${videos.length} vídeo${videos.length > 1 ? "s" : ""} processado${videos.length > 1 ? "s" : ""}` : "Nenhum vídeo ainda"}
-              {channel.lastPolledAt && ` · checado ${new Date(channel.lastPolledAt).toLocaleString("pt-BR")}`}
+              {videos.length > 0
+                ? videos.length === 1
+                  ? t("canais.umVideoProcessado")
+                  : t("canais.nVideosProcessados", { n: videos.length })
+                : t("canais.nenhumVideoAinda")}
+              {channel.lastPolledAt && ` · ${t("canais.checadoEm", { quando: dataHora(channel.lastPolledAt) })}`}
             </p>
             {/* A checagem roda a cada 20 min. Quando ela falha, a data acima
                 congela e parece que o sistema parou - por isso o aviso diz o
@@ -179,7 +187,7 @@ function ChannelCard({
                 <span className="min-w-0">
                   {channel.checkFailCount > 3
                     ? `A checagem vem falhando (${channel.checkFailCount} vezes seguidas). Vamos continuar tentando a cada 20 minutos.`
-                    : "A última checagem falhou. Vamos tentar de novo em alguns minutos."}
+                    : t("canais.checagemFalhou")}
                 </span>
               </p>
             )}
@@ -193,12 +201,12 @@ function ChannelCard({
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm font-medium">
-                {channel.isActive ? "Baixando e cortando automaticamente" : "Automação pausada"}
+                {channel.isActive ? t("canais.baixandoAutomaticamente") : t("canais.automacaoPausada")}
               </p>
               <p className="text-xs text-muted-foreground">
                 {channel.isActive
-                  ? "Vídeos novos deste canal entram na fila de corte assim que são detectados."
-                  : "Vídeos novos deste canal não são baixados nem cortados até você retomar."}
+                  ? t("canais.videosNovosEntram")
+                  : t("canais.videosNovosNaoBaixados")}
               </p>
             </div>
             <Button
@@ -214,15 +222,11 @@ function ChannelCard({
 
           <div className="flex flex-col gap-2 border-t border-border pt-3">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <IconBrandTiktok className="size-4 text-muted-foreground" />
-              Postar cortes na conta
-            </div>
+              <IconBrandTiktok className="size-4 text-muted-foreground" />{t("canais.postarNaConta")}</div>
             {tiktokAccounts.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 Nenhuma conta TikTok conectada ainda.{" "}
-                <a href="/client/tiktok-account" className="text-primary hover:underline">
-                  conecte uma
-                </a>{" "}
+                <a href="/client/tiktok-account" className="text-primary hover:underline">{t("canais.conecteUma")}</a>{" "}
                 pra poder postar os cortes desse canal.
               </p>
             ) : (
@@ -233,10 +237,10 @@ function ChannelCard({
                   disabled={savingTiktokAccount}
                 >
                   <SelectTrigger size="sm" className="w-full max-w-xs text-xs">
-                    <SelectValue placeholder="Escolha uma conta" />
+                    <SelectValue placeholder={t("canais.escolhaUmaConta")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Nenhuma (não posta)</SelectItem>
+                    <SelectItem value="none">{t("canais.nenhumaNaoPosta")}</SelectItem>
                     {tiktokAccounts.map((a) => (
                       <SelectItem key={a.id} value={String(a.id)}>
                         {a.displayName}
@@ -247,13 +251,11 @@ function ChannelCard({
                 {linkedAccount && (
                   <p className="text-xs text-muted-foreground">
                     Postagem automática {linkedAccount.autoPostEnabled ? "ligada" : "desligada"} pra essa conta.{" "}
-                    <a href="/client/tiktok-account" className="text-primary hover:underline">
-                      Gerenciar em Publicação
-                    </a>
+                    <a href="/client/tiktok-account" className="text-primary hover:underline">{t("canais.gerenciarEmPublicacao")}</a>
                   </p>
                 )}
                 <a href="/client/tiktok-account" className="text-xs font-semibold text-primary hover:underline">
-                  + Conectar outra conta
+                  + {t("pub.conectarOutraConta")}
                 </a>
               </>
             )}
@@ -285,8 +287,8 @@ function ChannelCard({
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {channel.driveExportMode === "auto"
-                        ? "Todo corte pronto é enviado sozinho."
-                        : "Você escolhe corte a corte na tela Cortes."}
+                        ? t("canais.todoCortePronto")
+                        : t("canais.vocEscolheCorteACorte")}
                     </p>
                   </div>
                   <Button
@@ -296,7 +298,7 @@ function ChannelCard({
                     disabled={savingExportMode}
                     className="shrink-0"
                   >
-                    {savingExportMode ? "Salvando..." : channel.driveExportMode === "auto" ? "Tornar manual" : "Tornar automático"}
+                    {savingExportMode ? "Salvando..." : channel.driveExportMode === "auto" ? "Tornar manual" : t("canais.tornarAutomatico")}
                   </Button>
                 </div>
               ) : (
@@ -307,7 +309,7 @@ function ChannelCard({
               <form onSubmit={handleSetExportFolder} className="flex flex-col gap-2">
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Link ou ID da pasta do Drive"
+                    placeholder={t("canais.linkOuIdPasta")}
                     value={exportFolderLink}
                     onChange={(e) => setExportFolderLink(e.target.value)}
                     required
@@ -339,8 +341,7 @@ function ChannelCard({
             <a
               href={`/client/videos-clips?channelId=${channel.id}`}
               className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-            >
-              Ver vídeos <IconArrowRight className="size-3" />
+            >{t("canais.verVideos")}<IconArrowRight className="size-3" />
             </a>
           </div>
         )}
@@ -350,6 +351,7 @@ function ChannelCard({
 }
 
 export function YouTubeChannelsPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const [channels, setChannels] = useState<YoutubeChannel[] | null>(null)
   const [videos, setVideos] = useState<SourceVideo[]>([])
@@ -394,7 +396,7 @@ export function YouTubeChannelsPage() {
         { channelUrl }
       )
       setChannelUrl("")
-      setSuccess('Canal adicionado, ainda "Pausado". Marque "Baixar e cortar automaticamente" abaixo pra ativar.')
+      setSuccess('Canal adicionado, ainda "Pausado". Marque t("canais.baixarECortar") abaixo pra ativar.')
       await load()
       if (created.latestVideo) {
         setLatestVideoPrompt({ channelId: created.channel.id, video: created.latestVideo })
@@ -414,13 +416,13 @@ export function YouTubeChannelsPage() {
       await api.post(`/api/client/youtube-channels/${latestVideoPrompt.channelId}/process-latest-video`, {})
       setLatestVideoPrompt(null)
       await load()
-      setSuccess("Vídeo mais recente entrou na fila de processamento.")
+      setSuccess(t("canais.videoMaisRecenteEntrou"))
     } catch (err) {
       // Fica com o popup aberto mostrando o erro (em vez de fechar
       // silenciosamente) - sem isso o cliente via o popup so sumir sem
       // explicação nenhuma quando a chamada falhava (ex: video ja
       // processado antes por engano, canal bloqueado etc).
-      setLatestVideoError(err instanceof ApiError ? err.message : "Não foi possível processar esse vídeo agora.")
+      setLatestVideoError(err instanceof ApiError ? err.message : t("canais.naoFoiPossivelProcessar"))
     } finally {
       setProcessingLatest(false)
     }
@@ -447,7 +449,7 @@ export function YouTubeChannelsPage() {
   }
 
   async function removeChannel(channel: YoutubeChannel) {
-    if (!confirm(`Remover o canal "${channel.channelName}"? Isso nao apaga os cortes ja gerados.`)) return
+    if (!confirm(t("canais.confirmarRemover", { nome: channel.channelName ?? "" }))) return
     await api.delete(`/api/client/youtube-channels/${channel.id}`)
     await load()
   }
@@ -457,14 +459,14 @@ export function YouTubeChannelsPage() {
   const hasDriveConnection = driveStatus?.connected === true
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Canais">
+    <DashboardLayout user={user} onLogout={logout} title={t("canais.titulo")}>
       <PageHeader
-        title="Canais"
-        description="Os canais que o Post Flow acompanha. Vídeo novo entra na fila sozinho."
+        title={t("canais.titulo")}
+        description={t("canais.descricao")}
       />
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Adicionar canal</CardTitle>
+          <CardTitle className="text-base">{t("canais.adicionarCanal")}</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit}>
@@ -480,7 +482,7 @@ export function YouTubeChannelsPage() {
                 </p>
               )}
               <Field>
-                <FieldLabel htmlFor="channelUrl">Link ou @handle do canal</FieldLabel>
+                <FieldLabel htmlFor="channelUrl">{t("canais.linkOuHandle")}</FieldLabel>
                 <div className="flex gap-2">
                   <Input
                     id="channelUrl"
@@ -493,9 +495,7 @@ export function YouTubeChannelsPage() {
                     {submitting ? "Adicionando..." : "Adicionar"}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Só entram no corte automático os vídeos publicados depois de adicionar. O histórico do canal não é baixado.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("canais.soEntramDepois")}</p>
               </Field>
             </FieldGroup>
           </form>
@@ -503,7 +503,7 @@ export function YouTubeChannelsPage() {
       </Card>
 
       <div>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Canais cadastrados</h2>
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t("canais.cadastrados")}</h2>
         {!channels ? (
           <div className="flex flex-col gap-3">
             <Skeleton className="h-24" />
@@ -544,7 +544,7 @@ export function YouTubeChannelsPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Já começar a usar o Post Flow com esse canal?</DialogTitle>
+            <DialogTitle>{t("canais.jaComecar")}</DialogTitle>
             <DialogDescription>
               Encontramos o vídeo mais recente desse canal. Quer que a gente já processe ele agora (baixar, cortar e
               deixar pronto pra postar)? Se preferir não, o canal continua monitorado normalmente. Só os próximos
@@ -586,10 +586,10 @@ export function YouTubeChannelsPage() {
               }}
               disabled={processingLatest}
             >
-              {latestVideoError ? "Fechar" : "Não, só a partir de agora"}
+              {latestVideoError ? "Fechar" : t("canais.naoSoApartirDeAgora")}
             </Button>
             <Button onClick={acceptLatestVideo} disabled={processingLatest}>
-              {processingLatest ? "Enviando..." : latestVideoError ? "Tentar de novo" : "Sim, processar esse vídeo"}
+              {processingLatest ? "Enviando..." : latestVideoError ? t("canais.tentarDeNovo") : t("canais.simProcessar")}
             </Button>
           </DialogFooter>
         </DialogContent>

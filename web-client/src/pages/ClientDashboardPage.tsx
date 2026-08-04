@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { useDateRange } from "@/hooks/useDateRange"
 import { api } from "@/lib/api"
 import type { ClientDashboardResponse } from "@/types/api"
+import { useT } from "@/i18n"
 
 function useFlashFromQuery() {
   const params = new URLSearchParams(window.location.search)
@@ -23,6 +24,7 @@ function useFlashFromQuery() {
 }
 
 export function ClientDashboardPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const { range, setRange } = useDateRange()
   const [data, setData] = useState<ClientDashboardResponse | null>(null)
@@ -47,38 +49,38 @@ export function ClientDashboardPage() {
     })) ?? []
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Início">
+    <DashboardLayout user={user} onLogout={logout} title={t("inicio.titulo")}>
       <PageHeader
-        title="Início"
-        description="Um resumo do que o Post Flow fez pelos seus canais no período escolhido."
+        title={t("inicio.titulo")}
+        description={t("inicio.descricao")}
       />
       {flash.tiktokConnected && (
         <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
-          Conta TikTok conectada com sucesso!
+          {t("inicio.contaConectada")}
         </p>
       )}
       {flash.tiktokError && (
         <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          Não foi possível conectar o TikTok: {flash.tiktokError}
+          {t("inicio.erroTikTok")}: {flash.tiktokError}
         </p>
       )}
       {flash.driveConnected && (
         <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
-          Google Drive conectado! Agora aponte sua pasta em{" "}
+          {t("inicio.driveConectado")}{" "}
           <a href="/client/settings" className="font-medium underline">
-            Configurações
+            {t("menu.configuracoes")}
           </a>
           .
         </p>
       )}
       {flash.driveError && (
         <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          Não foi possível conectar o Drive: {flash.driveError}
+          {t("inicio.erroDrive")}: {flash.driveError}
         </p>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-xs font-semibold uppercase tracking-[0.07em] text-muted-foreground">Período</span>
+        <span className="text-xs font-semibold uppercase tracking-[0.07em] text-muted-foreground">{t("inicio.periodo")}</span>
         <DateRangeFilter value={range} onChange={setRange} />
       </div>
 
@@ -91,23 +93,23 @@ export function ClientDashboardPage() {
       {data ? (
         <StatRow>
           <Stat
-            label="Cortes gerados no período"
+            label={t("inicio.cortesGerados")}
             value={data.counts.clipsInRange}
             emphasis
           />
           <Stat
-            label="Cortes postados no período"
+            label={t("inicio.cortesPostados")}
             value={data.counts.clipsPostedInRange}
             href="/client/videos-clips"
             hrefLabel="Ver cortes"
           />
           <Stat
-            label="Na fila aguardando postar"
+            label={t("inicio.naFila")}
             value={data.counts.pendingInQueue}
             href="/client/tiktok-account"
             hrefLabel="Ver a fila"
           />
-          <Stat label="Vídeos detectados no período" value={data.counts.videosInRange} />
+          <Stat label={t("inicio.videosDetectados")} value={data.counts.videosInRange} />
           <Stat
             label="Canais monitorados"
             value={data.counts.youtubeChannels}
@@ -122,13 +124,13 @@ export function ClientDashboardPage() {
       <UsageCard range={range} />
 
       <div className="flex flex-col gap-3">
-        <SectionLabel>Meus vídeos no período</SectionLabel>
+        <SectionLabel>{t("inicio.meusVideos")}</SectionLabel>
         {data ? (
           <PostingsTable
             rows={rows}
             showOrigin
             showChannel
-            emptyMessage="Nenhum vídeo processado nesse período. Cadastre um canal em Canais e o Post Flow passa a acompanhar os vídeos novos sozinho."
+            emptyMessage={t("inicio.vazio")}
           />
         ) : (
           <Skeleton className="h-64" />

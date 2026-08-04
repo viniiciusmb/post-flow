@@ -17,7 +17,7 @@ async function login(req, res) {
 }
 
 function showRegister(req, res) {
-  res.render('auth/register', { title: 'Criar conta', error: null, values: {} });
+  res.render('auth/register', { title: res.locals.t('cadastro.titulo'), error: null, values: {} });
 }
 
 async function register(req, res) {
@@ -30,8 +30,8 @@ async function register(req, res) {
   // direto passaria por cima. A checagem que conta e esta.
   if (!acceptedTerms) {
     return res.status(400).render('auth/register', {
-      title: 'Criar conta',
-      error: 'Você precisa aceitar os Termos de Uso e a Politica de Privacidade pra criar a conta.',
+      title: res.locals.t('cadastro.titulo'),
+      error: res.locals.t('cadastro.precisaAceitar'),
       values,
     });
   }
@@ -48,7 +48,7 @@ async function register(req, res) {
     req.session.user = { id: user.id, role: user.role, email: user.email };
     res.redirect('/client');
   } catch (err) {
-    res.status(400).render('auth/register', { title: 'Criar conta', error: err.message, values });
+    res.status(400).render('auth/register', { title: res.locals.t('cadastro.titulo'), error: err.message, values });
   }
 }
 

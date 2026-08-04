@@ -2,10 +2,8 @@
 
 <div class="wrap">
   <article class="doc" style="max-width: 25rem; padding-top: clamp(2.5rem, 5vw, 4rem)">
-    <h1 style="font-size: clamp(1.75rem, 3.5vw, 2.25rem)">Criar conta</h1>
-    <p style="margin-bottom: 0">
-      Leva menos de um minuto. Depois é só conectar o seu canal.
-    </p>
+    <h1 style="font-size: clamp(1.75rem, 3.5vw, 2.25rem)"><%= t('cadastro.titulo') %></h1>
+    <p style="margin-bottom: 0"><%= t('cadastro.subtitulo') %></p>
 
     <% if (error) { %>
       <p class="erro" style="margin-top: 1.5rem"><%= error %></p>
@@ -13,35 +11,35 @@
 
     <form method="post" action="/register" class="form">
       <label>
-        Nome do negócio <span style="color: var(--muted); font-weight: 400">(opcional)</span>
+        <%= t('cadastro.nomeNegocio') %>
+        <span style="color: var(--muted); font-weight: 400"><%= t('cadastro.opcional') %></span>
         <input type="text" name="businessName" autocomplete="organization"
                value="<%= locals.values && locals.values.businessName || '' %>">
       </label>
       <label>
-        E-mail
+        <%= t('cadastro.email') %>
         <input type="email" name="email" required autocomplete="email"
                value="<%= locals.values && locals.values.email || '' %>">
       </label>
       <label>
-        Senha
+        <%= t('cadastro.senha') %>
         <input type="password" name="password" required minlength="8" autocomplete="new-password">
-        <small>Pelo menos 8 caracteres.</small>
+        <small><%= t('cadastro.peloMenos8') %></small>
       </label>
 
+      <%# O `required` do HTML só vale dentro do navegador: um POST direto passa
+          por cima dele. A checagem que conta é a do servidor, em authController. %>
       <label class="check">
         <input type="checkbox" name="acceptedTerms" value="1" required>
-        <span>
-          Li e aceito os <a href="/termos" target="_blank" rel="noopener">Termos de Uso</a> e a
-          <a href="/privacidade" target="_blank" rel="noopener">Política de Privacidade</a>, e
-          declaro que só vou processar conteúdo do qual tenho os direitos.
-        </span>
+        <span><%- t('cadastro.aceite') %></span>
       </label>
 
-      <button type="submit" class="btn btn-primary btn-lg">Criar conta</button>
+      <button type="submit" class="btn btn-primary btn-lg"><%= t('cadastro.titulo') %></button>
     </form>
 
     <p style="margin-top: 1.75rem">
-      Já tem conta? <a href="/login" style="color: var(--signal)">Entrar</a>
+      <%= t('cadastro.jaTemConta') %>
+      <a href="/login" style="color: var(--signal)"><%= t('cadastro.entrar') %></a>
     </p>
   </article>
 </div>

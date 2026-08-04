@@ -213,6 +213,20 @@ module.exports = {
     },
   ],
 
+  cadastro: {
+    titulo: 'Create account',
+    subtitulo: 'It takes less than a minute. Then you just connect your channel.',
+    nomeNegocio: 'Business name',
+    opcional: '(optional)',
+    email: 'Email',
+    senha: 'Password',
+    peloMenos8: 'At least 8 characters.',
+    aceite: 'I have read and accept the <a href="/termos" target="_blank" rel="noopener">Terms of Use</a> and the <a href="/privacidade" target="_blank" rel="noopener">Privacy Policy</a>, and I declare that I will only process content I hold the rights to.',
+    precisaAceitar: 'You need to accept the Terms of Use and the Privacy Policy to create the account.',
+    jaTemConta: 'Already have an account?',
+    entrar: 'Sign in',
+  },
+
   contato: {
     titulo: 'Contact and support',
     respondemos: 'We reply {tempo}.',
