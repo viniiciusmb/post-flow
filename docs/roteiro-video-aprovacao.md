@@ -1,439 +1,224 @@
-# Roteiro dos vídeos de aprovação — Google e TikTok
+# Aprovação do app no TikTok
 
-Pesquisado na documentação oficial das duas plataformas em 03/08/2026. As regras mudam; os links
-estão no fim.
+Pesquisado nas [Diretrizes de Avaliação de Aplicativos](https://developers.tiktok.com/doc/app-review-guidelines)
+em 04/08/2026. As regras mudam; confira o link antes de enviar.
 
-**Leia esta página inteira antes de gravar.** A primeira seção muda bastante o trabalho que você
-imagina ter.
-
----
-
-## Antes de tudo: o Google provavelmente nem precisa de vídeo
-
-Isto mudou quando removemos o escopo `drive.readonly`.
-
-O Post Flow pede quatro escopos do Google, e **os quatro são não sensíveis**:
-
-| Escopo | Classificação oficial |
-|---|---|
-| `openid` | **Não sensível** |
-| `https://www.googleapis.com/auth/userinfo.email` | **Não sensível** |
-| `https://www.googleapis.com/auth/userinfo.profile` | **Não sensível** |
-| `https://www.googleapis.com/auth/drive.file` | **Não sensível** |
-
-A documentação do Drive diz, sobre o `drive.file`: *"only require basic OAuth App Verification"*. E
-o Google é explícito: **app que usa só escopos não sensíveis não precisa passar pela verificação**,
-não mostra a tela de "app não verificado" e não fica limitado a 100 usuários.
-
-O que sobra é a **verificação de marca** (*brand verification*): o processo leve que existe só pra
-você poder exibir o nome e o logo do Post Flow na tela de consentimento. Ela pede domínio
-verificado, site público e política de privacidade — **não pede vídeo**. O texto oficial diz que o
-vídeo é solicitado *só se* a equipe do Google achar necessário durante a análise.
-
-**O que isso significa na prática:**
-
-1. **Publique o app** (Testing → In production). Não há análise nenhuma nesse caminho — o passo a
-   passo está na próxima seção.
-2. A verificação de marca só é necessária se você quiser o **logo** na tela de consentimento.
-3. **Só grave o vídeo do Google se eles pedirem.** Se pedirem, o roteiro está na Parte 2 desta
-   página, pronto.
-4. O vídeo do **TikTok é obrigatório de qualquer jeito.** Se você só tiver fôlego pra um, é esse.
-
-> Se algum dia o recurso de "pasta de origem do Drive" voltar, ele exige o `drive.readonly`, que é
-> escopo **restrito**: aí volta a verificação completa, com vídeo **e** uma auditoria de segurança
-> paga refeita todo ano. Ver `docs/aprovacoes-google-tiktok.md`.
+> **O Google já está resolvido.** Os quatro escopos que usamos são não sensíveis e o domínio foi
+> verificado — não há vídeo nem análise pendente daquele lado. O histórico está em
+> [`aprovacoes-google-tiktok.md`](aprovacoes-google-tiktok.md).
 
 ---
 
-## Passo a passo: o que fazer no Google Cloud Console
+## ⚠️ Leia isto antes de enviar: o domínio
 
-Escrito em 03/08/2026, para o console novo ("Google Auth Platform"). Os quatro escopos que o Post
-Flow pede são **todos não sensíveis**, e é isso que torna este caminho curto.
+As diretrizes de marca do TikTok dizem que **não se pode usar "TikTok" em nome de produto, nome de
+empresa, nome de domínio ou URL** sem autorização por escrito. O nosso domínio é
+**postflowtiktok.com**.
 
-### Antes: por que os escopos "somem"
+O nome do app ("Post Flow") está certo. O problema é o endereço, e o revisor vê o endereço: a lista
+oficial de motivos de recusa inclui *"violações das diretrizes de marca"*.
 
-Na página **Data Access** (Acesso a dados), adicionar escopo tem **dois** cliques de confirmação, e
-é aí que a maioria se perde:
+**Três caminhos, do mais seguro pro mais arriscado:**
 
-1. **Add or remove scopes** → marque os escopos → **UPDATE** (dentro do painel lateral)
-2. De volta na página, **SAVE** no rodapé
-
-Fechar a aba, ou sair da página, depois do UPDATE e antes do SAVE, descarta tudo. Se sumir de novo,
-é quase certo que foi isso.
-
-A outra causa possível: escopo de uma API que não está **ativada** no projeto. Confira em **APIs e
-serviços → Biblioteca** que a **Google Drive API** está ativada.
-
-### Os escopos que devem estar lá (e só eles)
-
-| Escopo | Para quê |
+| Caminho | O que acontece |
 |---|---|
-| `openid` | Entrar com Google |
-| `.../auth/userinfo.email` | Saber o e-mail de quem entrou / de qual conta o Drive é |
-| `.../auth/userinfo.profile` | Nome da pessoa, no cadastro por Google |
-| `.../auth/drive.file` | Gravar o corte pronto na pasta que o cliente escolheu |
+| Registrar um domínio sem "tiktok" (`postflow.app`, `usepostflow.com`, `postflow.com.br`) e migrar antes de enviar | Elimina o risco. Custa um domínio e um dia de trabalho |
+| Enviar assim e ver no que dá | Se recusarem por isso, você perde as semanas da análise e migra depois do mesmo jeito |
+| Pedir autorização por escrito ao TikTok | Demora e provavelmente não vem |
 
-**Nenhum deles pode aparecer com o selo "Sensitive" ou "Restricted"** na tela. Se aparecer, tem
-escopo sobrando — o `drive.readonly` foi removido do código justamente por ser restrito.
+**Recomendação: migrar o domínio antes de enviar.** Uma recusa por marca custa mais tempo do que a
+migração, e o domínio novo serve pra sempre. Se decidir migrar, me avise: a troca envolve o
+`GOOGLE_REDIRECT_URI`, o `TIKTOK_REDIRECT_URI`, as URLs cadastradas nos dois consoles, o canonical
+do site e o `llms.txt`. Eu faço tudo de uma vez.
 
-### Os dois endereços de retorno
+Se preferir enviar assim mesmo, tudo abaixo continua valendo.
 
-Em **Clients → (seu cliente OAuth) → URIs de redirecionamento autorizados**, os dois precisam
-estar cadastrados:
+---
+
+## Parte 1 — Preencher o formulário
+
+### Informações básicas
+
+| Campo | Valor |
+|---|---|
+| **Ícone** | `postflowtiktok.com/img/marca/post-flow-icone-1024.png` |
+| **Nome** | `Post Flow` |
+| **Categoria** | Produtividade (ou a mais próxima de ferramenta de criador) |
+| **Descrição** | o texto abaixo |
+| **Termos de Serviço** | `https://postflowtiktok.com/termos` |
+| **Política de Privacidade** | `https://postflowtiktok.com/privacidade` |
+| **Plataformas** | só **Web** |
+
+**Descrição** (limite de 120 caracteres — este tem 107):
 
 ```
-https://postflowtiktok.com/auth/google/callback
-https://postflowtiktok.com/auth/google/login/callback
+Transforma os vídeos longos do seu canal do YouTube em cortes verticais legendados e publica no seu TikTok.
 ```
 
-O primeiro é o Drive, o segundo é o "Entrar com Google". Faltando o segundo, o Google recusa com
-`redirect_uri_mismatch`.
+> Não escreva que o produto está "em testes" ou "em desenvolvimento": app em desenvolvimento é
+> motivo de recusa declarado.
 
-### Publicar (é isto que "envia", e não tem análise)
+Em **Plataformas → Web**, o campo de redirecionamento tem que ser exatamente:
 
-Em **Audience** (Público-alvo):
+```
+https://postflowtiktok.com/auth/tiktok/callback
+```
 
-1. Confirme que o tipo é **External**.
-2. Clique em **PUBLISH APP** / **Publicar app** e confirme.
-3. O status vira **In production**.
+Sem barra no fim. É o endereço que o sistema envia; qualquer diferença quebra a conexão.
 
-Pronto. **Com escopos só não sensíveis, não existe fila de análise:** o Google só exige verificação
-para escopo sensível ou restrito. Não haverá tela de "app não verificado" nem limite de 100
-usuários.
+### Produtos
 
-> **Isto conserta um problema silencioso.** Enquanto o app fica em **Testing**, o Google **expira o
-> refresh token em 7 dias**. Na prática: a conexão do Google Drive dos seus clientes quebraria toda
-> semana, e eles teriam que reconectar. Publicar resolve isso.
+Adicione **os dois**, e nenhum além:
 
-### Verificação de marca — só se quiser o logo
+- **Login Kit** — conectar a conta.
+- **Content Posting API** — publicar. Ative o **Direct Post** dentro dele.
 
-Se você quiser o **logo** do Post Flow na tela de consentimento, aí sim existe um pedido: a
-*verificação de marca*. Ela é leve — pede domínio verificado no Search Console, site público e
-política de privacidade — e **não pede vídeo** (só se a equipe do Google resolver pedir).
+> Produto que você não usa **atrasa ou reprova** a análise. Se tiver adicionado outro pra testar,
+> remova antes de enviar.
 
-Sem ela, a tela de consentimento continua funcionando; aparece o nome do app sem o logo.
-
-### Checklist final
-
-- [ ] Google Drive API ativada no projeto
-- [ ] Os 4 escopos salvos (UPDATE **e** SAVE), nenhum marcado como sensível
-- [ ] Os 2 endereços de retorno cadastrados
-- [ ] App **publicado** (In production)
-- [ ] Domínio verificado no Search Console *(só se for pedir verificação de marca)*
-- [ ] Testar: entrar com Google numa janela anônima, e conectar o Drive por dentro do sistema
-
----
-
-## Preparação (vale para os dois vídeos)
-
-### O que deixar pronto antes de apertar o gravar
-
-- [ ] **Uma conta de teste no Post Flow**, criada só pra isso. Não use a sua conta de admin nem a de
-      um cliente real — vai aparecer dado de gente de verdade na tela.
-- [ ] **Um canal do YouTube já cadastrado** nessa conta, com **pelo menos um corte pronto na fila**.
-      Gerar corte na hora leva minutos e o revisor não vai esperar.
-- [ ] **Uma conta do TikTok de teste** (não a sua pessoal), adicionada como *Target User* no
-      Developer Console.
-- [ ] **Sair de todas as contas** do Google e do TikTok no navegador, ou usar uma janela anônima. Se
-      o navegador já estiver logado, a tela de consentimento é pulada — e é justamente ela que o
-      revisor precisa ver.
-- [ ] **Fechar** abas, notificações, extensões e qualquer coisa com nome de pessoa real na tela.
-- [ ] Tela em **1920×1080**, zoom do navegador em **100%**.
-
-### Como gravar
-
-- Grave **em inglês** se conseguir narrar; se não, **grave sem narração** e use legendas em inglês.
-  O Google exige explicitamente que o fluxo de consentimento seja mostrado em inglês. Você pode
-  trocar o idioma da tela de consentimento acrescentando `&hl=en` na URL, ou deixando o navegador em
-  inglês.
-- **Sem cortes** nas partes de autorização. Corte só os tempos de espera longos, e quando cortar,
-  deixe claro na legenda ("processing — 4 minutes later").
-- **Mouse devagar.** O revisor precisa acompanhar onde você clicou.
-- **Pause 2 segundos** em cada tela importante antes de clicar. Especialmente na tela de
-  consentimento.
-- Ferramenta: QuickTime (Mac, "Gravação de Tela") ou OBS. Não precisa de edição.
-
----
-
----
-
-## Conferência no TikTok Developer Portal (antes de gravar)
-
-Escrito em 04/08/2026. Confira nesta ordem — cada item abaixo já reprovou submissão de alguém.
-
-### 0. Você está no app certo, em Sandbox
-
-O sistema em produção hoje usa a chave **`sbawcrecv97w4zusib`**. O prefixo `sb` quer dizer
-**Sandbox**, e isso está **certo** para este momento: a documentação do TikTok diz que app que
-nunca foi aprovado *"is required to use a sandbox environment on the Developer Portal to
-demonstrate the integration"*. Ou seja: **grave o vídeo com o que já está no ar.**
-
-Não troque para as chaves de Produção antes da aprovação — Sandbox e Produção têm chave e segredo
-diferentes, e trocar agora derruba as conexões que já existem.
-
-### 1. Basic information
-
-| Campo | O que colocar |
-|---|---|
-| App icon | `postflowtiktok.com/img/marca/post-flow-nome-quadrada.png` (1024×1024) |
-| App name | Post Flow |
-| Category | Produtividade / ferramenta de criador |
-| Description | Ver o texto pronto em "O que escrever na descrição do app", mais abaixo |
-| Terms of Service URL | `https://postflowtiktok.com/termos` |
-| Privacy Policy URL | `https://postflowtiktok.com/privacidade` |
-
-As duas URLs precisam abrir sem login e sem redirecionar. Já abrem.
-
-### 2. Platforms → Web
-
-- Website URL: `https://postflowtiktok.com`
-- **Redirect URI: `https://postflowtiktok.com/auth/tiktok/callback`** — exatamente assim, sem barra
-  no fim. É o que o sistema envia; qualquer diferença dá erro na hora de conectar.
-
-### 3. Products
-
-Precisam estar os dois:
-
-- **Login Kit** — é o que permite conectar a conta.
-- **Content Posting API** — é o que publica. Sem ele, `video.publish` não funciona mesmo aparecendo
-  concedido no token. *(Este foi exatamente o erro que travou o sistema por dias: o escopo aparecia
-  no banco e a TikTok recusava assim mesmo.)*
-
-Dentro do Content Posting API, ligue a opção de **Direct Post**.
-
-### 4. Scopes
+### Escopos
 
 Os quatro, e só eles:
 
-`user.info.basic` · `user.info.stats` · `video.publish` · `video.upload`
+```
+user.info.basic
+user.info.stats
+video.publish
+video.upload
+```
 
-Escopo pedido e não demonstrado no vídeo é motivo de recusa. Os quatro aparecem no roteiro.
+O `user.info.stats` só se justifica porque a tela de Publicação mostra seguidores, curtidas e número
+de vídeos. Isso precisa aparecer no vídeo (está no roteiro).
 
-### 5. URL properties  ← o item que mais passa despercebido
+### URL properties
 
-No topo da página do app existe um botão **URL properties**. O Content Posting API exige que o
-domínio esteja verificado ali, igual ao que o Google pediu. Verifique `postflowtiktok.com`.
+Botão no topo da página do app. O Content Posting API exige o domínio verificado ali — mesma ideia
+do que o Google pediu. Verifique `postflowtiktok.com`.
 
-### 6. Sandbox → Target users
+### Sandbox → Target users
 
-Ainda em Sandbox, adicione a **conta TikTok de teste** na lista de usuários autorizados. Sem isso
-ela não consegue autorizar o app, e o vídeo trava na primeira cena.
+Adicione a **conta TikTok de teste** na lista. Sem isso ela não consegue autorizar o app, e o vídeo
+trava na primeira cena.
 
-Lembre do teto enquanto não há aprovação: **5 contas por 24 horas**, e toda publicação sai como
-**"só eu"**. É esperado, e o revisor sabe disso.
+Enquanto não há aprovação: **5 contas por 24 horas** e toda publicação sai como **"só eu"**. É
+esperado; o revisor sabe.
 
-### 7. App review
+### Explicação dos produtos e escopos
 
-- Descrição de cada produto e escopo (texto pronto abaixo).
-- O vídeo: até 5, **50 MB cada**.
-- **Submit for review.**
+Cole no campo "Explique como cada produto e escopo funciona" (limite de 1000 — este tem 992):
 
-### Estado atual das contas conectadas
+```
+Post Flow is a video repurposing tool for creators. It monitors the creator's own YouTube channel, uses AI to select the best segments of each new video, renders them as vertical clips with burned-in captions, and publishes them to the creator's own TikTok account. Website is in Brazilian Portuguese.
 
-| Conta | Modo | Escopos |
-|---|---|---|
-| #1 Aqueles Clipes | rascunho | só `user.info.basic` e `video.publish` — conectada antes da lista crescer |
-| #2 Aqueles Clipes | **direto** | os 4 |
+Products and scopes:
+- Login Kit / user.info.basic: the creator connects their own TikTok account. We display the nickname and avatar so they always know which profile a clip will go to.
+- user.info.stats: we show follower, like and video counts on the connected account card.
+- Content Posting API / video.upload: sends the finished clip as a draft to the creator's TikTok inbox, when the creator picks that mode.
+- Content Posting API / video.publish: publishes directly to the creator's profile, only after the creator manually sets privacy level, interaction settings and commercial disclosure for that specific clip.
 
-**Grave com a conta #2.** A #1 está com escopo faltando (conexão antiga) e não serve pra demonstrar
-`user.info.stats`. Se quiser consertar a #1, é só desconectar e conectar de novo.
+We never add any watermark, logo or promotional text to the video.
+```
 
 ---
 
-## Parte 1 — Vídeo do TikTok (obrigatório)
+## Parte 2 — Gravar o vídeo
 
-**Limites oficiais:** até 5 vídeos, **50 MB cada**. Um vídeo só, de 3 a 5 minutos, resolve.
-Se passar de 50 MB, exporte em 1080p a 30 fps, ou divida em dois (Login / Publicação).
+**Limites:** mp4 ou mov, até 5 arquivos, **50 MB cada**. Um vídeo de 3 a 5 minutos resolve. Se
+passar de 50 MB, exporte em 1080p a 30 fps.
 
-**Escopos que precisam aparecer funcionando:** `user.info.basic`, `user.info.stats`,
-`video.publish`, `video.upload`. Regra da TikTok: *"All selected products and scopes must be
-clearly demonstrated in the video"*. Escopo pedido e não demonstrado é motivo de recusa.
+### Antes de apertar o gravar
 
-### Cena 1 — O site público (00:00 – 00:25)
+- [ ] Conta de teste no Post Flow, com um canal cadastrado e **pelo menos um corte pronto na fila**.
+      Gerar corte na hora leva minutos e não dá pra esperar durante a gravação.
+- [ ] Use a conta TikTok **#2 ("Aqueles Clipes", modo direto)** — ela tem os quatro escopos. A #1
+      está com escopo faltando de uma conexão antiga e não serve pra mostrar o `user.info.stats`.
+- [ ] Janela anônima, ou sair de todas as contas. Se o navegador já estiver logado, a tela de
+      autorização é pulada — e é ela que o revisor mais olha.
+- [ ] Fechar abas, notificações e qualquer coisa com nome de pessoa real na tela.
+- [ ] Tela em 1920×1080, zoom do navegador em 100%.
+
+**Como gravar:** mouse devagar, pausa de 2 segundos em cada tela importante, e **sem cortes** nas
+partes de autorização. QuickTime ("Gravação de Tela") ou OBS. Não precisa editar.
+
+---
+
+### Cena 1 — O site (00:00 – 00:25)
 
 1. Abra `https://postflowtiktok.com` numa janela anônima.
-2. Role devagar pela página inteira, sem pressa, até o rodapé.
-3. **Pare no rodapé** e mostre os links **Termos de Uso** e **Política de Privacidade**.
-4. Clique em **Política de Privacidade**, deixe a página abrir, role até a seção que fala do TikTok.
-5. Volte.
+2. Role a página inteira, devagar, até o rodapé.
+3. Pare no rodapé mostrando **Termos de Uso** e **Política de Privacidade**.
+4. Clique em Política de Privacidade, role até a parte que fala do TikTok, e volte.
 
-> Por quê: a TikTok exige site oficial de verdade (*"not just a landing or login page"*) e os dois
-> links acessíveis sem precisar caçar em menu.
+> O domínio que aparece no vídeo tem que ser o mesmo cadastrado no formulário. É item de checagem.
 
 ### Cena 2 — Entrar (00:25 – 00:45)
 
-1. Clique em **Entrar**.
-2. Digite o e-mail e a senha da conta de teste. (A senha aparece como pontinhos, tudo bem.)
-3. Entre. Deixe o painel carregar.
+Clique em Entrar, use a conta de teste, deixe o painel carregar.
 
-### Cena 3 — Conectar a conta do TikTok — **esta é a cena mais importante** (00:45 – 01:40)
+### Cena 3 — Conectar a conta do TikTok (00:45 – 01:40) — **a cena mais importante**
 
-1. No menu, clique em **Publicação**.
-2. Clique em **Conectar outra conta**.
-3. **A tela de autorização do TikTok abre. NÃO CORTE AQUI.** Deixe parada por 3 segundos.
-4. **Role a tela de permissões devagar**, de cima até embaixo, mostrando cada permissão que o
-   TikTok lista.
-5. Faça login na conta de teste do TikTok, se pedir.
-6. Clique em **Autorizar**.
-7. Volte pro Post Flow. **Pare 3 segundos** no card da conta conectada, mostrando o apelido, a foto,
-   e os números de **seguidores, curtidas e vídeos no perfil**.
+1. Menu → **Publicação** → **Conectar outra conta**.
+2. **A tela de autorização do TikTok abre. NÃO CORTE.** Pare 3 segundos.
+3. **Role a lista de permissões devagar**, de cima até embaixo.
+4. Faça login na conta de teste, se pedir. Clique em **Autorizar**.
+5. De volta no Post Flow, pare 3 segundos no card da conta, mostrando o apelido, a foto e os números
+   de **seguidores, curtidas e vídeos** — é o `user.info.stats` funcionando.
 
-> Por que os números importam: eles são o escopo `user.info.stats` funcionando. Sem isso na tela, o
-> escopo fica pedido e não demonstrado.
+### Cena 4 — Escolher o modo (01:40 – 02:00)
 
-### Cena 4 — Escolher como o corte chega no TikTok (01:40 – 02:00)
+1. **Configurar postagens dessa conta**.
+2. Mostre o bloco **"Como o corte chega no TikTok"** com as duas opções.
+3. Clique em **Direto no perfil**.
 
-1. Clique em **Configurar postagens dessa conta**.
-2. Mostre o bloco **"Como o corte chega no TikTok"**, com as duas opções lado a lado.
-3. Leia (ou legende) as duas: *rascunho* e *direto no perfil*.
-4. Clique em **Direto no perfil**.
+### Cena 5 — As opções obrigatórias (02:00 – 03:30) — **a cena que a auditoria mais olha**
 
-> Por quê: a TikTok analisa se o app trata corretamente a escolha entre rascunho e publicação
-> direta, e se essa escolha é do criador — não uma decisão escondida do app.
+Abra o primeiro corte da fila e mostre, **um por um, pausando em cada**:
 
-### Cena 5 — As opções obrigatórias, corte a corte (02:00 – 03:30) — **a cena que a auditoria mais olha**
-
-Na fila, abra o primeiro corte e mostre, **um por um, pausando em cada**:
-
-1. **Apelido e foto da conta** de destino, no topo do bloco.
-2. **A prévia do vídeo.** Dê play em alguns segundos. Diga (ou legende): *"no watermark, no logo
-   added by the app"*.
-3. **"Quem pode ver este vídeo"**: abra a lista. **Mostre que nada vem escolhido por padrão.**
+1. **Apelido e foto** da conta de destino, no topo do bloco.
+2. **A prévia do vídeo.** Dê play em alguns segundos. Diga ou legende: *"no watermark, no logo added
+   by the app"*.
+3. **"Quem pode ver este vídeo"**: abra a lista e **mostre que nada vem escolhido por padrão**.
    Escolha uma opção.
-4. **"O que as pessoas podem fazer"**: mostre comentar, dueto e junção — **todos desmarcados**.
-   Marque um. Se a conta de teste tiver algum desativado, mostre que aparece bloqueado com o
-   motivo escrito.
-5. **Divulgação comercial**: marque *"Este vídeo divulga uma marca, produto ou serviço"*.
-   - Marque **Sua marca** → aponte a frase **"Seu vídeo será marcado como Conteúdo promocional"**.
-   - Desmarque e marque **Conteúdo de parceria** → aponte **"Parceria paga"**.
-   - **Com a parceria marcada, abra a lista de privacidade de novo** e mostre que **"Só você" está
+4. **"O que as pessoas podem fazer"**: comentar, dueto e junção, **todos desmarcados**. Marque um.
+5. **Divulgação comercial**: marque a caixa.
+   - Marque **Sua marca** → aponte *"Seu vídeo será marcado como Conteúdo promocional"*.
+   - Desmarque e marque **Conteúdo de parceria** → aponte *"Parceria paga"*.
+   - **Com a parceria marcada, abra a lista de privacidade** e mostre que **"Só você" está
      desabilitado**, com o motivo.
-   - Desligue a divulgação de volta.
-6. **A frase de consentimento**, logo acima do botão: *"Ao publicar, você concorda com a
-   Confirmação de Uso de Música do TikTok"*. Passe o mouse por cima pra mostrar que é um link.
-7. **O aviso de processamento**: *"Depois de publicar, o TikTok pode levar alguns minutos..."*.
-8. Clique em **Confirmar e liberar publicação**.
+   - Desligue a divulgação.
+6. **A frase de consentimento** acima do botão: *"Ao publicar, você concorda com a Confirmação de Uso
+   de Música do TikTok"*. Passe o mouse pra mostrar que é link.
+7. **O aviso de processamento** ("pode levar alguns minutos").
+8. **Confirmar e liberar publicação**.
 
-### Cena 6 — Publicar de verdade (03:30 – 04:30)
+### Cena 6 — Publicar (03:30 – 04:30)
 
-1. Clique em **Postar agora** naquele corte.
-2. Mostre o status mudando para **enviando / processando**.
-3. **Abra o aplicativo do TikTok** (ou o tiktok.com) na conta de teste e **mostre o vídeo publicado**.
-4. Volte pro Post Flow e mostre o corte na aba **Postados**.
+1. **Postar agora** naquele corte.
+2. Mostre o status mudando para enviando / processando.
+3. **Abra o TikTok** na conta de teste e **mostre o vídeo publicado**.
+4. Volte ao Post Flow e mostre o corte na aba **Postados**.
 
-> Se o vídeo demorar, corte e legende "3 minutes later". Terminar mostrando o vídeo dentro do TikTok
-> é o que fecha a demonstração.
-
-### O que escrever na descrição do app (campo do formulário)
-
-> Post Flow is a video repurposing tool for creators. It monitors the creator's own YouTube channel,
-> uses AI to select the best segments of each new video, renders them as vertical clips with
-> burned-in captions, and publishes them to the creator's own TikTok account.
->
-> Scope usage:
-> - `user.info.basic` — display the connected account's nickname and avatar so the creator always
->   knows which profile a clip will be published to.
-> - `user.info.stats` — show follower, like and video counts on the account card.
-> - `video.upload` — send the rendered clip as a draft to the creator's TikTok inbox, when the
->   creator chooses that mode.
-> - `video.publish` — publish directly to the creator's profile, only after the creator has manually
->   set privacy level, interaction settings and commercial disclosure for that specific clip.
->
-> All content published is the creator's own material. The app never adds any watermark, logo or
-> promotional text to the video: the only overlays are captions and titles produced from the
-> creator's own audio, and the creator can turn them off.
-
-### Cuidados que reprovam na hora
-
-- **Marca d'água.** A regra é literal: o app não pode sobrepor nome, logo ou marca d'água. O Post
-  Flow queima legenda e título **do próprio cliente**, nunca a nossa marca. Não mude isso.
-- Pedir escopo e não mostrar ele funcionando no vídeo.
-- Enquanto a auditoria não passa: no máximo **5 usuários por 24h**, e toda publicação sai como
-  **"só eu"**. É esperado — o revisor sabe disso.
+> Se demorar, corte e legende "3 minutes later". Terminar mostrando o vídeo dentro do TikTok é o que
+> fecha a demonstração.
 
 ---
 
-## Parte 2 — Vídeo do Google (só se pedirem)
+## O que reprova na hora
 
-Não grave por antecipação. Só grave se o Google solicitar durante a verificação de marca.
-
-**Onde hospedar:** o Google exige **YouTube, com visibilidade "Não listado"**. Não é anexo.
-
-**Duração:** 2 a 3 minutos.
-
-### Os quatro itens que o Google exige, na ordem
-
-A documentação lista exatamente estes:
-
-1. Mostrar o fluxo de consentimento **em inglês**;
-2. Mostrar que a tela de consentimento exibe **o nome do app corretamente**;
-3. Mostrar que a **barra de endereço** da tela de consentimento contém o **Client ID** do app;
-4. Demonstrar **a funcionalidade que cada escopo habilita**.
-
-### Roteiro
-
-**Cena 1 — Home pública (00:00 – 00:20)**
-Abra `https://postflowtiktok.com` numa janela anônima, role até o rodapé e clique em **Política de
-Privacidade**. Role até a seção que explica o acesso ao Google Drive. Volte.
-
-**Cena 2 — Entrar (00:20 – 00:35)**
-Entre com a conta de teste.
-
-**Cena 3 — Iniciar a conexão com o Google (00:35 – 00:50)**
-Vá em **Canais**, abra um canal e clique na opção de **enviar os cortes prontos pro Google Drive**.
-Clique em **Conectar o Google Drive**.
-
-**Cena 4 — A tela de consentimento (00:50 – 01:40) — a parte que o revisor mais olha**
-
-1. Quando a tela do Google abrir, **pare**.
-2. **Dê zoom na barra de endereço** (Cmd + "+" duas vezes) até dar pra ler. O `client_id` tem que
-   ficar legível. Segure 3 segundos.
-3. Volte o zoom. **Mostre o nome "Post Flow"** na tela de consentimento. Segure 2 segundos.
-4. Escolha a conta Google de teste.
-5. **Role a lista de permissões devagar.** Cada permissão precisa aparecer.
-6. Clique em **Continuar / Permitir**.
-
-**Cena 5 — Mostrar o escopo funcionando (01:40 – 02:40)**
-
-- `userinfo.email`: de volta no Post Flow, mostre o **e-mail da conta Google conectada** aparecendo
-  na tela. É literalmente para isso que o escopo serve.
-- `drive.file`: escolha a **pasta de destino** do canal, salve, vá em **Cortes**, clique em
-  **Enviar pro Drive** num corte pronto. Depois **abra o Google Drive** e **mostre o arquivo lá
-  dentro**.
-
-> Terminar mostrando o arquivo dentro do Drive é o que prova o `drive.file`. Sem isso a cena não
-> fecha.
-
-### O que escrever na justificativa dos escopos
-
-> **`drive.file`** — Post Flow renders short vertical clips from the user's own long-form videos.
-> When the user enables Drive export for a channel, each finished clip is uploaded to a folder the
-> user selected. The app only ever writes files it created; it never reads or lists the user's
-> existing Drive content.
->
-> **`userinfo.email`** — used to display which Google account is connected, so the user can confirm
-> the clips are going to the right account, and to prevent connecting the wrong account by mistake.
+- **Marca d'água.** O app não pode sobrepor nome, logo ou marca. O Post Flow queima legenda e título
+  **do próprio cliente**, nunca a nossa marca. Não mude isso.
+- **Escopo ou produto pedido e não demonstrado** no vídeo.
+- **Domínio do vídeo diferente** do cadastrado no formulário.
+- **Descrição dizendo que o produto está em testes.**
+- **Termos e Privacidade** que não abrem, ou escondidos atrás de menu.
+- **Produto ou escopo sobrando** que o app não usa.
 
 ---
 
-## Ordem recomendada
+## Depois de enviar
 
-1. **Hoje:** criar a conta de teste do Post Flow e a conta de teste do TikTok, com um canal e ao
-   menos um corte pronto.
-2. **Hoje:** enviar a **verificação de marca** do Google (não precisa de vídeo).
-3. **Hoje ou amanhã:** gravar o vídeo do TikTok e submeter o app.
-4. **Só se o Google pedir:** gravar o vídeo do Google e responder no mesmo chamado.
+Uma submissão bem feita costuma levar **1 a 2 semanas**. Incompleta, bem mais.
 
-O TikTok é o caminho longo: a auditoria da Content Posting API costuma levar **1 a 2 semanas** numa
-submissão bem feita, e mais se faltar demonstração de algum escopo.
-
----
-
-## Links oficiais
-
-- [Diretrizes de compartilhamento de conteúdo (TikTok)](https://developers.tiktok.com/doc/content-sharing-guidelines)
-- [Diretrizes de análise de app (TikTok)](https://developers.tiktok.com/doc/app-review-guidelines)
-- [Content Posting API — publicação direta (TikTok)](https://developers.tiktok.com/doc/content-posting-api-reference-direct-post)
-- [Verificação de escopo sensível (Google)](https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification)
-- [Verificação de marca (Google)](https://developers.google.com/identity/protocols/oauth2/production-readiness/brand-verification)
-- [Classificação dos escopos do Drive (Google)](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
+Enquanto não aprova, o app continua no limite de 5 contas por 24h com publicação "só eu" — o sistema
+funciona, só não fica público. **Não troque as chaves de Sandbox pelas de Produção antes da
+aprovação**: são credenciais diferentes e a troca derruba as conexões que já existem.
