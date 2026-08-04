@@ -55,6 +55,9 @@ async function transcribeAudio(audioFilePath, { language, checkCancelled } = {})
 
   return {
     text: data.text,
+    // O Whisper detecta o idioma e devolve o codigo ISO ('pt', 'en', 'es'...).
+    // E o que impede a IA de escrever titulo em ingles pra video em portugues.
+    language: data.language || null,
     words: (data.words || []).map((w) => ({ word: w.word, start: w.start, end: w.end })),
     durationSeconds: data.duration || 0,
     costUsd: whisperCostUsd(data.duration),

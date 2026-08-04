@@ -182,6 +182,9 @@ async function run(sourceVideoId) {
         text: sourceVideo.transcript_text,
         words: sourceVideo.transcript_words,
         durationSeconds: sourceVideo.whisper_audio_seconds,
+        // Vem do banco: retomar um video pausado nao roda a transcricao de
+        // novo, entao o idioma tem que sobreviver fora da memoria.
+        language: sourceVideo.transcript_language,
       };
     } else {
       await sourceVideosRepository.updateStatus(sourceVideo.id, 'transcribing');
@@ -193,6 +196,7 @@ async function run(sourceVideoId) {
         transcriptWords: transcript.words,
         whisperAudioSeconds: transcript.durationSeconds,
         whisperCostUsd: transcript.costUsd,
+        language: transcript.language,
       });
       fs.unlinkSync(audioPath);
     }
@@ -223,6 +227,9 @@ async function run(sourceVideoId) {
           minDuration: clipLengthPreset.minDuration,
           maxDuration: clipLengthPreset.maxDuration,
           exact: settings.clip_mode === 'fixed_count',
+          // Sem isto, a IA escrevia titulo e legenda em ingles mesmo em video
+          // falado em portugues.
+          language: transcript.language,
         });
         await sourceVideosRepository.saveClaudeUsage(sourceVideo.id, {
           inputTokens: selection.inputTokens,

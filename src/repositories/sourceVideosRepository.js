@@ -261,14 +261,18 @@ async function saveDownload(id, localVideoPath, { bytes = null, egressType = nul
   );
 }
 
-async function saveTranscript(id, { transcriptText, transcriptWords, whisperAudioSeconds = null, whisperCostUsd = null }) {
+async function saveTranscript(
+  id,
+  { transcriptText, transcriptWords, whisperAudioSeconds = null, whisperCostUsd = null, language = null }
+) {
   await pool.query(
     `UPDATE source_videos
      SET transcript_text = $2, transcript_words = $3,
          whisper_audio_seconds = $4, whisper_cost_usd = $5,
+         transcript_language = $6,
          transcription_completed_at = now(), updated_at = now()
      WHERE id = $1`,
-    [id, transcriptText, JSON.stringify(transcriptWords), whisperAudioSeconds, whisperCostUsd]
+    [id, transcriptText, JSON.stringify(transcriptWords), whisperAudioSeconds, whisperCostUsd, language]
   );
 }
 

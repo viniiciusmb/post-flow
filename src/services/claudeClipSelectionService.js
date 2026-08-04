@@ -37,6 +37,36 @@ function formatTranscriptForPrompt(words, windowSeconds = 8) {
   return lines.join('\n');
 }
 
+// O Whisper devolve o codigo ISO; a instrucao pro modelo fica bem mais firme
+// com o nome do idioma escrito por extenso do que com "pt".
+const NOMES_DE_IDIOMA = {
+  pt: 'português',
+  en: 'inglês',
+  es: 'espanhol',
+  fr: 'francês',
+  it: 'italiano',
+  de: 'alemão',
+  ja: 'japonês',
+  ko: 'coreano',
+  zh: 'chinês',
+  ru: 'russo',
+  ar: 'árabe',
+  hi: 'híndi',
+  nl: 'holandês',
+  pl: 'polonês',
+  tr: 'turco',
+};
+
+function instrucaoDeIdioma(language) {
+  const nome = NOMES_DE_IDIOMA[String(language || '').slice(0, 2).toLowerCase()];
+  // Sem idioma detectado (video transcrito antes desta mudanca), o melhor
+  // palpite e a propria transcricao que esta no prompt.
+  if (!nome) {
+    return 'IMPORTANTE: escreva o titulo e a legenda NO MESMO IDIOMA da transcricao acima. Nao traduza para outro idioma.';
+  }
+  return `IMPORTANTE: o video e falado em ${nome}. Escreva o titulo e a legenda em ${nome}, nunca em outro idioma. Nao traduza.`;
+}
+
 const SELECT_CLIPS_TOOL = {
   name: 'select_clips',
   description: 'Registra os melhores trechos do video pra virar cortes verticais de TikTok.',
@@ -48,8 +78,8 @@ const SELECT_CLIPS_TOOL = {
         items: {
           type: 'object',
           properties: {
-            title: { type: 'string', description: 'Titulo curto e chamativo pro corte, estilo TikTok.' },
-            description: { type: 'string', description: 'Legenda curta pra usar na postagem (1-2 frases), com 2-4 hashtags relevantes ao final.' },
+            title: { type: 'string', description: 'Titulo curto e chamativo pro corte, estilo TikTok, NO MESMO IDIOMA falado no video.' },
+            description: { type: 'string', description: 'Legenda curta pra usar na postagem (1-2 frases), com 2-4 hashtags relevantes ao final, NO MESMO IDIOMA falado no video.' },
             startSeconds: { type: 'number' },
             endSeconds: { type: 'number' },
           },
@@ -64,7 +94,7 @@ const SELECT_CLIPS_TOOL = {
 // exact=true (modo "escolher quantidade"): pede exatamente maxClips trechos.
 // exact=false (modo "IA decide"): maxClips vira so um teto de seguranca, o
 // prompt deixa claro que e a IA quem decide quantos fazem sentido.
-async function selectClips(transcriptWords, { maxClips = 4, minDuration = 25, maxDuration = 90, exact = false } = {}) {
+async function selectClips(transcriptWords, { maxClips = 4, minDuration = 25, maxDuration = 90, exact = false, language = null } = {}) {
   const transcript = formatTranscriptForPrompt(transcriptWords);
   if (!transcript) {
     throw new Error('Transcrição vazia. Não há o que analisar.');
@@ -78,7 +108,9 @@ async function selectClips(transcriptWords, { maxClips = 4, minDuration = 25, ma
 
 ${transcript}
 
-${countInstruction} que funcionariam bem como cortes verticais pro TikTok: momentos com potencial viral, respostas completas, historias com gancho, ou insights fortes - cada um durando entre ${minDuration} e ${maxDuration} segundos. Cada corte precisa comecar e terminar em um ponto que faca sentido sozinho (nunca no meio de uma frase). Sugira um titulo curto e chamativo, e uma legenda pronta pra postar (com hashtags) pra cada um. Use a ferramenta select_clips pra registrar sua escolha.`;
+${countInstruction} que funcionariam bem como cortes verticais pro TikTok: momentos com potencial viral, respostas completas, historias com gancho, ou insights fortes - cada um durando entre ${minDuration} e ${maxDuration} segundos. Cada corte precisa comecar e terminar em um ponto que faca sentido sozinho (nunca no meio de uma frase). Sugira um titulo curto e chamativo, e uma legenda pronta pra postar (com hashtags) pra cada um. Use a ferramenta select_clips pra registrar sua escolha.
+
+${instrucaoDeIdioma(language)}`;
 
   const response = await fetch(MESSAGES_URL, {
     method: 'POST',
