@@ -104,3 +104,86 @@ test('todo filtro termina no rótulo que o render usa pra saída', () => {
     }
   }
 });
+
+// --- Preservação da escolha ao salvar ---
+//
+// Esta tela é salva por dois cartões diferentes: o de qualidade e o de estilo
+// visual. Se um deles não mandar o campo do fundo e o servidor cair num padrão,
+// a escolha feita no outro some sem ninguém perceber. Já aconteceu igualzinho
+// com os horários de postagem.
+
+const pool = require('../../src/db/pool');
+const { startServer, stopServer, createLoginableClient, createAgent } = require('../helpers/http');
+
+let baseUrl;
+
+test.before(async () => {
+  baseUrl = await startServer();
+});
+
+test.after(async () => {
+  await stopServer();
+  await pool.end();
+});
+
+async function agenteLogado() {
+  const cliente = await createLoginableClient({ role: 'client' });
+  const agente = createAgent(baseUrl);
+  await agente.login(cliente.email, cliente.password);
+  return agente;
+}
+
+const BASE = {
+  aspectRatio: '9:16',
+  framing: 'crop',
+  quality: 'high',
+  captionStyle: 'classic',
+  clipLength: 'balanced',
+  clipMode: 'ai_choice',
+  maxClips: 4,
+  showTitle: true,
+  titleSeconds: 3,
+  descriptionMode: 'auto',
+  descriptionTemplate: null,
+  cropStyleMode: 'manual',
+  cropZoomPercent: 100,
+  showPartLabel: false,
+  partLabelPosition: 'top_right',
+  titleStyle: 'classic',
+  backgroundVideoHeightPercent: 66,
+  backgroundVideoOffsetPercent: 0,
+};
+
+test('salvar sem mandar o fundo PRESERVA o que já estava escolhido', async () => {
+  const agente = await agenteLogado();
+
+  const escolheu = await agente.put('/api/client/video-settings', { ...BASE, backgroundStyle: 'black' });
+  assert.equal(escolheu.status, 200);
+  assert.equal(escolheu.body.backgroundStyle, 'black');
+
+  // Agora o outro cartão salva, sem mandar o campo do fundo.
+  const outroCartao = await agente.put('/api/client/video-settings', { ...BASE, quality: 'medium' });
+  assert.equal(outroCartao.status, 200);
+  assert.equal(
+    outroCartao.body.backgroundStyle,
+    'black',
+    'a escolha do fundo foi apagada por um save que nem falava de fundo'
+  );
+});
+
+test('valor inválido não vira "blur" silenciosamente', async () => {
+  const agente = await agenteLogado();
+  await agente.put('/api/client/video-settings', { ...BASE, backgroundStyle: 'white' });
+
+  const r = await agente.put('/api/client/video-settings', { ...BASE, backgroundStyle: 'arco-iris' });
+  assert.equal(r.body.backgroundStyle, 'white');
+});
+
+test('escolher "minha imagem" sem imagem enviada é recusado', async () => {
+  const agente = await agenteLogado();
+  const r = await agente.put('/api/client/video-settings', { ...BASE, backgroundStyle: 'template' });
+
+  // Aceitar aqui renderizaria com o desfocado sem explicar por quê.
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /Envie a imagem/);
+});

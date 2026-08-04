@@ -171,9 +171,6 @@ async function update(req, res) {
   const alvo = await resolverAlvo(req);
   if (alvo.erro) return res.status(404).json({ error: alvo.erro });
 
-  const ESTILOS_DE_FUNDO = ['blur', 'black', 'white', 'template'];
-  const backgroundStyle = ESTILOS_DE_FUNDO.includes(req.body.backgroundStyle) ? req.body.backgroundStyle : 'blur';
-
   const backgroundHeight = Number(req.body.backgroundVideoHeightPercent ?? 100);
   const backgroundOffset = Number(req.body.backgroundVideoOffsetPercent ?? 50);
   if (!Number.isInteger(backgroundHeight) || backgroundHeight < 10 || backgroundHeight > 100) {
@@ -191,6 +188,16 @@ async function update(req, res) {
     ? (await clientVideoSettingsRepository.findChannelOverride(req.session.user.id, alvo.channelId)) ||
       (await clientVideoSettingsRepository.findByClientId(req.session.user.id))
     : await clientVideoSettingsRepository.findByClientId(req.session.user.id);
+
+  // Campo ausente PRESERVA o que ja estava salvo, em vez de cair num padrao.
+  // Esta tela e salva por dois cartoes diferentes (qualidade e estilo visual);
+  // se um deles nao mandar o campo, um padrao aqui apagaria em silencio a
+  // escolha feita no outro. E exatamente o bug que ja aconteceu com os
+  // horarios de postagem.
+  const ESTILOS_DE_FUNDO = ['blur', 'black', 'white', 'template'];
+  const backgroundStyle = ESTILOS_DE_FUNDO.includes(req.body.backgroundStyle)
+    ? req.body.backgroundStyle
+    : atual.background_style || 'blur';
 
   // Escolher "template" sem ter enviado imagem nenhuma renderizaria com o
   // fundo desfocado sem explicar por que - melhor recusar aqui e dizer.
