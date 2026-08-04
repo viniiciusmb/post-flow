@@ -186,11 +186,27 @@ export interface CreatorOptions {
   publishMode: "inbox" | "direct"
 }
 
+/**
+ * Padrão de publicação direta da conta: escolhido uma vez, vale pra todo corte.
+ * Enquanto `definido` for false, nenhum corte é publicado direto — a TikTok
+ * proíbe publicar com uma configuração que o criador nunca viu.
+ */
+export interface PublishDefaults {
+  definido: boolean
+  definidoEm: string | null
+  privacyLevel: string | null
+  disableComment: boolean
+  disableDuet: boolean
+  disableStitch: boolean
+  brandOrganicToggle: boolean
+  brandContentToggle: boolean
+}
+
 export interface PostingQueueItem {
   id: number
   clipId: number
-  /** false = o criador ainda não escolheu as opções; a publicação direta não sai. */
-  optionsConfirmed: boolean
+  /** true = este corte tem opções próprias, diferentes do padrão da conta. */
+  optionsCustom: boolean
   privacyLevel: string | null
   disableComment: boolean
   disableDuet: boolean

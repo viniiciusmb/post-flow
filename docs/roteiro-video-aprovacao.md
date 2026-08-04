@@ -42,9 +42,11 @@ tela que está sendo gravada. A senha aparece como pontinhos, então não há ri
 - [ ] **Sandbox com o Redirect URI do domínio novo**: `https://postflowclips.com/auth/tiktok/callback`
       Teste antes: entre no Post Flow e clique em "Conectar outra conta". Se abrir a tela do TikTok,
       está certo. Se der erro de redirect, corrija no Sandbox antes de gravar.
-- [ ] **Conta de teste do Post Flow** com canal cadastrado e **pelo menos um corte pronto na fila**,
-      ainda **sem as opções definidas** (o botão do corte tem que estar escrito "Definir opções de
-      publicação", não "Opções de publicação definidas" — senão a cena 5 não tem o que mostrar).
+- [ ] **Conta de teste do Post Flow** com canal cadastrado e **pelo menos um corte pronto na fila**.
+- [ ] **As opções de publicação da conta NÃO podem estar definidas ainda.** É o coração da cena 5.
+      Confira: em Publicação → Configurar postagens dessa conta, o cartão "Opções de publicação"
+      tem que estar com o aviso amarelo *"Nenhum corte é publicado enquanto você não definir estas
+      opções"*. Se já mostrar um resumo ("Quem pode ver: ..."), me avise que eu limpo pelo banco.
 - [ ] **NÃO deixe "Direto no perfil" pré-selecionado.** Você escolhe isso durante a gravação, na
       cena 4 — é assim que os dois modos aparecem no vídeo.
 - [ ] **Abra `postflowclips.com` numa anônima e recarregue 3 vezes.** Se aparecer a página da
@@ -136,32 +138,40 @@ Você pediu quatro, e cada um tem uma cena onde ele fica visível.
 
 ## Cena 5 — As opções de publicação (02:00 – 03:30) — **a que a auditoria mais examina**
 
-Você já está dentro de **Configurar postagens dessa conta** (cena 4). Desça até a aba **Fila**,
-clique em **Definir opções de publicação** no primeiro corte, e mostre **um por um, pausando em
-cada**:
+Você já está dentro de **Configurar postagens dessa conta** (cena 4). Logo abaixo aparece o cartão
+**"Opções de publicação"**, com o formulário já aberto e o aviso amarelo. Mostre **um por um,
+pausando em cada**:
 
-1. **Apelido e foto** da conta de destino, no topo do bloco
-2. **A prévia do vídeo** — dê play em alguns segundos e diga (ou legende):
-   *"no watermark, no logo added by the app"*
-3. **"Quem pode ver este vídeo"** — abra a lista e **mostre que nada vem escolhido por padrão**.
+1. **O aviso amarelo**: *"Nenhum corte é publicado enquanto você não definir estas opções."*
+   Diga (ou legende): *"nothing is published until the creator sets these"*
+2. **Apelido e foto** da conta de destino, no topo do bloco
+3. **"Quem pode ver os vídeos"** — abra a lista e **mostre que nada vem escolhido por padrão**.
    Escolha uma opção
 4. **"O que as pessoas podem fazer"** — comentar, dueto e junção, **todos desmarcados**. Marque um
 5. **Divulgação comercial** — marque a caixa:
-   - Marque **Sua marca** → aponte a frase *"Seu vídeo será marcado como Conteúdo promocional"*
+   - Marque **Sua marca** → aponte a frase *"Seus vídeos serão marcados como Conteúdo promocional"*
    - Desmarque, marque **Conteúdo de parceria** → aponte *"Parceria paga"*
    - **Com a parceria marcada, abra a lista de privacidade** e mostre que **"Só você" está
-     desabilitado**, com o motivo escrito
+     desabilitado**, com o motivo escrito ao lado
    - Desligue a divulgação
 6. **A frase acima do botão**: *"Ao publicar, você concorda com a Confirmação de Uso de Música do
    TikTok"*. Passe o mouse por cima pra mostrar que é um link
 7. **O aviso** de que o TikTok pode levar alguns minutos pra processar
-8. Clique em **Confirmar e liberar publicação**
+8. Clique em **Confirmar e liberar publicação** — o cartão vira um resumo do que você escolheu
+9. Desça até a aba **Fila**, e num corte clique em **Editar opções deste corte**. Mostre que é o
+   mesmo formulário, e que dá pra tratar um vídeo diferente dos outros. **Feche sem salvar.**
+
+> **Por que a escolha é uma vez só, e não a cada vídeo:** o passo 9 é o que responde isso pro
+> revisor. O criador define uma vez o que vale pra todos os cortes, e pode abrir a exceção quando
+> quiser. A regra da TikTok é que nada seja publicado com uma configuração que o criador nunca viu —
+> e o passo 1 mostra que, antes de ele definir, nada sai mesmo.
 
 > **Escopo desta cena: `video.publish`.**
 >
-> Esta é a cena que prova a regra mais importante da Content Posting API: nada é publicado com
-> valor padrão. Enquanto a privacidade não for escolhida, o botão **Confirmar e liberar publicação**
-> fica desabilitado, e **Postar agora** também. É esse bloqueio que o revisor procura.
+> Esta é a cena que prova a regra mais importante da Content Posting API: nada é publicado com um
+> valor que o criador não escolheu. Enquanto a privacidade não for escolhida, o botão **Confirmar e
+> liberar publicação** fica desabilitado, e **Postar agora** na fila também. É esse bloqueio que o
+> revisor procura.
 
 ## Cena 6 — Publicar (03:30 – 04:30)
 

@@ -186,9 +186,40 @@ async function setPublishMode(id, clientUserId, mode) {
   return rows[0] || null;
 }
 
+// Padrao de publicacao direta da CONTA: vale pra todo corte que nao tiver
+// opcoes proprias. publish_options_set_at e o que diz que o criador realmente
+// escolheu - enquanto for NULL, nada e publicado direto.
+async function savePublishDefaults(id, clientUserId, opcoes) {
+  const { rows } = await pool.query(
+    `UPDATE tiktok_accounts
+     SET default_privacy_level = $3,
+         default_disable_comment = $4,
+         default_disable_duet = $5,
+         default_disable_stitch = $6,
+         default_brand_organic_toggle = $7,
+         default_brand_content_toggle = $8,
+         publish_options_set_at = now(),
+         updated_at = now()
+     WHERE id = $1 AND client_user_id = $2 AND is_active = true
+     RETURNING *`,
+    [
+      id,
+      clientUserId,
+      opcoes.privacyLevel,
+      opcoes.disableComment,
+      opcoes.disableDuet,
+      opcoes.disableStitch,
+      opcoes.brandOrganicToggle,
+      opcoes.brandContentToggle,
+    ]
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
   saveCreatorInfo,
   setPublishMode,
+  savePublishDefaults,
   findById,
   findActiveByIdAndClient,
   listActiveByClientId,

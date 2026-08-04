@@ -4,6 +4,7 @@ const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRe
 const postingScheduleSettingsRepository = require('../../../repositories/postingScheduleSettingsRepository');
 const postingsRepository = require('../../../repositories/postingsRepository');
 const tiktokService = require('../../../services/tiktokService');
+const publishOptions = require('../../../lib/publishOptions');
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const RETENTION_PRESETS = [24, 72, 168, 720]; // 1d, 3d, 7d, 30d
@@ -90,6 +91,53 @@ async function setPublishMode(req, res) {
   const updated = await tiktokAccountsRepository.setPublishMode(account.id, account.client_user_id, mode);
   if (!updated) return res.status(404).json({ error: 'Conta não encontrada.' });
   res.json({ publishMode: updated.publish_mode });
+}
+
+// Padrao de publicacao direta da conta. Vale pra todos os cortes, e e o que
+// permite o sistema seguir automatico: o criador escolhe uma vez, nao corte a
+// corte. Enquanto "definido" for false, nada e publicado direto.
+function publishDefaultsToApi(account) {
+  return {
+    definido: Boolean(account.publish_options_set_at && account.default_privacy_level),
+    definidoEm: account.publish_options_set_at,
+    privacyLevel: account.default_privacy_level,
+    disableComment: account.default_disable_comment,
+    disableDuet: account.default_disable_duet,
+    disableStitch: account.default_disable_stitch,
+    brandOrganicToggle: account.default_brand_organic_toggle,
+    brandContentToggle: account.default_brand_content_toggle,
+  };
+}
+
+async function getPublishDefaults(req, res) {
+  const account = await findOwned(req);
+  if (!account) return res.status(404).json({ error: 'Conta não encontrada.' });
+  res.json(publishDefaultsToApi(account));
+}
+
+async function setPublishDefaults(req, res) {
+  const account = await findOwned(req);
+  if (!account) return res.status(404).json({ error: 'Conta não encontrada.' });
+
+  const opcoes = {
+    privacyLevel: req.body.privacyLevel,
+    disableComment: Boolean(req.body.disableComment),
+    disableDuet: Boolean(req.body.disableDuet),
+    disableStitch: Boolean(req.body.disableStitch),
+    brandOrganicToggle: Boolean(req.body.brandOrganicToggle),
+    brandContentToggle: Boolean(req.body.brandContentToggle),
+  };
+
+  const problema = publishOptions.validar(opcoes);
+  if (problema) return res.status(400).json({ error: problema });
+
+  const salvo = await tiktokAccountsRepository.savePublishDefaults(
+    account.id,
+    account.client_user_id,
+    opcoes
+  );
+  if (!salvo) return res.status(404).json({ error: 'Conta não encontrada.' });
+  res.json(publishDefaultsToApi(salvo));
 }
 
 function scheduleToApi(settings) {
@@ -201,6 +249,8 @@ async function setQueueOrder(req, res) {
 
 module.exports = {
   setPublishMode,
+  getPublishDefaults,
+  setPublishDefaults,
   list,
   deactivate,
   setAutoPost,

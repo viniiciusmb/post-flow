@@ -4,6 +4,7 @@ const postingsRepository = require('../../../repositories/postingsRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
 const tiktokPostingJob = require('../../../worker/jobs/tiktokPostingJob');
 const tiktokService = require('../../../services/tiktokService');
+const publishOptions = require('../../../lib/publishOptions');
 const logger = require('../../../lib/logger');
 
 function thumbnailUrl(row) {
@@ -30,9 +31,10 @@ async function listQueue(req, res) {
     postings: rows.map((p) => ({
       id: p.id,
       clipId: p.clip_id,
-      // Escolhas de publicacao direta. optionsConfirmed diz se o criador ja
-      // definiu; enquanto for false, a publicacao direta nao sai.
-      optionsConfirmed: Boolean(p.options_confirmed_at),
+      // Publicacao direta: o padrao vem da CONTA. optionsCustom diz se ESTE
+      // corte foi tratado diferente do padrao - e o que a tela usa pra mostrar
+      // "personalizado" e oferecer voltar ao padrao.
+      optionsCustom: publishOptions.postagemTemOpcoesProprias(p),
       privacyLevel: p.privacy_level,
       disableComment: p.disable_comment,
       disableDuet: p.disable_duet,
@@ -156,9 +158,7 @@ async function creatorOptions(req, res) {
   }
 }
 
-const PRIVACIDADES = ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'];
-
-// Salva o que o criador escolheu pra UM corte da fila.
+// Salva opcoes so pra UM corte, diferentes do padrao da conta.
 async function saveOptions(req, res) {
   const {
     privacyLevel,
@@ -169,18 +169,8 @@ async function saveOptions(req, res) {
     brandContentToggle,
   } = req.body;
 
-  // Sem privacidade escolhida nao ha o que salvar: e justamente a escolha que
-  // a TikTok exige que seja manual.
-  if (!PRIVACIDADES.includes(privacyLevel)) {
-    return res.status(400).json({ error: 'Escolha quem pode ver esse vídeo.' });
-  }
-  // Conteudo de parceria paga nao pode ser privado - regra da TikTok. A tela ja
-  // impede, mas quem chama a API direto tambem precisa esbarrar nisso.
-  if (brandContentToggle && privacyLevel === 'SELF_ONLY') {
-    return res.status(400).json({
-      error: 'Conteúdo de parceria paga não pode ficar visível só pra você. Escolha outra privacidade.',
-    });
-  }
+  const problema = publishOptions.validar({ privacyLevel, brandContentToggle });
+  if (problema) return res.status(400).json({ error: problema });
 
   const salvo = await postingsRepository.saveDirectPostOptionsOwnedByClient(
     Number(req.params.id),
@@ -198,6 +188,17 @@ async function saveOptions(req, res) {
   res.json({ ok: true });
 }
 
+// Desfaz a personalizacao: o corte volta a seguir o padrao da conta.
+async function clearOptions(req, res) {
+  const limpo = await postingsRepository.clearDirectPostOptionsOwnedByClient(
+    Number(req.params.id),
+    req.session.user.id
+  );
+  if (!limpo) return res.status(404).json({ error: 'Corte não encontrado na fila.' });
+  res.json({ ok: true });
+}
+
 module.exports = {
   creatorOptions,
+  clearOptions,
   saveOptions, listQueue, listPosted, listErrors, updateCaption, skip, postNow, retry };

@@ -21,5 +21,6 @@ router.post('/:id/retry', asyncHandler(controller.retry));
 // Opcoes de publicacao exigidas pela auditoria da Content Posting API.
 router.get('/accounts/:id/creator-options', asyncHandler(controller.creatorOptions));
 router.put('/:id/options', asyncHandler(controller.saveOptions));
+router.delete('/:id/options', asyncHandler(controller.clearOptions));
 
 module.exports = router;

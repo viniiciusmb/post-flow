@@ -10,6 +10,7 @@ const postingScheduleSettingsRepository = require('../../repositories/postingSch
 const tiktokAccountsRepository = require('../../repositories/tiktokAccountsRepository');
 const tiktokService = require('../../services/tiktokService');
 const errorReportService = require('../../services/errorReportService');
+const publishOptions = require('../../lib/publishOptions');
 const logger = require('../../lib/logger');
 
 const AUTO_WINDOW_START_HOUR = 8;
@@ -105,13 +106,15 @@ async function publish(account, posting) {
     //
     //   direct - vai direto pro perfil. A TikTok exige que privacidade,
     //            interacoes e divulgacao comercial tenham sido escolhidas
-    //            MANUALMENTE pelo criador antes. Se ninguem escolheu, nao
-    //            publicamos: pular e melhor que publicar com um padrao que a
-    //            pessoa nunca viu.
+    //            MANUALMENTE pelo criador antes. O criador escolhe uma vez, no
+    //            padrao da conta, e pode sobrescrever num corte especifico. Se
+    //            ninguem escolheu nada em lugar nenhum, nao publicamos: pular e
+    //            melhor que publicar com um padrao que a pessoa nunca viu.
     const modoDireto = account.publish_mode === 'direct';
-    if (modoDireto && !posting.options_confirmed_at) {
+    const opcoes = publishOptions.resolveForPosting(account, posting);
+    if (modoDireto && !opcoes) {
       logger.info(
-        `Corte "${posting.clip_title}" (postagem ${posting.id}) esta esperando o cliente escolher as opcoes de publicacao - pulando.`
+        `Corte "${posting.clip_title}" (postagem ${posting.id}) esta esperando o cliente definir as opcoes de publicacao da conta ${account.id} - pulando.`
       );
       return;
     }
@@ -139,12 +142,12 @@ async function publish(account, posting) {
     const { publishId, uploadUrl, chunkSize, totalChunkCount } = modoDireto
       ? await tiktokService.initDirectPost(accessToken, videoSizeBytes, {
           caption: posting.caption,
-          privacyLevel: posting.privacy_level,
-          disableComment: posting.disable_comment,
-          disableDuet: posting.disable_duet,
-          disableStitch: posting.disable_stitch,
-          brandContentToggle: posting.brand_content_toggle,
-          brandOrganicToggle: posting.brand_organic_toggle,
+          privacyLevel: opcoes.privacyLevel,
+          disableComment: opcoes.disableComment,
+          disableDuet: opcoes.disableDuet,
+          disableStitch: opcoes.disableStitch,
+          brandContentToggle: opcoes.brandContentToggle,
+          brandOrganicToggle: opcoes.brandOrganicToggle,
         })
       : await tiktokService.initInboxVideo(accessToken, videoSizeBytes);
     await tiktokService.uploadVideoFile(uploadUrl, posting.local_clip_path, videoSizeBytes, chunkSize, totalChunkCount);

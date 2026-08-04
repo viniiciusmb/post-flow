@@ -15,6 +15,9 @@ router.get('/', asyncHandler(controller.list));
 router.post('/:id/deactivate', asyncHandler(controller.deactivate));
 router.put('/:id/auto-post', asyncHandler(controller.setAutoPost));
 router.put('/:id/publish-mode', asyncHandler(controller.setPublishMode));
+// Padrao de publicacao direta da conta: escolhido uma vez, vale pra todo corte.
+router.get('/:id/publish-defaults', asyncHandler(controller.getPublishDefaults));
+router.put('/:id/publish-defaults', asyncHandler(controller.setPublishDefaults));
 router.get('/:id/schedule', asyncHandler(controller.getSchedule));
 router.put('/:id/schedule', asyncHandler(controller.setSchedule));
 router.put('/:id/queue-pause', asyncHandler(controller.setQueuePaused));

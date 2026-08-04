@@ -274,9 +274,32 @@ async function listQueueForClient(clientUserId, tiktokAccountId = null) {
 // interacoes, divulgacao comercial). So mexe em postagem PENDENTE dessa conta,
 // e so do proprio cliente.
 //
-// options_confirmed_at e o que libera a publicacao direta: enquanto for NULL,
-// o job pula a postagem. E de proposito - a TikTok exige escolha manual, entao
-// "ninguem escolheu" nao pode virar "publica com o padrao".
+// options_confirmed_at aqui significa "este corte tem opcoes proprias", nao
+// "ja confirmou": o padrao normal vem da conta. Quando e NULL, o corte segue o
+// padrao da conta - ver src/lib/publishOptions.js.
+// Desfaz a personalizacao de um corte: ele volta a seguir o padrao da conta.
+// Zerar os campos e limpar options_confirmed_at e a mesma coisa pro resolvedor,
+// mas deixar lixo pra tras faria a tela mostrar escolha que nao vale mais.
+async function clearDirectPostOptionsOwnedByClient(id, clientUserId) {
+  const { rows } = await pool.query(
+    `UPDATE postings p
+     SET privacy_level = NULL,
+         disable_comment = false,
+         disable_duet = false,
+         disable_stitch = false,
+         brand_organic_toggle = false,
+         brand_content_toggle = false,
+         options_confirmed_at = NULL,
+         updated_at = now()
+     FROM tiktok_accounts ta
+     WHERE p.id = $1 AND p.tiktok_account_id = ta.id
+       AND ta.client_user_id = $2 AND p.status = 'pending'
+     RETURNING p.*`,
+    [id, clientUserId]
+  );
+  return rows[0] || null;
+}
+
 async function saveDirectPostOptionsOwnedByClient(id, clientUserId, opcoes) {
   const { rows } = await pool.query(
     `UPDATE postings p
@@ -450,6 +473,7 @@ module.exports = {
   reflowScheduledFor,
   setQueueOrder,
   saveDirectPostOptionsOwnedByClient,
+  clearDirectPostOptionsOwnedByClient,
   listStaleProcessing,
   listPostedOlderThan,
   listQueueForClient,

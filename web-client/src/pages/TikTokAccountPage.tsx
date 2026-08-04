@@ -25,7 +25,11 @@ import {
 } from "@dnd-kit/core"
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { DirectPostOptions } from "@/components/dashboard/DirectPostOptions"
+import {
+  DirectPostOptions,
+  PublishDefaultsForm,
+  nomeDaPrivacidade,
+} from "@/components/dashboard/DirectPostOptions"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -46,6 +50,7 @@ import type {
   PostedItem,
   PostingQueueItem,
   PostingScheduleResponse,
+  PublishDefaults,
   TikTokAccountSummary,
   YoutubeChannel,
 } from "@/types/api"
@@ -151,6 +156,109 @@ function PauseQueueBar({ accountId }: { accountId: number }) {
   )
 }
 
+/**
+ * Opções de publicação da conta: escolhidas UMA vez, valem pra todos os cortes.
+ *
+ * Esta é a peça que mantém o sistema automático. A TikTok exige que o criador
+ * tenha escolhido privacidade, interações e divulgação comercial - não exige
+ * que ele reescolha a cada vídeo. Enquanto não escolher, nada é publicado
+ * direto: é isso que o cartão deixa explícito.
+ */
+function PublishDefaultsCard({
+  accountId,
+  onChange,
+}: {
+  accountId: number
+  onChange: (d: PublishDefaults) => void
+}) {
+  const [defaults, setDefaults] = useState<PublishDefaults | null>(null)
+  const [editando, setEditando] = useState(false)
+
+  useEffect(() => {
+    setDefaults(null)
+    setEditando(false)
+    api.get<PublishDefaults>(`/api/client/tiktok-accounts/${accountId}/publish-defaults`).then((d) => {
+      setDefaults(d)
+      onChange(d)
+      // Sem padrão nenhum, o formulário já abre: é a única coisa que separa a
+      // conta de começar a publicar.
+      setEditando(!d.definido)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId])
+
+  if (!defaults) return <Skeleton className="h-40" />
+
+  const permitidos = [
+    !defaults.disableComment && "comentar",
+    !defaults.disableDuet && "dueto",
+    !defaults.disableStitch && "junção",
+  ].filter(Boolean) as string[]
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Opções de publicação</CardTitle>
+        <CardDescription>
+          Escolha uma vez e vale pra todos os cortes desta conta. Se algum precisar sair diferente,
+          dá pra editar só ele na fila.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {/* Aparece mesmo com o formulário aberto: é o que explica por que ele
+            abriu sozinho e por que a fila está parada. */}
+        {!defaults.definido && (
+          <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-500">
+            Nenhum corte é publicado enquanto você não definir estas opções. É uma vez só.
+          </p>
+        )}
+
+        {defaults.definido && !editando && (
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <span>
+              <span className="text-muted-foreground">Quem pode ver: </span>
+              <strong>{nomeDaPrivacidade(defaults.privacyLevel)}</strong>
+            </span>
+            <span>
+              <span className="text-muted-foreground">Pessoas podem: </span>
+              <strong>{permitidos.length ? permitidos.join(", ") : "nada"}</strong>
+            </span>
+            <span>
+              <span className="text-muted-foreground">Divulgação comercial: </span>
+              <strong>
+                {defaults.brandContentToggle
+                  ? "parceria paga"
+                  : defaults.brandOrganicToggle
+                    ? "sua marca"
+                    : "não"}
+              </strong>
+            </span>
+          </div>
+        )}
+
+        {editando ? (
+          <PublishDefaultsForm
+            accountId={accountId}
+            defaults={defaults}
+            onSaved={(novo) => {
+              setDefaults(novo)
+              onChange(novo)
+              setEditando(false)
+            }}
+          />
+        ) : (
+          <div>
+            <Button size="sm" variant="outline" onClick={() => setEditando(true)} className="gap-1.5">
+              <IconSettings className="size-3.5" />
+              {defaults.definido ? "Alterar opções de publicação" : "Definir opções de publicação"}
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMode: "inbox" | "direct" }) {
   const [settings, setSettings] = useState<PostingScheduleResponse | null>(null)
   const [saving, setSaving] = useState(false)
@@ -217,9 +325,8 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
         <CardDescription>
           {publishMode === "direct" ? (
             <>
-              Cada corte é publicado <strong>direto no seu perfil do TikTok</strong>, depois que você confirmar as
-              opções dele na fila abaixo. O agendamento controla a que horas cada um sai, pra não sair tudo de uma
-              vez.
+              Cada corte é publicado <strong>direto no seu perfil do TikTok</strong>, com as opções que você
+              definiu acima. O agendamento controla a que horas cada um sai, pra não sair tudo de uma vez.
             </>
           ) : (
             <>
@@ -386,12 +493,15 @@ function QueueRow({
   onView,
   accountId,
   publishMode,
+  padraoDefinido,
   onOptionsSaved,
 }: {
   item: PostingQueueItem
   accountName: string
   accountId: number
   publishMode: "inbox" | "direct"
+  /** O padrão da conta já foi escolhido? Sem ele nenhum corte sai. */
+  padraoDefinido: boolean
   onOptionsSaved: () => void
   draft: string
   onDraftChange: (value: string) => void
@@ -407,10 +517,10 @@ function QueueRow({
   const [abrirOpcoes, setAbrirOpcoes] = useState(false)
   const downloadUrl = `/api/client/source-videos/clips/${item.clipId}/download`
 
-  // Na publicação direta o corte só pode sair depois que o criador escolher
-  // privacidade, interações e divulgação comercial - é exigência da TikTok, e o
-  // job de publicação pula quem não confirmou.
-  const precisaConfirmar = publishMode === "direct" && !item.optionsConfirmed
+  // Na publicação direta o corte segue o padrão da conta. Ele só fica parado se
+  // NINGUÉM definiu esse padrão ainda - o que se resolve uma vez lá em cima, não
+  // corte a corte.
+  const semPadrao = publishMode === "direct" && !padraoDefinido
 
   return (
     <div
@@ -454,23 +564,27 @@ function QueueRow({
         </div>
         {publishMode === "direct" && (
           <div className="mt-2">
-            <Button
-              size="xs"
-              variant={precisaConfirmar ? "default" : "outline"}
-              onClick={() => setAbrirOpcoes((v) => !v)}
-              className="gap-1"
-            >
-              <IconSettings className="size-3" />
-              {abrirOpcoes
-                ? "Fechar opções"
-                : precisaConfirmar
-                  ? "Definir opções de publicação"
-                  : "Opções de publicação definidas"}
-            </Button>
-            {precisaConfirmar && !abrirOpcoes && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => setAbrirOpcoes((v) => !v)}
+                className="gap-1 px-1.5 text-muted-foreground"
+              >
+                <IconSettings className="size-3" />
+                {abrirOpcoes ? "Fechar opções deste corte" : "Editar opções deste corte"}
+              </Button>
+              {item.optionsCustom && (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                  opções próprias
+                  {nomeDaPrivacidade(item.privacyLevel) ? `: ${nomeDaPrivacidade(item.privacyLevel)}` : ""}
+                </span>
+              )}
+            </div>
+            {semPadrao && !abrirOpcoes && (
               <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-500">
-                Este corte não sai enquanto você não escolher quem pode ver e o que as pessoas podem
-                fazer.
+                Nenhum corte sai enquanto as opções de publicação da conta não forem definidas, lá em
+                cima.
               </p>
             )}
             {abrirOpcoes && (
@@ -479,6 +593,10 @@ function QueueRow({
                   item={item}
                   accountId={accountId}
                   onSaved={() => {
+                    setAbrirOpcoes(false)
+                    onOptionsSaved()
+                  }}
+                  onVoltarAoPadrao={() => {
                     setAbrirOpcoes(false)
                     onOptionsSaved()
                   }}
@@ -493,8 +611,8 @@ function QueueRow({
             size="xs"
             variant="outline"
             onClick={onPostNow}
-            disabled={postingNow || precisaConfirmar}
-            title={precisaConfirmar ? "Defina as opções de publicação primeiro" : undefined}
+            disabled={postingNow || semPadrao}
+            title={semPadrao ? "Defina as opções de publicação da conta primeiro" : undefined}
             className="gap-1"
           >
             <IconSend className="size-3" />
@@ -529,10 +647,12 @@ function QueueCard({
   accountId,
   accountName,
   publishMode,
+  padraoDefinido,
 }: {
   accountId: number
   accountName: string
   publishMode: "inbox" | "direct"
+  padraoDefinido: boolean
 }) {
   const [items, setItems] = useState<PostingQueueItem[] | null>(null)
   const [drafts, setDrafts] = useState<Record<number, string>>({})
@@ -688,6 +808,7 @@ function QueueCard({
                     onView={() => setViewingItem(item)}
                     accountId={accountId}
                     publishMode={publishMode}
+                    padraoDefinido={padraoDefinido}
                     onOptionsSaved={load}
                   />
                 ))}
@@ -1023,6 +1144,9 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
   const [savingAutoPost, setSavingAutoPost] = useState(false)
   const [autoPostEnabled, setAutoPostEnabled] = useState(account.autoPostEnabled)
   const [publishMode, setPublishMode] = useState(account.publishMode)
+  // O cartão de opções gerais informa aqui em cima quando o padrão foi definido,
+  // pra fila saber se pode ou não liberar o botão de postar.
+  const [padraoDefinido, setPadraoDefinido] = useState(false)
   const [savingMode, setSavingMode] = useState(false)
 
   useEffect(() => {
@@ -1100,7 +1224,7 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
                   valor: "direct" as const,
                   titulo: "Direto no perfil",
                   texto:
-                    "O corte é publicado sem você abrir o TikTok. Antes de cada um sair, você escolhe aqui quem pode ver, o que as pessoas podem fazer e se há divulgação comercial.",
+                    "O corte é publicado sem você abrir o TikTok. Você escolhe uma vez quem pode ver, o que as pessoas podem fazer e se há divulgação comercial — e vale pra todos os cortes.",
                 },
               ]
             ).map((op) => (
@@ -1125,6 +1249,12 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
         {autoPostEnabled && (
           <>
             <PauseQueueBar accountId={account.id} />
+            {publishMode === "direct" && (
+              <PublishDefaultsCard
+                accountId={account.id}
+                onChange={(d) => setPadraoDefinido(d.definido)}
+              />
+            )}
             <ScheduleCard accountId={account.id} publishMode={publishMode} />
             <Tabs defaultValue="queue">
               <TabsList>
@@ -1133,7 +1263,12 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
                 <TabsTrigger value="errors">Erro</TabsTrigger>
               </TabsList>
               <TabsContent value="queue">
-                <QueueCard accountId={account.id} accountName={account.displayName} publishMode={publishMode} />
+                <QueueCard
+                  accountId={account.id}
+                  accountName={account.displayName}
+                  publishMode={publishMode}
+                  padraoDefinido={padraoDefinido}
+                />
               </TabsContent>
               <TabsContent value="posted">
                 <PostedCard accountId={account.id} />
