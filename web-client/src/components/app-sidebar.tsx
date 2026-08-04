@@ -27,6 +27,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import type { SessionUser } from "@/types/api"
+import { useT, type ChaveDeTraducao } from "@/i18n"
 
 // Os nomes do menu descrevem o que a PESSOA controla, nao como o sistema foi
 // construido. Foi por isso que "Túnel" virou "Sua conexão": tunel e o nome da
@@ -35,43 +36,47 @@ import type { SessionUser } from "@/types/api"
 // Mesma logica em "Fila de Processamento" -> "Processamento" e
 // "Vídeos & Cortes" -> "Cortes" (o "&" e a palavra "vídeos" nao acrescentavam
 // nada: o que o cliente vem procurar aqui e o corte).
-const ADMIN_GROUPS: { label?: string; items: NavItem[] }[] = [
+// Os grupos guardam a chave de tradução, não o texto: o menu é montado na
+// hora de desenhar, com o idioma que estiver valendo.
+type Grupo = { label?: ChaveDeTraducao; items: (Omit<NavItem, "title"> & { title: ChaveDeTraducao })[] }
+
+const ADMIN_GROUPS: Grupo[] = [
   {
-    items: [{ title: "Início", url: "/admin", icon: IconLayoutDashboard }],
+    items: [{ title: "menu.inicio", url: "/admin", icon: IconLayoutDashboard }],
   },
   {
-    label: "Operação",
+    label: "menu.grupoOperacao",
     items: [
-      { title: "Clientes", url: "/admin/clients", icon: IconUsers },
-      { title: "Publicações", url: "/admin/postings", icon: IconListDetails },
-      { title: "Processamento", url: "/admin/queue", icon: IconListCheck },
-      { title: "Métricas", url: "/admin/metrics", icon: IconChartBar },
-      { title: "Consumo de banda", url: "/admin/bandwidth", icon: IconGauge },
-      { title: "Assinaturas", url: "/admin/billing", icon: IconReceipt2 },
-      { title: "Erros", url: "/admin/errors", icon: IconAlertTriangle },
+      { title: "menu.clientes", url: "/admin/clients", icon: IconUsers },
+      { title: "menu.postagens", url: "/admin/postings", icon: IconListDetails },
+      { title: "menu.processamento", url: "/admin/queue", icon: IconListCheck },
+      { title: "menu.metricas", url: "/admin/metrics", icon: IconChartBar },
+      { title: "menu.banda", url: "/admin/bandwidth", icon: IconGauge },
+      { title: "menu.assinaturas", url: "/admin/billing", icon: IconReceipt2 },
+      { title: "menu.erros", url: "/admin/errors", icon: IconAlertTriangle },
     ],
   },
   {
-    label: "Meu conteúdo",
+    label: "menu.grupoMeuConteudo",
     items: [
-      { title: "Canais", url: "/client/youtube-channels", icon: IconBrandYoutube },
-      { title: "Cortes", url: "/client/videos-clips", icon: IconScissors },
-      { title: "Publicação", url: "/client/tiktok-account", icon: IconBrandTiktok },
-      { title: "Configurações", url: "/client/settings", icon: IconSettings },
+      { title: "menu.canais", url: "/client/youtube-channels", icon: IconBrandYoutube },
+      { title: "menu.cortes", url: "/client/videos-clips", icon: IconScissors },
+      { title: "menu.publicacao", url: "/client/tiktok-account", icon: IconBrandTiktok },
+      { title: "menu.configuracoes", url: "/client/settings", icon: IconSettings },
     ],
   },
 ]
 
-const CLIENT_GROUPS: { label?: string; items: NavItem[] }[] = [
+const CLIENT_GROUPS: Grupo[] = [
   {
     items: [
-      { title: "Início", url: "/client", icon: IconLayoutDashboard },
-      { title: "Canais", url: "/client/youtube-channels", icon: IconBrandYoutube },
-      { title: "Cortes", url: "/client/videos-clips", icon: IconScissors },
-      { title: "Publicação", url: "/client/tiktok-account", icon: IconBrandTiktok },
-      { title: "Sua conexão", url: "/client/tunnel", icon: IconRouter },
-      { title: "Plano e uso", url: "/client/billing", icon: IconReceipt2 },
-      { title: "Configurações", url: "/client/settings", icon: IconSettings },
+      { title: "menu.inicio", url: "/client", icon: IconLayoutDashboard },
+      { title: "menu.canais", url: "/client/youtube-channels", icon: IconBrandYoutube },
+      { title: "menu.cortes", url: "/client/videos-clips", icon: IconScissors },
+      { title: "menu.publicacao", url: "/client/tiktok-account", icon: IconBrandTiktok },
+      { title: "menu.conexao", url: "/client/tunnel", icon: IconRouter },
+      { title: "menu.planoEUso", url: "/client/billing", icon: IconReceipt2 },
+      { title: "menu.configuracoes", url: "/client/settings", icon: IconSettings },
     ],
   },
 ]
@@ -84,7 +89,12 @@ export function AppSidebar({
   user: SessionUser
   onLogout: () => void
 }) {
-  const groups = user.role === "admin" ? ADMIN_GROUPS : CLIENT_GROUPS
+  const t = useT()
+  const grupos = user.role === "admin" ? ADMIN_GROUPS : CLIENT_GROUPS
+  const groups: { label?: string; items: NavItem[] }[] = grupos.map((g) => ({
+    label: g.label ? t(g.label) : undefined,
+    items: g.items.map((i) => ({ ...i, title: t(i.title) })),
+  }))
 
   return (
     <Sidebar collapsible="icon" {...props}>

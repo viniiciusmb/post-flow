@@ -32,6 +32,7 @@ const adminBillingApiRoutes = require('./routes/api/adminBillingApiRoutes');
 const stripeWebhookApiRoutes = require('./routes/api/stripeWebhookApiRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const csrf = require('./middleware/csrf');
+const i18n = require('../i18n');
 const rateLimits = require('./middleware/rateLimits');
 const slowRequestLogger = require('./middleware/slowRequestLogger');
 
@@ -117,6 +118,10 @@ app.use(
 // Segunda camada anti-CSRF (token de dupla submissao). Precisa vir depois da
 // sessao (guarda o token nela) e antes das rotas. Ver middleware/csrf.js.
 app.use(csrf.middleware);
+
+// Idioma da requisicao: deixa t(), lang e htmlLang em toda view. Vem antes do
+// bloco de locals abaixo porque as views publicas usam os dois juntos.
+app.use(i18n.middleware);
 
 // Dados sempre disponiveis pra qualquer view renderizada.
 //

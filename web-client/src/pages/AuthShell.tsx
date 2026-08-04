@@ -2,6 +2,8 @@ import type { ReactNode } from "react"
 import { BrandMark } from "@/components/brand-mark"
 import { ProductPreview } from "@/pages/LoginPage"
 import { EMAIL_SUPORTE } from "@/lib/contato"
+import { LanguageToggle } from "@/components/language-toggle"
+import { ModeToggle } from "@/components/mode-toggle"
 
 // Moldura das telas de entrada (login, esqueci a senha, nova senha): marca em
 // cima, conteúdo no meio, aviso legal embaixo, e a mesma prévia do produto do
@@ -21,10 +23,18 @@ export function AuthShell({
   return (
     <div className="grid min-h-screen lg:grid-cols-[minmax(360px,480px)_1fr]">
       <div className="flex flex-col justify-between px-8 py-10 sm:px-14">
-        <a href="/login" className="flex items-center gap-2.5">
-          <BrandMark className="size-7.5" />
-          <span className="font-heading text-lg font-bold tracking-tight">Post Flow</span>
-        </a>
+        {/* Idioma e tema também aqui: quem chega pela primeira vez vê a tela
+            de entrada antes de qualquer outra, e não teria onde trocar. */}
+        <div className="flex items-center justify-between gap-4">
+          <a href="/login" className="flex items-center gap-2.5">
+            <BrandMark className="size-7.5" />
+            <span className="font-heading text-lg font-bold tracking-tight">Post Flow</span>
+          </a>
+          <div className="flex items-center gap-2">
+            <LanguageToggle />
+            <ModeToggle />
+          </div>
+        </div>
 
         <div className="mx-auto w-full max-w-[340px]">
           <div className="mb-8">

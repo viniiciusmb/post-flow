@@ -1,0 +1,56 @@
+<%- include('../partials/public-header') %>
+
+<%#
+  Uma view só para Termos e Privacidade, nos três idiomas.
+  Antes eram dois arquivos com o texto escrito à mão dentro do HTML. Traduzir
+  isso teria virado seis arquivos, e a primeira correção de vírgula em um deles
+  já deixaria os outros cinco para trás.
+
+  Agora o texto vem de src/i18n/legal-*.js em blocos com tipo. O campo `texto`
+  aceita HTML, e por isso é impresso sem escapar: os documentos têm negrito e
+  links no meio das frases, e quebrar cada frase em pedaços para escapar cada
+  tag deixaria o dicionário ilegível para quem for revisar o texto jurídico.
+%>
+
+<div class="wrap">
+  <article class="doc">
+    <h1><%= doc.titulo %></h1>
+    <p class="atualizado"><%= preencher(doc.atualizado) %></p>
+
+    <p><%- preencher(doc.intro) %></p>
+
+    <% if (doc.resumo) { %>
+      <div class="destaque"><p><%- preencher(doc.resumo) %></p></div>
+    <% } %>
+
+    <% doc.secoes.forEach(function (secao) { %>
+      <h2><%= secao.h %></h2>
+      <% secao.blocos.forEach(function (bloco) { %>
+        <% if (bloco.tipo === 'p') { %>
+          <p><%- preencher(bloco.texto) %></p>
+        <% } else if (bloco.tipo === 'destaque') { %>
+          <div class="destaque"><p><%- preencher(bloco.texto) %></p></div>
+        <% } else if (bloco.tipo === 'ul') { %>
+          <ul>
+            <% bloco.itens.forEach(function (item) { %>
+              <li><%- preencher(item) %></li>
+            <% }); %>
+          </ul>
+        <% } else if (bloco.tipo === 'tabela') { %>
+          <table>
+            <thead>
+              <tr><% bloco.cabecalho.forEach(function (c) { %><th><%= c %></th><% }); %></tr>
+            </thead>
+            <tbody>
+              <% bloco.linhas.forEach(function (linha) { %>
+                <tr><% linha.forEach(function (celula) { %><td><%- preencher(celula) %></td><% }); %></tr>
+              <% }); %>
+            </tbody>
+          </table>
+        <% } %>
+      <% }); %>
+    <% }); %>
+  </article>
+</div>
+
+<%- include('../partials/public-footer') %>

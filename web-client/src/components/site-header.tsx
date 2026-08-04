@@ -1,6 +1,7 @@
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { ModeToggle } from "@/components/mode-toggle"
+import { LanguageToggle } from "@/components/language-toggle"
 
 /**
  * Barra fina do topo.
@@ -22,6 +23,7 @@ export function SiteHeader({ title }: { title: string }) {
         {/* Fica só como pista de contexto quando a barra lateral está recolhida. */}
         <span className="text-sm font-medium text-muted-foreground">{title}</span>
         <div className="ml-auto flex items-center gap-2">
+          <LanguageToggle />
           <ModeToggle />
         </div>
       </div>

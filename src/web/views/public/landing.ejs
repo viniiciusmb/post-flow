@@ -8,20 +8,18 @@
       <span class="selo-seta" aria-hidden="true">→</span>
       <%- include('../partials/logo-tiktok') %>
       TikTok
-      <span class="selo-texto">100% automático</span>
+      <span class="selo-texto"><%= t('landing.selo') %></span>
     </p>
 
-    <h1>Você grava uma vez.<br>O resto acontece <em>sozinho</em>.</h1>
+    <h1><%= t('landing.h1a') %><br><%= t('landing.h1b') %> <em><%= t('landing.h1c') %></em>.</h1>
     <p class="lead">
-      Publicou no YouTube, o Post Flow percebe na hora. Ele baixa o vídeo, a IA lê a transcrição
-      inteira e escolhe os melhores trechos, corta no vertical com legenda queimada e publica no
-      seu TikTok. <strong>Sem você abrir editor, sem você abrir o TikTok.</strong>
+      <%= t('landing.lead') %> <strong><%= t('landing.leadForte') %></strong>
     </p>
     <div class="cta-linha">
-      <a class="btn btn-primary btn-lg" href="/register">Criar conta</a>
-      <a class="btn btn-ghost btn-lg" href="#como-funciona">Ver como funciona</a>
+      <a class="btn btn-primary btn-lg" href="/register"><%= t('nav.criarConta') %></a>
+      <a class="btn btn-ghost btn-lg" href="#como-funciona"><%= t('landing.verComoFunciona') %></a>
     </div>
-    <p class="nota">Feito para quem já produz conteúdo próprio e quer parar de editar corte na mão.</p>
+    <p class="nota"><%= t('landing.notaHero') %></p>
 
     <div class="duo">
       <div class="macbook">
@@ -29,7 +27,7 @@
           <div class="macbook-tela">
             <img
               src="/img/produto/cortes-light.png"
-              alt="Tela de cortes do Post Flow no computador, com os vídeos do canal em etapas diferentes do processamento"
+              alt="<%= t('landing.altComputador') %>"
               width="2880" height="1800" fetchpriority="high">
           </div>
         </div>
@@ -40,7 +38,7 @@
         <div class="iphone-tela">
           <img
             src="/img/produto/cortes-mobile.png"
-            alt="A mesma tela de cortes aberta no celular"
+            alt="<%= t('landing.altCelular') %>"
             width="1170" height="2532">
         </div>
       </div>
@@ -53,8 +51,8 @@
     <div class="fluxo">
       <div class="fluxo-passo fluxo-youtube">
         <span class="fluxo-marca"><%- include('../partials/logo-youtube') %></span>
-        <h3>Você publica no YouTube</h3>
-        <p>Um vídeo longo: podcast, live, aula, entrevista. Do jeito que você já faz hoje.</p>
+        <h3><%= t('landing.fluxo')[0].h %></h3>
+        <p><%= t('landing.fluxo')[0].p %></p>
       </div>
 
       <span class="fluxo-seta" aria-hidden="true">
@@ -63,8 +61,8 @@
 
       <div class="fluxo-passo fluxo-postflow">
         <span class="fluxo-marca fluxo-marca-pf"><%- include('../partials/brand-mark') %></span>
-        <h3>O Post Flow faz o trabalho</h3>
-        <p>Detecta, transcreve, escolhe os trechos, corta no vertical e legenda. Sem ninguém clicar em nada.</p>
+        <h3><%= t('landing.fluxo')[1].h %></h3>
+        <p><%= t('landing.fluxo')[1].p %></p>
       </div>
 
       <span class="fluxo-seta" aria-hidden="true">
@@ -73,8 +71,8 @@
 
       <div class="fluxo-passo fluxo-tiktok">
         <span class="fluxo-marca"><%- include('../partials/logo-tiktok') %></span>
-        <h3>Sai no seu TikTok</h3>
-        <p>Publicado direto no seu perfil, no horário que você escolheu. Você só acompanha.</p>
+        <h3><%= t('landing.fluxo')[2].h %></h3>
+        <p><%= t('landing.fluxo')[2].p %></p>
       </div>
     </div>
   </div>
@@ -83,42 +81,17 @@
 <section class="secao" id="como-funciona">
   <div class="wrap">
     <div class="narrow" style="margin-bottom: 3.5rem">
-      <p class="eyebrow">Como funciona</p>
-      <h2>Quatro etapas. Você participa da primeira.</h2>
+      <p class="eyebrow"><%= t('nav.comoFunciona') %></p>
+      <h2><%= t('landing.comoFuncionaTitulo') %></h2>
     </div>
 
     <div class="passos">
-      <div class="passo">
-        <h3>Conecte o canal</h3>
-        <p>
-          Cole o endereço do seu canal do YouTube. A partir daí o Post Flow percebe sozinho quando
-          você publica um vídeo novo. Também dá para enviar um arquivo do computador ou colar o
-          link de um vídeo específico.
-        </p>
-      </div>
-      <div class="passo">
-        <h3>A IA escolhe os trechos</h3>
-        <p>
-          O áudio é transcrito e uma inteligência artificial lê a transcrição inteira procurando os
-          trechos que funcionam sozinhos: começo, gancho e fecho. Você decide entre melhores partes,
-          vídeo inteiro ou uma quantidade fixa de cortes.
-        </p>
-      </div>
-      <div class="passo">
-        <h3>Corte, legenda e capa</h3>
-        <p>
-          Cada trecho vira um vídeo vertical 9:16 com legenda queimada, título opcional e capa. No
-          modo manual você ajusta o enquadramento arrastando e escolhe o estilo numa galeria visual.
-        </p>
-      </div>
-      <div class="passo">
-        <h3>Publicação no seu horário</h3>
-        <p>
-          Os cortes prontos entram numa fila com legenda editável. Você define os horários do dia,
-          ou deixa o sistema distribuir sozinho, e ele publica. Se preferir revisar antes, mande
-          tudo para uma pasta do seu Google Drive.
-        </p>
-      </div>
+      <% t('landing.passos').forEach(function (passo) { %>
+        <div class="passo">
+          <h3><%= passo.h %></h3>
+          <p><%= passo.p %></p>
+        </div>
+      <% }); %>
     </div>
   </div>
 </section>
@@ -126,78 +99,18 @@
 <section class="secao secao-mist" id="recursos">
   <div class="wrap">
     <div class="narrow" style="margin-bottom: 3rem">
-      <p class="eyebrow">O que dá pra fazer</p>
-      <h2>Você manda no resultado, sem abrir editor</h2>
-      <p style="color: var(--muted)">
-        O corte automático já sai pronto pra publicar. Mas se você tem um jeito próprio de
-        apresentar, dá pra ajustar cada parte dele.
-      </p>
+      <p class="eyebrow"><%= t('landing.recursosOlho') %></p>
+      <h2><%= t('landing.recursosTitulo') %></h2>
+      <p style="color: var(--muted)"><%= t('landing.recursosTexto') %></p>
     </div>
 
     <div class="recursos-grade">
-      <div class="recurso-card">
-        <h3>Estilo visual do corte</h3>
-        <p>
-          Escolha o estilo da legenda numa galeria: clássica, negrito, discreta ou em balão
-          colorido. O mesmo vale para o título que aparece nos primeiros segundos.
-        </p>
-      </div>
-      <div class="recurso-card">
-        <h3>Enquadramento na mão</h3>
-        <p>
-          No modo manual você arrasta o vídeo dentro da moldura vertical e decide o quanto
-          aproximar. O que você vê na tela é exatamente o que sai no corte.
-        </p>
-      </div>
-      <div class="recurso-card">
-        <h3>Imagem de fundo</h3>
-        <p>
-          Envie um modelo de fundo com a sua marca e posicione o vídeo em cima dele. Todo corte
-          daquele canal sai com a mesma identidade.
-        </p>
-      </div>
-      <div class="recurso-card">
-        <h3>Numeração de série</h3>
-        <p>
-          Ligue o selo "Parte 1, Parte 2" e escolha em que canto da tela ele aparece. Serve pra
-          transformar um vídeo longo numa sequência que prende.
-        </p>
-      </div>
-      <div class="recurso-card">
-        <h3>Configuração por canal</h3>
-        <p>
-          Cada canal pode ter o próprio estilo, ou você define um padrão e aplica a todos de uma
-          vez. Quantidade de cortes, duração e qualidade também.
-        </p>
-      </div>
-      <div class="recurso-card">
-        <h3>Descrição automática</h3>
-        <p>
-          A legenda de cada corte é escrita pela IA a partir do que foi dito no trecho. Dá pra
-          editar antes de publicar, ou fixar um texto padrão seu.
-        </p>
-      </div>
-      <div class="recurso-card">
-        <h3>Um canal, várias contas</h3>
-        <p>
-          Vários canais do YouTube e várias contas do TikTok ao mesmo tempo. Cada canal publica na
-          conta que você vinculou a ele.
-        </p>
-      </div>
-      <div class="recurso-card">
-        <h3>Horários que você escolhe</h3>
-        <p>
-          Defina os horários fixos do dia ou deixe o sistema distribuir sozinho. A fila mostra
-          quando cada corte vai sair.
-        </p>
-      </div>
-      <div class="recurso-card">
-        <h3>Cópia no Google Drive</h3>
-        <p>
-          Se preferir revisar antes, cada corte pronto pode ir automaticamente para uma pasta do
-          seu Drive, separada por canal.
-        </p>
-      </div>
+      <% t('landing.recursos').forEach(function (r) { %>
+        <div class="recurso-card">
+          <h3><%= r.h %></h3>
+          <p><%= r.p %></p>
+        </div>
+      <% }); %>
     </div>
   </div>
 </section>
@@ -205,38 +118,38 @@
 <section class="secao secao-mist" id="planos">
   <div class="wrap">
     <div class="narrow" style="margin-bottom: 3rem">
-      <p class="eyebrow">Planos</p>
-      <h2>Você paga por minuto de vídeo processado</h2>
-      <p style="color: var(--muted)">
-        Os minutos renovam toda semana. Quando os downloads saem pela sua própria internet, o custo
-        para nós cai, e essa economia volta para você em forma de minutos bônus.
-      </p>
+      <p class="eyebrow"><%= t('landing.planosOlho') %></p>
+      <h2><%= t('landing.planosTitulo') %></h2>
+      <p style="color: var(--muted)"><%= t('landing.planosTexto') %></p>
     </div>
 
     <div class="planos">
       <% plans.forEach(function (plan, i) { %>
         <div class="plano <%= i === 1 ? 'destaque' : '' %>">
-          <div class="marcador"><%= i === 1 ? 'Mais escolhido' : '' %></div>
+          <div class="marcador"><%= i === 1 ? t('landing.maisEscolhido') : '' %></div>
           <h3><%= plan.name %></h3>
           <div class="preco">
-            R$ <%= (plan.price_cents / 100).toFixed(2).replace('.', ',') %><span>/mês</span>
+            R$ <%= (plan.price_cents / 100).toFixed(2).replace('.', ',') %><span><%= t('landing.porMes') %></span>
           </div>
           <ul>
-            <li><strong><%= plan.weekly_minutes_normal %> minutos</strong> de vídeo por semana</li>
-            <li class="bonus"><strong><%= plan.weekly_minutes_bonus %> minutos</strong> usando sua internet</li>
-            <li><%= plan.max_youtube_channels ? `${plan.max_youtube_channels} ${plan.max_youtube_channels > 1 ? 'canais' : 'canal'} do YouTube` : 'Canais do YouTube ilimitados' %></li>
-            <li><%= plan.max_tiktok_accounts ? `${plan.max_tiktok_accounts} ${plan.max_tiktok_accounts > 1 ? 'contas' : 'conta'} do TikTok` : 'Contas do TikTok ilimitadas' %></li>
-            <li>Corte com IA, legenda, capa e agendamento</li>
-            <li>Exportação para o Google Drive</li>
+            <li><strong><%= t('landing.minutosPorSemana', { n: plan.weekly_minutes_normal }) %></strong> <%= t('landing.minutosPorSemanaResto') %></li>
+            <li class="bonus"><strong><%= t('landing.minutosBonus', { n: plan.weekly_minutes_bonus }) %></strong> <%= t('landing.minutosBonusResto') %></li>
+            <li><%= plan.max_youtube_channels
+                  ? t(plan.max_youtube_channels > 1 ? 'landing.canaisYoutube' : 'landing.canalYoutube', { n: plan.max_youtube_channels })
+                  : t('landing.canaisIlimitados') %></li>
+            <li><%= plan.max_tiktok_accounts
+                  ? t(plan.max_tiktok_accounts > 1 ? 'landing.contasTiktok' : 'landing.contaTiktok', { n: plan.max_tiktok_accounts })
+                  : t('landing.contasIlimitadas') %></li>
+            <li><%= t('landing.incluiCorte') %></li>
+            <li><%= t('landing.incluiDrive') %></li>
           </ul>
-          <a class="btn <%= i === 1 ? 'btn-primary' : 'btn-ghost' %>" href="/register">Começar</a>
+          <a class="btn <%= i === 1 ? 'btn-primary' : 'btn-ghost' %>" href="/register"><%= t('landing.comecar') %></a>
         </div>
       <% }); %>
     </div>
 
     <p style="text-align:center; color:var(--muted); font-size:0.9375rem; margin-top:2rem">
-      Acabaram os minutos da semana? Dá para comprar um pacote avulso, que não expira. Nada é
-      cobrado além da assinatura sem você autorizar.
+      <%= t('landing.notaPlanos') %>
     </p>
   </div>
 </section>
@@ -244,8 +157,8 @@
 <section class="secao" id="perguntas">
   <div class="wrap">
     <div class="narrow" style="margin-bottom: 2.5rem">
-      <p class="eyebrow">Perguntas frequentes</p>
-      <h2>O que costumam perguntar</h2>
+      <p class="eyebrow"><%= t('landing.faqOlho') %></p>
+      <h2><%= t('landing.faqTitulo') %></h2>
     </div>
 
     <%#
@@ -267,9 +180,9 @@
     </div>
 
     <p class="faq-rodape">
-      Ficou alguma dúvida? Escreva para
+      <%= t('landing.faqRodapeA') %>
       <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a> —
-      respondemos <%= contact.responseTime %>.
+      <%= t('landing.faqRodapeB') %> <%= contact.responseTime %>.
     </p>
   </div>
 </section>
@@ -277,17 +190,14 @@
 <section class="secao secao-final">
   <div class="wrap">
     <div class="final-caixa">
-      <p class="eyebrow" style="color:rgba(255,255,255,.6)">Comece hoje</p>
-      <h2>Cole o link do seu canal e veja o primeiro corte sair</h2>
-      <p>
-        A configuração leva alguns minutos. Depois disso, todo vídeo novo do seu canal vira corte
-        publicado sem você tocar em nada.
-      </p>
+      <p class="eyebrow" style="color:rgba(255,255,255,.6)"><%= t('landing.finalOlho') %></p>
+      <h2><%= t('landing.finalTitulo') %></h2>
+      <p><%= t('landing.finalTexto') %></p>
       <div class="cta-linha" style="justify-content:center">
-        <a class="btn btn-invertido btn-lg" href="/register">Criar conta</a>
-        <a class="btn btn-fantasma-claro btn-lg" href="/contato">Falar com a gente</a>
+        <a class="btn btn-invertido btn-lg" href="/register"><%= t('nav.criarConta') %></a>
+        <a class="btn btn-fantasma-claro btn-lg" href="/contato"><%= t('landing.falarComAGente') %></a>
       </div>
-      <p class="final-nota">Sem fidelidade. Cancele quando quiser.</p>
+      <p class="final-nota"><%= t('landing.semFidelidade') %></p>
     </div>
   </div>
 </section>

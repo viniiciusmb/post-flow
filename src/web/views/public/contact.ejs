@@ -2,57 +2,40 @@
 
 <div class="wrap">
   <article class="doc">
-    <h1>Contato e suporte</h1>
-    <p class="atualizado">Respondemos <%= contact.responseTime %>.</p>
+    <h1><%= t('contato.titulo') %></h1>
+    <p class="atualizado"><%= t('contato.respondemos', { tempo: contact.responseTime }) %></p>
 
     <div class="destaque">
       <p>
-        <strong>E-mail:</strong>
+        <strong><%= t('contato.emailRotulo') %>:</strong>
         <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a>
       </p>
-      <p>É o mesmo canal pra dúvida, problema técnico, cobrança e pedido de exclusão de dados.</p>
+      <p><%= t('contato.mesmoCanal') %></p>
     </div>
 
-    <h2>Já tem conta?</h2>
-    <p>
-      Se você já usa o Post Flow, o caminho mais rápido é entrar no
-      <a href="/client">seu painel</a>. A maioria das dúvidas se resolve ali:
-    </p>
+    <h2><%= t('contato.jaTemContaTitulo') %></h2>
+    <p><%- t('contato.jaTemContaTexto') %></p>
     <ul>
-      <li><strong>Vídeo travado ou com erro</strong>. A tela <strong>Cortes</strong> mostra o motivo
-      e tem o botão de tentar de novo.</li>
-      <li><strong>Corte não foi publicado</strong>. A aba Fila, em <strong>Publicação</strong>, mostra o
-      horário previsto de cada publicação, e a aba "Erro" mostra o que a TikTok recusou.</li>
-      <li><strong>Acabaram meus minutos</strong>. A tela <strong>Plano e uso</strong> mostra o saldo e
-      permite comprar um pacote avulso.</li>
-      <li><strong>Trocar senha ou e-mail</strong>, em <strong>Configurações</strong>.</li>
+      <% t('contato.atalhos').forEach(function (item) { %>
+        <li><%- item %></li>
+      <% }); %>
     </ul>
 
-    <h2>Pedido de exclusão de dados</h2>
-    <p>
-      Você pode pedir a exclusão da sua conta e de tudo que está ligado a ela mandando um e-mail
-      para <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a> do endereço
-      cadastrado na conta, com o assunto <strong>"Excluir minha conta"</strong>. Apagamos os vídeos,
-      os cortes, os tokens de acesso do TikTok e do Google, o histórico de créditos e os dados de
-      cadastro. O que fazemos exatamente está detalhado na
-      <a href="/privacidade">Política de Privacidade</a>.
-    </p>
+    <h2><%= t('contato.exclusaoTitulo') %></h2>
+    <p><%- t('contato.exclusaoTexto').replace(/\{email\}/g, contact.supportEmail) %></p>
 
-    <h2>Revogar o acesso sem apagar a conta</h2>
-    <p>
-      Se você só quer que o Post Flow pare de acessar suas contas, não precisa falar com a gente:
-    </p>
+    <h2><%= t('contato.revogarTitulo') %></h2>
+    <p><%= t('contato.revogarTexto') %></p>
     <ul>
-      <li><strong>TikTok</strong>. No painel, em <strong>Publicação</strong>, clique em desconectar. Ou, no
-      app do TikTok: Perfil → Configurações → Segurança → Apps e serviços conectados.</li>
-      <li><strong>Google Drive</strong>. No painel, em <strong>Configurações</strong>, desconecte o Drive. Ou em
-      <a href="https://myaccount.google.com/permissions" rel="noopener">myaccount.google.com/permissions</a>.</li>
+      <% t('contato.revogar').forEach(function (item) { %>
+        <li><%- item %></li>
+      <% }); %>
     </ul>
 
-    <h2>Documentos</h2>
+    <h2><%= t('contato.documentosTitulo') %></h2>
     <ul>
-      <li><a href="/termos">Termos de Uso</a></li>
-      <li><a href="/privacidade">Política de Privacidade</a></li>
+      <li><a href="/termos"><%= t('rodape.termos') %></a></li>
+      <li><a href="/privacidade"><%= t('rodape.privacidade') %></a></li>
     </ul>
   </article>
 </div>

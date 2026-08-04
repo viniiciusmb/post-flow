@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="<%= htmlLang %>">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -23,7 +23,13 @@
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Post Flow">
-  <meta property="og:locale" content="pt_BR">
+  <meta property="og:locale" content="<%= lang === 'pt' ? 'pt_BR' : (lang === 'es' ? 'es_ES' : 'en_US') %>">
+  <%# Diz ao buscador que a mesma página existe nos outros idiomas. Sem isto,
+      as três versões competem entre si em vez de se reforçarem. %>
+  <% idiomas.forEach(function (i) { %>
+  <link rel="alternate" hreflang="<%= i.htmlLang %>" href="<%= (locals.canonical || site) %>">
+  <% }); %>
+  <link rel="alternate" hreflang="x-default" href="<%= locals.canonical || site %>">
   <meta property="og:title" content="<%= locals.ogTitle || title + ' · Post Flow' %>">
   <meta property="og:description" content="<%= locals.metaDescription || 'Cortes automáticos do seu canal do YouTube publicados no seu TikTok.' %>">
   <meta property="og:url" content="<%= locals.canonical || site %>">
@@ -84,9 +90,9 @@
         },
         contactPoint: {
           '@type': 'ContactPoint',
-          contactType: 'Atendimento ao cliente',
+          contactType: 'Customer support',
           email: emailSuporte,
-          availableLanguage: ['Portuguese']
+          availableLanguage: ['Portuguese', 'English', 'Spanish']
         }
       },
       {
@@ -94,7 +100,7 @@
         '@id': `${site}/#site`,
         url: site,
         name: 'Post Flow',
-        inLanguage: 'pt-BR',
+        inLanguage: htmlLang,
         publisher: { '@id': `${site}/#organizacao` }
       }
     ]
@@ -106,34 +112,38 @@
 <body>
   <header class="topbar" id="topbar">
     <div class="wrap">
-      <a class="brand" href="/" aria-label="Post Flow, página inicial">
+      <a class="brand" href="/" aria-label="<%= t('nav.inicio') %>">
         <%- include('brand-mark') %>
         Post Flow
       </a>
       <nav class="topnav">
-        <a class="so-desktop" href="/#como-funciona">Como funciona</a>
-        <a class="so-desktop" href="/#recursos">Recursos</a>
-        <a class="so-desktop" href="/#planos">Planos</a>
-        <a class="so-desktop" href="/#perguntas">Dúvidas</a>
+        <a class="so-desktop" href="/#como-funciona"><%= t('nav.comoFunciona') %></a>
+        <a class="so-desktop" href="/#recursos"><%= t('nav.recursos') %></a>
+        <a class="so-desktop" href="/#planos"><%= t('nav.planos') %></a>
+        <a class="so-desktop" href="/#perguntas"><%= t('nav.duvidas') %></a>
+
+        <%# Seletor de idioma. É um <select> puro em vez de um menu com
+            JavaScript: a página pública não carrega framework nenhum, e um
+            controle nativo já é acessível pelo teclado e no celular. %>
+        <label class="seletor-idioma">
+          <span class="sr-only"><%= t('nav.idioma') %></span>
+          <select id="seletor-idioma" aria-label="<%= t('nav.idioma') %>">
+            <% idiomas.forEach(function (i) { %>
+              <option value="<%= i.code %>" <%= i.code === lang ? 'selected' : '' %>><%= i.label %></option>
+            <% }); %>
+          </select>
+        </label>
+
         <% if (currentUser) { %>
-          <a class="btn btn-primary" href="<%= currentUser.role === 'admin' ? '/admin' : '/client' %>">Meu painel</a>
+          <a class="btn btn-primary" href="<%= currentUser.role === 'admin' ? '/admin' : '/client' %>"><%= t('nav.meuPainel') %></a>
         <% } else { %>
-          <a href="/login">Entrar</a>
-          <a class="btn btn-primary" href="/register">Criar conta</a>
+          <a href="/login"><%= t('nav.entrar') %></a>
+          <a class="btn btn-primary" href="/register"><%= t('nav.criarConta') %></a>
         <% } %>
       </nav>
     </div>
   </header>
 
-  <script>
-    // A barra do topo só ganha a linha divisória depois que a página rola.
-    // Parada no topo ela fica sem moldura, colada no fundo branco.
-    (function () {
-      var barra = document.getElementById('topbar');
-      var marcar = function () { barra.classList.toggle('rolou', window.scrollY > 8); };
-      marcar();
-      window.addEventListener('scroll', marcar, { passive: true });
-    })();
-  </script>
+  <script src="/js/public.js" defer></script>
 
   <main>
