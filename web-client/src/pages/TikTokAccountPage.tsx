@@ -13,6 +13,7 @@ import {
   IconDownload,
   IconEye,
   IconRefresh,
+  IconSettings,
 } from "@tabler/icons-react"
 import {
   DndContext,
@@ -24,6 +25,7 @@ import {
 } from "@dnd-kit/core"
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+import { DirectPostOptions } from "@/components/dashboard/DirectPostOptions"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -382,9 +384,15 @@ function QueueRow({
   postingNow,
   onPostNow,
   onView,
+  accountId,
+  publishMode,
+  onOptionsSaved,
 }: {
   item: PostingQueueItem
   accountName: string
+  accountId: number
+  publishMode: "inbox" | "direct"
+  onOptionsSaved: () => void
   draft: string
   onDraftChange: (value: string) => void
   onSaveCaption: () => void
@@ -396,7 +404,13 @@ function QueueRow({
   onView: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
+  const [abrirOpcoes, setAbrirOpcoes] = useState(false)
   const downloadUrl = `/api/client/source-videos/clips/${item.clipId}/download`
+
+  // Na publicação direta o corte só pode sair depois que o criador escolher
+  // privacidade, interações e divulgação comercial - é exigência da TikTok, e o
+  // job de publicação pula quem não confirmou.
+  const precisaConfirmar = publishMode === "direct" && !item.optionsConfirmed
 
   return (
     <div
@@ -438,8 +452,51 @@ function QueueRow({
             Salvar
           </Button>
         </div>
+        {publishMode === "direct" && (
+          <div className="mt-2">
+            <Button
+              size="xs"
+              variant={precisaConfirmar ? "default" : "outline"}
+              onClick={() => setAbrirOpcoes((v) => !v)}
+              className="gap-1"
+            >
+              <IconSettings className="size-3" />
+              {abrirOpcoes
+                ? "Fechar opções"
+                : precisaConfirmar
+                  ? "Definir opções de publicação"
+                  : "Opções de publicação definidas"}
+            </Button>
+            {precisaConfirmar && !abrirOpcoes && (
+              <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-500">
+                Este corte não sai enquanto você não escolher quem pode ver e o que as pessoas podem
+                fazer.
+              </p>
+            )}
+            {abrirOpcoes && (
+              <div className="mt-2">
+                <DirectPostOptions
+                  item={item}
+                  accountId={accountId}
+                  onSaved={() => {
+                    setAbrirOpcoes(false)
+                    onOptionsSaved()
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <Button size="xs" variant="outline" onClick={onPostNow} disabled={postingNow} className="gap-1">
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={onPostNow}
+            disabled={postingNow || precisaConfirmar}
+            title={precisaConfirmar ? "Defina as opções de publicação primeiro" : undefined}
+            className="gap-1"
+          >
             <IconSend className="size-3" />
             {postingNow ? "Postando..." : "Postar agora"}
           </Button>
@@ -468,7 +525,15 @@ function QueueRow({
   )
 }
 
-function QueueCard({ accountId, accountName }: { accountId: number; accountName: string }) {
+function QueueCard({
+  accountId,
+  accountName,
+  publishMode,
+}: {
+  accountId: number
+  accountName: string
+  publishMode: "inbox" | "direct"
+}) {
   const [items, setItems] = useState<PostingQueueItem[] | null>(null)
   const [drafts, setDrafts] = useState<Record<number, string>>({})
   const [fixing, setFixing] = useState(false)
@@ -621,6 +686,9 @@ function QueueCard({ accountId, accountName }: { accountId: number; accountName:
                     postingNow={postingNowId === item.id}
                     onPostNow={() => postNow(item.id)}
                     onView={() => setViewingItem(item)}
+                    accountId={accountId}
+                    publishMode={publishMode}
+                    onOptionsSaved={load}
                   />
                 ))}
               </div>
@@ -1065,7 +1133,7 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
                 <TabsTrigger value="errors">Erro</TabsTrigger>
               </TabsList>
               <TabsContent value="queue">
-                <QueueCard accountId={account.id} accountName={account.displayName} />
+                <QueueCard accountId={account.id} accountName={account.displayName} publishMode={publishMode} />
               </TabsContent>
               <TabsContent value="posted">
                 <PostedCard accountId={account.id} />

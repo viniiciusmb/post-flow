@@ -159,9 +159,16 @@ export function DirectPostOptions({
                   key={nivel}
                   value={nivel}
                   disabled={bloqueado}
-                  title={bloqueado ? "Conteúdo de parceria não pode ficar visível só pra você." : undefined}
                 >
                   {NOMES_DE_PRIVACIDADE[nivel] ?? nivel}
+                  {/* O motivo fica escrito na própria linha, não num tooltip:
+                      quem só olha a tela (inclusive quem revisa o app) precisa
+                      enxergar por que a opção está apagada. */}
+                  {bloqueado && (
+                    <span className="text-xs text-muted-foreground">
+                      — parceria paga não pode ficar privada
+                    </span>
+                  )}
                 </SelectItem>
               )
             })}

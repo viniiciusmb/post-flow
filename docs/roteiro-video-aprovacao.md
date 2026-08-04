@@ -42,8 +42,11 @@ tela que está sendo gravada. A senha aparece como pontinhos, então não há ri
 - [ ] **Sandbox com o Redirect URI do domínio novo**: `https://postflowclips.com/auth/tiktok/callback`
       Teste antes: entre no Post Flow e clique em "Conectar outra conta". Se abrir a tela do TikTok,
       está certo. Se der erro de redirect, corrija no Sandbox antes de gravar.
-- [ ] **Conta de teste do Post Flow** com canal cadastrado e **um corte pronto na fila**.
-- [ ] **Modo de publicação: "Direto no perfil"** já escolhido na conta que você vai usar.
+- [ ] **Conta de teste do Post Flow** com canal cadastrado e **pelo menos um corte pronto na fila**,
+      ainda **sem as opções definidas** (o botão do corte tem que estar escrito "Definir opções de
+      publicação", não "Opções de publicação definidas" — senão a cena 5 não tem o que mostrar).
+- [ ] **NÃO deixe "Direto no perfil" pré-selecionado.** Você escolhe isso durante a gravação, na
+      cena 4 — é assim que os dois modos aparecem no vídeo.
 - [ ] **Abra `postflowclips.com` numa anônima e recarregue 3 vezes.** Se aparecer a página da
       Hostinger em alguma, o DNS ainda não terminou de propagar aí — espere e teste de novo.
 - [ ] Feche abas, notificações e qualquer coisa com nome de pessoa real na tela.
@@ -51,6 +54,35 @@ tela que está sendo gravada. A senha aparece como pontinhos, então não há ri
 
 **Como gravar:** QuickTime ("Gravação de Tela") ou OBS. Mouse devagar, 2 segundos parado em cada
 tela importante, e **sem cortes** nas partes de autorização.
+
+---
+
+## Onde cada escopo aparece no vídeo
+
+O revisor confere um por um: **escopo pedido que não aparece funcionando na gravação é recusado.**
+Você pediu quatro, e cada um tem uma cena onde ele fica visível.
+
+| Escopo | Cena | O que aparece na tela |
+|---|---|---|
+| `user.info.basic` | 3 | O card da conta com **apelido e foto** vindos do TikTok |
+| `user.info.stats` | 3 | Os números de **seguidores, curtidas e vídeos no perfil** |
+| `video.publish` | 5 e 6 | As opções de publicação e o corte saindo **direto no perfil** |
+| `video.upload` | 4 | A opção **"Como rascunho"**, que manda o corte pra caixa do app |
+
+**O que dizer (ou legendar) em cada um.** Não precisa ler igual, mas a ideia tem que ficar clara:
+
+- **`user.info.basic`** — *"Usamos para mostrar em qual perfil o corte vai sair. O criador conecta a
+  própria conta e vê o apelido e a foto dela; sem isso ele não teria como saber o destino do vídeo."*
+- **`user.info.stats`** — *"Usamos para exibir seguidores, curtidas e vídeos no card da conta
+  conectada, para o criador reconhecer o perfil e acompanhar o resultado dos cortes."*
+- **`video.publish`** — *"Usamos para publicar o corte direto no perfil, e só depois que o criador
+  escolhe manualmente a privacidade, as interações e a divulgação comercial daquele corte
+  específico."*
+- **`video.upload`** — *"Usamos quando o criador escolhe o modo rascunho: o corte é enviado para a
+  caixa de entrada do aplicativo do TikTok e ele finaliza por lá."*
+
+> Os dois modos são do criador, não nossos: o mesmo app usa `video.upload` ou `video.publish`
+> conforme o que ele escolher na cena 4. Por isso **as duas opções precisam aparecer** na gravação.
 
 ---
 
@@ -82,18 +114,31 @@ tela importante, e **sem cortes** nas partes de autorização.
 8. De volta no Post Flow, **pare 3 segundos** no card da conta mostrando o apelido, a foto e os
    números de **seguidores, curtidas e vídeos no perfil**
 
-> Os números do passo 8 não são enfeite: eles são o escopo `user.info.stats` funcionando. Escopo
-> pedido que não aparece no vídeo é motivo de recusa.
+> **Escopos desta cena: `user.info.basic` e `user.info.stats`.**
+>
+> O apelido e a foto no passo 8 são o `user.info.basic`; os números de seguidores, curtidas e
+> vídeos são o `user.info.stats`. É a única cena em que esses dois aparecem — se ela ficar
+> mal enquadrada, os dois escopos ficam sem prova no vídeo.
 
 ## Cena 4 — Escolher o modo (01:45 – 02:00)
 
 1. Clique em **Configurar postagens dessa conta**
 2. Mostre o bloco **"Como o corte chega no TikTok"**, com as duas opções
-3. Clique em **Direto no perfil**
+3. **Pare 2 segundos em "Como rascunho"** e leia o texto embaixo dela
+4. Clique em **Direto no perfil**
+
+> **Escopo desta cena: `video.upload`.**
+>
+> Ele é a opção "Como rascunho" — o corte vai pra caixa de entrada do aplicativo do TikTok e o
+> criador finaliza por lá. É o único momento do vídeo em que esse escopo aparece, e por isso o
+> passo 3 não pode ser pulado: você pede `video.upload` no formulário, então ele precisa estar
+> visível em algum lugar da gravação.
 
 ## Cena 5 — As opções de publicação (02:00 – 03:30) — **a que a auditoria mais examina**
 
-Abra o primeiro corte da fila e mostre, **um por um, pausando em cada**:
+Você já está dentro de **Configurar postagens dessa conta** (cena 4). Desça até a aba **Fila**,
+clique em **Definir opções de publicação** no primeiro corte, e mostre **um por um, pausando em
+cada**:
 
 1. **Apelido e foto** da conta de destino, no topo do bloco
 2. **A prévia do vídeo** — dê play em alguns segundos e diga (ou legende):
@@ -112,12 +157,21 @@ Abra o primeiro corte da fila e mostre, **um por um, pausando em cada**:
 7. **O aviso** de que o TikTok pode levar alguns minutos pra processar
 8. Clique em **Confirmar e liberar publicação**
 
+> **Escopo desta cena: `video.publish`.**
+>
+> Esta é a cena que prova a regra mais importante da Content Posting API: nada é publicado com
+> valor padrão. Enquanto a privacidade não for escolhida, o botão **Confirmar e liberar publicação**
+> fica desabilitado, e **Postar agora** também. É esse bloqueio que o revisor procura.
+
 ## Cena 6 — Publicar (03:30 – 04:30)
 
 1. Clique em **Postar agora** naquele corte
 2. Mostre o status mudando para enviando / processando
 3. **Abra o TikTok** na conta de teste e **mostre o vídeo publicado**
 4. Volte ao Post Flow e mostre o corte na aba **Postados**
+
+> **Escopo desta cena: `video.publish` (o resultado).** A cena 5 mostrou o criador decidindo; esta
+> mostra o vídeo já no perfil dele. As duas juntas fecham a demonstração do escopo.
 
 > Se demorar, corte e escreva na legenda "3 minutes later". Terminar mostrando o vídeo dentro do
 > TikTok é o que fecha a demonstração.
