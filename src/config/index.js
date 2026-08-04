@@ -90,6 +90,11 @@ const config = {
   // deixar o SDK explodir. Sem required() de proposito: a ausencia dessas
   // variaveis nao pode travar o boot do servidor, so deixa a integracao com
   // a Stripe indisponivel ate configurar.
+  // Codigo de verificacao de propriedade do dominio no Google Search Console.
+  // Fica em variavel de ambiente (nao no codigo) porque e um valor de conta, e
+  // porque assim da pra trocar sem esperar um deploy de codigo.
+  googleSiteVerification: process.env.GOOGLE_SITE_VERIFICATION || '',
+
   // Envio de e-mail transacional (recuperacao de senha). Sem a chave, o
   // sistema continua funcionando normalmente e so a recuperacao de senha fica
   // indisponivel - emailService recusa com mensagem clara em vez de explodir.

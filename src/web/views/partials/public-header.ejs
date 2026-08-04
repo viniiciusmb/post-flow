@@ -36,6 +36,17 @@
   <meta name="twitter:description" content="<%= locals.metaDescription || 'Cortes automáticos do seu canal do YouTube publicados no seu TikTok.' %>">
   <meta name="twitter:image" content="https://postflowtiktok.com/img/og/post-flow-og.png">
 
+  <%#
+    Verificação de propriedade do domínio no Google Search Console.
+    O Google exige provar que o domínio é seu antes de aprovar a tela de
+    consentimento OAuth. Este é o método "tag HTML": basta o código aparecer no
+    <head> da página inicial. Sai da variável GOOGLE_SITE_VERIFICATION - sem ela,
+    nada é impresso.
+  %>
+  <% if (locals.googleSiteVerification) { %>
+  <meta name="google-site-verification" content="<%= googleSiteVerification %>">
+  <% } %>
+
   <%# Páginas públicas são só no tema claro - ver o comentário no topo de public.css. %>
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">

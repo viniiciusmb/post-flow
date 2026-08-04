@@ -127,6 +127,7 @@ app.use(csrf.middleware);
 // hora de renderizar o rodape.
 app.use((req, res, next) => {
   res.locals.currentUser = req.session.user || null;
+  res.locals.googleSiteVerification = config.googleSiteVerification;
   res.locals.company = COMPANY;
   res.locals.contact = CONTACT;
   next();
