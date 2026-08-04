@@ -71,7 +71,7 @@ const PERGUNTAS = [
   },
   {
     p: 'Posso cancelar quando quiser?',
-    r: 'Pode, sem multa e sem falar com ninguém. O acesso continua até o fim do período já pago. Para apagar a conta e todos os dados, é só escrever para contato@postflowtiktok.com.',
+    r: `Pode, sem multa e sem falar com ninguém. O acesso continua até o fim do período já pago. Para apagar a conta e todos os dados, é só escrever para ${CONTACT.supportEmail}.`,
   },
 ];
 
@@ -149,7 +149,7 @@ async function landing(req, res) {
     title: 'Cortes automáticos do YouTube pro TikTok',
     metaDescription:
       'O Post Flow acompanha seu canal do YouTube, corta os melhores trechos com IA, legenda no formato vertical e publica no seu TikTok automaticamente. Você grava uma vez; o resto acontece sozinho.',
-    canonical: `${CONTACT.siteUrl}/`,
+    canonical: CONTACT.siteUrl,
     structuredData: `<script type="application/ld+json">${JSON.stringify(dadosEstruturados)}</script>`,
     perguntas: PERGUNTAS,
     plans,

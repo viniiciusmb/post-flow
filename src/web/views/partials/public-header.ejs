@@ -18,7 +18,7 @@
   %>
   <title><%= title %> · Post Flow</title>
   <meta name="description" content="<%= locals.metaDescription || 'O Post Flow acompanha seu canal do YouTube, corta os melhores trechos com IA e publica no seu TikTok automaticamente.' %>">
-  <link rel="canonical" href="<%= locals.canonical || 'https://postflowtiktok.com' + (typeof pageUrl !== 'undefined' ? pageUrl : '/') %>">
+  <link rel="canonical" href="<%= locals.canonical || site %>">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 
   <meta property="og:type" content="website">
@@ -26,15 +26,15 @@
   <meta property="og:locale" content="pt_BR">
   <meta property="og:title" content="<%= locals.ogTitle || title + ' · Post Flow' %>">
   <meta property="og:description" content="<%= locals.metaDescription || 'Cortes automáticos do seu canal do YouTube publicados no seu TikTok.' %>">
-  <meta property="og:url" content="<%= locals.canonical || 'https://postflowtiktok.com' + (typeof pageUrl !== 'undefined' ? pageUrl : '/') %>">
-  <meta property="og:image" content="https://postflowtiktok.com/img/og/post-flow-og.png">
+  <meta property="og:url" content="<%= locals.canonical || site %>">
+  <meta property="og:image" content="<%= site %>/img/og/post-flow-og.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Post Flow: do vídeo do YouTube ao corte publicado no TikTok, automático.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="<%= locals.ogTitle || title + ' · Post Flow' %>">
   <meta name="twitter:description" content="<%= locals.metaDescription || 'Cortes automáticos do seu canal do YouTube publicados no seu TikTok.' %>">
-  <meta name="twitter:image" content="https://postflowtiktok.com/img/og/post-flow-og.png">
+  <meta name="twitter:image" content="<%= site %>/img/og/post-flow-og.png">
 
   <%#
     Verificação de propriedade do domínio no Google Search Console.
@@ -67,13 +67,13 @@
     '@graph': [
       {
         '@type': 'Organization',
-        '@id': 'https://postflowtiktok.com/#organizacao',
+        '@id': `${site}/#organizacao`,
         name: 'Post Flow',
-        legalName: 'Kleos Digital LTDA',
-        url: 'https://postflowtiktok.com',
-        logo: 'https://postflowtiktok.com/img/marca/post-flow-logo-512.png',
-        email: 'contato@postflowtiktok.com',
-        taxID: '62.111.132/0001-48',
+        legalName: empresa.legalName,
+        url: site,
+        logo: `${site}/img/marca/post-flow-logo-512.png`,
+        email: emailSuporte,
+        taxID: empresa.cnpj,
         address: {
           '@type': 'PostalAddress',
           streetAddress: 'Rua Mistral, 332, Edif. The Point, sala 209A, Despraiado',
@@ -85,17 +85,17 @@
         contactPoint: {
           '@type': 'ContactPoint',
           contactType: 'Atendimento ao cliente',
-          email: 'contato@postflowtiktok.com',
+          email: emailSuporte,
           availableLanguage: ['Portuguese']
         }
       },
       {
         '@type': 'WebSite',
-        '@id': 'https://postflowtiktok.com/#site',
-        url: 'https://postflowtiktok.com',
+        '@id': `${site}/#site`,
+        url: site,
         name: 'Post Flow',
         inLanguage: 'pt-BR',
-        publisher: { '@id': 'https://postflowtiktok.com/#organizacao' }
+        publisher: { '@id': `${site}/#organizacao` }
       }
     ]
   }) %>

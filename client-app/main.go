@@ -20,7 +20,15 @@ import (
 	"github.com/getlantern/systray"
 )
 
-const defaultAPIBase = "https://postflowtiktok.com"
+// Dominio novo. Os programas JA INSTALADOS continuam apontando pro antigo, e
+// isso e de proposito: o dominio antigo segue servindo o sistema normalmente,
+// entao nenhum cliente precisa reinstalar nada. Quem baixar daqui pra frente ja
+// vem no dominio novo.
+//
+// Se um dia o dominio antigo for desligado, TODO cliente com o programa
+// instalado precisa baixar de novo - por isso ele nao pode ser desligado sem
+// aviso.
+const defaultAPIBase = "https://postflowclips.com"
 
 type pairingInfo struct {
 	PairingCode  string `json:"pairingCode"`

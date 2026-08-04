@@ -36,8 +36,8 @@ test('o pacote avulso gera um checkout de pagamento único com o valor certo', o
     amountCents: 4990,
     minutes: 100,
     bucket: 'normal',
-    successUrl: 'https://postflowtiktok.com/client/billing?pacote=sucesso',
-    cancelUrl: 'https://postflowtiktok.com/client/billing?pacote=cancelado',
+    successUrl: 'https://postflowclips.com/client/billing?pacote=sucesso',
+    cancelUrl: 'https://postflowclips.com/client/billing?pacote=cancelado',
     metadata: { clientUserId: '999' },
   });
 
@@ -53,8 +53,8 @@ test('o cartão de excedente gera uma sessão de setup', opcoes, async () => {
   const customerId = await clienteDeTeste('cartao');
   const sessao = await stripeService.createSetupSessionForOverageCard({
     customerId,
-    successUrl: 'https://postflowtiktok.com/client/billing?cartao=sucesso',
-    cancelUrl: 'https://postflowtiktok.com/client/billing?cartao=cancelado',
+    successUrl: 'https://postflowclips.com/client/billing?cartao=sucesso',
+    cancelUrl: 'https://postflowclips.com/client/billing?cartao=cancelado',
     metadata: { clientUserId: '999' },
   });
 

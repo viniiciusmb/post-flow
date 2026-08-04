@@ -123,7 +123,7 @@ Também aceita vídeo enviado do computador e link de vídeo avulso do YouTube.
 
 ## Planos e preço
 
-${linhasDePlano.length ? linhasDePlano.join('\n') : '- Consulte os planos em https://postflowtiktok.com/#planos'}
+${linhasDePlano.length ? linhasDePlano.join('\n') : `- Consulte os planos em ${BASE}/#planos`}
 
 Quem passa da cota pode comprar minutos avulsos ou cadastrar cartão para cobrança automática por vídeo processado. A cobrança é por minuto do vídeo ORIGINAL, não por quantidade de cortes: um vídeo de 30 minutos custa o mesmo se render 3 ou 12 cortes.
 
@@ -147,7 +147,7 @@ Contato: ${CONTACT.supportEmail}
 
 ## Páginas
 
-- Início: ${BASE}/
+- Início: ${BASE}
 - Contato: ${BASE}/contato
 - Termos de Uso: ${BASE}/termos
 - Política de Privacidade: ${BASE}/privacidade

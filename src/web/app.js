@@ -128,6 +128,12 @@ app.use(csrf.middleware);
 app.use((req, res, next) => {
   res.locals.currentUser = req.session.user || null;
   res.locals.googleSiteVerification = config.googleSiteVerification;
+  // Dominio, e-mail e dados da empresa vem de src/config/constants.js. Ficam em
+  // res.locals pra que nenhuma view precise receber isso do controller - foi
+  // assim que o dominio acabou escrito 12 vezes no cabecalho publico.
+  res.locals.site = CONTACT.siteUrl;
+  res.locals.emailSuporte = CONTACT.supportEmail;
+  res.locals.empresa = COMPANY;
   res.locals.company = COMPANY;
   res.locals.contact = CONTACT;
   next();

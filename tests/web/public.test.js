@@ -65,7 +65,7 @@ test('nenhuma pagina publica carrega CSS/script de servidor de terceiro', async 
       .map((m) => m[1])
       // Link pro usuario clicar e outra coisa - o problema e o que o navegador
       // BAIXA sozinho pra montar a pagina.
-      .filter((u) => !/myaccount\.google\.com|postflowtiktok\.com/.test(u));
+      .filter((u) => !/myaccount\.google\.com|postflowclips\.com|postflowtiktok\.com/.test(u));
     assert.deepStrictEqual(externos, [], `${rota} esta carregando recurso externo: ${externos.join(', ')}`);
   }
 });

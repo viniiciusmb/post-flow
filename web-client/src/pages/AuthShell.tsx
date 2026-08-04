@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { BrandMark } from "@/components/brand-mark"
 import { ProductPreview } from "@/pages/LoginPage"
+import { EMAIL_SUPORTE } from "@/lib/contato"
 
 // Moldura das telas de entrada (login, esqueci a senha, nova senha): marca em
 // cima, conteúdo no meio, aviso legal embaixo, e a mesma prévia do produto do
@@ -38,8 +39,8 @@ export function AuthShell({
           {rodape ?? (
             <>
               Precisa de ajuda? Escreva para{" "}
-              <a href="mailto:contato@postflowtiktok.com" className="underline">
-                contato@postflowtiktok.com
+              <a href={`mailto:${EMAIL_SUPORTE}`} className="underline">
+                {EMAIL_SUPORTE}
               </a>
             </>
           )}

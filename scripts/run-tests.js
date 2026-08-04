@@ -87,7 +87,7 @@ async function main() {
         NODE_ENV: 'test',
         // Login com Google: o endereco de retorno e derivado deste. Sem ele os
         // testes exercitariam so o caminho de fallback.
-        GOOGLE_REDIRECT_URI: 'https://postflowtiktok.com/auth/google/callback',
+        GOOGLE_REDIRECT_URI: 'https://postflowclips.com/auth/google/callback',
       }
     );
   } finally {

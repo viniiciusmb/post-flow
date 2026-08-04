@@ -15,6 +15,11 @@ const assert = require('node:assert/strict');
 
 const pool = require('../../src/db/pool');
 const { startServer, stopServer, createAgent } = require('../helpers/http');
+const { CONTACT } = require('../../src/config/constants');
+
+// O dominio sai das constantes, nao escrito aqui: numa troca de dominio, teste
+// com o endereco fixo passa a testar o endereco errado sem falhar.
+const SITE = CONTACT.siteUrl;
 
 let baseUrl;
 let agente;
@@ -70,10 +75,10 @@ test('cada página pública tem título e descrição DIFERENTES das outras', as
 
 test('cada página aponta pra si mesma no canonical', async () => {
   for (const [caminho, esperado] of [
-    ['/', 'https://postflowtiktok.com/'],
-    ['/contato', 'https://postflowtiktok.com/contato'],
-    ['/termos', 'https://postflowtiktok.com/termos'],
-    ['/privacidade', 'https://postflowtiktok.com/privacidade'],
+    ['/', SITE],
+    ['/contato', `${SITE}/contato`],
+    ['/termos', `${SITE}/termos`],
+    ['/privacidade', `${SITE}/privacidade`],
   ]) {
     const r = await agente.get(caminho);
     const canonical = r.text.match(/rel="canonical" href="([^"]+)"/)[1];
@@ -107,7 +112,7 @@ test('robots.txt libera o site e esconde a área logada', async () => {
   for (const area of ['/client', '/admin', '/api', '/auth']) {
     assert.match(r.text, new RegExp(`Disallow: ${area}`), `${area} deveria estar bloqueado`);
   }
-  assert.match(r.text, /Sitemap: https:\/\/postflowtiktok\.com\/sitemap\.xml/);
+  assert.ok(r.text.includes(`Sitemap: ${SITE}/sitemap.xml`));
 });
 
 test('o sitemap só lista páginas que realmente abrem', async () => {
@@ -120,7 +125,7 @@ test('o sitemap só lista páginas que realmente abrem', async () => {
   // Sitemap apontando pra página que não existe é pior que não ter sitemap:
   // gasta o orçamento de rastreio do buscador com erro 404.
   for (const url of urls) {
-    const caminho = url.replace('https://postflowtiktok.com', '') || '/';
+    const caminho = url.replace(SITE, '') || '/';
     const pagina = await agente.get(caminho);
     assert.equal(pagina.status, 200, `${url} está no sitemap mas responde ${pagina.status}`);
   }
@@ -207,7 +212,7 @@ test('a página continua sem depender de servidor de terceiro', async () => {
     const r = await agente.get(caminho);
     const externos = [...r.text.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)]
       .map((m) => m[1])
-      .filter((url) => !url.startsWith('https://postflowtiktok.com'))
+      .filter((url) => !url.startsWith(SITE))
       // Links de navegação pra fora (política do TikTok, etc.) são conteúdo,
       // não dependência de renderização.
       .filter((url) => /\.(css|js|woff2?|png|jpe?g|svg)(\?|$)/.test(url));
