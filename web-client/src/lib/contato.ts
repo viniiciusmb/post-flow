@@ -9,4 +9,4 @@
  * O que impede as duas de divergirem é um teste (`tests/web/contato.test.js`),
  * que falha se este valor sair do valor do servidor.
  */
-export const EMAIL_SUPORTE = "contato@postflowtiktok.com"
+export const EMAIL_SUPORTE = "contato@postflowclips.com"

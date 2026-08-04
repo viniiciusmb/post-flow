@@ -22,15 +22,14 @@ const DRIVE_FOLDER_TYPE = Object.freeze({
 // formulario de verificacao do Google e do TikTok, entao tem que bater.
 // Um lugar so pra nao ficar divergindo entre as paginas.
 const CONTACT = Object.freeze({
-  // ATENCAO: este endereco e o REMETENTE dos e-mails (Resend). Trocar o dominio
-  // aqui antes de o dominio novo estar verificado na Resend derruba a
-  // recuperacao de senha em silencio - a Resend recusa enviar de um dominio que
-  // ela nao verificou, e a tela continua dizendo "o link ja esta a caminho".
+  // ATENCAO: este endereco e o REMETENTE dos e-mails (Resend). Se o dominio
+  // daqui nao estiver verificado na Resend, a recuperacao de senha para de
+  // funcionar EM SILENCIO: a Resend recusa o envio e a tela continua dizendo
+  // "o link ja esta a caminho".
   //
-  // Por isso o e-mail e o site sao trocados em momentos DIFERENTES: o site
-  // mudou pro postflowclips.com agora; o e-mail muda depois que o dominio novo
-  // for verificado na Resend e a caixa contato@postflowclips.com existir.
-  supportEmail: 'contato@postflowtiktok.com',
+  // Conferido em 04/08/2026 contra a API da Resend: postflowclips.com envia,
+  // postflowtiktok.com foi removido de la e nao envia mais.
+  supportEmail: 'contato@postflowclips.com',
 
   // Dominio publico do produto. Fonte unica: canonical, Open Graph, dados
   // estruturados, sitemap, robots, llms.txt e os links dos e-mails saem daqui.

@@ -6,7 +6,7 @@
 // IMPORTANTE sobre o remetente: `onboarding@resend.dev` (que aparece nos
 // exemplos da Resend) é caixa de teste e SÓ entrega no e-mail do dono da conta.
 // Qualquer envio pra cliente real precisa sair de um domínio verificado, que é
-// o caso de postflowtiktok.com. Se um dia o remetente voltar pro exemplo, a
+// o caso de postflowclips.com. Se um dia o remetente voltar pro exemplo, a
 // recuperação de senha para de funcionar em silêncio para todo mundo menos o
 // fundador.
 'use strict';
