@@ -49,11 +49,25 @@ async function run(boss) {
       // novo marco d'agua).
       const priority = await queuePriorityService.resolveQueuePriorityForClient(channel.client_user_id);
       for (const video of [...newVideos].reverse()) {
+        // A listagem do canal devolve o titulo TRADUZIDO pelo YouTube: um video
+        // chamado "ABRIMOS UM RESTAURANTE" chegava aqui como "WE OPENED A
+        // RESTAURANT". Consultar o video em si devolve o titulo original.
+        //
+        // Uma chamada a mais por video NOVO (nao por checagem). Se falhar, fica
+        // com o titulo traduzido em vez de perder o video - titulo errado
+        // incomoda, video perdido e pior.
+        const original = await ytDlpService
+          .getVideoMetadata(`https://www.youtube.com/watch?v=${video.videoId}`)
+          .catch((err) => {
+            logger.warn(`Nao consegui o titulo original do video ${video.videoId}: ${err.message}`);
+            return null;
+          });
+
         const created = await sourceVideosRepository.createIfNotExists({
           youtubeChannelId: channel.id,
           ownerClientUserId: channel.client_user_id,
           youtubeVideoId: video.videoId,
-          title: video.title,
+          title: (original && original.title) || video.title,
           thumbnailUrl: video.thumbnailUrl,
           publishedAt: video.publishedAt,
           durationSeconds: video.durationSeconds,

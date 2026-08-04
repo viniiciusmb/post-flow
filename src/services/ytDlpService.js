@@ -293,8 +293,16 @@ function extractVideoId(url) {
   return match ? match[1] : null;
 }
 
-// Busca so os metadados de um video avulso (sem baixar) - usado quando o
-// cliente cola o link manualmente em vez de vir da checagem de um canal.
+// Busca so os metadados de um video (sem baixar).
+//
+// Usado em dois lugares: quando o cliente cola um link manualmente, e quando a
+// checagem de canal encontra um video novo.
+//
+// O segundo caso existe por um motivo especifico: a listagem do canal
+// (--flat-playlist) devolve o titulo TRADUZIDO pelo YouTube - um video com
+// titulo "ABRIMOS UM RESTAURANTE" chegava como "WE OPENED A RESTAURANT". Ja a
+// consulta de UM video devolve o titulo original e o idioma declarado. E uma
+// chamada a mais por video NOVO (nao por checagem), o que e barato.
 async function getVideoMetadata(url) {
   const { stdout } = await run(['--dump-json', '--no-warnings', '--no-playlist', '--skip-download', url], {
     allowDirect: true,
@@ -306,6 +314,9 @@ async function getVideoMetadata(url) {
     thumbnailUrl: entry.thumbnails?.at(-1)?.url || null,
     publishedAt: parseUploadDate(entry.upload_date),
     durationSeconds: entry.duration || null,
+    // Idioma declarado do video ('pt-BR', 'en'...). Serve de palpite inicial
+    // ate o Whisper detectar o idioma falado de verdade.
+    language: entry.language || null,
   };
 }
 
