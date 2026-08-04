@@ -425,10 +425,64 @@ export function ClipStyleEditorCard() {
         {settings.cropStyleMode === "manual" && (
           <>
             <Field>
-              <FieldLabel>Template de fundo (opcional)</FieldLabel>
+              <FieldLabel>Fundo do corte</FieldLabel>
               <p className="text-xs text-muted-foreground">
-                Envie uma imagem 9:16 (1080x1920) com a sua arte: moldura, marca, publicidade. O vídeo
-                é encaixado por cima dela, na altura e na posição que você escolher.
+                O que aparece atrás do vídeo quando ele não ocupa a tela inteira.
+              </p>
+
+              {/* Quatro escolhas. Antes só havia duas, e uma delas era implícita:
+                  ou você enviava uma imagem, ou ficava o vídeo desfocado. Quem
+                  quisesse fundo liso tinha que criar uma imagem de 1080x1920
+                  preenchida de uma cor só - trabalho por algo que o sistema
+                  gera sozinho. */}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {(
+                  [
+                    { valor: "blur", titulo: "Vídeo desfocado", amostra: "desfocado" },
+                    { valor: "black", titulo: "Preto", amostra: "preto" },
+                    { valor: "white", titulo: "Branco", amostra: "branco" },
+                    { valor: "template", titulo: "Minha imagem", amostra: "imagem" },
+                  ] as const
+                ).map((op) => {
+                  const escolhido = settings.backgroundStyle === op.valor
+                  // Escolher "minha imagem" sem ter enviado nada renderizaria
+                  // com o desfocado sem explicar por quê - o servidor recusa, e
+                  // aqui a opção fica desabilitada com o motivo.
+                  const bloqueado = op.valor === "template" && !settings.hasBackgroundTemplate
+                  return (
+                    <button
+                      key={op.valor}
+                      type="button"
+                      disabled={bloqueado}
+                      title={bloqueado ? "Envie uma imagem primeiro" : undefined}
+                      onClick={() => save({ ...settings, backgroundStyle: op.valor })}
+                      className={`rounded-lg border p-2 text-left transition-colors disabled:opacity-45 ${
+                        escolhido ? "border-primary bg-primary/5" : "border-border hover:bg-muted/60"
+                      }`}
+                    >
+                      <span
+                        className={`mb-1.5 block h-10 w-full rounded ${
+                          op.amostra === "preto"
+                            ? "bg-[#08090a]"
+                            : op.amostra === "branco"
+                              ? "border border-border bg-white"
+                              : op.amostra === "desfocado"
+                                ? "bg-gradient-to-br from-indigo-300 via-fuchsia-200 to-cyan-200 blur-[2px]"
+                                : "bg-[repeating-linear-gradient(45deg,#e7e7ea_0_6px,#f6f6f7_6px_12px)]"
+                        }`}
+                      />
+                      <span className="text-[11.5px] leading-tight font-medium">{op.titulo}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </Field>
+
+            <Field>
+              <FieldLabel>Sua imagem de fundo (opcional)</FieldLabel>
+              <p className="text-xs text-muted-foreground">
+                Uma imagem 9:16 (1080x1920) com a sua arte: moldura, marca, publicidade. O vídeo é
+                encaixado por cima dela, na altura e na posição que você escolher.
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <label>
@@ -455,10 +509,12 @@ export function ClipStyleEditorCard() {
               {erroTemplate && <p className="text-xs text-destructive">{erroTemplate}</p>}
             </Field>
 
-            {settings.hasBackgroundTemplate && (
-              <div className="grid gap-4 sm:grid-cols-2">
+            {/* Valem pros quatro fundos: definem onde o vídeo fica no quadro, e
+                o fundo escolhido preenche o resto. Com 100% não sobra fundo
+                visível, e o corte sai igual ao de sempre. */}
+            <div className="grid gap-4 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel>Altura do vídeo no template</FieldLabel>
+                  <FieldLabel>Altura do vídeo</FieldLabel>
                   <Input
                     type="range"
                     min={10}
@@ -471,7 +527,9 @@ export function ClipStyleEditorCard() {
                     onTouchEnd={() => save(settings)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    {settings.backgroundVideoHeightPercent}% da altura. O resto fica sendo a sua arte.
+                    {settings.backgroundVideoHeightPercent === 100
+                      ? "O vídeo ocupa a tela inteira. O fundo não aparece."
+                      : `${settings.backgroundVideoHeightPercent}% da altura. O resto fica sendo o fundo.`}
                   </p>
                 </Field>
                 <Field>
@@ -495,8 +553,7 @@ export function ClipStyleEditorCard() {
                         : "No meio."}
                   </p>
                 </Field>
-              </div>
-            )}
+            </div>
 
             <Field>
               <FieldLabel>Enquadramento (arraste as alças)</FieldLabel>

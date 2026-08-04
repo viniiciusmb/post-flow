@@ -39,6 +39,7 @@ function toApi(settings) {
     titleStyle: settings.title_style,
     // Só o fato de existir um template interessa ao front (o arquivo em si é
     // servido por rota própria, nunca por caminho de disco).
+    backgroundStyle: settings.background_style || 'blur',
     hasBackgroundTemplate: Boolean(settings.background_template_path),
     backgroundVideoHeightPercent: settings.background_video_height_percent ?? 100,
     backgroundVideoOffsetPercent: settings.background_video_offset_percent ?? 50,
@@ -170,6 +171,9 @@ async function update(req, res) {
   const alvo = await resolverAlvo(req);
   if (alvo.erro) return res.status(404).json({ error: alvo.erro });
 
+  const ESTILOS_DE_FUNDO = ['blur', 'black', 'white', 'template'];
+  const backgroundStyle = ESTILOS_DE_FUNDO.includes(req.body.backgroundStyle) ? req.body.backgroundStyle : 'blur';
+
   const backgroundHeight = Number(req.body.backgroundVideoHeightPercent ?? 100);
   const backgroundOffset = Number(req.body.backgroundVideoOffsetPercent ?? 50);
   if (!Number.isInteger(backgroundHeight) || backgroundHeight < 10 || backgroundHeight > 100) {
@@ -188,7 +192,14 @@ async function update(req, res) {
       (await clientVideoSettingsRepository.findByClientId(req.session.user.id))
     : await clientVideoSettingsRepository.findByClientId(req.session.user.id);
 
+  // Escolher "template" sem ter enviado imagem nenhuma renderizaria com o
+  // fundo desfocado sem explicar por que - melhor recusar aqui e dizer.
+  if (backgroundStyle === 'template' && !atual.background_template_path) {
+    return res.status(400).json({ error: 'Envie a imagem de fundo antes de escolher essa opção.' });
+  }
+
   const saved = await clientVideoSettingsRepository.upsert(req.session.user.id, {
+    backgroundStyle,
     backgroundTemplatePath: atual.background_template_path,
     backgroundVideoHeightPercent: backgroundHeight,
     backgroundVideoOffsetPercent: backgroundOffset,

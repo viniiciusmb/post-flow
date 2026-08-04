@@ -266,51 +266,83 @@ function escapeForFilter(filePath) {
 // (identico ao framing='blur_pad'), valores no meio interpolam a largura do
 // recorte entre os dois extremos - sempre com o fundo desfocado preenchendo
 // a sobra (que e zero quando zoom=100).
-// Composicao sobre um template de fundo enviado pelo cliente (uma imagem 9:16
-// com a arte dele: moldura, publicidade, marca). O video entra POR CIMA da
-// imagem, com a altura e a posicao vertical que o cliente escolheu no editor.
+// Composicao do corte sobre um FUNDO. O fundo pode ser a imagem que o cliente
+// enviou, uma cor lisa, ou o proprio video desfocado - o resto do arranjo e
+// identico nos quatro casos, e por isso eles compartilham esta funcao.
 //
-// Duas entradas no ffmpeg: [0:v] e o video do corte, [1:v] e a imagem. A
-// imagem e esticada pro tamanho final e o video e reduzido pra ocupar
-// `heightPercent` da altura, centralizado horizontalmente e posicionado em
-// `offsetPercent` da vertical (0 = colado no topo, 100 = colado na base).
-function buildTemplateFilter({ w, h, subtitlesFilter, heightPercent, offsetPercent }) {
+// O video entra POR CIMA do fundo, com a altura e a posicao vertical que o
+// cliente escolheu. Antes so o template tinha esses controles; com fundo liso
+// eles fazem o mesmo sentido (video no meio, cor sobrando em cima e embaixo).
+function buildBackgroundFilter({ w, h, subtitlesFilter, style, heightPercent, offsetPercent }) {
   const alturaVideo = Math.round((h * Math.max(10, Math.min(100, heightPercent))) / 100);
   // O offset e medido sobre o espaco que sobra, entao 50% sempre centraliza,
   // independente da altura escolhida.
   const sobra = h - alturaVideo;
   const topo = Math.round((sobra * Math.max(0, Math.min(100, offsetPercent))) / 100);
 
-  const chain = [
-    `[1:v]scale=${w}:${h},setsar=1[fundo]`,
-    // PREENCHE a caixa que o cliente dimensionou, nao "cabe dentro" dela.
-    //
-    // Antes isto usava o zoom do modo manual mais force_original_aspect_ratio=
-    // decrease. Com zoom de 39%, um video 16:9 virava 1080x762 dentro de uma
-    // caixa de 1080x1267: sobravam 505px de vazio entre o video e a arte, que
-    // foi exatamente a faixa branca que apareceu no primeiro corte real.
-    //
-    // O zoom nao faz sentido aqui: quando existe template, quem define o
-    // tamanho do video e o proprio controle de altura, e o editor ate esconde
-    // as alcas de arrastar. Entao a regra e cobrir: amplia ate cobrir a caixa
-    // (increase) e corta o excedente (crop), garantindo o retangulo exato, sem
-    // faixa nenhuma.
-    `[0:v]scale=${w}:${alturaVideo}:force_original_aspect_ratio=increase,crop=${w}:${alturaVideo},setsar=1[video]`,
-    // A legenda entra DEPOIS da composicao, pra poder ser posicionada em
-    // relacao ao quadro final e nao ao retangulo do video.
-    `[fundo][video]overlay=(W-w)/2:${topo}${subtitlesFilter ? `,${subtitlesFilter}` : ''}[outv]`,
-  ];
+  // Quando o video ocupa o quadro inteiro nao ha fundo visivel - gerar e
+  // compor um fundo que ninguem vai ver so gasta processamento.
+  const fundoVisivel = alturaVideo < h;
+
+  const chain = [];
+  let entradaDoVideo = '[0:v]';
+
+  if (fundoVisivel) {
+    if (style === 'template') {
+      // A imagem vem como segunda entrada do ffmpeg ([1:v]).
+      chain.push(`[1:v]scale=${w}:${h},setsar=1[fundo]`);
+    } else if (style === 'blur') {
+      // O proprio video desfocado. Precisa de split porque [0:v] e usado duas
+      // vezes - uma pro fundo, outra pro video em cima.
+      chain.push(`[0:v]split=2[paraFundo][paraVideo]`);
+      chain.push(
+        `[paraFundo]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=18:4,setsar=1[fundo]`
+      );
+      entradaDoVideo = '[paraVideo]';
+    } else {
+      // Cor lisa. Gerada por filtro de origem (`color`), sem entrada extra no
+      // ffmpeg - uma imagem de cor solida seria um arquivo a mais pra criar,
+      // guardar e limpar, por um retangulo de uma cor so.
+      const cor = style === 'white' ? 'white' : 'black';
+      chain.push(`color=c=${cor}:s=${w}x${h}[fundo]`);
+    }
+  }
+
+  // PREENCHE a caixa que o cliente dimensionou, nao "cabe dentro" dela.
+  //
+  // Antes isto usava force_original_aspect_ratio=decrease. Com altura de 66%,
+  // um video 16:9 virava 1080x762 dentro de uma caixa de 1080x1267: sobravam
+  // 505px de vazio entre o video e a arte - a faixa branca que apareceu no
+  // primeiro corte real. Amplia ate cobrir (increase) e corta o excedente
+  // (crop), garantindo o retangulo exato.
+  chain.push(
+    `${entradaDoVideo}scale=${w}:${alturaVideo}:force_original_aspect_ratio=increase,crop=${w}:${alturaVideo},setsar=1[video]`
+  );
+
+  // A legenda entra DEPOIS da composicao, pra poder ser posicionada em relacao
+  // ao quadro final e nao ao retangulo do video.
+  const legenda = subtitlesFilter ? `,${subtitlesFilter}` : '';
+  if (fundoVisivel) {
+    chain.push(`[fundo][video]overlay=(W-w)/2:${topo}${legenda}[outv]`);
+  } else {
+    chain.push(`[video]null${legenda}[outv]`);
+  }
+
   return { filterComplex: chain.join(';'), outputLabel: '[outv]' };
 }
 
-function buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, template }) {
-  if (template && template.path) {
-    return buildTemplateFilter({
+function buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, fundo }) {
+  // Fundo escolhido explicitamente (template, preto, branco ou desfocado). O
+  // 'blur' so entra por aqui quando ha altura definida - com o video ocupando
+  // o quadro inteiro, o caminho antigo (com zoom continuo) continua valendo.
+  if (fundo) {
+    return buildBackgroundFilter({
       w,
       h,
       subtitlesFilter,
-      heightPercent: template.heightPercent,
-      offsetPercent: template.offsetPercent,
+      style: fundo.style,
+      heightPercent: fundo.heightPercent,
+      offsetPercent: fundo.offsetPercent,
     });
   }
 
@@ -373,17 +405,34 @@ async function renderClip({
   // cliente apagou (ou a retencao limpou), renderiza sem template em vez de
   // derrubar o corte inteiro por causa de uma imagem faltando.
   const templatePath = settings.background_template_path;
-  const template =
-    templatePath && fs.existsSync(templatePath)
+  const alturaDoVideo = Number(settings.background_video_height_percent ?? 100);
+  // Sem estilo definido mas com imagem enviada, o fundo e a imagem: e o que
+  // configuracao antiga (anterior a esta escolha existir) quis dizer.
+  let estiloDeFundo = settings.background_style || (templatePath ? 'template' : 'blur');
+
+  // Template escolhido mas o arquivo sumiu (cliente apagou, retencao limpou):
+  // cai no desfocado em vez de derrubar o corte inteiro por uma imagem
+  // faltando.
+  if (estiloDeFundo === 'template' && (!templatePath || !fs.existsSync(templatePath))) {
+    logger.warn(`Template de fundo nao encontrado em ${templatePath} - renderizando com fundo desfocado.`);
+    estiloDeFundo = 'blur';
+  }
+
+  // Fundo so entra em jogo no modo manual e quando ha espaco pra ele. Com o
+  // video ocupando o quadro inteiro (100%) nao sobra fundo visivel, entao o
+  // caminho antigo (zoom continuo sobre o desfocado) continua valendo - e e o
+  // que preserva o comportamento de quem nunca mexeu nessa configuracao.
+  const fundo =
+    settings.crop_style_mode === 'manual' && alturaDoVideo < 100
       ? {
-          path: templatePath,
-          heightPercent: Number(settings.background_video_height_percent ?? 100),
+          style: estiloDeFundo,
+          heightPercent: alturaDoVideo,
           offsetPercent: Number(settings.background_video_offset_percent ?? 50),
         }
       : null;
-  if (templatePath && !template) {
-    logger.warn(`Template de fundo nao encontrado em ${templatePath} - renderizando sem ele.`);
-  }
+
+  // A imagem so vira entrada do ffmpeg quando e ela o fundo escolhido.
+  const template = fundo && fundo.style === 'template' ? { path: templatePath } : null;
 
   const { w, h } = ASPECT_RATIOS[aspectRatio] || ASPECT_RATIOS['9:16'];
   const { crf, preset } = QUALITY_PRESETS[quality] || QUALITY_PRESETS.high;
@@ -413,7 +462,7 @@ async function renderClip({
     subtitlesFilter = `subtitles=${escapeForFilter(assPath)}`;
   }
 
-  const { simpleFilter, filterComplex, outputLabel } = buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, template });
+  const { simpleFilter, filterComplex, outputLabel } = buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, fundo });
 
   try {
     const args = [
@@ -457,7 +506,11 @@ async function renderClip({
   return outputPath;
 }
 
+// buildBackgroundFilter e exportada so pra ser testada: ela e uma funcao pura
+// (entra configuracao, sai a string do filtro) e e onde mora a regra que ja
+// quebrou uma vez - o video precisa PREENCHER a caixa, nao caber dentro dela.
 module.exports = {
+  buildBackgroundFilter,
   extractAudio,
   renderClip,
   extractThumbnail,

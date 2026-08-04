@@ -278,6 +278,8 @@ export interface ClientVideoSettings {
   showPartLabel: boolean
   partLabelPosition: PartLabelPosition
   titleStyle: VideoCaptionStyle
+  /** O que aparece atrás do vídeo quando ele não ocupa a tela inteira. */
+  backgroundStyle: "blur" | "black" | "white" | "template"
   hasBackgroundTemplate: boolean
   backgroundVideoHeightPercent: number
   backgroundVideoOffsetPercent: number
