@@ -155,6 +155,91 @@ Sem ela, a tela de consentimento continua funcionando; aparece o nome do app sem
 
 ---
 
+---
+
+## Conferência no TikTok Developer Portal (antes de gravar)
+
+Escrito em 04/08/2026. Confira nesta ordem — cada item abaixo já reprovou submissão de alguém.
+
+### 0. Você está no app certo, em Sandbox
+
+O sistema em produção hoje usa a chave **`sbawcrecv97w4zusib`**. O prefixo `sb` quer dizer
+**Sandbox**, e isso está **certo** para este momento: a documentação do TikTok diz que app que
+nunca foi aprovado *"is required to use a sandbox environment on the Developer Portal to
+demonstrate the integration"*. Ou seja: **grave o vídeo com o que já está no ar.**
+
+Não troque para as chaves de Produção antes da aprovação — Sandbox e Produção têm chave e segredo
+diferentes, e trocar agora derruba as conexões que já existem.
+
+### 1. Basic information
+
+| Campo | O que colocar |
+|---|---|
+| App icon | `postflowtiktok.com/img/marca/post-flow-nome-quadrada.png` (1024×1024) |
+| App name | Post Flow |
+| Category | Produtividade / ferramenta de criador |
+| Description | Ver o texto pronto em "O que escrever na descrição do app", mais abaixo |
+| Terms of Service URL | `https://postflowtiktok.com/termos` |
+| Privacy Policy URL | `https://postflowtiktok.com/privacidade` |
+
+As duas URLs precisam abrir sem login e sem redirecionar. Já abrem.
+
+### 2. Platforms → Web
+
+- Website URL: `https://postflowtiktok.com`
+- **Redirect URI: `https://postflowtiktok.com/auth/tiktok/callback`** — exatamente assim, sem barra
+  no fim. É o que o sistema envia; qualquer diferença dá erro na hora de conectar.
+
+### 3. Products
+
+Precisam estar os dois:
+
+- **Login Kit** — é o que permite conectar a conta.
+- **Content Posting API** — é o que publica. Sem ele, `video.publish` não funciona mesmo aparecendo
+  concedido no token. *(Este foi exatamente o erro que travou o sistema por dias: o escopo aparecia
+  no banco e a TikTok recusava assim mesmo.)*
+
+Dentro do Content Posting API, ligue a opção de **Direct Post**.
+
+### 4. Scopes
+
+Os quatro, e só eles:
+
+`user.info.basic` · `user.info.stats` · `video.publish` · `video.upload`
+
+Escopo pedido e não demonstrado no vídeo é motivo de recusa. Os quatro aparecem no roteiro.
+
+### 5. URL properties  ← o item que mais passa despercebido
+
+No topo da página do app existe um botão **URL properties**. O Content Posting API exige que o
+domínio esteja verificado ali, igual ao que o Google pediu. Verifique `postflowtiktok.com`.
+
+### 6. Sandbox → Target users
+
+Ainda em Sandbox, adicione a **conta TikTok de teste** na lista de usuários autorizados. Sem isso
+ela não consegue autorizar o app, e o vídeo trava na primeira cena.
+
+Lembre do teto enquanto não há aprovação: **5 contas por 24 horas**, e toda publicação sai como
+**"só eu"**. É esperado, e o revisor sabe disso.
+
+### 7. App review
+
+- Descrição de cada produto e escopo (texto pronto abaixo).
+- O vídeo: até 5, **50 MB cada**.
+- **Submit for review.**
+
+### Estado atual das contas conectadas
+
+| Conta | Modo | Escopos |
+|---|---|---|
+| #1 Aqueles Clipes | rascunho | só `user.info.basic` e `video.publish` — conectada antes da lista crescer |
+| #2 Aqueles Clipes | **direto** | os 4 |
+
+**Grave com a conta #2.** A #1 está com escopo faltando (conexão antiga) e não serve pra demonstrar
+`user.info.stats`. Se quiser consertar a #1, é só desconectar e conectar de novo.
+
+---
+
 ## Parte 1 — Vídeo do TikTok (obrigatório)
 
 **Limites oficiais:** até 5 vídeos, **50 MB cada**. Um vídeo só, de 3 a 5 minutos, resolve.
