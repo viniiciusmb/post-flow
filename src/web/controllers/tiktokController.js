@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const tiktokService = require('../../services/tiktokService');
 const tiktokAccountsRepository = require('../../repositories/tiktokAccountsRepository');
+const backfillPostingsService = require('../../services/backfillPostingsService');
 const planLimitsService = require('../../services/planLimitsService');
 
 function connect(req, res) {
@@ -38,7 +39,7 @@ async function callback(req, res) {
 
   const userInfo = await tiktokService.getUserInfo(tokens.access_token);
 
-  await tiktokAccountsRepository.upsertForClient({
+  const conta = await tiktokAccountsRepository.upsertForClient({
     clientUserId: req.session.user.id,
     tiktokOpenId: tokens.open_id,
     tiktokUnionId: userInfo.union_id || null,
@@ -48,6 +49,14 @@ async function callback(req, res) {
     refreshToken: tokens.refresh_token,
     expiresIn: tokens.expires_in,
     scopes: (tokens.scope || '').split(',').filter(Boolean),
+  });
+
+  // Cortes que ficaram prontos antes desta conta existir nao tinham pra onde
+  // ir, e conectar depois nao voltava atras pra busca-los - a fila abria vazia
+  // sem explicacao. Ver backfillPostingsService.
+  await backfillPostingsService.enfileirarCortesProntos({
+    clientUserId: req.session.user.id,
+    tiktokAccountId: conta.id,
   });
 
   res.redirect('/client?tiktok_connected=1');
