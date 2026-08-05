@@ -109,5 +109,22 @@ export function useT() {
   return useI18n().t
 }
 
+/**
+ * Traduz fora de componente.
+ *
+ * Existe pro código que roda longe da árvore do React — o cliente HTTP, um
+ * formatador chamado de dentro de template string. Lê o idioma do
+ * armazenamento em vez do contexto; como trocar de idioma recarrega a página,
+ * os dois nunca discordam.
+ */
+export function traduzir(chave: ChaveDeTraducao, valores?: Valores): string {
+  const dicionario = DICIONARIOS[idiomaInicial()] as Record<string, string>
+  const texto = dicionario[chave] ?? (pt as Record<string, string>)[chave] ?? chave
+  if (!valores) return texto
+  return texto.replace(/\{(\w+)\}/g, (bruto, nome) =>
+    nome in valores ? String(valores[nome]) : bruto
+  )
+}
+
 export type ChaveDeTraducao = keyof typeof pt
 export type Dicionario = Record<ChaveDeTraducao, string>

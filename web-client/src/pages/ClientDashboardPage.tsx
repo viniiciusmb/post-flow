@@ -101,20 +101,20 @@ export function ClientDashboardPage() {
             label={t("inicio.cortesPostados")}
             value={data.counts.clipsPostedInRange}
             href="/client/videos-clips"
-            hrefLabel="Ver cortes"
+            hrefLabel={t("inicio.verCortes")}
           />
           <Stat
             label={t("inicio.naFila")}
             value={data.counts.pendingInQueue}
             href="/client/tiktok-account"
-            hrefLabel="Ver a fila"
+            hrefLabel={t("inicio.verAFila")}
           />
           <Stat label={t("inicio.videosDetectados")} value={data.counts.videosInRange} />
           <Stat
             label={t("inicio.canaisMonitorados")}
             value={data.counts.youtubeChannels}
             href="/client/youtube-channels"
-            hrefLabel="Ver canais"
+            hrefLabel={t("inicio.verCanais")}
           />
         </StatRow>
       ) : (

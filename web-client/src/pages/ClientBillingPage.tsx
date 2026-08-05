@@ -1,3 +1,4 @@
+import { Rico } from "@/components/dashboard/Rico"
 import { useT } from "@/i18n"
 import { useEffect, useState } from "react"
 import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter } from "@tabler/icons-react"
@@ -293,50 +294,37 @@ export function ClientBillingPage() {
                   </summary>
 
                   <div className="flex flex-col gap-3 border-t border-border p-3.5 text-sm leading-relaxed text-muted-foreground">
-                    <p>{t("plano.aCobrancaE")}<strong className="text-foreground">{t("plano.videoPorVideo")}</strong>, e o valor sai
-                      do <strong className="text-foreground">{t("plano.minutoDoOriginal")}</strong> — não da
-                      quantidade de cortes. Um vídeo de {VIDEO_EXEMPLO_MIN} minutos que vira 3 cortes custa
-                      exatamente o mesmo que um que vira 12.
-                    </p>
-
-                    <p>
-                      Ela acontece <strong className="text-foreground">antes</strong> do processamento
-                      começar. O sistema vê a duração do vídeo, cobra no cartão e só então baixa e corta. Se o
-                      cartão não passar, nada é processado e você recebe o aviso pra atualizar o cartão — o
-                      vídeo fica esperando, sem cobrança nenhuma.
-                    </p>
+                    {/* Estes parágrafos têm negrito no meio da frase. Cortá-los
+                        em pedaços pra montar o JSX deixaria o dicionário
+                        ilegível pra quem traduz — o Rico resolve isso. */}
+                    <Rico html={t("plano.cobrancaExplicacao1", { min: VIDEO_EXEMPLO_MIN })} />
+                    <Rico html={t("plano.cobrancaExplicacao2")} />
 
                     <div className="rounded-md bg-muted/60 p-3">
-                      <p className="text-xs font-medium text-foreground">Exemplo</p>
-                      <p className="mt-1 text-[13px]">
-                        Um vídeo de {VIDEO_EXEMPLO_MIN} minutos entra na fila e sua cota já acabou. Antes de
-                        qualquer processamento, é feita uma cobrança de{" "}
-                        <strong className="text-foreground tabular-nums">
-                          {formatCents(data.overage.rateCentsNormal * VIDEO_EXEMPLO_MIN)}
-                        </strong>{" "}
-                        no cartão cadastrado ({VIDEO_EXEMPLO_MIN} min ×{" "}
-                        {formatCents(data.overage.rateCentsNormal)}). Deu certo, o vídeo é processado e sai
-                        quantos cortes a IA achar que valem a pena.
-                      </p>
-                      <p className="mt-2 text-[13px]">
-                        Com o programa instalado no seu computador, o mesmo vídeo custaria{" "}
-                        <strong className="text-foreground tabular-nums">
-                          {formatCents(data.overage.rateCentsBonus * VIDEO_EXEMPLO_MIN)}
-                        </strong>
-                        .
-                      </p>
+                      <p className="text-xs font-medium text-foreground">{t("adm.exemplo")}</p>
+                      <Rico
+                        className="mt-1 block text-[13px]"
+                        html={t("plano.cobrancaExemplo1", {
+                          min: VIDEO_EXEMPLO_MIN,
+                          total: formatCents(data.overage.rateCentsNormal * VIDEO_EXEMPLO_MIN),
+                          tarifa: formatCents(data.overage.rateCentsNormal),
+                        })}
+                      />
+                      <Rico
+                        className="mt-2 block text-[13px]"
+                        html={t("plano.cobrancaExemplo2", {
+                          total: formatCents(data.overage.rateCentsBonus * VIDEO_EXEMPLO_MIN),
+                        })}
+                      />
                     </div>
 
-                    <p className="text-xs">
-                      Enquanto houver cota do plano disponível, ela é usada primeiro e nada é cobrado no
-                      cartão.
-                    </p>
+                    <p className="text-xs">{t("plano.cotaPrimeiro")}</p>
                   </div>
                 </details>
 
                 {data.overage.pendingCents > 0 && (
                   <TonePill tone="danger">
-                    Excedente acumulado neste ciclo: {formatCents(data.overage.pendingCents)}
+                    {t("plano.excedenteAcumulado", { valor: formatCents(data.overage.pendingCents) })}
                   </TonePill>
                 )}
 
@@ -469,7 +457,7 @@ export function ClientBillingPage() {
                       disabled={isCurrent || busyKey === `subscribe-${plan.key}`}
                       onClick={() => subscribe(plan.key)}
                     >
-                      {isCurrent ? "Plano atual" : "Assinar / trocar de plano"}
+                      {isCurrent ? "Plano atual" : t("plano.assinarTrocar")}
                     </Button>
                   </div>
                 )

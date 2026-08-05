@@ -60,7 +60,7 @@ function ChannelVideoThumb({ video }: { video: SourceVideo }) {
           </TonePill>
         </div>
       </div>
-      <p className="line-clamp-2 text-xs leading-snug font-medium">{video.title}</p>
+      <p data-conteudo className="line-clamp-2 text-xs leading-snug font-medium">{video.title}</p>
       <p className="text-[10px] text-muted-foreground">
         {video.clipCount === 1 ? t("cortes.umCorte") : t("cortes.nCortes", { n: video.clipCount })}
       </p>
@@ -216,7 +216,7 @@ function ChannelCard({
               disabled={savingActive}
               className="shrink-0"
             >
-              {savingActive ? "Salvando..." : channel.isActive ? "Pausar" : "Retomar"}
+              {savingActive ? t("comum.salvando") : channel.isActive ? t("canais.pausar") : t("canais.retomar")}
             </Button>
           </div>
 
@@ -250,7 +250,7 @@ function ChannelCard({
                 </Select>
                 {linkedAccount && (
                   <p className="text-xs text-muted-foreground">
-                    Postagem automática {linkedAccount.autoPostEnabled ? "ligada" : "desligada"} pra essa conta.{" "}
+                    {linkedAccount.autoPostEnabled ? t("canais.postagemLigada") : t("canais.postagemDesligada")}{" "}
                     <a href="/client/tiktok-account" className="text-primary hover:underline">{t("canais.gerenciarEmPublicacao")}</a>
                   </p>
                 )}
@@ -269,11 +269,11 @@ function ChannelCard({
             <IconBrandGoogleDrive className="size-4 text-muted-foreground" />{t("canais.enviarProDrive")}</div>
           {!hasDriveConnection ? (
             <p className="text-xs text-muted-foreground">
-              Conecte seu{" "}
+              {t("canais.conecteSeu")}{" "}
               <a href="/client/settings" className="text-primary hover:underline">
                 Google Drive
               </a>{" "}
-              em Configurações pra habilitar.
+              {t("canais.emConfiguracoes")}
             </p>
           ) : (
             <>
@@ -312,13 +312,13 @@ function ChannelCard({
                     className="h-8 text-xs"
                   />
                   <Button type="submit" size="sm" disabled={savingExportFolder} className="shrink-0">
-                    {savingExportFolder ? "Salvando..." : channel.exportFolder ? "Trocar" : t("comum.salvar")}
+                    {savingExportFolder ? "Salvando..." : channel.exportFolder ? t("canais.trocar") : t("comum.salvar")}
                   </Button>
                 </div>
                 {!channel.exportFolder && (
                   <label className="flex items-start gap-1.5 text-xs text-muted-foreground">
                     <Checkbox checked={autoModeOnCreate} onCheckedChange={(c) => setAutoModeOnCreate(c === true)} className="mt-0.5" />
-                    Salvar todos os vídeos do canal "{channel.channelName}" automaticamente nessa pasta?
+                    {t("cortes.confirmarPastaCanal", { canal: channel.channelName ?? "" })}
                   </label>
                 )}
               </form>
@@ -398,7 +398,7 @@ export function YouTubeChannelsPage() {
         setLatestVideoPrompt({ channelId: created.channel.id, video: created.latestVideo })
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Nao foi possivel adicionar o canal.")
+      setError(err instanceof ApiError ? err.message : t("canais.naoFoiPossivelAdicionar"))
     } finally {
       setSubmitting(false)
     }
@@ -488,7 +488,7 @@ export function YouTubeChannelsPage() {
                     required
                   />
                   <Button type="submit" disabled={submitting}>
-                    {submitting ? "Adicionando..." : "Adicionar"}
+                    {submitting ? t("canais.adicionando") : t("canais.adicionar")}
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">{t("canais.soEntramDepois")}</p>
@@ -580,7 +580,7 @@ export function YouTubeChannelsPage() {
               }}
               disabled={processingLatest}
             >
-              {latestVideoError ? "Fechar" : t("canais.naoSoApartirDeAgora")}
+              {latestVideoError ? t("comum.fechar2") : t("canais.naoSoApartirDeAgora")}
             </Button>
             <Button onClick={acceptLatestVideo} disabled={processingLatest}>
               {processingLatest ? "Enviando..." : latestVideoError ? t("canais.tentarDeNovo") : t("canais.simProcessar")}

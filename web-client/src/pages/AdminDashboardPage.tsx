@@ -51,7 +51,7 @@ export function AdminDashboardPage() {
               icon={<IconUsers />}
               tone="indigo"
               href="/admin/clients"
-              hrefLabel="Ver clientes"
+              hrefLabel={t("adm.verClientes")}
             />
             <StatCard
               label="Postagens registradas"
@@ -73,7 +73,7 @@ export function AdminDashboardPage() {
               icon={<IconClockHour4 />}
               tone="violet"
               href="/admin/queue"
-              hrefLabel="Ver fila"
+              hrefLabel={t("adm.verFila")}
             />
             <StatCard
               label={t("inicio.cortesGerados")}

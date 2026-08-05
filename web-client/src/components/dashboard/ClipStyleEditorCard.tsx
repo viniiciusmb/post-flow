@@ -389,7 +389,7 @@ export function ClipStyleEditorCard() {
                 {settings.channels.map((c) => (
                   <SelectItem key={c.id} value={String(c.id)}>
                     {c.name}
-                    {c.hasOwnStyle ? " (estilo próprio)" : ""}
+                    {c.hasOwnStyle ? t("ce.estiloProprio") : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -490,7 +490,7 @@ export function ClipStyleEditorCard() {
                     }}
                   />
                   <Button asChild variant="outline" size="sm" disabled={enviandoTemplate}>
-                    <span>{enviandoTemplate ? "Enviando..." : settings.hasBackgroundTemplate ? "Trocar imagem" : "Enviar imagem"}</span>
+                    <span>{enviandoTemplate ? "Enviando..." : settings.hasBackgroundTemplate ? t("ce.trocarImagem") : t("ce.enviarImagem")}</span>
                   </Button>
                 </label>
                 {settings.hasBackgroundTemplate && (

@@ -57,7 +57,7 @@ export function AdminClientsPage() {
       ) : filtered && filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
           {clients.length === 0
-            ? "Nenhum cliente cadastrado ainda. Clientes criam a propria conta em /register."
+            ? t("adm.nenhumClienteCadastradoLongo")
             : t("adm.nenhumClienteEncontrado")}
         </div>
       ) : (

@@ -63,7 +63,7 @@ function BackupMetric({ backup }: { backup: AdminMetricsResponse["backup"] }) {
   const label =
     backup.status === "nunca"
       ? t("adm.backupNuncaRodou")
-      : backup.status === "erro"
+      : backup.status === t("adm.rotuloErro")
         ? t("adm.backupFalhou")
         : backup.status === "atrasado"
           ? t("adm.backupAtrasado")
@@ -189,7 +189,7 @@ export function AdminMetricsPage() {
             <Metric label={t("adm.videosDetectados")} value={data.volume.videosDetected} />
             <Metric label={t("adm.cortesGerados")} value={data.volume.clipsGenerated} />
             <Metric label={t("adm.cortesPostados")} value={data.volume.clipsPosted} />
-            <Metric label={t("adm.taxaAproveitamento")} value={pct(data.volume.aproveitamentoRate)} sub="cortes postados / gerados" />
+            <Metric label={t("adm.taxaAproveitamento")} value={pct(data.volume.aproveitamentoRate)} sub={t("adm.cortesPostadosGerados")} />
             <Metric label={t("adm.clientesAtivos")} value={data.clients.active} sub={t("adm.comAtividade30")} />
             <Metric label={t("adm.clientesInativos")} value={data.clients.inactive} />
           </Section>

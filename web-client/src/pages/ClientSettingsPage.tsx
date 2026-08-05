@@ -267,7 +267,7 @@ function DriveSection() {
                 )}
                 <Field>
                   <FieldLabel htmlFor="folderLink">
-                    {status.folder ? "Trocar pasta" : t("config.linkOuIdPastaCompartilhada")}
+                    {status.folder ? t("config.trocarPasta") : t("config.linkOuIdPastaCompartilhada")}
                   </FieldLabel>
                   <div className="flex gap-2">
                     <Input

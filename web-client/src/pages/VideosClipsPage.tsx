@@ -161,7 +161,7 @@ function ClipCard({
         </div>
       )}
       <div className="p-3">
-        <p className="mb-2 line-clamp-2 text-sm font-medium">{clip.title}</p>
+        <p data-conteudo className="mb-2 line-clamp-2 text-sm font-medium">{clip.title}</p>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>{formatDuration(clip.endSeconds - clip.startSeconds)}</span>
           {clip.status === "ready" && (
@@ -211,7 +211,7 @@ function ClipCard({
                     />
                     <label className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
                       <Checkbox checked={autoMode} onCheckedChange={(c) => setAutoMode(c === true)} className="mt-0.5" />
-                      Salvar todos os vídeos do canal "{channel.channelName}" automaticamente nessa pasta?
+                      {t("cortes.confirmarPastaCanal", { canal: channel.channelName ?? "" })}
                     </label>
                     <Button type="submit" size="sm" disabled={savingFolder} className="h-7 text-[11px]">
                       {savingFolder ? "Salvando..." : t("comum.salvar")}
@@ -262,7 +262,7 @@ function ExportAllToDriveButton({ videoId, onExported }: { videoId: number; onEx
     <div className="flex flex-wrap items-center gap-2">
       <Button type="button" variant="outline" size="sm" onClick={handleClick} disabled={sending} className="gap-1.5">
         <IconBrandGoogleDrive className="size-3.5" />
-        {sending ? "Enviando cortes..." : t("cortes.exportarTodos")}
+        {sending ? t("cortes.enviandoCortes") : t("cortes.exportarTodos")}
       </Button>
       {result && <span className="text-xs text-muted-foreground">{result}</span>}
       {error && <span className="text-xs text-destructive">{error}</span>}
@@ -379,7 +379,7 @@ function VideoRow({
   }
 
   async function remove() {
-    if (!confirm(`Remover "${video.title}" e todos os cortes gerados dele? Essa ação não pode ser desfeita.`)) return
+    if (!confirm(t("cortes.confirmarRemover", { titulo: video.title }))) return
     setDeleting(true)
     try {
       await api.delete(`/api/client/source-videos/${video.id}`)
@@ -425,7 +425,7 @@ function VideoRow({
         </button>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{video.title}</p>
+          <p data-conteudo className="truncate text-sm font-medium">{video.title}</p>
           <p className="text-xs text-muted-foreground">
             {video.channelName ?? "Link avulso / upload"} · {formatDuration(video.durationSeconds)}
             {video.publishedAt && ` · ${data(video.publishedAt)}`}
@@ -868,7 +868,7 @@ export function VideosClipsPage() {
         </Button>
         <Button variant="outline" size="sm" onClick={() => setShowStyleEditor((v) => !v)} className="gap-2">
           <IconAdjustmentsHorizontal className="size-4" />
-          {showStyleEditor ? "Ocultar estilo visual" : t("cortes.estiloVisual")}
+          {showStyleEditor ? t("cortes.ocultarEstiloVisual") : t("cortes.estiloVisual")}
         </Button>
       </div>
       {showUpload && <UploadVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} />}
@@ -892,13 +892,13 @@ export function VideosClipsPage() {
               ? t("comum.excluindo")
               : confirmingBulkDelete
                 ? `Confirmar exclusão de ${selectedIds.size}?`
-                : "Excluir selecionados"}
+                : t("cortes.excluirSelecionados")}
           </Button>
         </div>
       )}
 
       {channelIdFilter && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">{t("cortes.mostrandoSoVideosDe")}<span className="font-medium text-foreground">{filteredChannelName ?? "canal selecionado"}</span>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">{t("cortes.mostrandoSoVideosDe")}<span className="font-medium text-foreground">{filteredChannelName ?? t("cortes.canalSelecionado")}</span>
           <a href="/client/videos-clips" className="font-semibold text-primary hover:underline">
             limpar filtro
           </a>

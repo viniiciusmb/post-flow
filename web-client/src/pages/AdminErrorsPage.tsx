@@ -105,7 +105,7 @@ function ErrorRow({
           </Button>
           <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs" onClick={copiar}>
             <IconCopy className="size-3.5" />
-            {copiado ? "Copiado" : t("adm.copiarPraEnviar")}
+            {copiado ? t("comum.copiado") : t("adm.copiarPraEnviar")}
           </Button>
         </div>
 

@@ -41,7 +41,7 @@ export function TikTokConnectionCard({
       </div>
       <Button asChild variant={vazio ? "default" : "outline"} size="sm" className="shrink-0">
         <a href={vazio ? "/auth/tiktok/connect" : "/client/tiktok-account"}>
-          {vazio ? "Conectar TikTok" : "Gerenciar"}
+          {vazio ? t("config.conectarTikTok") : "Gerenciar"}
         </a>
       </Button>
     </div>

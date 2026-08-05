@@ -238,7 +238,7 @@ export function AdminQueuePage() {
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">
                     <TonePill tone={v.status === "ready" ? "success" : "danger"}>
-                      {v.status === "ready" ? t("adm.concluido") : "Erro"}
+                      {v.status === "ready" ? t("adm.concluido") : t("pub.abaErro")}
                     </TonePill>
                     {v.status === "error" && (
                       <Button variant="outline" size="sm" onClick={() => retry(v.id)} className="h-7 gap-1 text-xs">

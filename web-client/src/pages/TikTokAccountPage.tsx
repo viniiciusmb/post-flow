@@ -230,7 +230,7 @@ function PublishDefaultsCard({
                   ? t("pub.parceriaPaga")
                   : defaults.brandOrganicToggle
                     ? t("pub.suaMarca")
-                    : "não"}
+                    : t("comum.nao")}
               </strong>
             </span>
           </div>
@@ -711,7 +711,7 @@ function QueueCard({
     try {
       const result = await api.post<{ status: string; errorMessage: string | null }>(`/api/client/postings/${id}/post-now`, {})
       if (result.status === "error") {
-        setPostNowError(result.errorMessage || "A TikTok recusou publicar esse corte.")
+        setPostNowError(result.errorMessage || t("pub.tiktokRecusouEsse"))
       }
       await load()
     } catch (err) {
@@ -865,7 +865,7 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
     }
   }
 
-  // "Tentar postar agora": volta pro pendente e ja tenta publicar na
+  // t("pub.tentarPostarAgora"): volta pro pendente e ja tenta publicar na
   // sequencia, sem esperar o proximo ciclo automatico.
   async function retryNow(id: number) {
     setRetryingNowId(id)
@@ -888,7 +888,7 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
 
   const channels = Array.from(
     new Map<string, string>([
-      ...allChannels.map((c): [string, string] => [String(c.id), c.channelName ?? "Canal"]),
+      ...allChannels.map((c): [string, string] => [String(c.id), c.channelName ?? t("pub.canalRotulo")]),
       ...items.map((i): [string, string] => [String(i.channelId ?? "none"), i.channelName ?? t("pub.videoAvulso")]),
     ]).entries()
   )
@@ -954,7 +954,7 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
                     className="gap-1"
                   >
                     <IconSend className="size-3" />
-                    {retryingNowId === item.id ? "Tentando..." : "Tentar postar agora"}
+                    {retryingNowId === item.id ? "Tentando..." : t("pub.tentarPostarAgora")}
                   </Button>
                   <Button
                     size="xs"
@@ -1311,7 +1311,7 @@ export function TikTokAccountPage() {
         <Button asChild size="sm" className="shrink-0">
           <a href="/auth/tiktok/connect">
             <IconPlus className="size-4" />
-            Conectar {accounts && accounts.length > 0 ? "outra conta" : "conta TikTok"}
+            {t("pub.conectarPalavra")} {accounts && accounts.length > 0 ? t("pub.outraConta") : t("pub.contaTikTokMinusculo")}
           </a>
         </Button>
       </div>

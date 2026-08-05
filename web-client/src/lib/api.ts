@@ -1,3 +1,4 @@
+import { traduzir } from "@/i18n"
 export class ApiError extends Error {
   status: number
   /**
@@ -42,7 +43,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new ApiError(response.status, data.error || "Erro inesperado.", data)
+    throw new ApiError(response.status, data.error || traduzir("comum.erroInesperado"), data)
   }
 
   return data as T
