@@ -49,7 +49,7 @@ async function overview(req, res) {
 
 async function toggleFounderTunnel(req, res) {
   const founderTunnel = await downloadTunnelsRepository.findFounderTunnel();
-  if (!founderTunnel) return res.status(404).json({ error: 'Nenhum tunel de fallback configurado ainda.' });
+  if (!founderTunnel) return res.status(404).json({ error: res.locals.t('erros.nenhumFallback') });
 
   const updated = await downloadTunnelsRepository.setEnabled(founderTunnel.id, Boolean(req.body.enabled));
   res.json({ enabled: updated.enabled });

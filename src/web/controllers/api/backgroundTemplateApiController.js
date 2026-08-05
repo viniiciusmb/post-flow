@@ -52,7 +52,7 @@ function tipoDaImagem(caminho) {
 }
 
 async function upload(req, res) {
-  if (!req.file) return res.status(400).json({ error: 'Nenhuma imagem foi enviada.' });
+  if (!req.file) return res.status(400).json({ error: res.locals.t('erros.nenhumaImagem') });
 
   const alvo = await resolverAlvo(req);
   if (alvo.erro) {
@@ -63,7 +63,7 @@ async function upload(req, res) {
   const tipo = tipoDaImagem(req.file.path);
   if (!tipo) {
     fs.rmSync(req.file.path, { force: true });
-    return res.status(400).json({ error: 'Envie uma imagem PNG, JPG ou WEBP.' });
+    return res.status(400).json({ error: res.locals.t('erros.formatoImagem') });
   }
 
   const destinoDir = pastaDoCliente(req.session.user.id);
@@ -133,13 +133,13 @@ async function download(req, res) {
 
   const caminho = settings && settings.background_template_path;
   if (!caminho || !fs.existsSync(caminho)) {
-    return res.status(404).json({ error: 'Nenhum template enviado pra esse alvo.' });
+    return res.status(404).json({ error: res.locals.t('erros.nenhumTemplate') });
   }
   // Segunda checagem de posse: mesmo com o registro no banco, o arquivo tem que
   // estar dentro da pasta desse cliente.
   if (!path.resolve(caminho).startsWith(path.resolve(pastaDoCliente(req.session.user.id)) + path.sep)) {
     logger.error(`Template fora da pasta do cliente ${req.session.user.id}: ${caminho}`);
-    return res.status(404).json({ error: 'Template não encontrado.' });
+    return res.status(404).json({ error: res.locals.t('erros.templateNaoEncontrado') });
   }
   res.sendFile(path.resolve(caminho));
 }

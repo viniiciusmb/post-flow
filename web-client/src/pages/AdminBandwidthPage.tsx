@@ -1,3 +1,4 @@
+import { useT, type ChaveDeTraducao } from "@/i18n"
 import { useEffect, useState } from "react"
 import { IconGauge } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
@@ -16,11 +17,11 @@ function gb(bytes: number) {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`
 }
 
-const EGRESS_LABELS: Record<BandwidthEgressType, string> = {
-  client_tunnel: "Túnel dos clientes",
-  founder_tunnel: "Minha internet",
-  proxy: "Proxy residencial",
-  direct: "Direto (sem túnel/proxy)",
+const EGRESS_LABELS: Record<BandwidthEgressType, ChaveDeTraducao> = {
+  client_tunnel: "adm.tunelDosClientes",
+  founder_tunnel: "adm.minhaInternet",
+  proxy: "adm.proxyResidencial",
+  direct: "adm.direto",
 }
 
 function Metric({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
@@ -34,6 +35,7 @@ function Metric({ label, value, sub }: { label: string; value: string | number; 
 }
 
 export function AdminBandwidthPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const { range, setRange } = useDateRange()
   const [data, setData] = useState<AdminBandwidthResponse | null>(null)
@@ -77,9 +79,9 @@ export function AdminBandwidthPage() {
   const bytesByType = (type: BandwidthEgressType) => data?.byEgress.find((e) => e.egressType === type)?.bytes ?? 0
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Consumo de banda">
+    <DashboardLayout user={user} onLogout={logout} title={t("menu.banda")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Período</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">{t("inicio.periodo")}</h2>
         <DateRangeFilter value={range} onChange={setRange} />
       </div>
 
@@ -91,7 +93,7 @@ export function AdminBandwidthPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Minha internet</CardTitle>
-                <CardDescription>Túnel de reserva - usado quando o cliente não tem o programa instalado.</CardDescription>
+                <CardDescription>{t("adm.tunelReserva")}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
                 <div className="flex items-center gap-2">
@@ -101,23 +103,21 @@ export function AdminBandwidthPage() {
                     onCheckedChange={(c) => toggleFounder(c === true)}
                     disabled={savingFounder || !data.founderTunnel}
                   />
-                  <label htmlFor="founder-toggle" className="cursor-pointer text-sm font-medium">
-                    Usar como saída de download
-                  </label>
+                  <label htmlFor="founder-toggle" className="cursor-pointer text-sm font-medium">{t("adm.usarComoSaida")}</label>
                   {data.founderTunnel && (
                     <TonePill tone={data.founderTunnel.connected ? "success" : "neutral"} className="ml-auto">
                       {data.founderTunnel.connected ? "Conectado" : "Desconectado"}
                     </TonePill>
                   )}
                 </div>
-                <Metric label="GB consumidos no período" value={gb(bytesByType("founder_tunnel"))} />
+                <Metric label={t("adm.bandaDescricao")} value={gb(bytesByType("founder_tunnel"))} />
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Proxy residencial</CardTitle>
-                <CardDescription>Último recurso pago - só é tentado quando os túneis falham.</CardDescription>
+                <CardDescription>{t("adm.ultimoRecursoPago")}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
                 <div className="flex items-center gap-2">
@@ -127,26 +127,22 @@ export function AdminBandwidthPage() {
                     onCheckedChange={(c) => toggleProxy(c === true)}
                     disabled={savingProxy || !data.proxy.configured}
                   />
-                  <label htmlFor="proxy-toggle" className="cursor-pointer text-sm font-medium">
-                    Usar como saída de download
-                  </label>
+                  <label htmlFor="proxy-toggle" className="cursor-pointer text-sm font-medium">{t("adm.usarComoSaida")}</label>
                   {!data.proxy.configured && (
-                    <TonePill tone="neutral" className="ml-auto">
-                      Não configurado
-                    </TonePill>
+                    <TonePill tone="neutral" className="ml-auto">{t("adm.naoConfigurado")}</TonePill>
                   )}
                 </div>
-                <Metric label="GB consumidos no período" value={gb(bytesByType("proxy"))} />
+                <Metric label={t("adm.bandaDescricao")} value={gb(bytesByType("proxy"))} />
               </CardContent>
             </Card>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Consumo total por origem</CardTitle>
+              <CardTitle className="text-base">{t("adm.consumoTotalPorOrigem")}</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-6 sm:grid-cols-4">
-              <Metric label="Total no período" value={gb(totalBytes)} />
+              <Metric label={t("adm.totalNoPeriodo")} value={gb(totalBytes)} />
               <Metric label={EGRESS_LABELS.client_tunnel} value={gb(bytesByType("client_tunnel"))} />
               <Metric label={EGRESS_LABELS.founder_tunnel} value={gb(bytesByType("founder_tunnel"))} />
               <Metric label={EGRESS_LABELS.direct} value={gb(bytesByType("direct"))} />
@@ -156,24 +152,22 @@ export function AdminBandwidthPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <IconGauge className="size-4 text-muted-foreground" />
-                Consumo por cliente
-              </CardTitle>
+                <IconGauge className="size-4 text-muted-foreground" />{t("adm.consumoPorCliente")}</CardTitle>
               <CardDescription>
-                "Pelo túnel próprio" é banda que saiu pela internet do cliente de verdade; "caiu pro reserva" é banda
+                t("adm.peloTunelProprio") é banda que saiu pela internet do cliente de verdade; "caiu pro reserva" é banda
                 que usou a sua internet ou o proxy pago porque o túnel do cliente não estava disponível.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {data.byClient.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum download registrado nesse período ainda.</p>
+                <p className="text-sm text-muted-foreground">{t("adm.nenhumDownloadRegistrado")}</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead>Cliente</TableHead>
-                      <TableHead>Vídeos</TableHead>
-                      <TableHead>Pelo túnel próprio</TableHead>
+                      <TableHead>{t("adm.videos")}</TableHead>
+                      <TableHead>{t("adm.peloTunelProprio")}</TableHead>
                       <TableHead>Caiu pro reserva</TableHead>
                     </TableRow>
                   </TableHeader>

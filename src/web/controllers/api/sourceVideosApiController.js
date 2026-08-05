@@ -43,7 +43,7 @@ async function resolveTiktokAccountIds(req) {
   const validIds = accounts.filter((a) => ids.includes(Number(a.id))).map((a) => a.id);
 
   if (validIds.length === 0) {
-    return { error: 'Escolha pelo menos uma conta TikTok pra receber esse vídeo.' };
+    return { error: res.locals.t('erros.escolhaContaVideo') };
   }
   return { tiktokAccountIds: validIds };
 }
@@ -81,7 +81,7 @@ async function list(req, res) {
 
 async function listClips(req, res) {
   const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(Number(req.params.id), req.session.user.id);
-  if (!sourceVideo) return res.status(404).json({ error: 'Vídeo não encontrado.' });
+  if (!sourceVideo) return res.status(404).json({ error: res.locals.t('erros.videoNaoEncontrado') });
 
   const clips = await clipsRepository.listBySourceVideoId(sourceVideo.id);
   res.json({
@@ -106,11 +106,11 @@ async function listClips(req, res) {
 async function downloadClip(req, res) {
   const clip = await clipsRepository.findByIdOwnedByClient(Number(req.params.id), req.session.user.id);
   if (!clip || clip.status !== 'ready' || !clip.local_clip_path) {
-    return res.status(404).json({ error: 'Corte não encontrado ou ainda não está pronto.' });
+    return res.status(404).json({ error: res.locals.t('erros.corteNaoPronto') });
   }
   if (!fs.existsSync(clip.local_clip_path)) {
     return res.status(410).json({
-      error: 'O arquivo desse corte não está mais no servidor (isso acontece se o serviço foi reiniciado antes do download).',
+      error: res.locals.t('erros.arquivoSumiuReinicio'),
     });
   }
 
@@ -123,7 +123,7 @@ async function downloadClip(req, res) {
 async function clipThumbnail(req, res) {
   const clip = await clipsRepository.findByIdOwnedByClient(Number(req.params.id), req.session.user.id);
   if (!clip || !clip.thumbnail_path || !fs.existsSync(clip.thumbnail_path)) {
-    return res.status(404).json({ error: 'Capa não encontrada.' });
+    return res.status(404).json({ error: res.locals.t('erros.capaNaoEncontrada') });
   }
   res.sendFile(clip.thumbnail_path);
 }
@@ -135,7 +135,7 @@ async function createManual(req, res) {
   const url = String(req.body.url || '').trim();
   const videoId = ytDlpService.extractVideoId(url);
   if (!videoId) {
-    return res.status(400).json({ error: 'Link do YouTube inválido. Cole a URL completa do vídeo.' });
+    return res.status(400).json({ error: res.locals.t('erros.linkYoutubeInvalido') });
   }
 
   // Video ja existe (pra este MESMO cliente - a unicidade e por dono, ver
@@ -189,7 +189,7 @@ async function createManual(req, res) {
     durationSeconds: metadata.durationSeconds,
   });
   if (!sourceVideo) {
-    return res.status(409).json({ error: 'Esse vídeo já foi adicionado antes.' });
+    return res.status(409).json({ error: res.locals.t('erros.videoJaAdicionado') });
   }
 
   if (targets.tiktokAccountIds.length > 0) {
@@ -208,7 +208,7 @@ async function createManual(req, res) {
 // aqui so confere a duracao e entra na mesma fila de processamento.
 async function uploadVideo(req, res) {
   if (!req.file) {
-    return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+    return res.status(400).json({ error: res.locals.t('erros.nenhumArquivo') });
   }
 
   const targets = await resolveTiktokAccountIds(req);
@@ -222,7 +222,7 @@ async function uploadVideo(req, res) {
     durationSeconds = Math.round(await videoEditingService.probeDuration(req.file.path));
   } catch {
     fs.unlinkSync(req.file.path);
-    return res.status(400).json({ error: 'Não foi possível ler esse arquivo de vídeo.' });
+    return res.status(400).json({ error: res.locals.t('erros.naoLeuVideo') });
   }
 
   const title = String(req.body.title || '').trim() || path.parse(req.file.originalname).name;
@@ -260,9 +260,9 @@ async function uploadVideo(req, res) {
 async function enqueue(req, res) {
   const id = Number(req.params.id);
   const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(id, req.session.user.id);
-  if (!sourceVideo) return res.status(404).json({ error: 'Vídeo não encontrado.' });
+  if (!sourceVideo) return res.status(404).json({ error: res.locals.t('erros.videoNaoEncontrado') });
   if (!['detected', 'paused'].includes(sourceVideo.status)) {
-    return res.status(400).json({ error: 'Esse vídeo não está esperando na fila.' });
+    return res.status(400).json({ error: res.locals.t('erros.videoNaoNaFila') });
   }
 
   // Um video pausado precisa da flag limpa, senao o worker para de novo no
@@ -281,14 +281,14 @@ async function enqueue(req, res) {
 async function retry(req, res) {
   const id = Number(req.params.id);
   const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(id, req.session.user.id);
-  if (!sourceVideo) return res.status(404).json({ error: 'Vídeo não encontrado.' });
+  if (!sourceVideo) return res.status(404).json({ error: res.locals.t('erros.videoNaoEncontrado') });
   if (!['error', 'cancelled'].includes(sourceVideo.status)) {
-    return res.status(400).json({ error: 'Esse vídeo não está com erro nem cancelado no momento.' });
+    return res.status(400).json({ error: res.locals.t('erros.videoNaoComErro') });
   }
 
   await clipsRepository.deleteBySourceVideoId(id);
   const updated = await sourceVideosRepository.resetForRetry(id);
-  if (!updated) return res.status(409).json({ error: 'Não foi possível reiniciar esse vídeo agora, tente de novo.' });
+  if (!updated) return res.status(409).json({ error: res.locals.t('erros.naoReiniciouVideo') });
 
   const boss = await queueService.getBoss();
   const priority = await queuePriorityService.resolveQueuePriorityForClient(req.session.user.id);
@@ -304,7 +304,7 @@ async function pause(req, res) {
   const id = Number(req.params.id);
   const updated = await sourceVideosRepository.requestPauseByIdOwnedByClient(id, req.session.user.id);
   if (!updated) {
-    return res.status(400).json({ error: 'Esse vídeo não está em processamento no momento (ou não existe).' });
+    return res.status(400).json({ error: res.locals.t('erros.videoNaoProcessando') });
   }
   res.json({ id: updated.id, pauseRequested: true });
 }
@@ -315,7 +315,7 @@ async function resume(req, res) {
   const id = Number(req.params.id);
   const updated = await sourceVideosRepository.resumeByIdOwnedByClient(id, req.session.user.id);
   if (!updated) {
-    return res.status(400).json({ error: 'Esse vídeo não está pausado no momento (ou não existe).' });
+    return res.status(400).json({ error: res.locals.t('erros.videoNaoPausado') });
   }
 
   const boss = await queueService.getBoss();
@@ -330,7 +330,7 @@ async function resume(req, res) {
 async function remove(req, res) {
   const id = Number(req.params.id);
   const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(id, req.session.user.id);
-  if (!sourceVideo) return res.status(404).json({ error: 'Vídeo não encontrado.' });
+  if (!sourceVideo) return res.status(404).json({ error: res.locals.t('erros.videoNaoEncontrado') });
 
   const clips = await clipsRepository.listBySourceVideoId(id);
   const filesToRemove = [
@@ -339,7 +339,7 @@ async function remove(req, res) {
   ].filter(Boolean);
 
   const deleted = await sourceVideosRepository.deleteByIdOwnedByClient(id, req.session.user.id);
-  if (!deleted) return res.status(404).json({ error: 'Vídeo não encontrado.' });
+  if (!deleted) return res.status(404).json({ error: res.locals.t('erros.videoNaoEncontrado') });
 
   for (const filePath of filesToRemove) {
     fs.rm(filePath, { force: true }, () => {});
@@ -355,18 +355,18 @@ async function remove(req, res) {
 async function exportClipToDrive(req, res) {
   const clip = await clipsRepository.findByIdWithChannelOwnedByClient(Number(req.params.id), req.session.user.id);
   if (!clip || clip.status !== 'ready' || !clip.local_clip_path) {
-    return res.status(404).json({ error: 'Corte não encontrado ou ainda não está pronto.' });
+    return res.status(404).json({ error: res.locals.t('erros.corteNaoPronto') });
   }
   if (!clip.youtube_channel_id) {
-    return res.status(400).json({ error: 'Esse corte não veio de um canal do YouTube, então não tem pasta de destino.' });
+    return res.status(400).json({ error: res.locals.t('erros.corteSemCanal') });
   }
   if (!fs.existsSync(clip.local_clip_path)) {
-    return res.status(410).json({ error: 'O arquivo desse corte não está mais no servidor.' });
+    return res.status(410).json({ error: res.locals.t('erros.arquivoSumiu') });
   }
 
   const folder = await driveFoldersRepository.findExportFolderByChannelId(clip.youtube_channel_id);
   if (!folder) {
-    return res.status(400).json({ error: 'Configure uma pasta de destino pra esse canal primeiro (na tela Canais).' });
+    return res.status(400).json({ error: res.locals.t('erros.configurePasta') });
   }
 
   let accessToken;
@@ -378,7 +378,7 @@ async function exportClipToDrive(req, res) {
     accessToken = null;
   }
   if (!accessToken) {
-    return res.status(400).json({ error: 'A conexão com o Google Drive não está mais válida. Reconecte em Configurações.' });
+    return res.status(400).json({ error: res.locals.t('erros.driveInvalido') });
   }
 
   const filename = `${(clip.title || 'corte').replace(/[^\p{L}\p{N}\s-]/gu, '').trim()}.mp4`;
@@ -401,14 +401,14 @@ async function exportClipToDrive(req, res) {
 async function exportAllClipsToDrive(req, res) {
   const sourceVideoId = Number(req.params.id);
   const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(sourceVideoId, req.session.user.id);
-  if (!sourceVideo) return res.status(404).json({ error: 'Vídeo não encontrado.' });
+  if (!sourceVideo) return res.status(404).json({ error: res.locals.t('erros.videoNaoEncontrado') });
   if (!sourceVideo.youtube_channel_id) {
-    return res.status(400).json({ error: 'Esse vídeo não veio de um canal do YouTube, então não tem pasta de destino.' });
+    return res.status(400).json({ error: res.locals.t('erros.videoSemCanal') });
   }
 
   const folder = await driveFoldersRepository.findExportFolderByChannelId(sourceVideo.youtube_channel_id);
   if (!folder) {
-    return res.status(400).json({ error: 'Configure uma pasta de destino pra esse canal primeiro (na tela Canais).' });
+    return res.status(400).json({ error: res.locals.t('erros.configurePasta') });
   }
 
   let accessToken;
@@ -420,7 +420,7 @@ async function exportAllClipsToDrive(req, res) {
     accessToken = null;
   }
   if (!accessToken) {
-    return res.status(400).json({ error: 'A conexão com o Google Drive não está mais válida. Reconecte em Configurações.' });
+    return res.status(400).json({ error: res.locals.t('erros.driveInvalido') });
   }
 
   const clips = await clipsRepository.listBySourceVideoId(sourceVideoId);
@@ -454,7 +454,7 @@ async function exportAllClipsToDrive(req, res) {
 async function bulkRemove(req, res) {
   const ids = Array.isArray(req.body.ids) ? req.body.ids.map(Number).filter((n) => Number.isInteger(n)) : [];
   if (ids.length === 0) {
-    return res.status(400).json({ error: 'Nenhum vídeo selecionado.' });
+    return res.status(400).json({ error: res.locals.t('erros.nenhumVideoSelecionado') });
   }
 
   let deletedCount = 0;

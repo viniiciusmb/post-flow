@@ -1,3 +1,4 @@
+import { useT } from "@/i18n"
 import { data } from "@/lib/formatoLocal"
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
@@ -22,6 +23,7 @@ function initials(name: string) {
 }
 
 export function AdminClientsPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const [clients, setClients] = useState<AdminClient[] | null>(null)
   const [search, setSearch] = useState("")
@@ -39,9 +41,9 @@ export function AdminClientsPage() {
   })
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Clientes">
+    <DashboardLayout user={user} onLogout={logout} title={t("menu.clientes")}>
       <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-muted-foreground">Todos os clientes cadastrados na plataforma.</p>
+        <p className="text-sm text-muted-foreground">{t("adm.clientesDescricao")}</p>
         <Input
           placeholder="Buscar cliente..."
           value={search}
@@ -56,7 +58,7 @@ export function AdminClientsPage() {
         <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
           {clients.length === 0
             ? "Nenhum cliente cadastrado ainda. Clientes criam a propria conta em /register."
-            : "Nenhum cliente encontrado pra essa busca."}
+            : t("adm.nenhumClienteEncontrado")}
         </div>
       ) : (
         <div className="rounded-lg border border-border">
@@ -65,8 +67,8 @@ export function AdminClientsPage() {
               <TableRow className="hover:bg-transparent">
                 <TableHead>Cliente</TableHead>
                 <TableHead>Conta TikTok</TableHead>
-                <TableHead className="text-center">Canais do YouTube</TableHead>
-                <TableHead>Cadastrado em</TableHead>
+                <TableHead className="text-center">{t("adm.canaisDoYoutube")}</TableHead>
+                <TableHead>{t("adm.cadastradoEm")}</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -89,7 +91,7 @@ export function AdminClientsPage() {
                       <span
                         className={`size-1.5 rounded-full ${c.tiktokConnected ? "bg-status-posted" : "bg-muted-foreground/40"}`}
                       />
-                      {c.tiktokConnected ? c.tiktokDisplayName : "Não conectado"}
+                      {c.tiktokConnected ? c.tiktokDisplayName : t("adm.naoConectado")}
                     </span>
                   </TableCell>
                   <TableCell className="text-center">

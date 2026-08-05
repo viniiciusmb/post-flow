@@ -30,7 +30,7 @@ const RESPOSTA_PADRAO =
 
 async function request(req, res) {
   const email = String(req.body.email || '').trim().toLowerCase();
-  if (!email) return res.status(400).json({ error: 'Escreva o e-mail da sua conta.' });
+  if (!email) return res.status(400).json({ error: res.locals.t('erros.escrevaEmail') });
 
   const user = await usersRepository.findByEmail(email);
 
@@ -75,7 +75,7 @@ async function reset(req, res) {
 
   const encontrado = await tokensRepository.findValidUser(token);
   if (!encontrado) {
-    return res.status(400).json({ error: 'Esse link expirou ou já foi usado. Peça um novo.', expired: true });
+    return res.status(400).json({ error: res.locals.t('erros.linkExpirado'), expired: true });
   }
 
   // Marca o token ANTES de trocar a senha. Se dois cliques chegarem juntos, só
@@ -83,7 +83,7 @@ async function reset(req, res) {
   // requisições gravarem senhas diferentes e a pessoa não saber qual valeu.
   const conseguiuMarcar = await tokensRepository.markUsed(encontrado.id);
   if (!conseguiuMarcar) {
-    return res.status(400).json({ error: 'Esse link já foi usado. Peça um novo.', expired: true });
+    return res.status(400).json({ error: res.locals.t('erros.linkUsado'), expired: true });
   }
 
   const hash = await bcrypt.hash(senha, SALT_ROUNDS);

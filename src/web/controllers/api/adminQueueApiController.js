@@ -45,14 +45,14 @@ async function overview(req, res) {
 // duplicava os cortes que ja estavam prontos.
 async function retry(req, res) {
   const sourceVideo = await sourceVideosRepository.findById(Number(req.params.id));
-  if (!sourceVideo) return res.status(404).json({ error: 'Vídeo não encontrado.' });
+  if (!sourceVideo) return res.status(404).json({ error: res.locals.t('erros.videoNaoEncontrado') });
   if (!['error', 'cancelled'].includes(sourceVideo.status)) {
-    return res.status(400).json({ error: 'Esse vídeo não está com erro nem cancelado no momento.' });
+    return res.status(400).json({ error: res.locals.t('erros.videoNaoComErro') });
   }
 
   await clipsRepository.deleteBySourceVideoId(sourceVideo.id);
   const updated = await sourceVideosRepository.resetForRetry(sourceVideo.id);
-  if (!updated) return res.status(409).json({ error: 'Não foi possível reiniciar esse vídeo agora, tente de novo.' });
+  if (!updated) return res.status(409).json({ error: res.locals.t('erros.naoReiniciouVideo') });
 
   const clientUserId = sourceVideo.youtube_channel_id
     ? (await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id)).client_user_id

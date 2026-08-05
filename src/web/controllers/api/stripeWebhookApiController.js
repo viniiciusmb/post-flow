@@ -147,7 +147,7 @@ async function webhook(req, res) {
     res.json({ received: true });
   } catch (err) {
     logger.error(`Falha ao processar webhook da Stripe (${event.type}):`, err);
-    res.status(500).json({ error: 'Falha ao processar evento.' });
+    res.status(500).json({ error: res.locals.t('erros.falhaEvento') });
   }
 }
 

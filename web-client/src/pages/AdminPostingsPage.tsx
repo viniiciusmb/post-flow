@@ -1,3 +1,4 @@
+import { useT } from "@/i18n"
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Input } from "@/components/ui/input"
@@ -10,6 +11,7 @@ import { api } from "@/lib/api"
 import type { AdminPostingsResponse } from "@/types/api"
 
 export function AdminPostingsPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const { range, setRange } = useDateRange()
   const [rows, setRows] = useState<PostingRow[] | null>(null)
@@ -42,9 +44,9 @@ export function AdminPostingsPage() {
   })
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Publicações">
+    <DashboardLayout user={user} onLogout={logout} title={t("menu.postagens")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">Todas as postagens, de todos os clientes, no período.</p>
+        <p className="text-sm text-muted-foreground">{t("adm.publicacoesDescricao")}</p>
         <div className="flex flex-wrap items-center gap-3">
           <DateRangeFilter value={range} onChange={setRange} />
           <Input
@@ -67,8 +69,8 @@ export function AdminPostingsPage() {
           showTiktokProfile
           emptyMessage={
             rows.length === 0
-              ? "Nenhuma postagem nesse período."
-              : "Nenhuma postagem encontrada pra essa busca."
+              ? t("adm.nenhumaPostagem")
+              : t("adm.nenhumaPostagemBusca")
           }
         />
       )}

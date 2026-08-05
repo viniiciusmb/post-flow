@@ -140,32 +140,32 @@ async function update(req, res) {
     titleStyle,
   } = req.body;
 
-  if (!ASPECT_RATIOS.includes(aspectRatio)) return res.status(400).json({ error: 'Proporcao inválida.' });
-  if (!FRAMINGS.includes(framing)) return res.status(400).json({ error: 'Enquadramento inválido.' });
-  if (!QUALITIES.includes(quality)) return res.status(400).json({ error: 'Qualidade inválida.' });
-  if (!CAPTION_STYLES.includes(captionStyle)) return res.status(400).json({ error: 'Estilo de legenda inválido.' });
-  if (!TITLE_STYLES.includes(titleStyle)) return res.status(400).json({ error: 'Estilo de título inválido.' });
-  if (!CLIP_LENGTHS.includes(clipLength)) return res.status(400).json({ error: 'Estilo de corte inválido.' });
-  if (!CLIP_MODES.includes(clipMode)) return res.status(400).json({ error: 'Modo de corte inválido.' });
-  if (!DESCRIPTION_MODES.includes(descriptionMode)) return res.status(400).json({ error: 'Modo de descrição inválido.' });
-  if (!CROP_STYLE_MODES.includes(cropStyleMode)) return res.status(400).json({ error: 'Modo de estilo de corte inválido.' });
+  if (!ASPECT_RATIOS.includes(aspectRatio)) return res.status(400).json({ error: res.locals.t('erros.proporcaoInvalida') });
+  if (!FRAMINGS.includes(framing)) return res.status(400).json({ error: res.locals.t('erros.enquadramentoInvalido') });
+  if (!QUALITIES.includes(quality)) return res.status(400).json({ error: res.locals.t('erros.qualidadeInvalida') });
+  if (!CAPTION_STYLES.includes(captionStyle)) return res.status(400).json({ error: res.locals.t('erros.estiloLegendaInvalido') });
+  if (!TITLE_STYLES.includes(titleStyle)) return res.status(400).json({ error: res.locals.t('erros.estiloTituloInvalido') });
+  if (!CLIP_LENGTHS.includes(clipLength)) return res.status(400).json({ error: res.locals.t('erros.estiloCorteInvalido') });
+  if (!CLIP_MODES.includes(clipMode)) return res.status(400).json({ error: res.locals.t('erros.modoCorteInvalido') });
+  if (!DESCRIPTION_MODES.includes(descriptionMode)) return res.status(400).json({ error: res.locals.t('erros.modoDescricaoInvalido') });
+  if (!CROP_STYLE_MODES.includes(cropStyleMode)) return res.status(400).json({ error: res.locals.t('erros.modoEstiloInvalido') });
   if (!PART_LABEL_POSITIONS.includes(partLabelPosition)) {
-    return res.status(400).json({ error: 'Posicao da numeracao de parte inválida.' });
+    return res.status(400).json({ error: res.locals.t('erros.posicaoNumeracaoInvalida') });
   }
   const maxClipsNum = Number(maxClips);
   if (!Number.isInteger(maxClipsNum) || maxClipsNum < 1 || maxClipsNum > 30) {
-    return res.status(400).json({ error: 'Número de cortes inválido (1 a 30).' });
+    return res.status(400).json({ error: res.locals.t('erros.numeroCortesInvalido') });
   }
   const titleSecondsNum = Number(titleSeconds);
   if (!Number.isInteger(titleSecondsNum) || titleSecondsNum < 1 || titleSecondsNum > 15) {
-    return res.status(400).json({ error: 'Duração do título inválida (1 a 15s).' });
+    return res.status(400).json({ error: res.locals.t('erros.duracaoTituloInvalida') });
   }
   const cropZoomPercentNum = Number(cropZoomPercent);
   if (!Number.isInteger(cropZoomPercentNum) || cropZoomPercentNum < 0 || cropZoomPercentNum > 100) {
-    return res.status(400).json({ error: 'Zoom de enquadramento inválido (0 a 100).' });
+    return res.status(400).json({ error: res.locals.t('erros.zoomInvalido') });
   }
   if (descriptionMode === 'fixed' && !String(descriptionTemplate || '').trim()) {
-    return res.status(400).json({ error: 'Escreva a descrição fixa que será usada.' });
+    return res.status(400).json({ error: res.locals.t('erros.escrevaDescricao') });
   }
 
   const alvo = await resolverAlvo(req);
@@ -174,10 +174,10 @@ async function update(req, res) {
   const backgroundHeight = Number(req.body.backgroundVideoHeightPercent ?? 100);
   const backgroundOffset = Number(req.body.backgroundVideoOffsetPercent ?? 50);
   if (!Number.isInteger(backgroundHeight) || backgroundHeight < 10 || backgroundHeight > 100) {
-    return res.status(400).json({ error: 'Altura do vídeo no template inválida (10 a 100).' });
+    return res.status(400).json({ error: res.locals.t('erros.alturaInvalida') });
   }
   if (!Number.isInteger(backgroundOffset) || backgroundOffset < 0 || backgroundOffset > 100) {
-    return res.status(400).json({ error: 'Posição do vídeo no template inválida (0 a 100).' });
+    return res.status(400).json({ error: res.locals.t('erros.posicaoVideoInvalida') });
   }
 
   // O caminho do template não vem do cliente: é preservado do que já está
@@ -202,7 +202,7 @@ async function update(req, res) {
   // Escolher "template" sem ter enviado imagem nenhuma renderizaria com o
   // fundo desfocado sem explicar por que - melhor recusar aqui e dizer.
   if (backgroundStyle === 'template' && !atual.background_template_path) {
-    return res.status(400).json({ error: 'Envie a imagem de fundo antes de escolher essa opção.' });
+    return res.status(400).json({ error: res.locals.t('erros.envieImagemAntes') });
   }
 
   const saved = await clientVideoSettingsRepository.upsert(req.session.user.id, {
@@ -235,7 +235,7 @@ async function removeChannelStyle(req, res) {
   const id = Number(req.params.channelId);
   const canal = await youtubeChannelsRepository.findById(id);
   if (!canal || String(canal.client_user_id) !== String(req.session.user.id)) {
-    return res.status(404).json({ error: 'Canal não encontrado.' });
+    return res.status(404).json({ error: res.locals.t('erros.canalNaoEncontrado') });
   }
   await clientVideoSettingsRepository.removeChannelOverride(req.session.user.id, id);
   res.json({ ok: true });

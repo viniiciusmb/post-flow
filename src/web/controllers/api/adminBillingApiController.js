@@ -50,7 +50,7 @@ async function listPlans(req, res) {
 async function assignPlan(req, res) {
   const clientUserId = Number(req.params.clientUserId);
   const plan = await subscriptionPlansRepository.findByKey(String(req.body.planKey || ''));
-  if (!plan) return res.status(400).json({ error: 'Plano inválido.' });
+  if (!plan) return res.status(400).json({ error: res.locals.t('erros.planoInvalido') });
 
   const before = await clientSubscriptionsRepository.getOrCreate(clientUserId);
   const firstActivation = before.status === 'sem_plano' || !before.plan_id;

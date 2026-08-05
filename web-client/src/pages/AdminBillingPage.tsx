@@ -1,3 +1,4 @@
+import { useT, type ChaveDeTraducao } from "@/i18n"
 import { useEffect, useState } from "react"
 import { IconReceipt2 } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
@@ -34,14 +35,15 @@ const STATUS_TONE: Record<SubscriptionStatus, "success" | "danger" | "neutral"> 
   sem_plano: "neutral",
 }
 
-const STATUS_LABEL: Record<SubscriptionStatus, string> = {
-  ativo: "Ativo",
-  inadimplente: "Inadimplente",
-  cancelado: "Cancelado",
-  sem_plano: "Sem plano",
+const STATUS_LABEL: Record<SubscriptionStatus, ChaveDeTraducao> = {
+  ativo: "adm.ativo",
+  inadimplente: "adm.inadimplente",
+  cancelado: "adm.cancelado",
+  sem_plano: "adm.semPlano",
 }
 
 export function AdminBillingPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const [clients, setClients] = useState<AdminBillingClient[] | null>(null)
   const [plans, setPlans] = useState<BillingPlan[] | null>(null)
@@ -75,7 +77,7 @@ export function AdminBillingPage() {
       await api.post(`/api/admin/billing/clients/${clientUserId}/plan`, { planKey })
       await load()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível atribuir o plano.")
+      setError(err instanceof ApiError ? err.message : t("adm.naoFoiPossivelAtribuir"))
     } finally {
       setSavingClientId(null)
     }
@@ -91,7 +93,7 @@ export function AdminBillingPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Assinaturas dos clientes</CardTitle>
+              <CardTitle className="text-base">{t("adm.assinaturasClientes")}</CardTitle>
               <CardDescription>
                 Atribua um plano manualmente pra ativar um cliente sem depender da Stripe (útil enquanto as chaves
                 de pagamento não chegaram, ou pra qualquer ativação manual).
@@ -107,7 +109,7 @@ export function AdminBillingPage() {
                       <TableHead>Cliente</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Plano</TableHead>
-                      <TableHead>Excedente automático</TableHead>
+                      <TableHead>{t("adm.excedenteAutomatico")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -115,7 +117,7 @@ export function AdminBillingPage() {
                       <TableRow key={c.clientUserId}>
                         <TableCell className="font-medium">{c.businessName || c.email}</TableCell>
                         <TableCell>
-                          <TonePill tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</TonePill>
+                          <TonePill tone={STATUS_TONE[c.status]}>{t(STATUS_LABEL[c.status])}</TonePill>
                         </TableCell>
                         <TableCell>
                           <Select
@@ -124,7 +126,7 @@ export function AdminBillingPage() {
                             disabled={savingClientId === c.clientUserId}
                           >
                             <SelectTrigger size="sm" className="w-40">
-                              <SelectValue placeholder="Sem plano" />
+                              <SelectValue placeholder={t("adm.semPlano")} />
                             </SelectTrigger>
                             <SelectContent>
                               {plans.map((p) => (
@@ -151,10 +153,8 @@ export function AdminBillingPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <IconReceipt2 className="size-4 text-muted-foreground" />
-                Faturamento de excedente
-              </CardTitle>
-              <CardDescription>Quanto cada cliente acumulou de excedente (pendente + já faturado/pago).</CardDescription>
+                <IconReceipt2 className="size-4 text-muted-foreground" />{t("adm.faturamentoExcedente")}</CardTitle>
+              <CardDescription>{t("adm.quantoAcumulou")}</CardDescription>
             </CardHeader>
             <CardContent>
               {overage.length === 0 ? (
@@ -164,8 +164,8 @@ export function AdminBillingPage() {
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead>Cliente</TableHead>
-                      <TableHead>Pendente no ciclo</TableHead>
-                      <TableHead>Já faturado/pago</TableHead>
+                      <TableHead>{t("adm.pendenteNoCiclo")}</TableHead>
+                      <TableHead>{t("adm.jaFaturadoPago")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

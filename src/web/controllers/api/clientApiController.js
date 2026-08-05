@@ -79,12 +79,12 @@ async function updateProfile(req, res) {
   const businessName = String(req.body.businessName || '').trim() || null;
   const email = String(req.body.email || '').trim().toLowerCase();
   if (!email || !email.includes('@')) {
-    return res.status(400).json({ error: 'Informe um e-mail válido.' });
+    return res.status(400).json({ error: res.locals.t('erros.emailInvalido') });
   }
 
   const existing = await usersRepository.findByEmail(email);
   if (existing && existing.id !== req.session.user.id) {
-    return res.status(409).json({ error: 'Já existe uma conta com esse e-mail.' });
+    return res.status(409).json({ error: res.locals.t('erros.emailJaExiste') });
   }
 
   const updated = await usersRepository.updateProfile(req.session.user.id, { businessName, email });
@@ -96,13 +96,13 @@ async function updatePassword(req, res) {
   const currentPassword = String(req.body.currentPassword || '');
   const newPassword = String(req.body.newPassword || '');
   if (newPassword.length < 8) {
-    return res.status(400).json({ error: 'A nova senha precisa ter pelo menos 8 caracteres.' });
+    return res.status(400).json({ error: res.locals.t('erros.senhaCurta') });
   }
 
   const user = await usersRepository.findById(req.session.user.id);
   const matches = user.password_hash && (await bcrypt.compare(currentPassword, user.password_hash));
   if (!matches) {
-    return res.status(400).json({ error: 'Senha atual incorreta.' });
+    return res.status(400).json({ error: res.locals.t('erros.senhaAtualIncorreta') });
   }
 
   const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);

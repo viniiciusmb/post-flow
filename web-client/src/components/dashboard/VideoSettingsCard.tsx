@@ -1,3 +1,4 @@
+import { useT, type ChaveDeTraducao } from "@/i18n"
 import { useEffect, useState } from "react"
 import { IconVideo } from "@tabler/icons-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -8,39 +9,41 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { api } from "@/lib/api"
 import type { ClientVideoSettingsResponse } from "@/types/api"
 
-const ASPECT_LABELS: Record<string, string> = {
-  "9:16": "9:16 (TikTok/Reels)",
-  "1:1": "1:1 (quadrado)",
-  "16:9": "16:9 (horizontal)",
-  "4:5": "4:5 (retrato)",
+const ASPECT_LABELS: Record<string, ChaveDeTraducao> = {
+  "9:16": "vs.aspect916",
+  "1:1": "vs.aspect11",
+  "16:9": "vs.aspect169",
+  "4:5": "vs.aspect45",
 }
-const FRAMING_LABELS: Record<string, string> = {
-  crop: "Cortar as bordas (preenche a tela)",
-  blur_pad: "Mostrar o vídeo inteiro (fundo desfocado)",
+const FRAMING_LABELS: Record<string, ChaveDeTraducao> = {
+  crop: "vs.cortarBordas",
+  blur_pad: "vs.mostrarInteiro",
 }
-const QUALITY_LABELS: Record<string, string> = {
-  high: "Alta (mais nítido, arquivo maior)",
-  medium: "Média (mais rápido de gerar)",
+// Todos guardam a CHAVE de tradução: são montados quando o módulo carrega,
+// antes de existir idioma escolhido.
+const QUALITY_LABELS: Record<string, ChaveDeTraducao> = {
+  high: "vs.alta",
+  medium: "vs.media",
 }
-const CLIP_LENGTH_LABELS: Record<string, string> = {
-  short: "Curtos (15–40s)",
-  balanced: "Equilibrados (25–90s)",
-  long: "Longos (60–180s)",
+const CLIP_LENGTH_LABELS: Record<string, ChaveDeTraducao> = {
+  short: "vs.curtos",
+  balanced: "vs.equilibrados",
+  long: "vs.longos",
 }
-const CLIP_MODE_LABELS: Record<string, string> = {
-  ai_choice: "Melhores partes",
-  full_video: "Vídeo inteiro",
-  fixed_count: "Escolher quantidade",
+const CLIP_MODE_LABELS: Record<string, ChaveDeTraducao> = {
+  ai_choice: "vs.melhoresPartes",
+  full_video: "vs.videoInteiro",
+  fixed_count: "vs.escolherQuantidade",
 }
-const CLIP_MODE_DESCRIPTIONS: Record<string, string> = {
-  ai_choice: "A IA decide quantos cortes fazem sentido para esse vídeo, sem número fixo.",
-  full_video: "O vídeo inteiro vira um único corte vertical, sem a IA escolher trecho.",
-  fixed_count: "Você escolhe exatamente quantos cortes quer, e a IA escolhe os melhores trechos até esse número.",
+const CLIP_MODE_DESCRIPTIONS: Record<string, ChaveDeTraducao> = {
+  ai_choice: "vs.iaDecide",
+  full_video: "vs.videoInteiroTexto",
+  fixed_count: "vs.quantidadeFixaTexto",
 }
-const DESCRIPTION_MODE_LABELS: Record<string, string> = {
-  auto: "IA escreve",
-  fixed: "Sempre a mesma",
-  none: "Sem descrição",
+const DESCRIPTION_MODE_LABELS: Record<string, ChaveDeTraducao> = {
+  auto: "vs.iaEscreve",
+  fixed: "vs.sempreAMesma",
+  none: "vs.semDescricao",
 }
 
 function OptionRow({
@@ -53,9 +56,10 @@ function OptionRow({
   label: string
   value: string
   options: string[]
-  labels: Record<string, string>
+  labels: Record<string, ChaveDeTraducao>
   onChange: (value: string) => void
 }) {
+  const t = useT()
   return (
     <Field>
       <FieldLabel>{label}</FieldLabel>
@@ -68,7 +72,7 @@ function OptionRow({
       >
         {options.map((o) => (
           <ToggleGroupItem key={o} value={o} className="text-xs">
-            {labels[o] ?? o}
+            {labels[o] ? t(labels[o]) : o}
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
@@ -77,6 +81,7 @@ function OptionRow({
 }
 
 export function VideoSettingsCard() {
+  const t = useT()
   const [settings, setSettings] = useState<ClientVideoSettingsResponse | null>(null)
   const [descriptionDraft, setDescriptionDraft] = useState("")
   const [saving, setSaving] = useState(false)
@@ -108,17 +113,13 @@ export function VideoSettingsCard() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <IconVideo className="size-4 text-muted-foreground" />
-          Qualidade e estilo dos cortes
-        </CardTitle>
-        <CardDescription>
-          Como cada vídeo é cortado e editado automaticamente. 9:16 é o padrão recomendado pro TikTok.
-        </CardDescription>
+          <IconVideo className="size-4 text-muted-foreground" />{t("vs.titulo")}</CardTitle>
+        <CardDescription>{t("vs.descricao")}</CardDescription>
       </CardHeader>
       <CardContent>
         <FieldGroup>
           <Field>
-            <FieldLabel>Como escolher os cortes</FieldLabel>
+            <FieldLabel>{t("vs.comoEscolher")}</FieldLabel>
             <ToggleGroup
               type="single"
               variant="outline"
@@ -137,7 +138,7 @@ export function VideoSettingsCard() {
 
           {settings.clipMode === "fixed_count" && (
             <Field>
-              <FieldLabel htmlFor="maxClips">Quantidade de cortes (1 a 30)</FieldLabel>
+              <FieldLabel htmlFor="maxClips">{t("vs.quantidadeCortes")}</FieldLabel>
               <Input
                 id="maxClips"
                 type="number"
@@ -151,21 +152,21 @@ export function VideoSettingsCard() {
           )}
 
           <OptionRow
-            label="Proporção"
+            label={t("vs.proporcao")}
             value={settings.aspectRatio}
             options={settings.options.aspectRatios}
             labels={ASPECT_LABELS}
             onChange={(v) => save({ ...settings, aspectRatio: v as never })}
           />
           <OptionRow
-            label="Enquadramento"
+            label={t("vs.enquadramento")}
             value={settings.framing}
             options={settings.options.framings}
             labels={FRAMING_LABELS}
             onChange={(v) => save({ ...settings, framing: v as never })}
           />
           <OptionRow
-            label="Qualidade"
+            label={t("vs.qualidade")}
             value={settings.quality}
             options={settings.options.qualities}
             labels={QUALITY_LABELS}
@@ -174,7 +175,7 @@ export function VideoSettingsCard() {
 
           {settings.clipMode !== "full_video" && (
             <OptionRow
-              label="Duração de cada corte"
+              label={t("vs.duracaoCadaCorte")}
               value={settings.clipLength}
               options={settings.options.clipLengths}
               labels={CLIP_LENGTH_LABELS}
@@ -183,7 +184,7 @@ export function VideoSettingsCard() {
           )}
 
           <Field>
-            <FieldLabel>Descrição do corte</FieldLabel>
+            <FieldLabel>{t("vs.descricaoDoCorte")}</FieldLabel>
             <ToggleGroup
               type="single"
               variant="outline"
@@ -200,13 +201,13 @@ export function VideoSettingsCard() {
           </Field>
           {settings.descriptionMode === "fixed" && (
             <Field>
-              <FieldLabel htmlFor="descriptionTemplate">Texto fixo (usado em todos os cortes)</FieldLabel>
+              <FieldLabel htmlFor="descriptionTemplate">{t("vs.textoFixo")}</FieldLabel>
               <div className="flex gap-2">
                 <Input
                   id="descriptionTemplate"
                   value={descriptionDraft}
                   onChange={(e) => setDescriptionDraft(e.target.value)}
-                  placeholder="Ex: Segue a gente pra mais! #viral"
+                  placeholder={t("vs.exemploDescricao")}
                 />
                 <button
                   type="button"
@@ -220,7 +221,7 @@ export function VideoSettingsCard() {
           )}
 
           <p className="text-xs text-muted-foreground">
-            {saving ? "Salvando..." : savedFlash ? "Salvo ✓" : "Mudanças valem pros próximos vídeos processados."}
+            {saving ? "Salvando..." : savedFlash ? "Salvo ✓" : t("vs.mudancasValem")}
           </p>
         </FieldGroup>
       </CardContent>

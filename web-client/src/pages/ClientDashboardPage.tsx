@@ -111,7 +111,7 @@ export function ClientDashboardPage() {
           />
           <Stat label={t("inicio.videosDetectados")} value={data.counts.videosInRange} />
           <Stat
-            label="Canais monitorados"
+            label={t("inicio.canaisMonitorados")}
             value={data.counts.youtubeChannels}
             href="/client/youtube-channels"
             hrefLabel="Ver canais"

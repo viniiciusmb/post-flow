@@ -1,3 +1,4 @@
+import { useT } from "@/i18n"
 import { useEffect, useState } from "react"
 import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
@@ -60,6 +61,7 @@ function RateBox({
 // leitor de tela e toque funcionando, e o visual sai todo do accent-color, que
 // segue o tema claro/escuro sozinho.
 function MinutosSlider({
+  rotuloSlider,
   value,
   min,
   max,
@@ -71,6 +73,7 @@ function MinutosSlider({
   max: number
   step: number
   onChange: (v: number) => void
+  rotuloSlider: string
 }) {
   const percentual = ((value - min) / (max - min)) * 100
   return (
@@ -81,7 +84,7 @@ function MinutosSlider({
         max={max}
         step={step}
         value={value}
-        aria-label="Quantos minutos comprar"
+        aria-label={rotuloSlider}
         onChange={(e) => onChange(Number(e.target.value))}
         style={{
           background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${percentual}%, var(--muted) ${percentual}%, var(--muted) 100%)`,
@@ -118,13 +121,20 @@ const VIDEO_EXEMPLO_MIN = 30
 // Traduz minutos em "quantos vídeos". Abaixo do vídeo de exemplo a divisão dá
 // zero, e "cerca de 0 vídeos" logo acima de um botão de compra parece defeito -
 // então nesse caso a frase muda em vez de mostrar o zero.
-function estimativaVideos(minutos: number) {
+//
+// Recebe o `t` porque é chamada de dentro de JSX aninhado, fora de componente.
+function estimativaVideos(
+  minutos: number,
+  t: (c: "plano.daProcessarUm" | "plano.daProcessarVarios" | "plano.daProcessarExatamenteUm", v?: Record<string, string | number>) => string
+) {
   const quantos = Math.floor(minutos / VIDEO_EXEMPLO_MIN)
-  if (quantos < 1) return `Dá pra processar um vídeo de até ${minutos} minutos.`
-  return `Dá pra processar cerca de ${quantos} vídeo${quantos === 1 ? "" : "s"} de ${VIDEO_EXEMPLO_MIN} minutos.`
+  if (quantos < 1) return t("plano.daProcessarUm", { min: minutos })
+  if (quantos === 1) return t("plano.daProcessarExatamenteUm", { min: VIDEO_EXEMPLO_MIN })
+  return t("plano.daProcessarVarios", { n: quantos, min: VIDEO_EXEMPLO_MIN })
 }
 
 export function ClientBillingPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const [data, setData] = useState<ClientBillingOverviewResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -155,7 +165,7 @@ export function ClientBillingPage() {
       }
       await load()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível completar essa ação agora.")
+      setError(err instanceof ApiError ? err.message : t("plano.naoFoiPossivelCompletar"))
     } finally {
       setBusyKey(null)
     }
@@ -186,10 +196,10 @@ export function ClientBillingPage() {
   const totalAvulso = data ? minutos * data.package.centsPerMinute : 0
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Plano e uso">
+    <DashboardLayout user={user} onLogout={logout} title={t("plano.titulo")}>
       <PageHeader
-        title="Plano e uso"
-        description="Quantos minutos você tem, quanto já usou e como conseguir mais."
+        title={t("plano.titulo")}
+        description={t("plano.descricao")}
       />
       {!data ? (
         <Skeleton className="h-64" />
@@ -200,7 +210,7 @@ export function ClientBillingPage() {
           {data.isExempt && (
             <Card>
               <CardContent className="py-4">
-                <p className="text-sm font-medium">Esta conta não consome crédito.</p>
+                <p className="text-sm font-medium">{t("plano.naoConsomeCredito")}</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Você é o dono do sistema: seus vídeos são processados sem descontar cota e sem
                   depender de plano. Os números abaixo são só pra você ver como a tela aparece pros
@@ -211,23 +221,21 @@ export function ClientBillingPage() {
           )}
 
           {!data.stripeConfigured && (
-            <TonePill tone="neutral">Pagamento por cartão ainda não está disponível - fale com o suporte.</TonePill>
+            <TonePill tone="neutral">{t("plano.cartaoIndisponivel")}</TonePill>
           )}
 
           {data.subscription.status === "sem_plano" && (
-            <TonePill tone="danger">
-              Você ainda não tem um plano ativo - escolha um abaixo ou fale com o suporte pra ativar.
-            </TonePill>
+            <TonePill tone="danger">{t("plano.semPlanoAtivo")}</TonePill>
           )}
           {data.subscription.status === "inadimplente" && (
-            <TonePill tone="danger">Sua última cobrança falhou - atualize o cartão pra manter a assinatura ativa.</TonePill>
+            <TonePill tone="danger">{t("plano.ultimaCobrancaFalhou")}</TonePill>
           )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Créditos normais</CardTitle>
-                <CardDescription>Cota semanal do seu plano. É a que roda quando o download sai pela nossa internet.</CardDescription>
+                <CardTitle className="text-base">{t("plano.creditosNormais")}</CardTitle>
+                <CardDescription>{t("plano.creditosNormaisTexto")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <BucketMeter label="Normais" bucket={data.credits.normal} />
@@ -235,19 +243,17 @@ export function ClientBillingPage() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Créditos bônus</CardTitle>
-                <CardDescription>Cota extra, liberada quando o programa do seu computador está conectado.</CardDescription>
+                <CardTitle className="text-base">{t("plano.creditosBonus")}</CardTitle>
+                <CardDescription>{t("plano.creditosBonusTexto")}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
-                <BucketMeter label="Bônus" bucket={data.credits.bonus} />
+                <BucketMeter label={t("plano.bonus")} bucket={data.credits.bonus} />
                 {/* Quem chega aqui e vê "0 min disponíveis" no bônus precisa
                     saber onde ligar isso. Sem o caminho, a cota bônus vira um
                     número sem explicação. */}
                 <Button variant="outline" size="sm" asChild className="w-fit gap-1.5">
                   <a href="/client/tunnel">
-                    <IconRouter className="size-4" />
-                    Configurar minha conexão
-                  </a>
+                    <IconRouter className="size-4" />{t("plano.configurarConexao")}</a>
                 </Button>
               </CardContent>
             </Card>
@@ -260,25 +266,20 @@ export function ClientBillingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <IconCreditCard className="size-4 text-muted-foreground" />
-                  Cartão para cobrança automática
-                </CardTitle>
-                <CardDescription>
-                  Sua máquina de views não para quando o crédito acaba. Com um cartão cadastrado, o vídeo continua
-                  sendo processado e você paga só o que passou do plano.
-                </CardDescription>
+                  <IconCreditCard className="size-4 text-muted-foreground" />{t("plano.cartaoCobranca")}</CardTitle>
+                <CardDescription>{t("plano.maquinaDeViews")}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col gap-4">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <RateBox
-                    titulo="Pela nossa internet"
+                    titulo={t("plano.pelaNossaInternet")}
                     valor={`${formatCents(data.overage.rateCentsNormal)} / min`}
-                    detalhe="Sem instalar nada. É o padrão."
+                    detalhe={t("plano.semInstalarNada")}
                   />
                   <RateBox
-                    titulo="Pela sua internet"
+                    titulo={t("plano.pelaSuaInternet")}
                     valor={`${formatCents(data.overage.rateCentsBonus)} / min`}
-                    detalhe="Com o programa instalado no seu computador."
+                    detalhe={t("plano.comProgramaInstalado")}
                     destaque
                   />
                 </div>
@@ -288,15 +289,12 @@ export function ClientBillingPage() {
                     ("quando exatamente me cobram?") - e essa merece resposta
                     completa, não uma linha espremida. */}
                 <details className="group rounded-lg border border-border">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3.5 text-sm font-medium [&::-webkit-details-marker]:hidden">
-                    Como os gastos são processados
-                    <IconChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3.5 text-sm font-medium [&::-webkit-details-marker]:hidden">{t("plano.comoGastosProcessados")}<IconChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                   </summary>
 
                   <div className="flex flex-col gap-3 border-t border-border p-3.5 text-sm leading-relaxed text-muted-foreground">
-                    <p>
-                      A cobrança é <strong className="text-foreground">vídeo por vídeo</strong>, e o valor sai
-                      do <strong className="text-foreground">minuto do vídeo original</strong> — não da
+                    <p>{t("plano.aCobrancaE")}<strong className="text-foreground">{t("plano.videoPorVideo")}</strong>, e o valor sai
+                      do <strong className="text-foreground">{t("plano.minutoDoOriginal")}</strong> — não da
                       quantidade de cortes. Um vídeo de {VIDEO_EXEMPLO_MIN} minutos que vira 3 cortes custa
                       exatamente o mesmo que um que vira 12.
                     </p>
@@ -345,22 +343,16 @@ export function ClientBillingPage() {
                 <div className="mt-auto flex flex-wrap items-center gap-2">
                   {data.subscription.overageCardEnabled ? (
                     <>
-                      <TonePill tone="success" icon={<IconCircleCheck className="size-3.5" />}>
-                        Cartão ativo
-                      </TonePill>
+                      <TonePill tone="success" icon={<IconCircleCheck className="size-3.5" />}>{t("plano.cartaoAtivo")}</TonePill>
                       <Button
                         variant="outline"
                         size="sm"
                         disabled={busyKey === "overage-disable"}
                         onClick={disableOverageCard}
-                      >
-                        Desligar cobrança automática
-                      </Button>
+                      >{t("plano.desligarCobranca")}</Button>
                     </>
                   ) : (
-                    <Button disabled={busyKey === "overage-setup"} onClick={setupOverageCard}>
-                      Cadastrar cartão
-                    </Button>
+                    <Button disabled={busyKey === "overage-setup"} onClick={setupOverageCard}>{t("plano.cadastrarCartao")}</Button>
                   )}
                 </div>
               </CardContent>
@@ -369,25 +361,20 @@ export function ClientBillingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <IconCoins className="size-4 text-muted-foreground" />
-                  Comprar créditos
-                </CardTitle>
-                <CardDescription>
-                  Prefere pagar adiantado? Compre minutos avulsos e use quando quiser. Eles não expiram e não somem
-                  na virada da semana.
-                </CardDescription>
+                  <IconCoins className="size-4 text-muted-foreground" />{t("plano.comprarCreditos")}</CardTitle>
+                <CardDescription>{t("plano.preferePagarAdiantado")}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col gap-4">
                 <div className="rounded-lg border border-border p-4">
                   <div className="flex items-end justify-between gap-4">
                     <div>
-                      <div className="text-xs text-muted-foreground">Quantos minutos</div>
+                      <div className="text-xs text-muted-foreground">{t("plano.quantosMinutos")}</div>
                       <div className="font-heading text-3xl leading-tight font-semibold tabular-nums">
                         {minutos} min
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs text-muted-foreground">Você paga</div>
+                      <div className="text-xs text-muted-foreground">{t("plano.vocePaga")}</div>
                       <div className="font-heading text-3xl leading-tight font-semibold tabular-nums">
                         {formatCents(totalAvulso)}
                       </div>
@@ -401,12 +388,13 @@ export function ClientBillingPage() {
                       max={data.package.maxMinutes}
                       step={data.package.stepMinutes}
                       onChange={setMinutosAvulsos}
+                      rotuloSlider={t("plano.quantosMinutosComprar")}
                     />
                   </div>
 
                   <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                    {formatCents(data.package.centsPerMinute)} por minuto, o mesmo preço do excedente pela nossa
-                    internet. {estimativaVideos(minutos)}
+                    {t("plano.mesmoPreco", { valor: formatCents(data.package.centsPerMinute) })}{" "}
+                    {estimativaVideos(minutos, t)}
                   </p>
                 </div>
 
@@ -442,11 +430,11 @@ export function ClientBillingPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Seu plano</CardTitle>
+              <CardTitle className="text-base">{t("plano.seuPlano")}</CardTitle>
               <CardDescription>
                 {data.subscription.planName
                   ? `Plano atual: ${data.subscription.planName}`
-                  : "Escolha um plano pra começar a processar vídeos."}
+                  : t("plano.escolhaUmPlano")}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-3">
@@ -470,10 +458,10 @@ export function ClientBillingPage() {
                       <span className="text-xs font-normal text-muted-foreground">/mês</span>
                     </div>
                     <ul className="flex flex-1 flex-col gap-1 text-xs text-muted-foreground">
-                      <li>{plan.weeklyMinutesNormal} minutos por semana</li>
-                      <li>{plan.weeklyMinutesBonus} minutos usando sua internet</li>
-                      <li>{plural(plan.maxYoutubeChannels, "canal do YouTube", "canais do YouTube", "Canais do YouTube ilimitados")}</li>
-                      <li>{plural(plan.maxTiktokAccounts, "conta do TikTok", "contas do TikTok", "Contas do TikTok ilimitadas")}</li>
+                      <li>{t("plano.minutosPorSemana", { n: plan.weeklyMinutesNormal })}</li>
+                      <li>{t("plano.minutosSuaInternet", { n: plan.weeklyMinutesBonus })}</li>
+                      <li>{plural(plan.maxYoutubeChannels, t("plano.canalYoutube"), t("plano.canaisYoutube"), t("plano.canaisIlimitados"))}</li>
+                      <li>{plural(plan.maxTiktokAccounts, t("plano.contaTiktok"), t("plano.contasTiktok"), t("plano.contasIlimitadas"))}</li>
                     </ul>
                     <Button
                       variant={isCurrent ? "outline" : "default"}
@@ -495,14 +483,25 @@ export function ClientBillingPage() {
                 <CardTitle className="text-base">Consumo recente</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-2">
-                {data.recentTransactions.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Vídeo #{t.sourceVideoId}</span>
-                    <span>
-                      {t.minutesCharged} min · bolso {t.bucket === "bonus" ? "bônus" : "normal"}
+                {data.recentTransactions.map((lancamento) => (
+                  <div key={lancamento.id} className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      {t("tabela.video")} #{lancamento.sourceVideoId}
                     </span>
-                    <TonePill tone={t.status === "confirmado" ? "success" : t.status === "liberado" ? "neutral" : "cyan"}>
-                      {t.status}
+                    <span>
+                      {lancamento.minutesCharged} min ·{" "}
+                      {lancamento.bucket === "bonus" ? t("plano.bonusMinusculo") : t("plano.normalMinusculo")}
+                    </span>
+                    <TonePill
+                      tone={
+                        lancamento.status === "confirmado"
+                          ? "success"
+                          : lancamento.status === "liberado"
+                            ? "neutral"
+                            : "cyan"
+                      }
+                    >
+                      {lancamento.status}
                     </TonePill>
                   </div>
                 ))}

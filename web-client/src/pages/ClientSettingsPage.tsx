@@ -54,7 +54,7 @@ function ProfileSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <IconUserCircle className="size-4 text-muted-foreground" />
-          Perfil
+          {t("config.perfil")}
         </CardTitle>
         <CardDescription>{t("config.perfilDescricao")}</CardDescription>
       </CardHeader>
@@ -70,7 +70,7 @@ function ProfileSection() {
                 </p>
               )}
               <Field>
-                <FieldLabel htmlFor="businessName">Nome / empresa</FieldLabel>
+                <FieldLabel htmlFor="businessName">{t("config.nomeEmpresa")}</FieldLabel>
                 <Input id="businessName" value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
               </Field>
               <Field>
@@ -79,7 +79,7 @@ function ProfileSection() {
               </Field>
               <div className="flex items-center gap-3">
                 <Button type="submit" size="sm" disabled={saving}>
-                  {saving ? "Salvando..." : "Salvar"}
+                  {saving ? t("comum.salvando") : t("comum.salvar")}
                 </Button>
                 {saved && <span className="text-xs text-status-posted">Salvo ✓</span>}
               </div>
@@ -128,7 +128,7 @@ function PasswordSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <IconLock className="size-4 text-muted-foreground" />
-          Trocar senha
+          {t("config.trocarSenha")}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -140,7 +140,7 @@ function PasswordSection() {
               </p>
             )}
             <Field>
-              <FieldLabel htmlFor="currentPassword">Senha atual</FieldLabel>
+              <FieldLabel htmlFor="currentPassword">{t("config.senhaAtual")}</FieldLabel>
               <Input
                 id="currentPassword"
                 type="password"
@@ -150,7 +150,7 @@ function PasswordSection() {
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="newPassword">Nova senha</FieldLabel>
+              <FieldLabel htmlFor="newPassword">{t("config.novaSenha")}</FieldLabel>
               <Input
                 id="newPassword"
                 type="password"
@@ -162,7 +162,7 @@ function PasswordSection() {
               <FieldDescription>Pelo menos 8 caracteres.</FieldDescription>
             </Field>
             <Field>
-              <FieldLabel htmlFor="confirmPassword">Confirmar nova senha</FieldLabel>
+              <FieldLabel htmlFor="confirmPassword">{t("config.confirmarNovaSenha")}</FieldLabel>
               <Input
                 id="confirmPassword"
                 type="password"
@@ -173,7 +173,7 @@ function PasswordSection() {
             </Field>
             <div className="flex items-center gap-3">
               <Button type="submit" size="sm" disabled={saving}>
-                {saving ? "Salvando..." : "Trocar senha"}
+                {saving ? t("comum.salvando") : t("config.trocarSenha")}
               </Button>
               {saved && <span className="text-xs text-status-posted">Senha trocada ✓</span>}
             </div>
@@ -231,10 +231,7 @@ function DriveSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <IconBrandGoogleDrive className="size-4 text-muted-foreground" />{t("config.minhaPasta")}</CardTitle>
-        <CardDescription>
-          Opcional: conecte seu próprio Google Drive e aponte uma pasta com vídeos, eles são postados
-          automaticamente no seu TikTok, sem precisar de canal do YouTube.
-        </CardDescription>
+        <CardDescription>{t("config.driveOpcional")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {!status ? (
@@ -281,7 +278,7 @@ function DriveSection() {
                       required
                     />
                     <Button type="submit" disabled={saving}>
-                      {saving ? "Salvando..." : "Salvar"}
+                      {saving ? t("comum.salvando") : t("comum.salvar")}
                     </Button>
                   </div>
                   <FieldDescription>{t("config.pastaChecada")}</FieldDescription>

@@ -1,3 +1,4 @@
+import { useT } from "@/i18n"
 import { useEffect, useState } from "react"
 import { IconAlertTriangle, IconCircleCheck, IconCircleX, IconServer } from "@tabler/icons-react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
@@ -12,10 +13,12 @@ import { useAuth } from "@/hooks/useAuth"
 import { api } from "@/lib/api"
 import type { AdminMetricsResponse, DateRangeKey } from "@/types/api"
 
-const SYSTEM_CHART_CONFIG = {
-  cpuPercent: { label: "CPU (carga / núcleos)", color: "var(--tone-danger-ink)" },
-  memPercent: { label: "Memória usada", color: "var(--tone-indigo-ink)" },
-} satisfies ChartConfig
+// O rótulo do gráfico é montado dentro do componente (ver AdminMetricsPage),
+// porque aqui fora ainda não existe idioma escolhido.
+const SYSTEM_CHART_COLORS = {
+  cpuPercent: "var(--tone-danger-ink)",
+  memPercent: "var(--tone-indigo-ink)",
+}
 
 function gb(n: number | null) {
   if (n === null) return "—"
@@ -55,17 +58,18 @@ function Metric({ label, value, sub }: { label: string; value: string | number; 
 // ninguem viu), por isso qualquer coisa diferente de "ok" vira pilula vermelha
 // em vez de so um numero a mais.
 function BackupMetric({ backup }: { backup: AdminMetricsResponse["backup"] }) {
+  const t = useT()
   const isOk = backup.status === "ok"
   const label =
     backup.status === "nunca"
-      ? "nunca rodou"
+      ? t("adm.backupNuncaRodou")
       : backup.status === "erro"
-        ? "falhou"
+        ? t("adm.backupFalhou")
         : backup.status === "atrasado"
-          ? "atrasado"
+          ? t("adm.backupAtrasado")
           : backup.ageHours !== null && backup.ageHours < 1
-            ? "há minutos"
-            : `há ${Math.round(backup.ageHours ?? 0)}h`
+            ? t("adm.backupHaMinutos")
+            : t("adm.backupHaHoras", { n: Math.round(backup.ageHours ?? 0) })
 
   return (
     <div>
@@ -78,7 +82,7 @@ function BackupMetric({ backup }: { backup: AdminMetricsResponse["backup"] }) {
           </TonePill>
         )}
       </div>
-      <div className="text-xs text-muted-foreground">Backup do banco</div>
+      <div className="text-xs text-muted-foreground">{t("adm.backupDoBanco")}</div>
       <div className="mt-0.5 text-xs text-muted-foreground/70">
         {isOk ? `último ${label}` : "verifique /var/log/postflow-backup.log na VPS"}
       </div>
@@ -114,6 +118,11 @@ function Section({
 }
 
 export function AdminMetricsPage() {
+  const t = useT()
+  const systemChartConfig = {
+    cpuPercent: { label: t("adm.cpuCarga"), color: SYSTEM_CHART_COLORS.cpuPercent },
+    memPercent: { label: t("adm.memoriaUsada"), color: SYSTEM_CHART_COLORS.memPercent },
+  } satisfies ChartConfig
   const { user, loading: authLoading, logout } = useAuth()
   const [data, setData] = useState<AdminMetricsResponse | null>(null)
   // Um periodo por painel. Vao juntos numa chamada so pra nao virar quatro
@@ -151,10 +160,10 @@ export function AdminMetricsPage() {
   }
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Métricas">
+    <DashboardLayout user={user} onLogout={logout} title={t("menu.metricas")}>
       <PageHeader
-        title="Métricas"
-        description="Cada painel tem o próprio período, então dá pra comparar janelas diferentes lado a lado."
+        title={t("menu.metricas")}
+        description={t("adm.metricasDescricao")}
       />
 
       {!data ? (
@@ -177,49 +186,47 @@ export function AdminMetricsPage() {
           )}
 
           <Section title="Volume" range={rangeVolume} onRangeChange={setRangeVolume}>
-            <Metric label="Vídeos detectados" value={data.volume.videosDetected} />
+            <Metric label={t("adm.videosDetectados")} value={data.volume.videosDetected} />
             <Metric label="Cortes gerados" value={data.volume.clipsGenerated} />
             <Metric label="Cortes postados" value={data.volume.clipsPosted} />
-            <Metric label="Taxa de aproveitamento" value={pct(data.volume.aproveitamentoRate)} sub="cortes postados / gerados" />
-            <Metric label="Clientes ativos" value={data.clients.active} sub="com atividade nos últimos 30 dias" />
+            <Metric label={t("adm.taxaAproveitamento")} value={pct(data.volume.aproveitamentoRate)} sub="cortes postados / gerados" />
+            <Metric label="Clientes ativos" value={data.clients.active} sub={t("adm.comAtividade30")} />
             <Metric label="Clientes inativos" value={data.clients.inactive} />
           </Section>
 
-          <Section title="Saúde do pipeline" range={rangePipeline} onRangeChange={setRangePipeline}>
-            <Metric label="Taxa de erro" value={pct(data.pipeline.errorRate)} sub={`${data.pipeline.totalFinished} vídeos concluídos`} />
-            <Metric label="Tempo médio de processamento" value={minutes(data.pipeline.avgProcessingSeconds)} />
-            <Metric label="Tempo médio de espera na fila" value={minutes(data.pipeline.avgQueueWaitSeconds)} />
-            <Metric label="Vídeos na fila agora" value={data.pipeline.queueDepth} />
+          <Section title={t("adm.saudePipeline")} range={rangePipeline} onRangeChange={setRangePipeline}>
+            <Metric label={t("adm.taxaDeErro")} value={pct(data.pipeline.errorRate)} sub={`${data.pipeline.totalFinished} vídeos concluídos`} />
+            <Metric label={t("adm.tempoMedioProcessamento")} value={minutes(data.pipeline.avgProcessingSeconds)} />
+            <Metric label={t("adm.tempoMedioEspera")} value={minutes(data.pipeline.avgQueueWaitSeconds)} />
+            <Metric label={t("adm.videosNaFilaAgora")} value={data.pipeline.queueDepth} />
           </Section>
 
-          <Section title="Custo de IA" range={rangeCost} onRangeChange={setRangeCost}>
-            <Metric label="Whisper (transcrição)" value={usd(data.cost.whisperCostUsd)} />
-            <Metric label="Claude (escolha dos cortes)" value={usd(data.cost.claudeCostUsd)} />
-            <Metric label="Total no período" value={usd(data.cost.totalCostUsd)} />
+          <Section title={t("adm.custoDeIA")} range={rangeCost} onRangeChange={setRangeCost}>
+            <Metric label={t("adm.whisper")} value={usd(data.cost.whisperCostUsd)} />
+            <Metric label={t("adm.claude")} value={usd(data.cost.claudeCostUsd)} />
+            <Metric label={t("adm.totalNoPeriodo")} value={usd(data.cost.totalCostUsd)} />
             <Metric
-              label="Custo médio por vídeo"
+              label={t("adm.custoMedioPorVideo")}
               value={usd(data.cost.avgCostPerVideo)}
               sub={`${data.cost.videosWithCost} vídeos com custo registrado`}
             />
-            <Metric label="Projeção mensal" value={usd(data.cost.projectedMonthlyUsd)} sub="sempre com base nos últimos 7 dias" />
+            <Metric label={t("adm.projecaoMensal")} value={usd(data.cost.projectedMonthlyUsd)} sub={t("adm.baseUltimos7")} />
           </Section>
 
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <IconServer className="size-4 text-muted-foreground" />
-                Saúde do servidor (VPS)
-              </CardTitle>
+                <IconServer className="size-4 text-muted-foreground" />{t("adm.saudeDoServidor")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-6">
               <div className="grid grid-cols-2 gap-6 sm:grid-cols-6">
                 <Metric
-                  label="Carga da CPU (1 min)"
+                  label={t("adm.cargaCpu")}
                   value={data.system.latest ? data.system.latest.loadAvg1m.toFixed(2) : "—"}
                   sub={data.system.latest ? `${data.system.latest.cpuCores} núcleos` : undefined}
                 />
                 <Metric
-                  label="Memória usada"
+                  label={t("adm.memoriaUsada")}
                   value={data.system.latest ? `${Math.round((data.system.latest.memUsedMb / data.system.latest.memTotalMb) * 100)}%` : "—"}
                   sub={data.system.latest ? `${(data.system.latest.memUsedMb / 1024).toFixed(1)} / ${(data.system.latest.memTotalMb / 1024).toFixed(1)} GB` : undefined}
                 />
@@ -229,19 +236,19 @@ export function AdminMetricsPage() {
                   sub={data.system.latest ? `${gb(data.system.latest.diskUsedGb)} / ${gb(data.system.latest.diskTotalGb)}` : undefined}
                 />
                 <Metric
-                  label="Última amostra"
+                  label={t("adm.ultimaAmostra")}
                   value={data.system.latest ? new Date(data.system.latest.sampledAt).toLocaleTimeString("pt-BR") : "—"}
                 />
                 <Metric
-                  label="Túneis de cliente conectados"
+                  label={t("adm.tuneisConectados")}
                   value={data.tunnels.connectedClients}
-                  sub="download saindo pela internet do cliente"
+                  sub={t("adm.saindoPelaInternetCliente")}
                 />
                 <BackupMetric backup={data.backup} />
               </div>
 
               {data.system.history.length > 1 && (
-                <ChartContainer config={SYSTEM_CHART_CONFIG} className="aspect-auto h-56 w-full">
+                <ChartContainer config={systemChartConfig} className="aspect-auto h-56 w-full">
                   <LineChart
                     data={data.system.history.map((h) => ({
                       time: new Date(h.sampledAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
@@ -267,12 +274,12 @@ export function AdminMetricsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Ranking de clientes</CardTitle>
+              <CardTitle className="text-base">{t("adm.rankingClientes")}</CardTitle>
               <DateRangeFilter value={rangeRanking} onChange={setRangeRanking} />
             </CardHeader>
             <CardContent>
               {data.ranking.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum vídeo processado no período escolhido.</p>
+                <p className="text-sm text-muted-foreground">{t("adm.nenhumVideoProcessadoPeriodo")}</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {data.ranking.map((r, i) => (
@@ -293,18 +300,18 @@ export function AdminMetricsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Status dos serviços</CardTitle>
+              <CardTitle className="text-base">{t("adm.statusDosServicos")}</CardTitle>
             </CardHeader>
             <CardContent>
               {data.services.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum serviço reportou status ainda.</p>
+                <p className="text-sm text-muted-foreground">{t("adm.nenhumServicoReportou")}</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {data.services.map((s) => (
                     <div key={s.name} className="flex items-center justify-between border-b border-border py-2 text-sm last:border-b-0">
                       <span className="font-medium">{s.name}</span>
                       <TonePill tone={s.isUp ? "success" : "danger"} icon={s.isUp ? <IconCircleCheck className="size-3.5" /> : <IconCircleX className="size-3.5" />}>
-                        {s.isUp ? "No ar" : "Sem sinal"}
+                        {s.isUp ? t("adm.noAr") : t("adm.semSinal")}
                       </TonePill>
                     </div>
                   ))}

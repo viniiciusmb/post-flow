@@ -1,3 +1,4 @@
+import { useT, type ChaveDeTraducao } from "@/i18n"
 import { useEffect, useRef, useState } from "react"
 import { IconAdjustmentsHorizontal } from "@tabler/icons-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -50,6 +51,7 @@ function CropZoomEditor({
   templateHeightPercent?: number
   templateOffsetPercent?: number
 }) {
+  const t = useT()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
   const comTemplate = Boolean(templateUrl)
@@ -104,7 +106,7 @@ function CropZoomEditor({
             className="absolute flex items-center justify-center bg-neutral-700/95 text-center text-[10px] text-white/70"
             style={{ width: videoWidth, height: videoHeight, left: videoLeftInFrame, top: videoTop }}
           >
-            {comTemplate ? "seu vídeo" : "vídeo original (16:9)"}
+            {comTemplate ? t("ce.seuVideo") : t("ce.videoOriginal")}
           </div>
         </div>
 
@@ -129,20 +131,20 @@ function CropZoomEditor({
       </div>
       <p className="max-w-[220px] text-center text-xs text-muted-foreground">
         {comTemplate
-          ? "Seu template ao fundo. Ajuste a altura e a posição do vídeo nos controles abaixo."
+          ? t("ce.templateAoFundo")
           : value >= 90
-          ? "Bem apertado. Preenche a moldura toda e mostra menos do vídeo original."
+          ? t("ce.bemApertado")
           : value <= 10
-            ? "Bem amplo. Mostra o vídeo quase inteiro, com fundo desfocado preenchendo a sobra."
+            ? t("ce.bemAmplo")
             : `Zoom em ${value}%. Arraste as alças pra ajustar.`}
       </p>
     </div>
   )
 }
 
-const STYLE_PREVIEW: Record<VideoCaptionStyle, { label: string; render: (text: string) => React.ReactNode }> = {
+const STYLE_PREVIEW: Record<VideoCaptionStyle, { label: ChaveDeTraducao; render: (text: string) => React.ReactNode }> = {
   classic: {
-    label: "Clássica",
+    label: "ce.classica",
     render: (text) => (
       <span style={{ fontFamily: "Arial Black, sans-serif", fontWeight: 900, color: "#fff", WebkitTextStroke: "1.5px #000", fontSize: 15 }}>
         {text}
@@ -150,7 +152,7 @@ const STYLE_PREVIEW: Record<VideoCaptionStyle, { label: string; render: (text: s
     ),
   },
   bold: {
-    label: "Chamativa",
+    label: "ce.chamativa",
     render: (text) => (
       <span style={{ fontFamily: "Arial Black, sans-serif", fontWeight: 900, color: "#ffd700", WebkitTextStroke: "1.5px #000", fontSize: 17 }}>
         {text}
@@ -158,13 +160,13 @@ const STYLE_PREVIEW: Record<VideoCaptionStyle, { label: string; render: (text: s
     ),
   },
   minimal: {
-    label: "Minimalista",
+    label: "ce.minimalista",
     render: (text) => (
       <span style={{ fontFamily: "Arial, sans-serif", color: "#fff", WebkitTextStroke: "0.5px #000", fontSize: 13 }}>{text}</span>
     ),
   },
   bubble_dark: {
-    label: "Balão escuro",
+    label: "ce.balaoEscuro",
     render: (text) => (
       <span
         style={{
@@ -182,7 +184,7 @@ const STYLE_PREVIEW: Record<VideoCaptionStyle, { label: string; render: (text: s
     ),
   },
   bubble_purple: {
-    label: "Balão roxo",
+    label: "ce.balaoRoxo",
     render: (text) => (
       <span
         style={{
@@ -200,7 +202,7 @@ const STYLE_PREVIEW: Record<VideoCaptionStyle, { label: string; render: (text: s
     ),
   },
   none: {
-    label: "Sem legenda",
+    label: "ce.semLegenda",
     render: () => <span className="text-xs text-white/40">(nenhuma)</span>,
   },
 }
@@ -216,6 +218,7 @@ function StyleGallery({
   onChange: (v: VideoCaptionStyle) => void
   sampleText: string
 }) {
+  const t = useT()
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
       {options.map((style) => {
@@ -234,7 +237,7 @@ function StyleGallery({
             <div className="flex h-16 w-full items-center justify-center rounded-md bg-neutral-900">
               {preview.render(sampleText)}
             </div>
-            <span className="text-xs font-medium">{preview.label}</span>
+            <span className="text-xs font-medium">{t(preview.label)}</span>
           </button>
         )
       })}
@@ -253,6 +256,7 @@ const POSITION_STYLE: Record<PartLabelPosition, React.CSSProperties> = {
 }
 
 function PartLabelPositionPicker({ value, onChange }: { value: PartLabelPosition; onChange: (v: PartLabelPosition) => void }) {
+  const t = useT()
   return (
     <div className="relative rounded-md bg-neutral-900" style={{ width: 240, height: 180 }}>
       <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white/25">corte 9:16</span>
@@ -266,15 +270,14 @@ function PartLabelPositionPicker({ value, onChange }: { value: PartLabelPosition
             "absolute rounded px-2 py-1 text-[10px] font-bold whitespace-nowrap",
             value === pos ? "bg-primary text-primary-foreground" : "bg-white/15 text-white hover:bg-white/25"
           )}
-        >
-          Parte 1
-        </button>
+        >{t("ce.parteUm")}</button>
       ))}
     </div>
   )
 }
 
 export function ClipStyleEditorCard() {
+  const t = useT()
   const [settings, setSettings] = useState<ClientVideoSettingsResponse | null>(null)
   const [zoomDraft, setZoomDraft] = useState(100)
   const [saving, setSaving] = useState(false)
@@ -328,12 +331,12 @@ export function ClipStyleEditorCard() {
         body: form,
       })
       const dados = await resposta.json().catch(() => ({}))
-      if (!resposta.ok) throw new Error(dados.error || "Não foi possível enviar a imagem.")
+      if (!resposta.ok) throw new Error(dados.error || t("ce.naoFoiPossivelEnviarImagem"))
       const atualizado = await api.get<ClientVideoSettingsResponse>(`/api/client/video-settings${queryAlvo}`)
       setSettings(atualizado)
       setVersaoTemplate((v) => v + 1)
     } catch (e) {
-      setErroTemplate(e instanceof Error ? e.message : "Não foi possível enviar a imagem.")
+      setErroTemplate(e instanceof Error ? e.message : t("ce.naoFoiPossivelEnviarImagem"))
     } finally {
       setEnviandoTemplate(false)
     }
@@ -364,9 +367,7 @@ export function ClipStyleEditorCard() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <IconAdjustmentsHorizontal className="size-4 text-muted-foreground" />
-          Estilo visual do corte
-        </CardTitle>
+          <IconAdjustmentsHorizontal className="size-4 text-muted-foreground" />{t("ce.titulo")}</CardTitle>
         <CardDescription>
           Automático usa nosso padrão (recorte central 9:16, legenda clássica, título clássico, sem numeração). Manual
           te dá controle total sobre enquadramento, legenda, título e numeração de parte.
@@ -377,14 +378,14 @@ export function ClipStyleEditorCard() {
             de tudo que vem abaixo: sem isso a pessoa edita achando que mexe em
             um canal e na verdade mexe em todos. */}
         <Field>
-          <FieldLabel>Aplicar em</FieldLabel>
+          <FieldLabel>{t("ce.aplicarEm")}</FieldLabel>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={alvo} onValueChange={setAlvo}>
               <SelectTrigger className="w-[19rem]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos os canais</SelectItem>
+                <SelectItem value="all">{t("ce.todosOsCanais")}</SelectItem>
                 {settings.channels.map((c) => (
                   <SelectItem key={c.id} value={String(c.id)}>
                     {c.name}
@@ -394,17 +395,15 @@ export function ClipStyleEditorCard() {
               </SelectContent>
             </Select>
             {alvo !== "all" && !settings.usesDefault && (
-              <Button variant="outline" size="sm" onClick={voltarAoPadrao}>
-                Voltar a seguir todos os canais
-              </Button>
+              <Button variant="outline" size="sm" onClick={voltarAoPadrao}>{t("ce.voltarASeguirTodos")}</Button>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
             {alvo === "all"
-              ? "Vale para todo canal que não tenha um estilo próprio, e para vídeos enviados avulsos."
+              ? t("ce.valeParaTodoCanal")
               : settings.usesDefault
-                ? "Este canal segue a configuração de todos os canais. Mexer em qualquer coisa aqui cria um estilo só dele."
-                : "Este canal tem estilo próprio e ignora a configuração de todos os canais."}
+                ? t("ce.canalSegueConfig")
+                : t("ce.canalTemProprio")}
           </p>
         </Field>
 
@@ -414,21 +413,15 @@ export function ClipStyleEditorCard() {
           value={settings.cropStyleMode}
           onValueChange={(next) => next && save({ ...settings, cropStyleMode: next as "auto" | "manual" })}
         >
-          <ToggleGroupItem value="auto" className="text-xs">
-            Automático
-          </ToggleGroupItem>
-          <ToggleGroupItem value="manual" className="text-xs">
-            Manual
-          </ToggleGroupItem>
+          <ToggleGroupItem value="auto" className="text-xs">{t("ce.modoAutomatico")}</ToggleGroupItem>
+          <ToggleGroupItem value="manual" className="text-xs">{t("ce.modoManual")}</ToggleGroupItem>
         </ToggleGroup>
 
         {settings.cropStyleMode === "manual" && (
           <>
             <Field>
-              <FieldLabel>Fundo do corte</FieldLabel>
-              <p className="text-xs text-muted-foreground">
-                O que aparece atrás do vídeo quando ele não ocupa a tela inteira.
-              </p>
+              <FieldLabel>{t("ce.fundoDoCorte")}</FieldLabel>
+              <p className="text-xs text-muted-foreground">{t("ce.fundoTexto")}</p>
 
               {/* Quatro escolhas. Antes só havia duas, e uma delas era implícita:
                   ou você enviava uma imagem, ou ficava o vídeo desfocado. Quem
@@ -438,10 +431,10 @@ export function ClipStyleEditorCard() {
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {(
                   [
-                    { valor: "blur", titulo: "Vídeo desfocado", amostra: "desfocado" },
-                    { valor: "black", titulo: "Preto", amostra: "preto" },
-                    { valor: "white", titulo: "Branco", amostra: "branco" },
-                    { valor: "template", titulo: "Minha imagem", amostra: "imagem" },
+                    { valor: "blur", titulo: t("ce.videoDesfocado"), amostra: "desfocado" },
+                    { valor: "black", titulo: t("ce.preto"), amostra: "preto" },
+                    { valor: "white", titulo: t("ce.branco"), amostra: "branco" },
+                    { valor: "template", titulo: t("ce.minhaImagem"), amostra: "imagem" },
                   ] as const
                 ).map((op) => {
                   const escolhido = settings.backgroundStyle === op.valor
@@ -454,7 +447,7 @@ export function ClipStyleEditorCard() {
                       key={op.valor}
                       type="button"
                       disabled={bloqueado}
-                      title={bloqueado ? "Envie uma imagem primeiro" : undefined}
+                      title={bloqueado ? t("ce.envieImagemPrimeiro") : undefined}
                       onClick={() => save({ ...settings, backgroundStyle: op.valor })}
                       className={`rounded-lg border p-2 text-left transition-colors disabled:opacity-45 ${
                         escolhido ? "border-primary bg-primary/5" : "border-border hover:bg-muted/60"
@@ -479,7 +472,7 @@ export function ClipStyleEditorCard() {
             </Field>
 
             <Field>
-              <FieldLabel>Sua imagem de fundo (opcional)</FieldLabel>
+              <FieldLabel>{t("ce.suaImagemDeFundo")}</FieldLabel>
               <p className="text-xs text-muted-foreground">
                 Uma imagem 9:16 (1080x1920) com a sua arte: moldura, marca, publicidade. O vídeo é
                 encaixado por cima dela, na altura e na posição que você escolher.
@@ -514,7 +507,7 @@ export function ClipStyleEditorCard() {
                 visível, e o corte sai igual ao de sempre. */}
             <div className="grid gap-4 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel>Altura do vídeo</FieldLabel>
+                  <FieldLabel>{t("ce.alturaDoVideo")}</FieldLabel>
                   <Input
                     type="range"
                     min={10}
@@ -528,12 +521,12 @@ export function ClipStyleEditorCard() {
                   />
                   <p className="text-xs text-muted-foreground">
                     {settings.backgroundVideoHeightPercent === 100
-                      ? "O vídeo ocupa a tela inteira. O fundo não aparece."
+                      ? t("ce.telaInteira")
                       : `${settings.backgroundVideoHeightPercent}% da altura. O resto fica sendo o fundo.`}
                   </p>
                 </Field>
                 <Field>
-                  <FieldLabel>Posição do vídeo</FieldLabel>
+                  <FieldLabel>{t("ce.posicaoDoVideo")}</FieldLabel>
                   <Input
                     type="range"
                     min={0}
@@ -547,16 +540,16 @@ export function ClipStyleEditorCard() {
                   />
                   <p className="text-xs text-muted-foreground">
                     {settings.backgroundVideoOffsetPercent <= 15
-                      ? "Colado no topo."
+                      ? t("ce.coladoNoTopo")
                       : settings.backgroundVideoOffsetPercent >= 85
-                        ? "Colado na base."
-                        : "No meio."}
+                        ? t("ce.coladoNaBase")
+                        : t("ce.noMeio")}
                   </p>
                 </Field>
             </div>
 
             <Field>
-              <FieldLabel>Enquadramento (arraste as alças)</FieldLabel>
+              <FieldLabel>{t("ce.enquadramentoArraste")}</FieldLabel>
               <CropZoomEditor
                 value={zoomDraft}
                 onChange={setZoomDraft}
@@ -568,7 +561,7 @@ export function ClipStyleEditorCard() {
             </Field>
 
             <Field>
-              <FieldLabel>Estilo da legenda</FieldLabel>
+              <FieldLabel>{t("ce.estiloDaLegenda")}</FieldLabel>
               <StyleGallery
                 options={settings.options.captionStyles}
                 value={settings.captionStyle}
@@ -583,15 +576,13 @@ export function ClipStyleEditorCard() {
                 checked={settings.showTitle}
                 onCheckedChange={(checked) => save({ ...settings, showTitle: checked === true })}
               />
-              <FieldLabel htmlFor="showTitle" className="font-normal">
-                Mostrar o título no começo do vídeo
-              </FieldLabel>
+              <FieldLabel htmlFor="showTitle" className="font-normal">{t("ce.mostrarTitulo")}</FieldLabel>
             </Field>
 
             {settings.showTitle && (
               <>
                 <Field>
-                  <FieldLabel htmlFor="titleSeconds">Por quantos segundos (1 a 15)</FieldLabel>
+                  <FieldLabel htmlFor="titleSeconds">{t("ce.porQuantosSegundos")}</FieldLabel>
                   <Input
                     id="titleSeconds"
                     type="number"
@@ -603,12 +594,12 @@ export function ClipStyleEditorCard() {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel>Estilo do título</FieldLabel>
+                  <FieldLabel>{t("ce.estiloDoTitulo")}</FieldLabel>
                   <StyleGallery
                     options={settings.options.titleStyles}
                     value={settings.titleStyle}
                     onChange={(v) => save({ ...settings, titleStyle: v })}
-                    sampleText="Título aqui"
+                    sampleText={t("ce.tituloAqui")}
                   />
                 </Field>
               </>
@@ -620,13 +611,11 @@ export function ClipStyleEditorCard() {
                 checked={settings.showPartLabel}
                 onCheckedChange={(checked) => save({ ...settings, showPartLabel: checked === true })}
               />
-              <FieldLabel htmlFor="showPartLabel" className="font-normal">
-                Numerar os cortes (Parte 1, Parte 2...) quando o vídeo gerar mais de um
-              </FieldLabel>
+              <FieldLabel htmlFor="showPartLabel" className="font-normal">{t("ce.numerarCortes")}</FieldLabel>
             </Field>
             {settings.showPartLabel && (
               <Field>
-                <FieldLabel>Onde mostrar a numeração</FieldLabel>
+                <FieldLabel>{t("ce.ondeMostrarNumeracao")}</FieldLabel>
                 <PartLabelPositionPicker
                   value={settings.partLabelPosition}
                   onChange={(v) => save({ ...settings, partLabelPosition: v })}
@@ -637,7 +626,7 @@ export function ClipStyleEditorCard() {
         )}
 
         <p className="text-xs text-muted-foreground">
-          {saving ? "Salvando..." : savedFlash ? "Salvo ✓" : "Mudanças valem pros próximos vídeos processados."}
+          {saving ? "Salvando..." : savedFlash ? "Salvo ✓" : t("vs.mudancasValem")}
         </p>
       </CardContent>
     </Card>

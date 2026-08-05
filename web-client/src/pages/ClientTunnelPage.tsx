@@ -13,6 +13,8 @@ import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import type { ClientTunnel, ClientTunnelResponse } from "@/types/api"
+import { Rico } from "@/components/dashboard/Rico"
+import { useT } from "@/i18n"
 
 type Os = "windows" | "mac"
 
@@ -31,11 +33,12 @@ function StepCard({ number, title, children }: { number: number; title: string; 
 }
 
 function OsPicker({ onSelect }: { onSelect: (os: Os) => void }) {
+  const t = useT()
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Qual é o sistema do seu computador?</CardTitle>
-        <CardDescription>Escolha uma opção pra ver o passo a passo certo pro seu computador.</CardDescription>
+        <CardTitle className="text-base">{t("tunel.qualSistema")}</CardTitle>
+        <CardDescription>{t("tunel.escolhaOpcao")}</CardDescription>
       </CardHeader>
       {/* w-32 nos dois: sem largura fixa, cada botão se ajusta ao próprio texto
           e "Windows" sai bem maior que "Mac" - dois quadrados de tamanhos
@@ -55,49 +58,35 @@ function OsPicker({ onSelect }: { onSelect: (os: Os) => void }) {
 }
 
 function BackToOsPicker({ onClick }: { onClick: () => void }) {
+  const t = useT()
   return (
     <Button variant="ghost" size="sm" onClick={onClick} className="w-fit gap-1.5 text-muted-foreground">
       <IconArrowLeft className="size-3.5" />
-      Trocar sistema (Windows/Mac)
+      {t("tunel.trocarSistema")}
     </Button>
   )
 }
 
 function UninstallGuide({ os }: { os: Os }) {
+  const t = useT()
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Quer desinstalar o programa?</CardTitle>
-        <CardDescription>Sem problema. Dá pra desinstalar a qualquer momento, sem afetar mais nada.</CardDescription>
+        <CardTitle className="text-base">{t("tunel.querDesinstalar")}</CardTitle>
+        <CardDescription>{t("tunel.semProblema")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <StepCard number={1} title="Primeiro, desconecte por aqui">
-          Se o programa já estiver conectado, volte no topo desta página e clique no botão{" "}
-          <strong className="text-foreground">"Desconectar"</strong>. Isso avisa o nosso sistema que você não vai
-          mais usar essa conexão.
+        <StepCard number={1} title={t("tunel.des1Titulo")}>
+          <Rico html={t("tunel.des1")} />
         </StepCard>
-        <StepCard number={2} title="Feche o programa no seu computador">
-          Clique no ícone dele ({os === "windows" ? "perto do relógio, canto inferior direito" : "na barra de menu, topo da tela"}
-          ) e clique em <strong className="text-foreground">"Sair"</strong>.
+        <StepCard number={2} title={t("tunel.des2Titulo")}>
+          <Rico html={os === "windows" ? t("tunel.des2Windows") : t("tunel.des2Mac")} />
         </StepCard>
-        <StepCard number={3} title='Se tinha ativado "Iniciar com o sistema", desmarque antes'>
-          Se você marcou essa opção no menu do programa, clique nela de novo pra desmarcar antes de fechar. Assim
-          ele não tenta abrir sozinho da próxima vez que ligar o computador.
+        <StepCard number={3} title={t("tunel.des3Titulo")}>
+          {t("tunel.des3")}
         </StepCard>
-        <StepCard number={4} title="Apague os arquivos">
-          {os === "windows" ? (
-            <>
-              Vá na pasta <strong className="text-foreground">Downloads</strong>, apague a pasta que você extraiu
-              (a que tinha o arquivo <code className="rounded bg-muted px-1">post-flow-tunnel-windows.exe</code>{" "}
-              dentro) e, se quiser, o arquivo <code className="rounded bg-muted px-1">.zip</code> original também.
-            </>
-          ) : (
-            <>
-              Vá na pasta <strong className="text-foreground">Downloads</strong>, clique com o botão direito no
-              arquivo <code className="rounded bg-muted px-1">post-flow-tunnel-mac</code> e escolha{" "}
-              <strong className="text-foreground">"Mover para o Lixo"</strong>.
-            </>
-          )}
+        <StepCard number={4} title={t("tunel.des4Titulo")}>
+          <Rico html={os === "windows" ? t("tunel.des4Windows") : t("tunel.des4Mac")} />
         </StepCard>
       </CardContent>
     </Card>
@@ -105,6 +94,7 @@ function UninstallGuide({ os }: { os: Os }) {
 }
 
 function PairingForm({ onPaired }: { onPaired: () => void }) {
+  const t = useT()
   const [code, setCode] = useState("")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -118,7 +108,7 @@ function PairingForm({ onPaired }: { onPaired: () => void }) {
       setCode("")
       onPaired()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não consegui conectar com esse código.")
+      setError(err instanceof ApiError ? err.message : t("tunel.naoConseguiConectar"))
     } finally {
       setSaving(false)
     }
@@ -127,18 +117,18 @@ function PairingForm({ onPaired }: { onPaired: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       <Field>
-        <FieldLabel>Código de pareamento (mostrado no programa)</FieldLabel>
+        <FieldLabel>{t("tunel.codigoPareamento")}</FieldLabel>
         <div className="flex gap-2">
           <Input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="Ex: A3K9QZ"
+            placeholder={t("tunel.exemploCodigo")}
             maxLength={6}
             required
             className="font-mono uppercase"
           />
           <Button type="submit" disabled={saving || code.trim().length === 0}>
-            {saving ? "Conectando..." : "Conectar"}
+            {saving ? t("tunel.conectando") : t("tunel.conectar")}
           </Button>
         </div>
       </Field>
@@ -148,6 +138,7 @@ function PairingForm({ onPaired }: { onPaired: () => void }) {
 }
 
 function ConnectedStatus({ tunnel, onChanged }: { tunnel: ClientTunnel; onChanged: () => void }) {
+  const t = useT()
   const [testing, setTesting] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [requireTunnel, setRequireTunnel] = useState(tunnel.requireClientTunnel)
@@ -205,12 +196,9 @@ function ConnectedStatus({ tunnel, onChanged }: { tunnel: ClientTunnel; onChange
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <IconRouter className="size-4 text-muted-foreground" />
-          {tunnel.label || "Seu programa"}
+          {tunnel.label || t("tunel.seuPrograma")}
         </CardTitle>
-        <CardDescription>
-          Um teste real: busca o IP de saída direto da VPS e o IP passando pelo seu programa. Se forem diferentes,
-          está funcionando de verdade.
-        </CardDescription>
+        <CardDescription>{t("tunel.testeReal")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {result && (
@@ -218,22 +206,22 @@ function ConnectedStatus({ tunnel, onChanged }: { tunnel: ClientTunnel; onChange
             <div className="flex items-center gap-2">
               {result.success ? (
                 <TonePill tone="success" icon={<IconCircleCheck className="size-3.5" />}>
-                  Funcionando
+                  {t("tunel.funcionando")}
                 </TonePill>
               ) : (
                 <TonePill tone="danger" icon={<IconCircleX className="size-3.5" />}>
-                  Não funcionando ainda
+                  {t("tunel.naoFuncionandoAinda")}
                 </TonePill>
               )}
               <span className="text-xs text-muted-foreground">
-                último teste: {dataHora(result.testedAt)}
+                {t("tunel.ultimoTeste", { quando: dataHora(result.testedAt) })}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              IP direto da VPS: <span className="font-mono text-foreground">{result.directIp ?? result.directError ?? "—"}</span>
+              {t("tunel.ipDireto")} <span className="font-mono text-foreground">{result.directIp ?? result.directError ?? "—"}</span>
             </p>
             <p className="text-xs text-muted-foreground">
-              IP pelo seu programa:{" "}
+              {t("tunel.ipPeloPrograma")}{" "}
               <span className="font-mono text-foreground">{result.proxiedIp ?? result.proxiedError ?? "—"}</span>
             </p>
           </div>
@@ -243,29 +231,25 @@ function ConnectedStatus({ tunnel, onChanged }: { tunnel: ClientTunnel; onChange
             existe só enquanto o computador está ligado, conectado e com o
             programa aberto. Quem não entende isso descobre pela fatura. */}
         <div className="rounded-lg border border-border p-4">
-          <p className="text-sm font-medium">Quando a sua internet é usada</p>
-          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            Só enquanto o seu computador estiver <strong className="text-foreground">ligado, conectado
-            à internet e com o programa aberto</strong>. O download acontece na hora em que o vídeo
-            entra na fila — se nesse momento o computador estiver desligado, dormindo ou sem
-            internet, não dá pra usar a sua conexão.
-          </p>
+          <p className="text-sm font-medium">{t("tunel.quandoInternetUsada")}</p>
+          <Rico
+            className="mt-1 block text-sm leading-relaxed text-muted-foreground"
+            html={t("tunel.quandoInternetUsadaTexto")}
+          />
 
           <div className="mt-4 flex flex-col gap-2">
-            <p className="text-sm font-medium">O que fazer quando isso acontecer</p>
+            <p className="text-sm font-medium">{t("tunel.oQueFazer")}</p>
             {(
               [
                 {
                   valor: false,
-                  titulo: "Baixar mesmo assim, pela internet do Post Flow",
-                  texto:
-                    "O vídeo não espera. Como não sai pela sua conexão, ele consome crédito normal (a tarifa maior) em vez do crédito bônus.",
+                  titulo: t("tunel.baixarMesmoAssim"),
+                  texto: t("tunel.baixarMesmoAssimTexto"),
                 },
                 {
                   valor: true,
-                  titulo: "Esperar o meu computador ligar",
-                  texto:
-                    "O vídeo fica na fila até o programa reconectar, e aí baixa pela sua internet, consumindo crédito bônus. Nada é processado enquanto isso.",
+                  titulo: t("tunel.esperarComputador"),
+                  texto: t("tunel.esperarComputadorTexto"),
                 },
               ] as const
             ).map((op) => (
@@ -290,10 +274,10 @@ function ConnectedStatus({ tunnel, onChanged }: { tunnel: ClientTunnel; onChange
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={handleTest} disabled={testing} className="w-fit gap-2">
             <IconRefresh className={testing ? "size-4 animate-spin" : "size-4"} />
-            {testing ? "Testando..." : "Testar conexão"}
+            {testing ? t("tunel.testando") : t("tunel.testarConexao")}
           </Button>
           <Button size="sm" variant="outline" onClick={handleDisconnect} disabled={disconnecting} className="w-fit">
-            {disconnecting ? "Desconectando..." : "Desconectar"}
+            {disconnecting ? t("tunel.desconectando") : t("pub.desconectar")}
           </Button>
         </div>
       </CardContent>
@@ -302,6 +286,7 @@ function ConnectedStatus({ tunnel, onChanged }: { tunnel: ClientTunnel; onChange
 }
 
 export function ClientTunnelPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const [data, setData] = useState<ClientTunnelResponse | null>(null)
   const [selectedOs, setSelectedOs] = useState<Os | null>(null)
@@ -318,25 +303,18 @@ export function ClientTunnelPage() {
   if (authLoading || !user) return null
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Sua conexão">
+    <DashboardLayout user={user} onLogout={logout} title={t("tunel.titulo")}>
       <PageHeader
-        title="Sua conexão"
-        description="Faça os downloads saírem pela sua internet e ganhe minutos extras."
+        title={t("tunel.titulo")}
+        description={t("tunel.descricao")}
       />
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">O que é isso e pra que serve</CardTitle>
+          <CardTitle className="text-base">{t("tunel.oQueE")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
-          <p>
-            O YouTube bloqueia downloads vindos do nosso servidor (é um IP "de datacenter", e o YouTube desconfia
-            desse tipo de IP). Instalando esse programinha no seu computador, os downloads dos SEUS vídeos passam a
-            sair pela sua própria internet. Um IP residencial normal não é bloqueado.
-          </p>
-          <p>
-            Enquanto você não instalar, seus downloads continuam funcionando normalmente (usam uma conexão de
-            reserva). Instalar é opcional, mas ajuda a evitar bloqueios.
-          </p>
+          <p>{t("tunel.oQueETexto1")}</p>
+          <p>{t("tunel.oQueETexto2")}</p>
         </CardContent>
       </Card>
 
@@ -348,11 +326,8 @@ export function ClientTunnelPage() {
         <>
           <Card className="border-primary/30 bg-primary/5">
             <CardContent className="flex flex-col gap-2 py-4 text-sm">
-              <p className="font-semibold">Não se preocupe se você nunca instalou um programa assim antes.</p>
-              <p className="text-muted-foreground">
-                O passo a passo explica cada clique. Se travar em algum passo, é só voltar aqui depois. Nada quebra,
-                e dá pra tentar de novo quantas vezes precisar.
-              </p>
+              <p className="font-semibold">{t("tunel.naoSePreocupe")}</p>
+              <p className="text-muted-foreground">{t("tunel.naoSePreocupeTexto")}</p>
             </CardContent>
           </Card>
 
@@ -364,56 +339,35 @@ export function ClientTunnelPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <WindowsMark className="size-4 text-muted-foreground" />
-                Instalando no Windows
+                {t("tunel.instalandoWindows")}
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
-              <StepCard number={1} title="Baixe o programa">
+              <StepCard number={1} title={t("tunel.baixeOPrograma")}>
                 <div className="flex flex-col gap-2">
                   <a href="/downloads/post-flow-tunnel-windows.zip" download className="w-fit">
                     <Button size="sm" variant="outline" className="gap-2">
                       <IconDownload className="size-4" />
-                      Baixar pra Windows
+                      {t("tunel.baixarWindows")}
                     </Button>
                   </a>
-                  <p>
-                    O arquivo baixado normalmente vai pra uma pasta chamada <strong className="text-foreground">Downloads</strong> no
-                    seu computador. Se não souber onde encontrar, digite "Downloads" na busca do Windows (o ícone de
-                    lupa, geralmente perto do botão Iniciar) e abra a pasta que aparecer.
-                  </p>
+                  <Rico html={t("tunel.win1")} />
                 </div>
               </StepCard>
-              <StepCard number={2} title='"Extraia" o arquivo baixado'>
-                O arquivo baixado tem uma "pasta compactada" dentro dele (é assim que ele fica menor pra baixar mais
-                rápido). Antes de usar, precisa abrir essa compactação. Clique com o{" "}
-                <strong className="text-foreground">botão direito do mouse</strong> em cima do arquivo baixado (o nome
-                é parecido com <code className="rounded bg-muted px-1">post-flow-tunnel-windows.zip</code>) e escolha a
-                opção <strong className="text-foreground">"Extrair tudo..."</strong>. Vai abrir uma janela pequena. Só
-                clique no botão <strong className="text-foreground">"Extrair"</strong> dela, sem mudar nada.
+              <StepCard number={2} title={t("tunel.win2Titulo")}>
+                <Rico html={t("tunel.win2")} />
               </StepCard>
-              <StepCard number={3} title="Abra a pasta nova e execute o programa">
-                Depois de extrair, vai aparecer uma pasta nova com o mesmo nome. Abra ela (duplo clique) e procure
-                dentro um arquivo chamado{" "}
-                <code className="rounded bg-muted px-1">post-flow-tunnel-windows.exe</code>. Dê um{" "}
-                <strong className="text-foreground">duplo clique</strong> nesse arquivo.
+              <StepCard number={3} title={t("tunel.win3Titulo")}>
+                <Rico html={t("tunel.win3")} />
               </StepCard>
-              <StepCard number={4} title='Se aparecer uma tela azul de aviso, não é vírus'>
-                É bem comum o Windows mostrar uma tela dizendo{" "}
-                <strong className="text-foreground">"O Windows protegeu o computador"</strong>. Isso acontece com
-                qualquer programa novo que ainda não pagou por um "certificado". Não significa que tem vírus. Pra
-                continuar: clique no texto pequeno{" "}
-                <strong className="text-foreground">"Mais informações"</strong>, e depois no botão que vai aparecer
-                escrito <strong className="text-foreground">"Executar assim mesmo"</strong>.
+              <StepCard number={4} title={t("tunel.win4Titulo")}>
+                <Rico html={t("tunel.win4")} />
               </StepCard>
-              <StepCard number={5} title="Procure o ícone perto do relógio">
-                O programa não abre uma janela, ele fica rodando "escondido" perto do relógio, no canto inferior
-                direito da tela. Se não ver um ícone novo ali, clique na setinha{" "}
-                <strong className="text-foreground">"^"</strong> pra mostrar os ícones escondidos. Vai ter um círculo
-                colorido novo, esse é o programa.
+              <StepCard number={5} title={t("tunel.win5Titulo")}>
+                <Rico html={t("tunel.win5")} />
               </StepCard>
-              <StepCard number={6} title="Veja o código">
-                Clique nesse ícone. Vai aparecer um código curto de 6 letras/números. É esse código que você vai
-                colar no campo lá embaixo desta página.
+              <StepCard number={6} title={t("tunel.vejaOCodigo")}>
+                {t("tunel.vejaOCodigoTexto")}
               </StepCard>
             </CardContent>
           </Card>
@@ -425,50 +379,35 @@ export function ClientTunnelPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <AppleMark className="size-4 text-muted-foreground" />
-                Instalando no Mac
+                {t("tunel.instalandoMac")}
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
-              <StepCard number={1} title="Baixe o programa">
+              <StepCard number={1} title={t("tunel.baixeOPrograma")}>
                 <div className="flex flex-col gap-2">
                   <a href="/downloads/post-flow-tunnel-mac" download className="w-fit">
                     <Button size="sm" variant="outline" className="gap-2">
                       <IconDownload className="size-4" />
-                      Baixar pra Mac
+                      {t("tunel.baixarMac")}
                     </Button>
                   </a>
-                  <p>
-                    O arquivo baixado normalmente vai pra pasta{" "}
-                    <strong className="text-foreground">Downloads</strong>. O próprio navegador costuma mostrar um
-                    aviso "Download concluído" com um atalho pra ele.
-                  </p>
+                  <Rico html={t("tunel.mac1")} />
                 </div>
               </StepCard>
-              <StepCard number={2} title="Abra o arquivo baixado">
-                Dê um <strong className="text-foreground">duplo clique</strong> no arquivo que você baixou (o nome é
-                parecido com <code className="rounded bg-muted px-1">post-flow-tunnel-mac</code>).
+              <StepCard number={2} title={t("tunel.mac2Titulo")}>
+                <Rico html={t("tunel.mac2")} />
               </StepCard>
-              <StepCard number={3} title='Se o Mac bloquear, não é vírus'>
-                É bem comum aparecer uma mensagem tipo{" "}
-                <strong className="text-foreground">"não é possível abrir porque é de um desenvolvedor não
-                identificado"</strong>. Isso acontece com qualquer programa novo que ainda não pagou pela
-                "identificação" da Apple. Não significa que tem vírus. Pra resolver: clique no ícone da maçã (canto
-                superior esquerdo) → <strong className="text-foreground">Ajustes do Sistema</strong> →{" "}
-                <strong className="text-foreground">Privacidade e Segurança</strong> → role a tela pra baixo até achar
-                uma frase mencionando o programa bloqueado → clique em{" "}
-                <strong className="text-foreground">"Abrir Assim Mesmo"</strong>.
+              <StepCard number={3} title={t("tunel.mac3Titulo")}>
+                <Rico html={t("tunel.mac3")} />
               </StepCard>
-              <StepCard number={4} title="Abra o arquivo de novo">
-                Volte na pasta Downloads e dê duplo clique no arquivo mais uma vez. Agora ele deve abrir
-                normalmente.
+              <StepCard number={4} title={t("tunel.mac4Titulo")}>
+                {t("tunel.mac4")}
               </StepCard>
-              <StepCard number={5} title="Procure o ícone no topo da tela">
-                O programa não abre uma janela, ele fica rodando "escondido" na barra de menu, bem no topo da tela
-                (ao lado do relógio, Wi-Fi, etc). Vai ter um círculo colorido novo ali, esse é o programa.
+              <StepCard number={5} title={t("tunel.mac5Titulo")}>
+                {t("tunel.mac5")}
               </StepCard>
-              <StepCard number={6} title="Veja o código">
-                Clique nesse ícone. Vai aparecer um código curto de 6 letras/números. É esse código que você vai
-                colar no campo lá embaixo desta página.
+              <StepCard number={6} title={t("tunel.vejaOCodigo")}>
+                {t("tunel.vejaOCodigoTexto")}
               </StepCard>
             </CardContent>
           </Card>
@@ -478,8 +417,8 @@ export function ClientTunnelPage() {
             <>
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Conectar</CardTitle>
-                  <CardDescription>Cole aqui o código de 6 caracteres que apareceu no programa.</CardDescription>
+                  <CardTitle className="text-base">{t("tunel.conectar")}</CardTitle>
+                  <CardDescription>{t("tunel.coleOCodigo")}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <PairingForm onPaired={load} />
@@ -488,10 +427,8 @@ export function ClientTunnelPage() {
 
               <Card>
                 <CardContent className="py-4 text-sm text-muted-foreground">
-                  <strong className="text-foreground">Uma coisa importante:</strong> pra isso funcionar, seu
-                  computador precisa estar ligado e conectado à internet. Se ele desligar, hibernar ou perder a
-                  internet, não tem problema nenhum. Os downloads simplesmente voltam a usar a conexão de reserva
-                  até seu computador voltar a ficar disponível.
+                  <strong className="text-foreground">{t("tunel.umaCoisaImportante")}</strong>{" "}
+                  {t("tunel.umaCoisaImportanteTexto")}
                 </CardContent>
               </Card>
 

@@ -1,3 +1,4 @@
+import { useT } from "@/i18n"
 import { useEffect, useState } from "react"
 import { IconUsers, IconListDetails, IconBrandYoutube, IconClockHour4, IconScissors } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
@@ -11,6 +12,7 @@ import { api } from "@/lib/api"
 import type { AdminDashboardResponse } from "@/types/api"
 
 export function AdminDashboardPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const { range, setRange } = useDateRange()
   const [data, setData] = useState<AdminDashboardResponse | null>(null)
@@ -34,9 +36,9 @@ export function AdminDashboardPage() {
     })) ?? []
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Início">
+    <DashboardLayout user={user} onLogout={logout} title={t("menu.inicio")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Período</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">{t("inicio.periodo")}</h2>
         <DateRangeFilter value={range} onChange={setRange} />
       </div>
 
@@ -60,13 +62,13 @@ export function AdminDashboardPage() {
               hrefLabel="Ver postagens"
             />
             <StatCard
-              label="Canais monitorados"
+              label={t("adm.canaisMonitorados")}
               value={data.counts.youtubeChannels}
               icon={<IconBrandYoutube />}
               tone="danger"
             />
             <StatCard
-              label="Vídeos na fila"
+              label={t("adm.videosNaFila")}
               value={data.counts.videosInProgress}
               icon={<IconClockHour4 />}
               tone="violet"
@@ -74,7 +76,7 @@ export function AdminDashboardPage() {
               hrefLabel="Ver fila"
             />
             <StatCard
-              label="Cortes gerados no período"
+              label={t("inicio.cortesGerados")}
               value={data.counts.clipsInRange}
               icon={<IconScissors />}
               tone="success"
@@ -92,13 +94,13 @@ export function AdminDashboardPage() {
       </div>
 
       <div>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Postagens no período</h2>
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t("adm.postagensNoPeriodo")}</h2>
         {data ? (
           <PostingsTable
             rows={rows}
             showClient
             showOrigin
-            emptyMessage="Nenhuma postagem nesse período."
+            emptyMessage={t("adm.nenhumaPostagem")}
           />
         ) : (
           <Skeleton className="h-64" />

@@ -1,3 +1,4 @@
+import { useT } from "@/i18n"
 import { dataHora } from "@/lib/formatoLocal"
 import { useEffect, useState } from "react"
 import { IconRefresh, IconCheck, IconCopy, IconAlertTriangle } from "@tabler/icons-react"
@@ -29,6 +30,7 @@ function ErrorRow({
   onResolve: () => void
   busy: boolean
 }) {
+  const t = useT()
   const [aberto, setAberto] = useState(false)
   const [copiado, setCopiado] = useState(false)
 
@@ -36,13 +38,13 @@ function ErrorRow({
   // que importa num bloco só - copiar campo por campo da tela seria pior.
   async function copiar() {
     const texto = [
-      `Operação: ${erro.operationLabel}`,
-      erro.entityLabel ? `Item: ${erro.entityLabel} #${erro.entityId}` : null,
-      erro.clientName ? `Cliente: ${erro.clientName}` : "Cliente: (do sistema)",
-      `Ocorrências: ${erro.occurrences} (primeira ${quando(erro.firstSeenAt)}, última ${quando(erro.lastSeenAt)})`,
-      `Resumo: ${erro.message}`,
+      `${t("adm.copiaOperacao")}: ${erro.operationLabel}`,
+      erro.entityLabel ? `${t("adm.copiaItem")}: ${erro.entityLabel} #${erro.entityId}` : null,
+      `${t("adm.copiaCliente")}: ${erro.clientName ?? t("adm.copiaDoSistema")}`,
+      `${t("adm.copiaOcorrencias")}: ${erro.occurrences} (${t("adm.copiaPrimeira")} ${quando(erro.firstSeenAt)}, ${t("adm.copiaUltima")} ${quando(erro.lastSeenAt)})`,
+      `${t("adm.copiaResumo")}: ${erro.message}`,
       "",
-      erro.detail || "(sem detalhe técnico)",
+      erro.detail || t("adm.copiaSemDetalhe"),
     ]
       .filter(Boolean)
       .join("\n")
@@ -63,7 +65,7 @@ function ErrorRow({
                   {erro.occurrences}x
                 </TonePill>
               )}
-              {erro.status === "retentando" && <TonePill tone="cyan" spin>Tentando de novo</TonePill>}
+              {erro.status === "retentando" && <TonePill tone="cyan" spin>{t("adm.tentandoDeNovo")}</TonePill>}
               {erro.status === "resolvido" && (
                 <TonePill tone="success" icon={<IconCheck className="size-3.5" />}>
                   Resolvido
@@ -79,7 +81,7 @@ function ErrorRow({
                   {erro.entityLabel} #{erro.entityId} ·{" "}
                 </>
               )}
-              {erro.clientName || "do sistema"} · última vez {quando(erro.lastSeenAt)}
+              {erro.clientName || t("adm.doSistema")} · última vez {quando(erro.lastSeenAt)}
               {erro.retryCount > 0 && ` · ${erro.retryCount} tentativa${erro.retryCount > 1 ? "s" : ""}`}
             </p>
           </div>
@@ -92,26 +94,24 @@ function ErrorRow({
               </Button>
             )}
             {erro.status !== "resolvido" && (
-              <Button size="sm" variant="outline" onClick={onResolve} disabled={busy}>
-                Já resolvi
-              </Button>
+              <Button size="sm" variant="outline" onClick={onResolve} disabled={busy}>{t("adm.jaResolvi")}</Button>
             )}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setAberto((v) => !v)}>
-            {aberto ? "Esconder detalhe" : "Ver detalhe técnico"}
+            {aberto ? "Esconder detalhe" : t("adm.verDetalheTecnico")}
           </Button>
           <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs" onClick={copiar}>
             <IconCopy className="size-3.5" />
-            {copiado ? "Copiado" : "Copiar pra enviar"}
+            {copiado ? "Copiado" : t("adm.copiarPraEnviar")}
           </Button>
         </div>
 
         {aberto && (
           <pre className="max-h-64 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-[11.5px] leading-relaxed whitespace-pre-wrap">
-            {erro.detail || "Sem detalhe técnico registrado."}
+            {erro.detail || t("adm.semDetalheTecnico")}
           </pre>
         )}
       </CardContent>
@@ -120,6 +120,7 @@ function ErrorRow({
 }
 
 export function AdminErrorsPage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const [data, setData] = useState<SystemErrorsResponse | null>(null)
   const [filtro, setFiltro] = useState<Filtro>("abertos")
@@ -146,7 +147,7 @@ export function AdminErrorsPage() {
       await api.post(`/api/admin/errors/${id}/${caminho}`)
       await load()
     } catch (err) {
-      setAviso(err instanceof ApiError ? err.message : "Não consegui fazer isso agora.")
+      setAviso(err instanceof ApiError ? err.message : t("adm.naoConsegiFazerIsso"))
     } finally {
       setBusyId(null)
     }
@@ -156,7 +157,7 @@ export function AdminErrorsPage() {
     <DashboardLayout user={user} onLogout={logout} title="Erros">
       <PageHeader
         title="Erros"
-        description="Tudo que falhou no sistema, seu ou de qualquer cliente, num lugar só."
+        description={t("adm.errosDescricao")}
       />
 
       {aviso && <p className="text-sm text-destructive">{aviso}</p>}
@@ -196,7 +197,7 @@ export function AdminErrorsPage() {
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
             <IconCheck className="size-8 text-muted-foreground" />
             <p className="text-sm font-medium">
-              {filtro === "abertos" ? "Nenhum erro em aberto." : "Nada por aqui."}
+              {filtro === "abertos" ? t("adm.nenhumErroEmAberto") : t("adm.nadaPorAqui")}
             </p>
             <p className="max-w-sm text-xs text-muted-foreground">
               Quando alguma operação falhar - sua ou de um cliente - ela aparece nesta lista com o

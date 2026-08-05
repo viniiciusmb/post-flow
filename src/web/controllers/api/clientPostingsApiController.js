@@ -88,7 +88,7 @@ async function updateCaption(req, res) {
   const caption = String(req.body.caption || '').trim();
   const updated = await postingsRepository.updateCaptionOwnedByClient(Number(req.params.id), req.session.user.id, caption);
   if (!updated) {
-    return res.status(404).json({ error: 'Postagem não encontrada ou já saiu da fila de espera.' });
+    return res.status(404).json({ error: res.locals.t('erros.postagemNaoNaFila') });
   }
   res.json({ id: updated.id, caption: updated.caption });
 }
@@ -96,7 +96,7 @@ async function updateCaption(req, res) {
 async function skip(req, res) {
   const updated = await postingsRepository.skipOwnedByClient(Number(req.params.id), req.session.user.id);
   if (!updated) {
-    return res.status(404).json({ error: 'Postagem não encontrada ou já saiu da fila de espera.' });
+    return res.status(404).json({ error: res.locals.t('erros.postagemNaoNaFila') });
   }
   res.status(204).end();
 }
@@ -108,7 +108,7 @@ async function skip(req, res) {
 async function retry(req, res) {
   const updated = await postingsRepository.retryOwnedByClient(Number(req.params.id), req.session.user.id);
   if (!updated) {
-    return res.status(404).json({ error: 'Postagem não encontrada ou não está com erro.' });
+    return res.status(404).json({ error: res.locals.t('erros.postagemSemErro') });
   }
   res.status(204).end();
 }
@@ -120,12 +120,12 @@ async function retry(req, res) {
 async function postNow(req, res) {
   const posting = await postingsRepository.findPublishableByIdOwnedByClient(Number(req.params.id), req.session.user.id);
   if (!posting) {
-    return res.status(404).json({ error: 'Postagem não encontrada ou já saiu da fila de espera.' });
+    return res.status(404).json({ error: res.locals.t('erros.postagemNaoNaFila') });
   }
 
   const account = await tiktokAccountsRepository.findActiveByIdAndClient(posting.tiktok_account_id, req.session.user.id);
   if (!account) {
-    return res.status(404).json({ error: 'Conta TikTok não encontrada.' });
+    return res.status(404).json({ error: res.locals.t('erros.contaTiktokNaoEncontrada') });
   }
 
   await tiktokPostingJob.publish(account, posting);
@@ -145,7 +145,7 @@ async function creatorOptions(req, res) {
     Number(req.params.id),
     req.session.user.id
   );
-  if (!conta) return res.status(404).json({ error: 'Conta TikTok não encontrada.' });
+  if (!conta) return res.status(404).json({ error: res.locals.t('erros.contaTiktokNaoEncontrada') });
 
   try {
     const token = await tiktokAccountsRepository.getValidAccessToken(tiktokService, conta);
@@ -154,7 +154,7 @@ async function creatorOptions(req, res) {
     res.json({ ...info, publishMode: conta.publish_mode });
   } catch (err) {
     logger.error(`Falha ao consultar opcoes de publicacao da conta ${conta.id}:`, err.message);
-    res.status(502).json({ error: 'Não foi possível falar com o TikTok agora. Tente de novo em instantes.' });
+    res.status(502).json({ error: res.locals.t('erros.tiktokIndisponivel') });
   }
 }
 
@@ -184,7 +184,7 @@ async function saveOptions(req, res) {
       brandContentToggle: Boolean(brandContentToggle),
     }
   );
-  if (!salvo) return res.status(404).json({ error: 'Corte não encontrado na fila.' });
+  if (!salvo) return res.status(404).json({ error: res.locals.t('erros.corteNaoNaFila') });
   res.json({ ok: true });
 }
 
@@ -194,7 +194,7 @@ async function clearOptions(req, res) {
     Number(req.params.id),
     req.session.user.id
   );
-  if (!limpo) return res.status(404).json({ error: 'Corte não encontrado na fila.' });
+  if (!limpo) return res.status(404).json({ error: res.locals.t('erros.corteNaoNaFila') });
   res.json({ ok: true });
 }
 

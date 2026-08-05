@@ -62,7 +62,7 @@ function ChannelVideoThumb({ video }: { video: SourceVideo }) {
       </div>
       <p className="line-clamp-2 text-xs leading-snug font-medium">{video.title}</p>
       <p className="text-[10px] text-muted-foreground">
-        {video.clipCount} {video.clipCount === 1 ? "corte" : "cortes"}
+        {video.clipCount === 1 ? t("cortes.umCorte") : t("cortes.nCortes", { n: video.clipCount })}
       </p>
     </a>
   )

@@ -42,7 +42,7 @@ async function resolveTiktokAccountIds(req) {
   const validIds = accounts.filter((a) => ids.includes(Number(a.id))).map((a) => a.id);
 
   if (validIds.length === 0) {
-    return { error: 'Escolha pelo menos uma conta TikTok pra receber os vídeos dessa pasta.' };
+    return { error: res.locals.t('erros.escolhaContaPasta') };
   }
   return { tiktokAccountIds: validIds };
 }
@@ -50,12 +50,12 @@ async function resolveTiktokAccountIds(req) {
 async function setFolder(req, res) {
   const driveFolderId = extractDriveFolderId(req.body.folderLink);
   if (!driveFolderId) {
-    return res.status(400).json({ error: 'Cole o link ou ID da pasta do Drive.' });
+    return res.status(400).json({ error: res.locals.t('erros.coleLinkPasta') });
   }
 
   const connection = await driveConnectionsRepository.findByOwnerId(req.session.user.id);
   if (!connection) {
-    return res.status(400).json({ error: 'Conecte o Google Drive primeiro.' });
+    return res.status(400).json({ error: res.locals.t('erros.conecteDrive') });
   }
 
   const targets = await resolveTiktokAccountIds(req);

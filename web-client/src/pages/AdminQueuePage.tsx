@@ -1,3 +1,4 @@
+import { useT, type ChaveDeTraducao } from "@/i18n"
 import { useEffect, useState } from "react"
 import { IconCheck, IconRefresh, IconX } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
@@ -53,11 +54,11 @@ function TimingMetric({ label, seconds }: { label: string; seconds: number | nul
   )
 }
 
-const STEPS: { status: string; label: string }[] = [
-  { status: "downloading", label: "Baixando vídeo" },
-  { status: "transcribing", label: "Transcrevendo áudio" },
-  { status: "selecting_clips", label: "Selecionando cortes (IA)" },
-  { status: "cutting", label: "Cortando & legendando" },
+const STEPS: { status: string; label: ChaveDeTraducao }[] = [
+  { status: "downloading", label: "adm.baixandoVideo" },
+  { status: "transcribing", label: "adm.transcricao" },
+  { status: "selecting_clips", label: "adm.selecionandoCortes" },
+  { status: "cutting", label: "adm.cortandoLegendando" },
 ]
 
 function timeAgo(iso: string) {
@@ -74,6 +75,7 @@ function initials(name: string) {
 }
 
 export function AdminQueuePage() {
+  const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const [data, setData] = useState<QueueOverview | null>(null)
 
@@ -100,9 +102,7 @@ export function AdminQueuePage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Processamento">
-      <p className="-mt-2 text-sm text-muted-foreground">
-        Cortes de YouTube são processados um vídeo por vez.
-      </p>
+      <p className="-mt-2 text-sm text-muted-foreground">{t("adm.umVideoPorVez")}</p>
 
       {!data ? (
         <Skeleton className="h-28" />
@@ -144,7 +144,7 @@ export function AdminQueuePage() {
                             (i === currentStepIndex ? "text-foreground font-semibold" : "text-muted-foreground")
                           }
                         >
-                          {step.label}
+                          {t(step.label)}
                         </span>
                       </div>
                       {i < STEPS.length - 1 && (
@@ -165,9 +165,7 @@ export function AdminQueuePage() {
             </div>
           )}
 
-          <div className="flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-            Na fila
-            <span className="rounded-full bg-tone-neutral-wash px-2 py-0.5 text-[11px] font-bold text-tone-neutral-ink normal-case">
+          <div className="flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase">{t("adm.naFila")}<span className="rounded-full bg-tone-neutral-wash px-2 py-0.5 text-[11px] font-bold text-tone-neutral-ink normal-case">
               {data.waiting.length}
             </span>
           </div>
@@ -188,9 +186,9 @@ export function AdminQueuePage() {
                       {v.title} · {v.channelName}
                     </div>
                   </div>
-                  {v.status === "aguardando_creditos" && <TonePill tone="danger">Sem crédito</TonePill>}
+                  {v.status === "aguardando_creditos" && <TonePill tone="danger">{t("adm.semCredito")}</TonePill>}
                   {v.status === "aguardando_conexao" && (
-                    <TonePill tone="cyan">Esperando o computador do cliente</TonePill>
+                    <TonePill tone="cyan">{t("adm.esperandoComputador")}</TonePill>
                   )}
                   <div className="shrink-0 text-xs text-muted-foreground">{timeAgo(v.createdAt)}</div>
                 </div>
@@ -200,7 +198,7 @@ export function AdminQueuePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Tempo de processamento (por minuto de vídeo)</CardTitle>
+              <CardTitle className="text-base">{t("adm.tempoProcessamento")}</CardTitle>
               <CardDescription>
                 Média dos últimos 30 dias, normalizada por minuto de vídeo, ex: "15s" significa 15 segundos dessa
                 etapa pra cada 1 minuto de vídeo original.
@@ -209,18 +207,16 @@ export function AdminQueuePage() {
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-6 sm:grid-cols-5">
               <TimingMetric label="Download" seconds={data.stageTimings.avgDownloadSecondsPerMinute} />
-              <TimingMetric label="Transcrição" seconds={data.stageTimings.avgTranscriptionSecondsPerMinute} />
-              <TimingMetric label="Seleção de cortes" seconds={data.stageTimings.avgSelectionSecondsPerMinute} />
+              <TimingMetric label={t("adm.transcricao")} seconds={data.stageTimings.avgTranscriptionSecondsPerMinute} />
+              <TimingMetric label={t("adm.selecaoDeCortes")} seconds={data.stageTimings.avgSelectionSecondsPerMinute} />
               <TimingMetric label="Corte/renderização" seconds={data.stageTimings.avgCuttingSecondsPerMinute} />
               <TimingMetric label="Total" seconds={data.stageTimings.avgTotalSecondsPerMinute} />
             </CardContent>
           </Card>
 
-          <div className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">Histórico recente</div>
+          <div className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">{t("adm.historicoRecente")}</div>
           {data.history.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-              Nenhum processamento concluído ainda.
-            </div>
+            <div className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">{t("adm.nenhumProcessamentoConcluido")}</div>
           ) : (
             <div className="rounded-lg border border-border">
               {data.history.map((v) => (
@@ -244,7 +240,7 @@ export function AdminQueuePage() {
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">
                     <TonePill tone={v.status === "ready" ? "success" : "danger"}>
-                      {v.status === "ready" ? "Concluído" : "Erro"}
+                      {v.status === "ready" ? t("adm.concluido") : "Erro"}
                     </TonePill>
                     {v.status === "error" && (
                       <Button variant="outline" size="sm" onClick={() => retry(v.id)} className="h-7 gap-1 text-xs">

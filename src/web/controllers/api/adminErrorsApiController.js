@@ -70,9 +70,9 @@ async function list(req, res) {
 // minutos (um vídeo inteiro, por exemplo).
 async function retry(req, res) {
   const erro = await systemErrorsRepository.findById(req.params.id);
-  if (!erro) return res.status(404).json({ error: 'Erro não encontrado.' });
+  if (!erro) return res.status(404).json({ error: res.locals.t('erros.erroNaoEncontrado') });
   if (!PODE_TENTAR_DE_NOVO.has(erro.operation)) {
-    return res.status(400).json({ error: 'Essa operação não pode ser refeita por aqui.' });
+    return res.status(400).json({ error: res.locals.t('erros.operacaoNaoRefeita') });
   }
 
   await systemErrorsRepository.markRetrying(erro.id);
@@ -82,7 +82,7 @@ async function retry(req, res) {
     if (!disparou) {
       await systemErrorsRepository.markOpenAgain(erro.id);
       return res.status(409).json({
-        error: 'Não deu pra tentar de novo: o item dessa falha não existe mais.',
+        error: res.locals.t('erros.itemNaoExisteMais'),
       });
     }
   } catch (err) {
@@ -90,7 +90,7 @@ async function retry(req, res) {
     // "retentando" faria parecer que tem algo rodando quando não tem.
     await systemErrorsRepository.markOpenAgain(erro.id);
     logger.error(`Falha ao reenfileirar o erro ${erro.id}:`, err.message);
-    return res.status(500).json({ error: 'Não consegui recolocar na fila agora.' });
+    return res.status(500).json({ error: res.locals.t('erros.naoRecolocouNaFila') });
   }
 
   const atualizado = await systemErrorsRepository.findById(erro.id);
@@ -149,7 +149,7 @@ async function videoDoCorte(clipId) {
 
 async function resolve(req, res) {
   const atualizado = await systemErrorsRepository.resolve(req.params.id);
-  if (!atualizado) return res.status(404).json({ error: 'Erro não encontrado.' });
+  if (!atualizado) return res.status(404).json({ error: res.locals.t('erros.erroNaoEncontrado') });
   res.json({ error: toApi(atualizado) });
 }
 
