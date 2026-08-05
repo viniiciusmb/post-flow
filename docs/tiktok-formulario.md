@@ -49,16 +49,16 @@ Adicione a conta TikTok de teste. Sem isso ela não consegue autorizar o app.
 
 ## Explicação dos produtos e escopos
 
-Limite 1000; este tem 992:
+Limite 1000; este tem 979:
 
 ```
-Post Flow is a video repurposing tool for creators. It monitors the creator's own YouTube channel, uses AI to select the best segments of each new video, renders them as vertical clips with burned-in captions, and publishes them to the creator's own TikTok account. The website and dashboard are available in English, Portuguese and Spanish.
+Post Flow is a video repurposing tool for creators. It monitors the creator's own YouTube channel, uses AI to select the best segments of each new video, renders them as vertical clips with burned-in captions, and publishes them to the creator's own TikTok account. Available in English, Portuguese and Spanish.
 
 Products and scopes:
-- Login Kit / user.info.basic: the creator connects their own TikTok account. We display the nickname and avatar so they always know which profile a clip will go to.
+- Login Kit / user.info.basic: the creator connects their own TikTok account. We show the nickname and avatar so they always know which profile a clip will go to.
 - user.info.stats: we show follower, like and video counts on the connected account card.
 - Content Posting API / video.upload: sends the finished clip as a draft to the creator's TikTok inbox, when the creator picks that mode.
-- Content Posting API / video.publish: publishes directly to the creator's profile, only after the creator manually sets privacy level, interaction settings and commercial disclosure for that specific clip.
+- Content Posting API / video.publish: publishes straight to the creator's profile, only after the creator has manually set privacy level, interaction settings and commercial disclosure.
 
 We never add any watermark, logo or promotional text to the video.
 ```

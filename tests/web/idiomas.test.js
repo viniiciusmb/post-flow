@@ -263,3 +263,30 @@ test('a Política de Privacidade lista os 4 escopos exatos do TikTok', async () 
     }
   }
 });
+
+test('os valores do formulário da TikTok cabem nos limites e apontam pro ar', async () => {
+  // O formulário de submissão da TikTok tem limite de caracteres, e passar do
+  // limite só aparece na hora de colar - com o vídeo já gravado e o usuário
+  // esperando. Já aconteceu: a explicação passou de 1000 quando ganhou uma
+  // frase a mais.
+  const doc = fs.readFileSync(path.join(RAIZ_PROJETO, 'docs/tiktok-formulario.md'), 'utf8');
+
+  const blocos = [...doc.matchAll(/```\n([\s\S]*?)```/g)].map((m) => m[1].trim());
+  const descricao = blocos.find((b) => b.startsWith('Transforma'));
+  const explicacao = blocos.find((b) => b.startsWith('Post Flow is'));
+
+  assert.ok(descricao, 'a descrição curta sumiu do formulário');
+  assert.ok(descricao.length <= 120, `descrição tem ${descricao.length} caracteres (limite 120)`);
+
+  assert.ok(explicacao, 'a explicação de produtos e escopos sumiu do formulário');
+  assert.ok(explicacao.length <= 1000, `explicação tem ${explicacao.length} caracteres (limite 1000)`);
+
+  // Os 4 escopos que o app pede precisam estar explicados aqui também: é o
+  // texto que o revisor lê ao lado da lista de permissões.
+  for (const escopo of ['user.info.basic', 'user.info.stats', 'video.publish', 'video.upload']) {
+    assert.ok(explicacao.includes(escopo), `${escopo} não aparece na explicação`);
+  }
+
+  // Domínio: o formulário não pode apontar pro domínio antigo depois da troca.
+  assert.ok(!doc.includes('postflowtiktok.com'), 'o formulário ainda cita o domínio antigo');
+});
