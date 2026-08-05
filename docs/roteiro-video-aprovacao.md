@@ -51,11 +51,21 @@ tela que está sendo gravada. A senha aparece como pontinhos, então não há ri
       cena 4 — é assim que os dois modos aparecem no vídeo.
 - [ ] **Abra `postflowclips.com` numa anônima e recarregue 3 vezes.** Se aparecer a página da
       Hostinger em alguma, o DNS ainda não terminou de propagar aí — espere e teste de novo.
+- [ ] **Coloque o site em inglês antes de começar.** O botão fica no canto superior direito
+      (ícone de idioma, ao lado do sol/lua). Escolha **English** e a página recarrega. Vale pro
+      site público E pro painel — o revisor da TikTok lê em inglês, e um app em português é um
+      motivo bobo de atrito na análise.
+- [ ] **Confira que ficou em inglês nas telas que você vai mostrar**: a landing, o menu lateral
+      (Home, Channels, Clips, Publishing) e o bloco de opções de publicação.
 - [ ] Feche abas, notificações e qualquer coisa com nome de pessoa real na tela.
 - [ ] Tela em 1920×1080, zoom do navegador em 100%.
 
 **Como gravar:** QuickTime ("Gravação de Tela") ou OBS. Mouse devagar, 2 segundos parado em cada
 tela importante, e **sem cortes** nas partes de autorização.
+
+> **Sobre o idioma:** o site tem português, inglês e espanhol. Grave em **inglês** — é o idioma em
+> que a TikTok analisa. Os nomes de tela citados neste roteiro estão em português porque é assim
+> que você conhece o sistema; a tradução de cada um aparece entre parênteses onde importa.
 
 ---
 
@@ -106,8 +116,8 @@ Você pediu quatro, e cada um tem uma cena onde ele fica visível.
 
 ## Cena 3 — Conectar o TikTok (00:45 – 01:45) — **a mais importante**
 
-1. No menu, clique em **Publicação**
-2. Clique em **Conectar outra conta**
+1. No menu, clique em **Publicação** (*Publishing*)
+2. Clique em **Conectar outra conta** (*Connect another account*)
 3. **A tela do TikTok abre. NÃO CORTE NADA daqui até o fim da cena.**
 4. Faça login com **e-mail e senha da conta de teste do TikTok**
 5. Aparece a tela de autorização. **Pare 3 segundos.**
@@ -124,10 +134,10 @@ Você pediu quatro, e cada um tem uma cena onde ele fica visível.
 
 ## Cena 4 — Escolher o modo (01:45 – 02:00)
 
-1. Clique em **Configurar postagens dessa conta**
+1. Clique em **Configurar postagens dessa conta** (*Configure this account's posting*)
 2. Mostre o bloco **"Como o corte chega no TikTok"**, com as duas opções
-3. **Pare 2 segundos em "Como rascunho"** e leia o texto embaixo dela
-4. Clique em **Direto no perfil**
+3. **Pare 2 segundos em "Como rascunho"** (*As a draft*) e leia o texto embaixo dela
+4. Clique em **Direto no perfil** (*Straight to the profile*)
 
 > **Escopo desta cena: `video.upload`.**
 >
@@ -157,8 +167,8 @@ pausando em cada**:
 6. **A frase acima do botão**: *"Ao publicar, você concorda com a Confirmação de Uso de Música do
    TikTok"*. Passe o mouse por cima pra mostrar que é um link
 7. **O aviso** de que o TikTok pode levar alguns minutos pra processar
-8. Clique em **Confirmar e liberar publicação** — o cartão vira um resumo do que você escolheu
-9. Desça até a aba **Fila**, e num corte clique em **Editar opções deste corte**. Mostre que é o
+8. Clique em **Confirmar e liberar publicação** (*Confirm and allow publishing*) — o cartão vira um resumo do que você escolheu
+9. Desça até a aba **Fila** (*Queue*), e num corte clique em **Editar opções deste corte** (*Edit this clip's options*). Mostre que é o
    mesmo formulário, e que dá pra tratar um vídeo diferente dos outros. **Feche sem salvar.**
 
 > **Por que a escolha é uma vez só, e não a cada vídeo:** o passo 9 é o que responde isso pro
@@ -175,10 +185,10 @@ pausando em cada**:
 
 ## Cena 6 — Publicar (03:30 – 04:30)
 
-1. Clique em **Postar agora** naquele corte
+1. Clique em **Postar agora** (*Post now*) naquele corte
 2. Mostre o status mudando para enviando / processando
 3. **Abra o TikTok** na conta de teste e **mostre o vídeo publicado**
-4. Volte ao Post Flow e mostre o corte na aba **Postados**
+4. Volte ao Post Flow e mostre o corte na aba **Postados** (*Posted*)
 
 > **Escopo desta cena: `video.publish` (o resultado).** A cena 5 mostrou o criador decidindo; esta
 > mostra o vídeo já no perfil dele. As duas juntas fecham a demonstração do escopo.

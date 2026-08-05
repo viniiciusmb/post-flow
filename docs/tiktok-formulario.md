@@ -52,7 +52,7 @@ Adicione a conta TikTok de teste. Sem isso ela não consegue autorizar o app.
 Limite 1000; este tem 992:
 
 ```
-Post Flow is a video repurposing tool for creators. It monitors the creator's own YouTube channel, uses AI to select the best segments of each new video, renders them as vertical clips with burned-in captions, and publishes them to the creator's own TikTok account. Website is in Brazilian Portuguese.
+Post Flow is a video repurposing tool for creators. It monitors the creator's own YouTube channel, uses AI to select the best segments of each new video, renders them as vertical clips with burned-in captions, and publishes them to the creator's own TikTok account. The website and dashboard are available in English, Portuguese and Spanish.
 
 Products and scopes:
 - Login Kit / user.info.basic: the creator connects their own TikTok account. We display the nickname and avatar so they always know which profile a clip will go to.
