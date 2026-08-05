@@ -106,7 +106,7 @@ export function AdminBandwidthPage() {
                   <label htmlFor="founder-toggle" className="cursor-pointer text-sm font-medium">{t("adm.usarComoSaida")}</label>
                   {data.founderTunnel && (
                     <TonePill tone={data.founderTunnel.connected ? "success" : "neutral"} className="ml-auto">
-                      {data.founderTunnel.connected ? "Conectado" : "Desconectado"}
+                      {data.founderTunnel.connected ? t("comum.conectado") : "Desconectado"}
                     </TonePill>
                   )}
                 </div>
@@ -165,7 +165,7 @@ export function AdminBandwidthPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead>Cliente</TableHead>
+                      <TableHead>{t("tabela.cliente")}</TableHead>
                       <TableHead>{t("adm.videos")}</TableHead>
                       <TableHead>{t("adm.peloTunelProprio")}</TableHead>
                       <TableHead>{t("adm.caiuProReserva")}</TableHead>

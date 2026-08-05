@@ -169,11 +169,9 @@ function ClipCard({
               href={downloadUrl}
               download
               className="flex items-center gap-1 font-semibold text-primary hover:underline"
-              title="Baixar corte"
+              title={t("cortes.baixarCorte")}
             >
-              <IconDownload className="size-3" />
-              Baixar
-            </a>
+              <IconDownload className="size-3" />{t("comum.baixar2")}</a>
           )}
         </div>
 
@@ -201,9 +199,7 @@ function ClipCard({
                   onClick={() => setShowPasteFolder((v) => !v)}
                   className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
                 >
-                  <IconBrandGoogleDrive className="size-3" />
-                  Escolher pasta
-                </button>
+                  <IconBrandGoogleDrive className="size-3" />{t("cortes.escolherPasta")}</button>
                 {showPasteFolder && (
                   <form onSubmit={handleChooseFolder} className="mt-2 flex flex-col gap-1.5">
                     <Input
@@ -218,7 +214,7 @@ function ClipCard({
                       Salvar todos os vídeos do canal "{channel.channelName}" automaticamente nessa pasta?
                     </label>
                     <Button type="submit" size="sm" disabled={savingFolder} className="h-7 text-[11px]">
-                      {savingFolder ? "Salvando..." : "Salvar"}
+                      {savingFolder ? "Salvando..." : t("comum.salvar")}
                     </Button>
                   </form>
                 )}
@@ -541,7 +537,7 @@ function VideoRow({
           {!clips ? (
             <Skeleton className="h-16" />
           ) : clips.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum corte gerado ainda.</p>
+            <p className="text-sm text-muted-foreground">{t("cortes.nenhumCorteGerado")}</p>
           ) : (
             <>
               {channel?.exportFolder && clips.some((c) => c.status === "ready" && !c.exportedToDrive) && (

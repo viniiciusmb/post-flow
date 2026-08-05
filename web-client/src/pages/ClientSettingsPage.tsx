@@ -175,7 +175,7 @@ function PasswordSection() {
               <Button type="submit" size="sm" disabled={saving}>
                 {saving ? t("comum.salvando") : t("config.trocarSenha")}
               </Button>
-              {saved && <span className="text-xs text-status-posted">Senha trocada ✓</span>}
+              {saved && <span className="text-xs text-status-posted">{t("config.senhaTrocada")}</span>}
             </div>
           </FieldGroup>
         </form>
@@ -243,7 +243,7 @@ function DriveSection() {
         ) : (
           <>
             <div className="flex items-center gap-2 text-sm">
-              <TonePill tone="success">Conectado</TonePill>
+              <TonePill tone="success">{t("comum.conectado")}</TonePill>
               <span className="text-muted-foreground">{status.googleAccountEmail}</span>
               <Button asChild variant="ghost" size="sm" className="ml-auto">
                 <a href="/auth/google/connect">{t("config.trocarDeConta")}</a>

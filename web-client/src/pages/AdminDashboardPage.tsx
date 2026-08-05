@@ -46,7 +46,7 @@ export function AdminDashboardPage() {
         {data ? (
           <>
             <StatCard
-              label="Clientes cadastrados"
+              label={t("adm.clientesCadastrados")}
               value={data.counts.clients}
               icon={<IconUsers />}
               tone="indigo"

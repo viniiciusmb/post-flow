@@ -187,11 +187,11 @@ export function AdminMetricsPage() {
 
           <Section title="Volume" range={rangeVolume} onRangeChange={setRangeVolume}>
             <Metric label={t("adm.videosDetectados")} value={data.volume.videosDetected} />
-            <Metric label="Cortes gerados" value={data.volume.clipsGenerated} />
-            <Metric label="Cortes postados" value={data.volume.clipsPosted} />
+            <Metric label={t("adm.cortesGerados")} value={data.volume.clipsGenerated} />
+            <Metric label={t("adm.cortesPostados")} value={data.volume.clipsPosted} />
             <Metric label={t("adm.taxaAproveitamento")} value={pct(data.volume.aproveitamentoRate)} sub="cortes postados / gerados" />
-            <Metric label="Clientes ativos" value={data.clients.active} sub={t("adm.comAtividade30")} />
-            <Metric label="Clientes inativos" value={data.clients.inactive} />
+            <Metric label={t("adm.clientesAtivos")} value={data.clients.active} sub={t("adm.comAtividade30")} />
+            <Metric label={t("adm.clientesInativos")} value={data.clients.inactive} />
           </Section>
 
           <Section title={t("adm.saudePipeline")} range={rangePipeline} onRangeChange={setRangePipeline}>

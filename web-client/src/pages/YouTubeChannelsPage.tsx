@@ -192,7 +192,7 @@ function ChannelCard({
               </p>
             )}
           </div>
-          <Button variant="ghost" size="icon-sm" onClick={onRemove} title="Remover canal">
+          <Button variant="ghost" size="icon-sm" onClick={onRemove} title={t("canais.removerCanal")}>
             <IconTrash />
           </Button>
         </div>
@@ -266,9 +266,7 @@ function ChannelCard({
 
         <div className="flex flex-col gap-2 rounded-lg border border-border px-3 py-3">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <IconBrandGoogleDrive className="size-4 text-muted-foreground" />
-            Enviar cortes prontos deste canal pro Google Drive
-          </div>
+            <IconBrandGoogleDrive className="size-4 text-muted-foreground" />{t("canais.enviarProDrive")}</div>
           {!hasDriveConnection ? (
             <p className="text-xs text-muted-foreground">
               Conecte seu{" "}
@@ -302,9 +300,7 @@ function ChannelCard({
                   </Button>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  Opcional. Cada corte pronto gerado desse canal pode ser salvo nessa pasta.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("canais.opcionalPasta")}</p>
               )}
               <form onSubmit={handleSetExportFolder} className="flex flex-col gap-2">
                 <div className="flex gap-2">
@@ -316,7 +312,7 @@ function ChannelCard({
                     className="h-8 text-xs"
                   />
                   <Button type="submit" size="sm" disabled={savingExportFolder} className="shrink-0">
-                    {savingExportFolder ? "Salvando..." : channel.exportFolder ? "Trocar" : "Salvar"}
+                    {savingExportFolder ? "Salvando..." : channel.exportFolder ? "Trocar" : t("comum.salvar")}
                   </Button>
                 </div>
                 {!channel.exportFolder && (
@@ -510,9 +506,7 @@ export function YouTubeChannelsPage() {
             <Skeleton className="h-24" />
           </div>
         ) : channels.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-            Nenhum canal cadastrado ainda.
-          </div>
+          <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">{t("canais.nenhumCanalCadastrado")}</div>
         ) : (
           <div className="flex flex-col gap-3">
             {channels.map((channel) => (

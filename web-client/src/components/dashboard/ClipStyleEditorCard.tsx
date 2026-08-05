@@ -259,7 +259,7 @@ function PartLabelPositionPicker({ value, onChange }: { value: PartLabelPosition
   const t = useT()
   return (
     <div className="relative rounded-md bg-neutral-900" style={{ width: 240, height: 180 }}>
-      <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white/25">corte 9:16</span>
+      <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white/25">{t("ce.corte916")}</span>
       {POSITIONS.map((pos) => (
         <button
           key={pos}
@@ -494,9 +494,7 @@ export function ClipStyleEditorCard() {
                   </Button>
                 </label>
                 {settings.hasBackgroundTemplate && (
-                  <Button variant="ghost" size="sm" onClick={removerTemplate}>
-                    Remover
-                  </Button>
+                  <Button variant="ghost" size="sm" onClick={removerTemplate}>{t("comum.remover")}</Button>
                 )}
               </div>
               {erroTemplate && <p className="text-xs text-destructive">{erroTemplate}</p>}

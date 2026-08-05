@@ -7,6 +7,8 @@ import { BrandMark } from "@/components/brand-mark"
 import { api, ApiError } from "@/lib/api"
 import type { SessionUser } from "@/types/api"
 import { useT } from "@/i18n"
+import { LanguageToggle } from "@/components/language-toggle"
+import { ModeToggle } from "@/components/mode-toggle"
 
 function GoogleIcon() {
   return (
@@ -62,29 +64,23 @@ export function ProductPreview() {
           </div>
         </div>
 
-        {/* Corte fictício, no formato que o produto realmente entrega: vertical,
-            com a numeração de parte no topo e a legenda queimada embaixo. É um
-            mockup declarado (nada aqui é foto de cliente real), mas usa a mesma
-            linguagem visual da saída de verdade, então mostra o produto em vez
-            de um retângulo com play. */}
+        {/* Um corte de verdade, gerado pelo próprio Post Flow: a legenda
+            queimada e a numeração de parte são a saída real do produto. Antes
+            aqui havia um mockup desenhado em CSS - honesto, mas que mostrava
+            um retângulo escuro no lugar do que o cliente compra. */}
         <div className="relative mb-4 aspect-[9/13] w-full overflow-hidden rounded-xl bg-[#101014]">
-          {/* "Cena" abstrata: só um clima de estúdio, sem fingir ser uma foto. */}
-          <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_0%,#3a3f52_0%,#191c26_55%,#0e1015_100%)]" />
-          <div className="absolute bottom-[24%] left-1/2 size-28 -translate-x-1/2 rounded-full bg-white/[0.07] blur-xl" />
+          <img
+            src="/img/produto/corte-exemplo.jpg"
+            alt={t("auth.altCorteExemplo")}
+            className="absolute inset-0 size-full object-cover"
+            width={506}
+            height={900}
+            loading="lazy"
+          />
 
           <span className="absolute top-2.5 left-2.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[9.5px] font-bold text-white">
-            Parte 1
+            {t("ce.parteUm")}
           </span>
-
-          {/* Legenda queimada, no estilo "balão escuro" que existe no produto. */}
-          <div className="absolute inset-x-3 bottom-9 flex flex-col items-center gap-1">
-            <span className="rounded bg-black/85 px-1.5 py-0.5 text-[11px] leading-tight font-extrabold text-white">
-              O ERRO QUE QUASE
-            </span>
-            <span className="rounded bg-black/85 px-1.5 py-0.5 text-[11px] leading-tight font-extrabold text-white">
-              TODO MUNDO COMETE
-            </span>
-          </div>
 
           <span className="absolute right-2.5 bottom-2.5 rounded-full bg-white/12 px-2 py-0.5 text-[9.5px] font-semibold text-white/80">
             0:38
@@ -118,9 +114,7 @@ export function ProductPreview() {
               fill="#fff"
             />
           </svg>
-        </div>
-        Postado com sucesso
-      </div>
+        </div>{t("auth.postadoComSucesso")}</div>
     </div>
   )
 }
@@ -180,10 +174,19 @@ export function LoginPage() {
   return (
     <div className="grid min-h-screen lg:grid-cols-[minmax(360px,480px)_1fr]">
       <div className="flex flex-col justify-between px-8 py-10 sm:px-14">
-        <a href="/login" className="flex items-center gap-2.5">
-          <BrandMark className="size-7.5" />
-          <span className="font-heading text-lg font-bold tracking-tight">Post Flow</span>
-        </a>
+        {/* Idioma e tema também aqui: esta é a primeira tela de quem chega, e
+            sem os controles a pessoa só descobriria que o site tem o idioma
+            dela depois de entrar. Mesmo bloco do AuthShell. */}
+        <div className="flex items-center justify-between gap-4">
+          <a href="/login" className="flex items-center gap-2.5">
+            <BrandMark className="size-7.5" />
+            <span className="font-heading text-lg font-bold tracking-tight">Post Flow</span>
+          </a>
+          <div className="flex items-center gap-2">
+            <LanguageToggle />
+            <ModeToggle />
+          </div>
+        </div>
 
         <div className="mx-auto w-full max-w-[340px]">
           <div className="mb-8">

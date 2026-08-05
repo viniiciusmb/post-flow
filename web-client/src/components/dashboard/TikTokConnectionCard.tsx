@@ -1,3 +1,4 @@
+import { useT } from "@/i18n"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { IconBrandTiktok } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
@@ -15,6 +16,7 @@ export function TikTokConnectionCard({
 }: {
   accounts: { id: number; displayName: string; avatarUrl: string | null }[]
 }) {
+  const t = useT()
   const vazio = accounts.length === 0
 
   return (
@@ -22,7 +24,7 @@ export function TikTokConnectionCard({
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
         <span className="text-xs font-medium text-muted-foreground">Publica em</span>
         {vazio ? (
-          <span className="text-sm text-muted-foreground">nenhuma conta conectada ainda</span>
+          <span className="text-sm text-muted-foreground">{t("config.nenhumaContaConectada")}</span>
         ) : (
           accounts.map((a) => (
             <span key={a.id} className="flex items-center gap-1.5 text-sm font-medium">

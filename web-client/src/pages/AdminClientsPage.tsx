@@ -45,7 +45,7 @@ export function AdminClientsPage() {
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-muted-foreground">{t("adm.clientesDescricao")}</p>
         <Input
-          placeholder="Buscar cliente..."
+          placeholder={t("adm.buscarCliente")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-60"
@@ -65,8 +65,8 @@ export function AdminClientsPage() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead>Cliente</TableHead>
-                <TableHead>Conta TikTok</TableHead>
+                <TableHead>{t("tabela.cliente")}</TableHead>
+                <TableHead>{t("pub.contaTikTok")}</TableHead>
                 <TableHead className="text-center">{t("adm.canaisDoYoutube")}</TableHead>
                 <TableHead>{t("adm.cadastradoEm")}</TableHead>
                 <TableHead>Status</TableHead>

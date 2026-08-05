@@ -33,7 +33,7 @@ export function UsageCard({ range }: { range: DateRangeKey }) {
 
       {activeDays.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.6875rem] text-muted-foreground">
-          <span className="font-medium text-foreground">Últimos 30 dias</span>
+          <span className="font-medium text-foreground">{t("periodo.ultimos30")}</span>
           {activeDays.map((h) => (
             <span key={h.date} className="tabular-nums">
               {formatDay(h.date)}: {h.videosCount}

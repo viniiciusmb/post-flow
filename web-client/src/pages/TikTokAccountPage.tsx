@@ -552,12 +552,10 @@ function QueueRow({
           <Input
             value={draft}
             onChange={(e) => onDraftChange(e.target.value)}
-            placeholder="Legenda desse corte..."
+            placeholder={t("pub.legendaDesseCorte")}
             className="text-xs"
           />
-          <Button size="sm" variant="outline" onClick={onSaveCaption}>
-            Salvar
-          </Button>
+          <Button size="sm" variant="outline" onClick={onSaveCaption}>{t("comum.salvar")}</Button>
         </div>
         {publishMode === "direct" && (
           <div className="mt-2">
@@ -618,9 +616,7 @@ function QueueRow({
           </Button>
           <Button size="xs" variant="outline" className="gap-1" asChild>
             <a href={downloadUrl} download>
-              <IconDownload className="size-3" />
-              Baixar
-            </a>
+              <IconDownload className="size-3" />{t("comum.baixar2")}</a>
           </Button>
           <Button
             size="xs"
@@ -809,7 +805,7 @@ function QueueCard({
             </SortableContext>
           </DndContext>
         )}
-        {reordering && <p className="mt-2 text-xs text-muted-foreground">Salvando nova ordem...</p>}
+        {reordering && <p className="mt-2 text-xs text-muted-foreground">{t("pub.salvandoNovaOrdem")}</p>}
         {orderError && <p className="mt-2 text-xs text-destructive">{orderError}</p>}
         {skipError && <p className="mt-2 text-xs text-destructive">{skipError}</p>}
         {postNowError && <p className="mt-2 text-xs text-destructive">{postNowError}</p>}
@@ -944,7 +940,7 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
                   <TonePill tone="danger">{t("pub.abaErro")}</TonePill>
                 </div>
                 <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                  {item.channelName ?? t("pub.videoAvulso")} <span className="mx-1">·</span> conta <strong className="font-medium">{accountName}</strong>
+                  {item.channelName ?? t("pub.videoAvulso")} <span className="mx-1">·</span>{t("pub.contaMinusculo")}<strong className="font-medium">{accountName}</strong>
                 </p>
                 {/* Idem: o motivo tecnico fica no painel de erros do admin. */}
                 <p className="mt-0.5 text-xs text-muted-foreground">{t("pub.naoDeuPublicar")}</p>
@@ -996,9 +992,7 @@ function PostedCard({ accountId }: { accountId: number }) {
   if (items.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          Nenhum corte postado ainda.
-        </CardContent>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">{t("pub.nenhumCortePostado")}</CardContent>
       </Card>
     )
   }
@@ -1078,7 +1072,7 @@ function AccountBox({
                 <TonePill tone="success">{t("pub.conectada")}</TonePill>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Conectada em {data(account.connectedAt)}.
+                {t("pub.conectadaEm", { quando: data(account.connectedAt) })}
               </p>
             </div>
           </div>
@@ -1093,12 +1087,12 @@ function AccountBox({
             <span className="flex items-center gap-1.5 tabular-nums">
               <IconUsers className="size-4 text-muted-foreground" />
               <span className="font-semibold">{formatCount(account.followerCount)}</span>
-              <span className="text-muted-foreground">seguidores</span>
+              <span className="text-muted-foreground">{t("pub.seguidores")}</span>
             </span>
             <span className="flex items-center gap-1.5 tabular-nums">
               <IconHeart className="size-4 text-muted-foreground" />
               <span className="font-semibold">{formatCount(account.likesCount)}</span>
-              <span className="text-muted-foreground">curtidas</span>
+              <span className="text-muted-foreground">{t("pub.curtidas")}</span>
             </span>
             <span className="flex items-center gap-1.5 tabular-nums">
               <IconMovie className="size-4 text-muted-foreground" />
@@ -1113,8 +1107,7 @@ function AccountBox({
             <span>
               <strong className="font-semibold text-foreground">{account.pendingCount}</strong>{t("pub.naFila")}</span>
             <span>
-              <strong className="font-semibold text-foreground">{account.postedCount}</strong> postados
-            </span>
+              <strong className="font-semibold text-foreground">{account.postedCount}</strong>{t("pub.postadosMinusculo")}</span>
             <span className={account.errorCount > 0 ? "text-destructive" : undefined}>
               <strong className="font-semibold">{account.errorCount}</strong>{t("pub.comErro")}</span>
           </div>
@@ -1329,9 +1322,7 @@ export function TikTokAccountPage() {
           <Skeleton className="h-28" />
         </div>
       ) : accounts.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-          Nenhuma conta TikTok conectada ainda.
-        </div>
+        <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">{t("pub.nenhumaContaConectada")}</div>
       ) : (
         <>
           <div className="flex flex-col gap-4">

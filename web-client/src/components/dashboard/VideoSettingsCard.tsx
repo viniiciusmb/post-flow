@@ -129,11 +129,11 @@ export function VideoSettingsCard() {
             >
               {settings.options.clipModes.map((m) => (
                 <ToggleGroupItem key={m} value={m} className="text-xs">
-                  {CLIP_MODE_LABELS[m] ?? m}
+                  {CLIP_MODE_LABELS[m] ? t(CLIP_MODE_LABELS[m]) : m}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
-            <p className="text-xs text-muted-foreground">{CLIP_MODE_DESCRIPTIONS[settings.clipMode]}</p>
+            <p className="text-xs text-muted-foreground">{t(CLIP_MODE_DESCRIPTIONS[settings.clipMode])}</p>
           </Field>
 
           {settings.clipMode === "fixed_count" && (
@@ -194,7 +194,7 @@ export function VideoSettingsCard() {
             >
               {settings.options.descriptionModes.map((m) => (
                 <ToggleGroupItem key={m} value={m} className="text-xs">
-                  {DESCRIPTION_MODE_LABELS[m] ?? m}
+                  {DESCRIPTION_MODE_LABELS[m] ? t(DESCRIPTION_MODE_LABELS[m]) : m}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
@@ -213,9 +213,7 @@ export function VideoSettingsCard() {
                   type="button"
                   onClick={() => save({ ...settings, descriptionTemplate: descriptionDraft })}
                   className="shrink-0 rounded-md border border-input px-3 text-sm font-medium hover:bg-accent"
-                >
-                  Salvar
-                </button>
+                >{t("comum.salvar")}</button>
               </div>
             </Field>
           )}

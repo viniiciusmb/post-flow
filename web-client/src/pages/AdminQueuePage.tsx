@@ -160,9 +160,7 @@ export function AdminQueuePage() {
               </div>
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-              Fila livre. Nada sendo processado agora.
-            </div>
+            <div className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">{t("adm.filaLivre")}</div>
           )}
 
           <div className="flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase">{t("adm.naFila")}<span className="rounded-full bg-tone-neutral-wash px-2 py-0.5 text-[11px] font-bold text-tone-neutral-ink normal-case">
@@ -209,7 +207,7 @@ export function AdminQueuePage() {
               <TimingMetric label="Download" seconds={data.stageTimings.avgDownloadSecondsPerMinute} />
               <TimingMetric label={t("adm.transcricao")} seconds={data.stageTimings.avgTranscriptionSecondsPerMinute} />
               <TimingMetric label={t("adm.selecaoDeCortes")} seconds={data.stageTimings.avgSelectionSecondsPerMinute} />
-              <TimingMetric label="Corte/renderização" seconds={data.stageTimings.avgCuttingSecondsPerMinute} />
+              <TimingMetric label={t("adm.corteRenderizacao")} seconds={data.stageTimings.avgCuttingSecondsPerMinute} />
               <TimingMetric label="Total" seconds={data.stageTimings.avgTotalSecondsPerMinute} />
             </CardContent>
           </Card>

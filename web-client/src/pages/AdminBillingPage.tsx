@@ -101,12 +101,12 @@ export function AdminBillingPage() {
             </CardHeader>
             <CardContent>
               {clients.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum cliente cadastrado ainda.</p>
+                <p className="text-sm text-muted-foreground">{t("adm.nenhumClienteCadastrado")}</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead>Cliente</TableHead>
+                      <TableHead>{t("tabela.cliente")}</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>{t("adm.plano")}</TableHead>
                       <TableHead>{t("adm.excedenteAutomatico")}</TableHead>
@@ -158,12 +158,12 @@ export function AdminBillingPage() {
             </CardHeader>
             <CardContent>
               {overage.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum excedente registrado ainda.</p>
+                <p className="text-sm text-muted-foreground">{t("adm.nenhumExcedente")}</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead>Cliente</TableHead>
+                      <TableHead>{t("tabela.cliente")}</TableHead>
                       <TableHead>{t("adm.pendenteNoCiclo")}</TableHead>
                       <TableHead>{t("adm.jaFaturadoPago")}</TableHead>
                     </TableRow>
