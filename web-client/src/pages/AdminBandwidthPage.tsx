@@ -168,7 +168,7 @@ export function AdminBandwidthPage() {
                       <TableHead>Cliente</TableHead>
                       <TableHead>{t("adm.videos")}</TableHead>
                       <TableHead>{t("adm.peloTunelProprio")}</TableHead>
-                      <TableHead>Caiu pro reserva</TableHead>
+                      <TableHead>{t("adm.caiuProReserva")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

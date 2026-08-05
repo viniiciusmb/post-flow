@@ -238,7 +238,7 @@ function DriveSection() {
           <Skeleton className="h-10" />
         ) : !status.connected ? (
           <Button asChild size="sm" className="w-fit">
-            <a href="/auth/google/connect">Conectar Google Drive</a>
+            <a href="/auth/google/connect">{t("config.conectarDrive")}</a>
           </Button>
         ) : (
           <>

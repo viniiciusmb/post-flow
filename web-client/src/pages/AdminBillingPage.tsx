@@ -108,7 +108,7 @@ export function AdminBillingPage() {
                     <TableRow className="hover:bg-transparent">
                       <TableHead>Cliente</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Plano</TableHead>
+                      <TableHead>{t("adm.plano")}</TableHead>
                       <TableHead>{t("adm.excedenteAutomatico")}</TableHead>
                     </TableRow>
                   </TableHeader>

@@ -1,3 +1,4 @@
+import { useT } from "@/i18n"
 import { IconDotsVertical, IconLogout } from "@tabler/icons-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -28,6 +29,7 @@ export function NavUser({
   user: SessionUser
   onLogout: () => void
 }) {
+  const t = useT()
   const { isMobile } = useSidebar()
 
   return (
@@ -45,7 +47,7 @@ export function NavUser({
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.email}</span>
                 <span className="truncate text-xs text-muted-foreground capitalize">
-                  {user.role === "admin" ? "Administrador" : "Cliente"}
+                  {user.role === "admin" ? t("menu.admin") : t("menu.cliente")}
                 </span>
               </div>
               <IconDotsVertical className="ml-auto size-4" />
@@ -67,9 +69,7 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onLogout}>
-              <IconLogout />
-              Sair
-            </DropdownMenuItem>
+              <IconLogout />{t("menu.sair")}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

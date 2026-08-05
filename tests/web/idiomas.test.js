@@ -220,3 +220,19 @@ test('o erro da API chega no idioma de quem pediu', async () => {
   const corpo = await r.json();
   assert.match(corpo.error, /Invalid email or password|CSRF|Too many/i);
 });
+
+test('o print do produto na landing existe nos três idiomas', async () => {
+  // A landing troca a imagem do painel conforme o idioma. Se o arquivo de um
+  // idioma não existir, a página abre com um espaço vazio no lugar do produto -
+  // e é a primeira coisa que um visitante vê.
+  for (const lang of IDIOMAS) {
+    const html = await (await buscar('/', lang)).text();
+    for (const base of ['cortes-light', 'cortes-mobile']) {
+      const achado = html.match(new RegExp(`/img/produto/${base}[\\w-]*\\.png`));
+      assert.ok(achado, `${base} não aparece na landing em ${lang}`);
+
+      const arquivo = path.join(RAIZ_PROJETO, 'src/web/public', achado[0]);
+      assert.ok(fs.existsSync(arquivo), `${achado[0]} está na página mas não existe no disco`);
+    }
+  }
+});

@@ -108,7 +108,7 @@ export function AdminQueuePage() {
         <Skeleton className="h-28" />
       ) : (
         <>
-          <div className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">Processando agora</div>
+          <div className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">{t("adm.processandoAgora")}</div>
           {data.processing ? (
             <div className="rounded-2xl border border-primary bg-card p-5 shadow-[0_0_0_4px_var(--tone-indigo-wash)]">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">

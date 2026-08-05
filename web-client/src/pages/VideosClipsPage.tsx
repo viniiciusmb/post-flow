@@ -439,7 +439,7 @@ function VideoRow({
           <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
             <IconBrandTiktok className="size-3" />
             {video.tiktokAccountNames.length > 0 ? (
-              <>Postar em: {video.tiktokAccountNames.join(", ")}</>
+              <>{t("cortes.postarEm", { contas: video.tiktokAccountNames.join(", ") })}</>
             ) : (
               <span className="text-amber-600 dark:text-amber-400">{t("cortes.semContaVinculada")}</span>
             )}
@@ -456,13 +456,13 @@ function VideoRow({
         {isActive && (
           <Button size="sm" variant="outline" onClick={pause} disabled={pauseRequested} className="h-7 shrink-0 gap-1 text-xs">
             <IconPlayerPause className="size-3" />
-            {pauseRequested ? "Pausando..." : "Pausar"}
+            {pauseRequested ? t("cortes.pausando") : t("cortes.pausar")}
           </Button>
         )}
         {isPaused && (
           <Button size="sm" onClick={resume} disabled={resumeRequested} className="h-7 shrink-0 gap-1 text-xs">
             <IconPlayerPlay className="size-3" />
-            {resumeRequested ? "Retomando..." : "Retomar"}
+            {resumeRequested ? t("cortes.retomando") : t("cortes.retomar")}
           </Button>
         )}
         {video.status === "detected" && (
@@ -474,7 +474,7 @@ function VideoRow({
             className="h-7 shrink-0 gap-1 text-xs"
           >
             <IconPlayerPlay className="size-3" />
-            {enqueueing ? "Enviando..." : "Processar agora"}
+            {enqueueing ? t("cortes.enviando") : t("cortes.processarAgora")}
           </Button>
         )}
         <Button variant="ghost" size="icon-sm" onClick={remove} disabled={deleting} title={t("cortes.removerVideo")}>
@@ -630,7 +630,7 @@ function AddManualVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; 
                   required
                 />
                 <Button type="submit" disabled={submitting}>
-                  {submitting ? "Cortando..." : "Cortar"}
+                  {submitting ? t("cortes.cortando") : t("cortes.cortar")}
                 </Button>
               </div>
             </Field>
@@ -893,7 +893,7 @@ export function VideosClipsPage() {
           >
             <IconTrash className="size-3.5" />
             {bulkDeleting
-              ? "Excluindo..."
+              ? t("comum.excluindo")
               : confirmingBulkDelete
                 ? `Confirmar exclusão de ${selectedIds.size}?`
                 : "Excluir selecionados"}
@@ -920,8 +920,8 @@ export function VideosClipsPage() {
       ) : (
         <Tabs defaultValue="in-progress">
           <TabsList>
-            <TabsTrigger value="in-progress">Em andamento ({inProgress.length})</TabsTrigger>
-            <TabsTrigger value="finished">Prontos ({finished.length})</TabsTrigger>
+            <TabsTrigger value="in-progress">{t("cortes.emAndamento", { n: inProgress.length })}</TabsTrigger>
+            <TabsTrigger value="finished">{t("cortes.prontos", { n: finished.length })}</TabsTrigger>
           </TabsList>
           <TabsContent value="in-progress" className="flex flex-col gap-3">
             {inProgress.length === 0 ? (

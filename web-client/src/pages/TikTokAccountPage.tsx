@@ -610,7 +610,7 @@ function QueueRow({
             className="gap-1"
           >
             <IconSend className="size-3" />
-            {postingNow ? "Postando..." : "Postar agora"}
+            {postingNow ? t("pub.postando") : t("pub.postarAgora")}
           </Button>
           <Button size="xs" variant="outline" onClick={onView} className="gap-1">
             <IconEye className="size-3" />
@@ -941,7 +941,7 @@ function ErrorCard({ accountId, accountName }: { accountId: number; accountName:
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="truncate text-sm">{item.clipTitle}</p>
-                  <TonePill tone="danger">Erro</TonePill>
+                  <TonePill tone="danger">{t("pub.abaErro")}</TonePill>
                 </div>
                 <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                   {item.channelName ?? t("pub.videoAvulso")} <span className="mx-1">·</span> conta <strong className="font-medium">{accountName}</strong>
@@ -1247,9 +1247,9 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
             <ScheduleCard accountId={account.id} publishMode={publishMode} />
             <Tabs defaultValue="queue">
               <TabsList>
-                <TabsTrigger value="queue">Fila</TabsTrigger>
-                <TabsTrigger value="posted">Postados</TabsTrigger>
-                <TabsTrigger value="errors">Erro</TabsTrigger>
+                <TabsTrigger value="queue">{t("pub.abaFila")}</TabsTrigger>
+                <TabsTrigger value="posted">{t("pub.abaPostados")}</TabsTrigger>
+                <TabsTrigger value="errors">{t("pub.abaErro")}</TabsTrigger>
               </TabsList>
               <TabsContent value="queue">
                 <QueueCard
