@@ -272,14 +272,27 @@ test('os valores do formulário da TikTok cabem nos limites e apontam pro ar', a
   const doc = fs.readFileSync(path.join(RAIZ_PROJETO, 'docs/tiktok-formulario.md'), 'utf8');
 
   const blocos = [...doc.matchAll(/```\n([\s\S]*?)```/g)].map((m) => m[1].trim());
-  const descricao = blocos.find((b) => b.startsWith('Transforma'));
+  const descricao = blocos.find((b) => b.startsWith('Turns'));
+  const motivo = blocos.find((b) => b.startsWith('First submission'));
   const explicacao = blocos.find((b) => b.startsWith('Post Flow is'));
 
   assert.ok(descricao, 'a descrição curta sumiu do formulário');
   assert.ok(descricao.length <= 120, `descrição tem ${descricao.length} caracteres (limite 120)`);
 
+  assert.ok(motivo, 'o motivo da submissão sumiu do formulário');
+  assert.ok(motivo.length <= 120, `motivo tem ${motivo.length} caracteres (limite 120)`);
+
   assert.ok(explicacao, 'a explicação de produtos e escopos sumiu do formulário');
   assert.ok(explicacao.length <= 1000, `explicação tem ${explicacao.length} caracteres (limite 1000)`);
+
+  // O revisor analisa em inglês. Um campo em português é atrito à toa: ele
+  // teria que traduzir pra conferir se bate com o que o app faz.
+  for (const [nome, texto] of [['descrição', descricao], ['motivo', motivo], ['explicação', explicacao]]) {
+    assert.ok(
+      !/[ãõçá]|\b(seu|sua|para|com|vídeos?|cortes?)\b/i.test(texto),
+      `${nome} voltou a ter português`
+    );
+  }
 
   // Os 4 escopos que o app pede precisam estar explicados aqui também: é o
   // texto que o revisor lê ao lado da lista de permissões.

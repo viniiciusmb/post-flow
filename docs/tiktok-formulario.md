@@ -19,11 +19,14 @@ usa a chave `sb...`), e é a Produção que o revisor analisa.
 | Website URL | `https://postflowclips.com` |
 | Redirect URI | `https://postflowclips.com/auth/tiktok/callback` |
 
-**Descrição** (limite 120; este tem 107):
+**Descrição** (limite 120; este tem 105):
 
 ```
-Transforma os vídeos longos do seu canal do YouTube em cortes verticais legendados e publica no seu TikTok.
+Turns your YouTube channel's long videos into captioned vertical clips and publishes them to your TikTok.
 ```
+
+> Tudo em inglês, inclusive esta descrição. É o idioma em que a TikTok analisa, e um campo em
+> português é atrito à toa — o revisor teria que traduzir pra conferir se bate com o que o app faz.
 
 ## Produtos
 
@@ -46,6 +49,19 @@ Botão no topo da página do app. Verifique `postflowclips.com`. O Content Posti
 ## Sandbox → Target users
 
 Adicione a conta TikTok de teste. Sem isso ela não consegue autorizar o app.
+
+## Motivo da submissão
+
+A caixa que aparece ao clicar em "Submeter para revisão" (limite 120; este tem 115):
+
+```
+First submission. Login Kit and Content Posting API for a tool that clips a creator's own YouTube videos to TikTok.
+```
+
+> Esse campo não é decisivo, mas é a primeira coisa que o revisor lê. Ele responde as duas
+> perguntas dele: é submissão nova ou recurso de recusa, e o que o app faz em uma linha.
+> Numa RE-submissão depois de recusa, troque por: o que foi recusado e o que mudou desde então —
+> é o que evita ele repetir a análise inteira do zero.
 
 ## Explicação dos produtos e escopos
 
