@@ -93,9 +93,19 @@ async function upsertForClient({
 // Desconecta uma conta especifica (nao mexe nas outras do cliente). Canais
 // e fontes que apontavam pra ela ficam sem conta vinculada (ON DELETE SET
 // NULL / CASCADE nas tabelas de vinculo) - o cliente precisa escolher outra.
+// Desconectar apaga os tokens, nao so marca inativo.
+//
+// A Politica de Privacidade promete que "ao desconectar, apagamos os tokens de
+// acesso" - antes eles ficavam guardados (criptografados, mas guardados) numa
+// linha inativa. Guardar credencial que ninguem mais vai usar so aumenta o
+// estrago de um vazamento.
 async function deactivate(id, clientUserId) {
   const { rows } = await pool.query(
-    `UPDATE tiktok_accounts SET is_active = false, updated_at = now()
+    `UPDATE tiktok_accounts
+        SET is_active = false,
+            access_token_encrypted = NULL, access_token_iv = NULL,
+            refresh_token_encrypted = NULL, refresh_token_iv = NULL,
+            updated_at = now()
      WHERE id = $1 AND client_user_id = $2 AND is_active = true
      RETURNING *`,
     [id, clientUserId]

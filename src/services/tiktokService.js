@@ -7,6 +7,7 @@ const config = require('../config');
 
 const AUTHORIZE_URL = 'https://www.tiktok.com/v2/auth/authorize/';
 const TOKEN_URL = 'https://open.tiktokapis.com/v2/oauth/token/';
+const REVOKE_URL = 'https://open.tiktokapis.com/v2/oauth/revoke/';
 const USER_INFO_URL = 'https://open.tiktokapis.com/v2/user/info/';
 const PUBLISH_INIT_URL = 'https://open.tiktokapis.com/v2/post/publish/inbox/video/init/';
 // Publicacao DIRETA no perfil. Exige que o app tenha passado na auditoria da
@@ -273,8 +274,41 @@ async function fetchPublishStatus(accessToken, publishId) {
   };
 }
 
+// Diz a TikTok pra esquecer a autorizacao desta conta.
+//
+// Sem isso, "Desconectar" so marcava inativo no NOSSO banco: a autorizacao
+// continuava concedida do lado da TikTok pra sempre. Duas consequencias:
+//
+//   - a Politica de Privacidade promete "ao desconectar, apagamos os tokens de
+//     acesso e o servico para de agir naquela conta imediatamente" - e a
+//     segunda metade era verdade, a primeira nao;
+//   - reconectar depois pulava a tela de permissoes (a TikTok trata como
+//     reautorizacao silenciosa), o que atrapalha ate gravar a demonstracao do
+//     app pra propria TikTok.
+//
+// Falhar aqui NAO impede a desconexao: se a TikTok estiver fora do ar, o
+// cliente ainda tem direito de nos tirar o acesso agora. O token some do nosso
+// lado de qualquer jeito.
+async function revokeAccess(accessToken) {
+  const response = await fetch(REVOKE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_key: config.tiktok.clientKey,
+      client_secret: config.tiktok.clientSecret,
+      token: accessToken,
+    }).toString(),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) {
+    throw new Error(`TikTok recusou revogar o acesso: ${data.error_description || data.error || response.statusText}`);
+  }
+}
+
 module.exports = {
   queryCreatorInfo,
+  revokeAccess,
   initDirectPost,
   buildAuthorizeUrl,
   exchangeCodeForToken,

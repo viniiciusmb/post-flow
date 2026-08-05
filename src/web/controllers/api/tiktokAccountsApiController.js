@@ -5,6 +5,7 @@ const postingScheduleSettingsRepository = require('../../../repositories/posting
 const postingsRepository = require('../../../repositories/postingsRepository');
 const tiktokService = require('../../../services/tiktokService');
 const publishOptions = require('../../../lib/publishOptions');
+const logger = require('../../../lib/logger');
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const RETENTION_PRESETS = [24, 72, 168, 720]; // 1d, 3d, 7d, 30d
@@ -66,6 +67,20 @@ async function findOwned(req) {
 async function deactivate(req, res) {
   const account = await findOwned(req);
   if (!account) return res.status(404).json({ error: res.locals.t('erros.contaNaoEncontrada') });
+
+  // Avisa a TikTok pra esquecer a autorizacao ANTES de apagar o token daqui -
+  // depois de apagar nao teria mais como revogar.
+  //
+  // Falhar aqui nao impede a desconexao: se a TikTok estiver fora do ar, o
+  // cliente ainda tem o direito de nos tirar o acesso agora. O token some do
+  // nosso lado de qualquer jeito, entao o pior caso e uma autorizacao orfa la,
+  // que ele pode remover nas configuracoes do proprio TikTok.
+  try {
+    const token = await tiktokAccountsRepository.getValidAccessToken(tiktokService, account);
+    if (token) await tiktokService.revokeAccess(token);
+  } catch (err) {
+    logger.error(`Nao consegui revogar o acesso da conta TikTok ${account.id} (desconectando mesmo assim):`, err.message);
+  }
 
   await tiktokAccountsRepository.deactivate(account.id, req.session.user.id);
   res.status(204).end();
