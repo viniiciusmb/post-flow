@@ -343,17 +343,36 @@ module.exports = {
         h: '5. What we ask TikTok for, and why',
         blocos: [
           {
-            tipo: 'ul',
-            itens: [
-              '<strong>Basic profile information</strong>. To show in the dashboard which account it is (username and picture), since you can connect more than one.',
-              '<strong>Publish videos</strong>. To send the finished clips to your account. We only publish what was generated from content you pointed us at yourself.',
-              '<strong>Post statistics</strong>. To show in the dashboard how each clip performed.',
+            tipo: 'p',
+            texto:
+              "When you connect your TikTok account, TikTok's own authorisation screen shows the permissions below. That is all we ask for:",
+          },
+          {
+            tipo: 'tabela',
+            cabecalho: ['Permission', 'Why we need it'],
+            linhas: [
+              [
+                '<code>user.info.basic</code>',
+                'To read the username and picture of the connected account, so we can show in the dashboard which profile the clip will go to. You can connect more than one account, and without this there would be no way to tell them apart.',
+              ],
+              [
+                '<code>user.info.stats</code>',
+                "To read followers, likes and the profile's video count, to display on the connected account card. It helps you recognise the account and follow the results.",
+              ],
+              [
+                '<code>video.publish</code>',
+                'To publish the finished clip <strong>straight to your profile</strong>, when you choose that mode. It only happens after you manually set the privacy level, what people can do and the commercial disclosure.',
+              ],
+              [
+                '<code>video.upload</code>',
+                'To send the finished clip <strong>as a draft</strong> to your TikTok app inbox, when you choose that mode. In that case you are the one who publishes, inside the app.',
+              ],
             ],
           },
           {
             tipo: 'p',
             texto:
-              'We do not read your direct messages and we do not publish anything except through the system\'s own flow.',
+              'We do not read your direct messages, we do not see your existing videos and we do not publish anything outside the flow you configured. We only send clips generated from content you pointed us at yourself.',
           },
         ],
       },

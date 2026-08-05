@@ -346,17 +346,36 @@ module.exports = {
         h: '5. O que pedimos ao TikTok e por quê',
         blocos: [
           {
-            tipo: 'ul',
-            itens: [
-              '<strong>Informações básicas do perfil</strong>. Pra mostrar no painel de qual conta se trata (nome de usuário e foto), já que você pode conectar mais de uma.',
-              '<strong>Publicar vídeos</strong>. Pra enviar os cortes prontos pra sua conta. Só publicamos o que foi gerado a partir do conteúdo que você mesmo indicou.',
-              '<strong>Estatísticas das publicações</strong>. Pra mostrar no painel como cada corte performou.',
+            tipo: 'p',
+            texto:
+              'Quando você conecta sua conta do TikTok, a tela de autorização do próprio TikTok mostra as permissões abaixo. É só isso que pedimos:',
+          },
+          {
+            tipo: 'tabela',
+            cabecalho: ['Permissão', 'Por que precisamos'],
+            linhas: [
+              [
+                '<code>user.info.basic</code>',
+                'Ler o nome de usuário e a foto da conta conectada, pra mostrar no painel em qual perfil o corte vai sair. Você pode conectar mais de uma conta, e sem isso não haveria como diferenciar uma da outra.',
+              ],
+              [
+                '<code>user.info.stats</code>',
+                'Ler seguidores, curtidas e número de vídeos do perfil, pra exibir no cartão da conta conectada. Serve pra você reconhecer a conta e acompanhar o resultado.',
+              ],
+              [
+                '<code>video.publish</code>',
+                'Publicar o corte pronto <strong>direto no seu perfil</strong>, quando você escolhe esse modo. Só acontece depois que você define manualmente a privacidade, o que as pessoas podem fazer e a divulgação comercial.',
+              ],
+              [
+                '<code>video.upload</code>',
+                'Enviar o corte pronto <strong>como rascunho</strong> pra caixa de entrada do aplicativo do TikTok, quando você escolhe esse modo. Nesse caso quem publica é você, dentro do aplicativo.',
+              ],
             ],
           },
           {
             tipo: 'p',
             texto:
-              'Não lemos suas mensagens diretas nem publicamos nada sem ser através do fluxo do sistema.',
+              'Não lemos suas mensagens diretas, não vemos seus vídeos existentes e não publicamos nada fora do fluxo que você configurou. Só enviamos cortes gerados a partir do conteúdo que você mesmo indicou.',
           },
         ],
       },

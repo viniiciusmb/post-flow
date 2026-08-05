@@ -236,3 +236,30 @@ test('o print do produto na landing existe nos três idiomas', async () => {
     }
   }
 });
+
+test('a Política de Privacidade lista os 4 escopos exatos do TikTok', async () => {
+  // O revisor da TikTok compara o que o app PEDE no Developer Console com o que
+  // a política DECLARA. Escopo pedido e não declarado é motivo de recusa, e
+  // escopo declarado com outro nome ("publicar vídeos" em vez de video.publish)
+  // dá o mesmo problema: ele não consegue casar um com o outro.
+  const ESCOPOS = ['user.info.basic', 'user.info.stats', 'video.publish', 'video.upload'];
+
+  for (const lang of IDIOMAS) {
+    const secao = criarT(lang)('privacidade.secoes').find((s) => /TikTok/.test(s.h));
+    assert.ok(secao, `seção do TikTok sumiu em ${lang}`);
+
+    const tabela = secao.blocos.find((b) => b.tipo === 'tabela');
+    assert.ok(tabela, `a seção do TikTok em ${lang} voltou a ser texto corrido em vez de tabela`);
+
+    const listados = tabela.linhas.map((l) => l[0].replace(/<[^>]+>/g, '').trim());
+    assert.deepEqual(listados, ESCOPOS, `escopos errados ou fora de ordem em ${lang}`);
+
+    // Cada um precisa de uma explicação de verdade, não uma linha vazia.
+    for (const [escopo, motivo] of tabela.linhas) {
+      assert.ok(
+        motivo.replace(/<[^>]+>/g, '').trim().length > 40,
+        `${escopo} em ${lang} está sem explicação`
+      );
+    }
+  }
+});

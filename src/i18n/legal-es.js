@@ -344,17 +344,36 @@ module.exports = {
         h: '5. Qué le pedimos a TikTok y por qué',
         blocos: [
           {
-            tipo: 'ul',
-            itens: [
-              '<strong>Información básica del perfil</strong>. Para mostrar en el panel de qué cuenta se trata (nombre de usuario y foto), ya que puedes conectar más de una.',
-              '<strong>Publicar vídeos</strong>. Para enviar los clips terminados a tu cuenta. Solo publicamos lo que se generó a partir del contenido que tú mismo indicaste.',
-              '<strong>Estadísticas de las publicaciones</strong>. Para mostrar en el panel cómo funcionó cada clip.',
+            tipo: 'p',
+            texto:
+              'Cuando conectas tu cuenta de TikTok, la pantalla de autorización del propio TikTok muestra los permisos de abajo. Eso es todo lo que pedimos:',
+          },
+          {
+            tipo: 'tabela',
+            cabecalho: ['Permiso', 'Por qué lo necesitamos'],
+            linhas: [
+              [
+                '<code>user.info.basic</code>',
+                'Leer el nombre de usuario y la foto de la cuenta conectada, para mostrar en el panel en qué perfil va a salir el clip. Puedes conectar más de una cuenta, y sin esto no habría forma de diferenciarlas.',
+              ],
+              [
+                '<code>user.info.stats</code>',
+                'Leer seguidores, me gusta y número de vídeos del perfil, para mostrarlos en la tarjeta de la cuenta conectada. Sirve para que reconozcas la cuenta y sigas el resultado.',
+              ],
+              [
+                '<code>video.publish</code>',
+                'Publicar el clip terminado <strong>directamente en tu perfil</strong>, cuando eliges ese modo. Solo ocurre después de que defines manualmente la privacidad, lo que la gente puede hacer y la divulgación comercial.',
+              ],
+              [
+                '<code>video.upload</code>',
+                'Enviar el clip terminado <strong>como borrador</strong> a la bandeja de entrada de la app de TikTok, cuando eliges ese modo. En ese caso quien publica eres tú, dentro de la app.',
+              ],
             ],
           },
           {
             tipo: 'p',
             texto:
-              'No leemos tus mensajes directos ni publicamos nada fuera del flujo del sistema.',
+              'No leemos tus mensajes directos, no vemos tus vídeos existentes y no publicamos nada fuera del flujo que configuraste. Solo enviamos clips generados a partir del contenido que tú mismo indicaste.',
           },
         ],
       },
