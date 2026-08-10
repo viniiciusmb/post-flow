@@ -806,4 +806,6 @@ export const pt = {
   "pub.conectarPalavra": "Conectar",
   "cortes.confirmarPastaCanal": "Salvar todos os vídeos do canal \"{canal}\" automaticamente nessa pasta?",
   "cortes.confirmarRemover": "Remover \"{titulo}\" e todos os cortes gerados dele? Essa ação não pode ser desfeita.",
+  "canais.nenhumaContaAinda": "Nenhuma conta TikTok conectada ainda.",
+  "canais.praPoderPostar": "pra poder postar os cortes desse canal.",
 } as const

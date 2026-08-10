@@ -225,9 +225,9 @@ function ChannelCard({
               <IconBrandTiktok className="size-4 text-muted-foreground" />{t("canais.postarNaConta")}</div>
             {tiktokAccounts.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                Nenhuma conta TikTok conectada ainda.{" "}
+                {t("canais.nenhumaContaAinda")}{" "}
                 <a href="/client/tiktok-account" className="text-primary hover:underline">{t("canais.conecteUma")}</a>{" "}
-                pra poder postar os cortes desse canal.
+                {t("canais.praPoderPostar")}
               </p>
             ) : (
               <>

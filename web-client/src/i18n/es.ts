@@ -800,4 +800,6 @@ export const es: Dicionario = {
   "pub.conectarPalavra": "Conectar",
   "cortes.confirmarPastaCanal": "¿Guardar todos los vídeos del canal \"{canal}\" automáticamente en esa carpeta?",
   "cortes.confirmarRemover": "¿Eliminar \"{titulo}\" y todos los clips generados a partir de él? Esta acción no se puede deshacer.",
+  "canais.nenhumaContaAinda": "Ninguna cuenta de TikTok conectada todavía.",
+  "canais.praPoderPostar": "para poder publicar los clips de este canal.",
 }
