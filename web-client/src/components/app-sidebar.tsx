@@ -12,6 +12,7 @@ import {
   IconRouter,
   IconReceipt2,
   IconAlertTriangle,
+  IconGift,
 } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
@@ -53,6 +54,7 @@ const ADMIN_GROUPS: Grupo[] = [
       { title: "menu.metricas", url: "/admin/metrics", icon: IconChartBar },
       { title: "menu.banda", url: "/admin/bandwidth", icon: IconGauge },
       { title: "menu.assinaturas", url: "/admin/billing", icon: IconReceipt2 },
+      { title: "menu.comissoes", url: "/admin/commissions", icon: IconGift },
       { title: "menu.erros", url: "/admin/errors", icon: IconAlertTriangle },
     ],
   },
@@ -76,6 +78,7 @@ const CLIENT_GROUPS: Grupo[] = [
       { title: "menu.publicacao", url: "/client/tiktok-account", icon: IconBrandTiktok },
       { title: "menu.conexao", url: "/client/tunnel", icon: IconRouter },
       { title: "menu.planoEUso", url: "/client/billing", icon: IconReceipt2 },
+      { title: "menu.comissoes", url: "/client/commissions", icon: IconGift },
       { title: "menu.configuracoes", url: "/client/settings", icon: IconSettings },
     ],
   },

@@ -5,6 +5,7 @@ const postingsRepository = require('../../../repositories/postingsRepository');
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
+const referralsRepository = require('../../../repositories/referralsRepository');
 const { ROLES } = require('../../../config/constants');
 const { resolveRange } = require('../../../lib/dateRanges');
 
@@ -69,18 +70,38 @@ async function postings(req, res) {
 }
 
 async function clients(req, res) {
-  const rows = await usersRepository.listClientsWithStats();
+  const [rows, origins] = await Promise.all([
+    usersRepository.listClientsWithStats(),
+    referralsRepository.originByUser(),
+  ]);
+  // Por usuario: nome/e-mail de quem indicou, ou a UTM de campanha, ou nulo
+  // (cadastro direto) - ver referralsRepository.originByUser.
+  const originByUserId = new Map(origins.map((o) => [o.referred_user_id, o]));
+
   res.json({
-    clients: rows.map((c) => ({
-      id: c.id,
-      businessName: c.business_name,
-      email: c.email,
-      isActive: c.is_active,
-      createdAt: c.created_at,
-      channelCount: c.channel_count,
-      tiktokConnected: Boolean(c.tiktok_display_name),
-      tiktokDisplayName: c.tiktok_display_name,
-    })),
+    clients: rows.map((c) => {
+      const origin = originByUserId.get(c.id);
+      return {
+        id: c.id,
+        businessName: c.business_name,
+        email: c.email,
+        isActive: c.is_active,
+        createdAt: c.created_at,
+        channelCount: c.channel_count,
+        tiktokConnected: Boolean(c.tiktok_display_name),
+        tiktokDisplayName: c.tiktok_display_name,
+        origin: origin
+          ? {
+              referrerName: origin.referrer_email
+                ? origin.referrer_business_name || origin.referrer_email
+                : null,
+              affiliateLinkLabel: origin.affiliate_link_label,
+              utmSource: origin.utm_source,
+              utmCampaign: origin.utm_campaign,
+            }
+          : null,
+      };
+    }),
   });
 }
 

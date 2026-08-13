@@ -2,6 +2,7 @@
 
 const authService = require('../../services/authService');
 const publicController = require('./publicController');
+const affiliateService = require('../../services/affiliateService');
 const { ROLES } = require('../../config/constants');
 
 async function login(req, res) {
@@ -45,6 +46,21 @@ async function register(req, res) {
       // quando os termos mudarem, da pra saber quem aceitou o texto antigo.
       termsVersion: publicController.LEGAL_UPDATED_AT,
     });
+
+    // De onde esse cliente veio (indicacao/UTM) - capturado na sessao por
+    // affiliateAttribution.js em qualquer visita a pagina publica antes do
+    // cadastro. So vale pra conta NOVA, por isso fica aqui e nao em login.
+    const attribution = req.session.affiliateAttribution;
+    if (attribution) {
+      await affiliateService.captureAttribution({
+        referredUserId: user.id,
+        refCode: attribution.refCode,
+        utm: attribution.utm,
+        landingPath: attribution.landingPath,
+      });
+      delete req.session.affiliateAttribution;
+    }
+
     req.session.user = { id: user.id, role: user.role, email: user.email };
     res.redirect('/client');
   } catch (err) {

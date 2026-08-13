@@ -30,8 +30,11 @@ const clientTunnelApiRoutes = require('./routes/api/clientTunnelApiRoutes');
 const clientBillingApiRoutes = require('./routes/api/clientBillingApiRoutes');
 const adminBillingApiRoutes = require('./routes/api/adminBillingApiRoutes');
 const stripeWebhookApiRoutes = require('./routes/api/stripeWebhookApiRoutes');
+const clientCommissionsApiRoutes = require('./routes/api/clientCommissionsApiRoutes');
+const adminCommissionsApiRoutes = require('./routes/api/adminCommissionsApiRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const csrf = require('./middleware/csrf');
+const affiliateAttribution = require('./middleware/affiliateAttribution');
 const i18n = require('../i18n');
 const rateLimits = require('./middleware/rateLimits');
 const slowRequestLogger = require('./middleware/slowRequestLogger');
@@ -119,6 +122,11 @@ app.use(
 // sessao (guarda o token nela) e antes das rotas. Ver middleware/csrf.js.
 app.use(csrf.middleware);
 
+// Captura ?ref=codigo/UTMs de qualquer pagina publica na sessao, ate o
+// cadastro acontecer (ver middleware/affiliateAttribution.js). Precisa vir
+// depois da sessao e antes das rotas publicas.
+app.use(affiliateAttribution);
+
 // Idioma da requisicao: deixa t(), lang e htmlLang em toda view. Vem antes do
 // bloco de locals abaixo porque as views publicas usam os dois juntos.
 app.use(i18n.middleware);
@@ -153,7 +161,10 @@ app.use(
   rateLimits.auth
 );
 app.use('/api/tunnel', rateLimits.publicApi);
-app.use(['/api/client/billing', '/api/admin/billing'], rateLimits.billing);
+app.use(
+  ['/api/client/billing', '/api/admin/billing', '/api/client/commissions', '/api/admin/commissions'],
+  rateLimits.billing
+);
 app.use('/api/client/source-videos/upload', rateLimits.upload);
 app.use('/api', (req, res, next) =>
   req.path.startsWith('/stripe/webhook') ? next() : rateLimits.geral(req, res, next)
@@ -183,6 +194,8 @@ app.use('/api/tunnel', tunnelPublicApiRoutes);
 app.use('/api/client/tunnel', clientTunnelApiRoutes);
 app.use('/api/client/billing', clientBillingApiRoutes);
 app.use('/api/admin/billing', adminBillingApiRoutes);
+app.use('/api/client/commissions', clientCommissionsApiRoutes);
+app.use('/api/admin/commissions', adminCommissionsApiRoutes);
 app.use('/api/stripe/webhook', stripeWebhookApiRoutes);
 app.use('/api', (req, res) => res.status(404).json({ error: 'Rota nao encontrada.' }));
 

@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const googleService = require('../../services/googleService');
 const usersRepository = require('../../repositories/usersRepository');
 const publicController = require('./publicController');
+const affiliateService = require('../../services/affiliateService');
 const logger = require('../../lib/logger');
 
 function paraLogin(res, mensagem) {
@@ -80,6 +81,21 @@ async function callback(req, res) {
       termsVersion: publicController.LEGAL_UPDATED_AT,
     });
     logger.info(`Conta criada por login com Google: ${email}`);
+
+    // Precisa acontecer AQUI, antes do regenerate() logo abaixo - regenerate
+    // troca o id da sessao e descarta o que estava nela, inclusive a
+    // atribuicao de afiliado/UTM capturada por affiliateAttribution.js numa
+    // visita anterior (o cookie sameSite=lax sobrevive ao roundtrip do OAuth,
+    // entao a sessao antiga ainda esta aqui nesse ponto).
+    const attribution = req.session.affiliateAttribution;
+    if (attribution) {
+      await affiliateService.captureAttribution({
+        referredUserId: user.id,
+        refCode: attribution.refCode,
+        utm: attribution.utm,
+        landingPath: attribution.landingPath,
+      });
+    }
   }
 
   if (!user.is_active) {

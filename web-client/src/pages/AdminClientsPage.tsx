@@ -69,6 +69,7 @@ export function AdminClientsPage() {
                 <TableHead>{t("pub.contaTikTok")}</TableHead>
                 <TableHead className="text-center">{t("adm.canaisDoYoutube")}</TableHead>
                 <TableHead>{t("adm.cadastradoEm")}</TableHead>
+                <TableHead>{t("adm.origem")}</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -101,6 +102,17 @@ export function AdminClientsPage() {
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {data(c.createdAt)}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {c.origin?.referrerName ? (
+                      t("adm.indicadoPor", { nome: c.origin.referrerName })
+                    ) : c.origin?.affiliateLinkLabel ? (
+                      c.origin.affiliateLinkLabel
+                    ) : c.origin?.utmSource ? (
+                      c.origin.utmSource
+                    ) : (
+                      t("adm.origemDireta")
+                    )}
                   </TableCell>
                   <TableCell>
                     <TonePill tone={c.isActive ? "success" : "neutral"}>

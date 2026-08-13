@@ -53,6 +53,13 @@ export interface AdminPostingsResponse {
   postings: AdminPosting[]
 }
 
+export interface ClientOrigin {
+  referrerName: string | null
+  affiliateLinkLabel: string | null
+  utmSource: string | null
+  utmCampaign: string | null
+}
+
 export interface AdminClient {
   id: number
   businessName: string | null
@@ -62,6 +69,7 @@ export interface AdminClient {
   channelCount: number
   tiktokConnected: boolean
   tiktokDisplayName: string | null
+  origin: ClientOrigin | null
 }
 
 export interface AdminClientsResponse {
@@ -546,4 +554,114 @@ export interface SystemError {
 export interface SystemErrorsResponse {
   errors: SystemError[]
   counts: { abertos: number; resolvidos: number; ocorrenciasAbertas: number }
+}
+
+// --- Comissões / afiliados ---
+
+export type PixKeyType = "cpf" | "cnpj" | "email" | "telefone" | "aleatoria"
+export type WithdrawalStatus = "pendente" | "pago" | "recusado"
+
+export interface CommissionEntry {
+  id: number
+  referredEmail: string
+  referredBusinessName: string | null
+  amountPaidCents: number
+  commissionPercent: number
+  commissionCents: number
+  createdAt: string
+}
+
+export interface ReferralEntry {
+  id: number
+  email: string
+  businessName: string | null
+  subscriptionStatus: SubscriptionStatus | null
+  createdAt: string
+}
+
+export interface WithdrawalEntry {
+  id: number
+  amountCents: number
+  status: WithdrawalStatus
+  requestedAt: string
+  resolvedAt: string | null
+}
+
+export interface ClientCommissionsOverviewResponse {
+  range: RangeInfo
+  link: { code: string; url: string }
+  balance: { availableCents: number; reservedCents: number; totalEarnedCents: number }
+  referralCount: number
+  periodReferralCount: number
+  activeSubscriptionCount: number
+  periodTotalCents: number
+  minWithdrawCents: number
+  pix: { key: string | null; type: PixKeyType | null }
+  recentCommissions: CommissionEntry[]
+  recentReferrals: ReferralEntry[]
+  recentWithdrawals: WithdrawalEntry[]
+}
+
+export interface AdminCommissionsOverviewResponse {
+  range: RangeInfo
+  periodCommissionCents: number
+  periodCommissionCount: number
+  lifetimeCommissionCents: number
+  affiliateCount: number
+  totalReferrals: number
+  totalActiveSubscriptions: number
+  totalPendingWithdrawalCents: number
+}
+
+export interface AdminAffiliate {
+  userId: number
+  email: string
+  businessName: string | null
+  commissionPercentOverride: number | null
+  referralCount: number
+  activeSubscriptionCount: number
+  totalEarnedCents: number
+  balanceAvailableCents: number
+  balanceReservedCents: number
+}
+
+export interface AdminAffiliatesResponse {
+  affiliates: AdminAffiliate[]
+}
+
+export interface AdminWithdrawal {
+  id: number
+  affiliateUserId: number
+  email: string
+  businessName: string | null
+  amountCents: number
+  pixKey: string
+  pixKeyType: PixKeyType
+  status: WithdrawalStatus
+  adminNote: string | null
+  requestedAt: string
+  resolvedAt: string | null
+}
+
+export interface AdminWithdrawalsResponse {
+  withdrawals: AdminWithdrawal[]
+}
+
+export interface AffiliateSettings {
+  percentDefault: number
+  minWithdrawCents: number
+  maxMonths: number
+}
+
+export interface AdminAffiliateLink {
+  id: number
+  code: string
+  label: string | null
+  referralCount: number
+  activeCount: number
+  createdAt: string
+}
+
+export interface AdminAffiliateLinksResponse {
+  links: AdminAffiliateLink[]
 }

@@ -11,6 +11,7 @@ const clientCreditsRepository = require('../../../repositories/clientCreditsRepo
 const subscriptionPlansRepository = require('../../../repositories/subscriptionPlansRepository');
 const creditPurchasesRepository = require('../../../repositories/creditPurchasesRepository');
 const creditsUnlockService = require('../../../services/creditsUnlockService');
+const affiliateService = require('../../../services/affiliateService');
 const logger = require('../../../lib/logger');
 
 async function handleCheckoutCompleted(session) {
@@ -88,6 +89,16 @@ async function handleInvoicePaymentFailed(invoice) {
 }
 
 async function handleInvoicePaid(invoice) {
+  // Comissao de afiliado roda pra TODA fatura de mensalidade paga, nao so
+  // pras que reativam assinatura vencida - por isso vem antes do early
+  // return abaixo. recordCommissionForInvoice ja filtra sozinho (so
+  // mensalidade, idempotente, respeita teto de meses e isencao de admin).
+  try {
+    await affiliateService.recordCommissionForInvoice(invoice);
+  } catch (err) {
+    logger.error(`Falha ao processar comissao de afiliado da fatura ${invoice.id}:`, err);
+  }
+
   const existing = await clientSubscriptionsRepository.findByStripeCustomerId(invoice.customer);
   if (!existing) return;
   // So reativa quem estava inadimplente. Nao mexe em quem cancelou de
