@@ -353,7 +353,13 @@ export const FluxoAutomatico: React.FC = () => {
   const pulseHub3 = frame >= 144 && frame <= 154 ? frame - 149 : null;
 
   return (
-    <AbsoluteFill style={{ background: COLOR.paper, opacity: globalOpacity }}>
+    // Fundo branco SEM opacidade, sempre solido - separado do conteudo (que
+    // esmaece por baixo dele). Antes o opacity ficava no AbsoluteFill de
+    // fora, junto com o fundo: como .mp4 nao tem canal alfa, "opacity 0" no
+    // fundo virava preto na exportacao em vez de branco, e cada ponta do
+    // video (comeco e fim) piscava uma tela escura.
+    <AbsoluteFill style={{ background: COLOR.paper }}>
+    <AbsoluteFill style={{ opacity: globalOpacity }}>
       <ColumnHeader
         x={COL_X[0]}
         frame={frame}
@@ -397,20 +403,38 @@ export const FluxoAutomatico: React.FC = () => {
       <div
         style={{
           position: 'absolute',
-          bottom: 56,
+          bottom: 50,
           left: 0,
           right: 0,
           textAlign: 'center',
-          fontFamily,
-          fontWeight: 600,
-          fontSize: 18,
-          letterSpacing: '0.04em',
-          color: COLOR.muted,
-          opacity: interpolate(frame, [190, 210], [0, 0.7], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }),
+          opacity: interpolate(frame, [180, 200], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }),
         }}
       >
-        100% AUTOMÁTICO · POSTFLOWCLIPS.COM
+        <div
+          style={{
+            fontFamily,
+            fontWeight: 700,
+            fontSize: 26,
+            color: COLOR.ink,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          Tudo acontece sem você precisar dar nem um clique
+        </div>
+        <div
+          style={{
+            fontFamily,
+            fontWeight: 600,
+            fontSize: 16,
+            letterSpacing: '0.04em',
+            color: COLOR.muted,
+            marginTop: 8,
+          }}
+        >
+          POSTFLOWCLIPS.COM
+        </div>
       </div>
+    </AbsoluteFill>
     </AbsoluteFill>
   );
 };
