@@ -1036,6 +1036,7 @@ strong {
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 1.5rem;
+  overflow: hidden;
   transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 .recurso-card:hover {
@@ -1043,39 +1044,47 @@ strong {
   transform: translateY(-3px);
   box-shadow: 0 16px 32px -20px rgba(79, 70, 229, 0.35);
 }
-.recurso-icone {
+/* "Print" em miniatura de cada funcionalidade - desenhado em HTML/CSS
+   (ver landing.ejs), não uma captura de tela de verdade: um print real
+   encolhido pra esta largura de cartão vira texto ilegível, o mesmo problema
+   que a grade antiga já tinha. Sangra até a borda do cartão (margin negativo
+   compensa o padding do .recurso-card) com a mesma moldura de "janela" (3
+   bolinhas) usada nos prints do vídeo tutorial, pra dar a mesma sensação de
+   "isto é a tela de verdade". */
+.recurso-print {
+  margin: -1.5rem -1.5rem 1.25rem;
+  background: var(--mist);
+  border-bottom: 1px solid var(--line);
+}
+.recurso-print-chrome {
+  display: flex;
+  gap: 5px;
+  padding: 10px 14px;
+}
+.recurso-print-chrome span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.recurso-print-conteudo {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 10px;
-  background: var(--acento-lavagem);
-  color: var(--acento);
-  margin-bottom: 1.25rem;
-  transition: background-color 0.2s ease;
-}
-.recurso-card:hover .recurso-icone {
-  background: var(--acento);
-  color: #fff;
-}
-.recurso-icone svg {
-  width: 1.4rem;
-  height: 1.4rem;
+  height: 140px;
+  padding: 0.75rem 1rem 1rem;
 }
 .recurso-indice {
-  position: absolute;
-  top: 1.5rem;
-  right: 1.5rem;
+  display: block;
+  margin-bottom: 0.5rem;
   font-size: 0.75rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
-  color: var(--line);
+  color: var(--acento);
 }
 .recurso-card h3 {
   margin-bottom: 0.5rem;
-  padding-right: 2rem;
 }
 .recurso-card p {
   margin: 0;
@@ -1190,7 +1199,6 @@ strong {
 .fluxo-video {
   display: block;
   width: 100%;
-  max-width: 720px;
   height: auto;
   margin: 0 auto;
   border-radius: 18px;
@@ -1198,35 +1206,26 @@ strong {
 .fluxo-video-envolt {
   margin: clamp(3rem, 6vw, 4.5rem) auto 0;
 }
-/* No celular o video NÃO encolhe pra 100% da tela: o texto desenhado dentro
-   dele (nomes de coluna, legenda) fica ilegível num vídeo raster espremido
-   pra ~340px. Em vez disso, ganha uma largura fixa legível e rola de lado
-   dentro do PRÓPRIO contêiner - a página nunca ganha rolagem horizontal
-   (overflow-x:hidden no <html> continua valendo, isso é só local). */
+.fluxo-video-horizontal {
+  max-width: 720px;
+}
+/* Existem DOIS vídeos (ver comentário no landing.ejs): o horizontal (3
+   colunas lado a lado) só cabe bem a partir de telas largas - encolhido pra
+   a largura de um celular, o texto desenhado dentro dele virava ilegível.
+   Abaixo de 720px mostra o vertical (mesma animação, etapas empilhadas) no
+   lugar - larguras diferentes porque o vertical já nasce feito pro celular
+   (não precisa do teto de 720px do horizontal) mas também não pode esticar
+   demais num tablet em pé. */
+.fluxo-video-vertical {
+  display: none;
+}
 @media (max-width: 720px) {
-  .fluxo-video-envolt {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-  .fluxo-video-envolt::-webkit-scrollbar {
+  .fluxo-video-horizontal {
     display: none;
   }
-  .fluxo-video {
-    width: 620px;
-    max-width: none;
-  }
-}
-.fluxo-dica {
-  display: none;
-  text-align: center;
-  margin: 0.85rem 0 0;
-  font-size: 0.8125rem;
-  color: var(--muted);
-}
-@media (max-width: 720px) {
-  .fluxo-dica {
+  .fluxo-video-vertical {
     display: block;
+    max-width: 420px;
   }
 }
 

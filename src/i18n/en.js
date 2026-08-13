@@ -63,7 +63,6 @@ module.exports = {
 
     fluxoVideoAlt:
       'Video showing the automatic flow: a new video published on YouTube, Post Flow cutting it into vertical clips, and automatic posting to TikTok.',
-    fluxoDica: 'Drag sideways to see the whole video',
     fluxo: [
       {
         h: 'You publish on YouTube',
@@ -102,6 +101,9 @@ module.exports = {
     recursosOlho: 'What you can do',
     recursosAnterior: 'Previous feature',
     recursosProximo: 'Next feature',
+    recursosParte1: 'Part 1',
+    recursosCanal: 'Channel {letra}',
+    recursosLegenda: 'Caption',
     recursosTitulo: 'You control the result, without opening an editor',
     recursosTexto:
       'The automatic clip comes out ready to publish. But if you have your own way of presenting, you can adjust every part of it.',

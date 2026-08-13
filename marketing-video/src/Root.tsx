@@ -1,5 +1,6 @@
 import { Composition } from 'remotion';
 import { FluxoAutomatico } from './FluxoAutomatico';
+import { FluxoAutomaticoVertical } from './FluxoAutomaticoVertical';
 import { TutorialPassoAPasso, TUTORIAL_DURATION } from './TutorialPassoAPasso';
 
 export const FPS = 30;
@@ -72,6 +73,28 @@ const FluxoAutomaticoCortado: React.FC = () => (
   </CropWindow>
 );
 
+// bbox real: x=[94,826] y=[226,1700] numa tela de 900x1750 (mesmo script de
+// medicao pixel-a-pixel das outras 2 composicoes).
+export const FLUXO_V_INNER_WIDTH = 900;
+export const FLUXO_V_INNER_HEIGHT = 1750;
+export const FLUXO_V_WIDTH = 764;
+export const FLUXO_V_HEIGHT = 1506;
+const FLUXO_V_SHIFT_X = -78;
+const FLUXO_V_SHIFT_Y = -210;
+
+const FluxoAutomaticoVerticalCortado: React.FC = () => (
+  <CropWindow
+    innerWidth={FLUXO_V_INNER_WIDTH}
+    innerHeight={FLUXO_V_INNER_HEIGHT}
+    shiftX={FLUXO_V_SHIFT_X}
+    shiftY={FLUXO_V_SHIFT_Y}
+    outerWidth={FLUXO_V_WIDTH}
+    outerHeight={FLUXO_V_HEIGHT}
+  >
+    <FluxoAutomaticoVertical />
+  </CropWindow>
+);
+
 const TutorialPassoAPassoCortado: React.FC = () => (
   <CropWindow
     innerWidth={TUTORIAL_INNER_WIDTH}
@@ -103,6 +126,14 @@ export const Root: React.FC = () => {
         fps={FPS}
         width={TUTORIAL_WIDTH}
         height={TUTORIAL_HEIGHT}
+      />
+      <Composition
+        id="FluxoAutomaticoVertical"
+        component={FluxoAutomaticoVerticalCortado}
+        durationInFrames={DURATION_IN_FRAMES}
+        fps={FPS}
+        width={FLUXO_V_WIDTH}
+        height={FLUXO_V_HEIGHT}
       />
     </>
   );

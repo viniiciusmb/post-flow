@@ -72,7 +72,6 @@ module.exports = {
 
     fluxoVideoAlt:
       'Vídeo mostrando o fluxo automático: um vídeo novo publicado no YouTube, o Post Flow cortando ele em clipes verticais, e a publicação automática no TikTok.',
-    fluxoDica: 'Arraste pro lado pra ver o vídeo inteiro',
     fluxo: [
       {
         h: 'Você publica no YouTube',
@@ -114,6 +113,9 @@ module.exports = {
       'O corte automático já sai pronto pra publicar. Mas se você tem um jeito próprio de apresentar, dá pra ajustar cada parte dele.',
     recursosAnterior: 'Recurso anterior',
     recursosProximo: 'Próximo recurso',
+    recursosParte1: 'Parte 1',
+    recursosCanal: 'Canal {letra}',
+    recursosLegenda: 'Legenda',
     recursos: [
       {
         h: 'Estilo visual do corte',
