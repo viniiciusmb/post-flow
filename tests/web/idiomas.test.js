@@ -221,18 +221,20 @@ test('o erro da API chega no idioma de quem pediu', async () => {
   assert.match(corpo.error, /Invalid email or password|CSRF|Too many/i);
 });
 
-test('o print do produto na landing existe nos três idiomas', async () => {
-  // A landing troca a imagem do painel conforme o idioma. Se o arquivo de um
-  // idioma não existir, a página abre com um espaço vazio no lugar do produto -
+test('o vídeo da hero e o poster dele existem no disco', async () => {
+  // A hero troca o print estático do painel por um vídeo (prints reais em
+  // loop, gerado com Remotion - ver marketing-video/). Ele é o mesmo nos três
+  // idiomas (só em português), mas o arquivo tem que existir de verdade: se
+  // não existir, a página abre com um retângulo vazio no lugar do produto -
   // e é a primeira coisa que um visitante vê.
   for (const lang of IDIOMAS) {
     const html = await (await buscar('/', lang)).text();
-    for (const base of ['cortes-light', 'cortes-mobile']) {
-      const achado = html.match(new RegExp(`/img/produto/${base}[\\w-]*\\.png`));
-      assert.ok(achado, `${base} não aparece na landing em ${lang}`);
+    for (const [attr, ext] of [['src', 'mp4'], ['poster', 'jpg']]) {
+      const achado = html.match(new RegExp(`${attr}="(/video/tutorial-passo-a-passo[\\w-]*\\.${ext})"`));
+      assert.ok(achado, `${attr} do vídeo da hero não aparece na landing em ${lang}`);
 
-      const arquivo = path.join(RAIZ_PROJETO, 'src/web/public', achado[0]);
-      assert.ok(fs.existsSync(arquivo), `${achado[0]} está na página mas não existe no disco`);
+      const arquivo = path.join(RAIZ_PROJETO, 'src/web/public', achado[1]);
+      assert.ok(fs.existsSync(arquivo), `${achado[1]} está na página mas não existe no disco`);
     }
   }
 });

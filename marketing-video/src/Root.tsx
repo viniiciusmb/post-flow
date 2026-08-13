@@ -1,5 +1,6 @@
 import { Composition } from 'remotion';
 import { FluxoAutomatico } from './FluxoAutomatico';
+import { TutorialPassoAPasso, TUTORIAL_DURATION } from './TutorialPassoAPasso';
 
 export const FPS = 30;
 export const DURATION_IN_FRAMES = 240;
@@ -13,6 +14,14 @@ export const Root: React.FC = () => {
         id="FluxoAutomatico"
         component={FluxoAutomatico}
         durationInFrames={DURATION_IN_FRAMES}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+      />
+      <Composition
+        id="TutorialPassoAPasso"
+        component={TutorialPassoAPasso}
+        durationInFrames={TUTORIAL_DURATION}
         fps={FPS}
         width={WIDTH}
         height={HEIGHT}

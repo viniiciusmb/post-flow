@@ -21,33 +21,21 @@
     </div>
     <p class="nota"><%= t('landing.notaHero') %></p>
 
-    <div class="duo">
-      <div class="macbook">
-        <div class="macbook-tampa">
-          <div class="macbook-tela">
-            <img
-              <%# O print mostra o painel no idioma da página: um visitante que
-                  lê a landing em inglês veria o produto em português, e o
-                  primeiro contato com o app seria a impressão de que ele não é
-                  traduzido. Os arquivos por idioma são gerados a partir do
-                  próprio painel. %>
-              src="/img/produto/cortes-light<%= lang === 'pt' ? '' : '-' + lang %>.png"
-              alt="<%= t('landing.altComputador') %>"
-              width="2880" height="1800" fetchpriority="high">
-          </div>
-        </div>
-        <div class="macbook-base"></div>
-      </div>
-
-      <div class="iphone">
-        <div class="iphone-tela">
-          <img
-            src="/img/produto/cortes-mobile<%= lang === 'pt' ? '' : '-' + lang %>.png"
-            alt="<%= t('landing.altCelular') %>"
-            width="1170" height="2532">
-        </div>
-      </div>
-    </div>
+    <%# Video mudo em loop com prints REAIS da plataforma (canal sendo
+        adicionado, estilo de corte, TikTok conectado) - substituiu o duo
+        macbook+iphone estático: explica em segundos o que antes exigia ler os
+        cartões de "como funciona" mais abaixo. Só em português (mesma
+        limitação já aceita no video de fluxo da seção seguinte - re-gravar
+        por idioma é trabalho grande pra um ganho pequeno). Gerado com
+        Remotion, fonte em /marketing-video. %>
+    <video
+      class="hero-video"
+      src="/video/tutorial-passo-a-passo.mp4"
+      poster="/video/tutorial-passo-a-passo-poster.jpg"
+      width="1920" height="1080"
+      autoplay muted loop playsinline preload="auto"
+      aria-label="<%= t('landing.tutorialVideoAlt') %>"
+    ></video>
   </div>
 </section>
 

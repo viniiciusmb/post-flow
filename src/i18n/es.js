@@ -49,6 +49,8 @@ module.exports = {
     altComputador:
       'La pantalla de clips de Post Flow en el ordenador, con los vídeos del canal en distintas etapas del procesamiento',
     altCelular: 'La misma pantalla de clips abierta en el móvil',
+    tutorialVideoAlt:
+      'Vídeo tutorial con capturas reales de la plataforma: paso 1, agregar el canal de YouTube; paso 2, configurar el estilo de corte; paso 3, conectar la cuenta de TikTok.',
 
     fluxoVideoAlt:
       'Vídeo mostrando el flujo automático: un vídeo nuevo publicado en YouTube, Post Flow cortándolo en clips verticales, y la publicación automática en TikTok.',
