@@ -58,12 +58,12 @@ module.exports = {
     whatsOlho: 'Community',
     whatsTitulo: 'There\'s a WhatsApp group just for Post Flow users',
     whatsTexto:
-      'Ask questions, swap ideas with other creators, and be the first to know about new features. Free, no strings attached.',
-    whatsBotao: 'Join the group',
+      'Ask questions, swap ideas with other creators, and be the first to know about new features — unlocked automatically for subscribers, no extra step needed.',
     whatsBannerTexto: 'Post Flow Group',
 
     fluxoVideoAlt:
       'Video showing the automatic flow: a new video published on YouTube, Post Flow cutting it into vertical clips, and automatic posting to TikTok.',
+    fluxoDica: 'Drag sideways to see the whole video',
     fluxo: [
       {
         h: 'You publish on YouTube',
@@ -100,6 +100,8 @@ module.exports = {
     ],
 
     recursosOlho: 'What you can do',
+    recursosAnterior: 'Previous feature',
+    recursosProximo: 'Next feature',
     recursosTitulo: 'You control the result, without opening an editor',
     recursosTexto:
       'The automatic clip comes out ready to publish. But if you have your own way of presenting, you can adjust every part of it.',

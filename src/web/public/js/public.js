@@ -69,4 +69,61 @@
       video.src = video.dataset.lazySrc;
     });
   }
+
+  // Carrossel de "o que dá pra fazer": setas clicam de um cartão pro
+  // próximo/anterior, os pontinhos embaixo marcam qual está mais visível
+  // (calculado a partir do scroll, não de um índice fixo - o visitante pode
+  // chegar lá arrastando com o dedo/mouse também, sem passar pelas setas).
+  var trilho = document.getElementById('recursos-carrossel');
+  if (trilho) {
+    var cartoes = trilho.querySelectorAll('.recurso-card');
+    var pontos = document.querySelectorAll('#recursos-pontos .recursos-ponto');
+    var setaEsq = document.querySelector('.recursos-seta-esq');
+    var setaDir = document.querySelector('.recursos-seta-dir');
+
+    var passo = function () {
+      return cartoes.length > 1 ? cartoes[1].offsetLeft - cartoes[0].offsetLeft : trilho.clientWidth;
+    };
+
+    var atualizar = function () {
+      var indiceAtivo = Math.round(trilho.scrollLeft / passo());
+      pontos.forEach(function (ponto, i) {
+        ponto.classList.toggle('ativo', i === indiceAtivo);
+      });
+      var fimDaRolagem = trilho.scrollWidth - trilho.clientWidth - 4;
+      if (setaEsq) setaEsq.disabled = trilho.scrollLeft <= 4;
+      if (setaDir) setaDir.disabled = trilho.scrollLeft >= fimDaRolagem;
+    };
+
+    var pedindoQuadro = false;
+    trilho.addEventListener(
+      'scroll',
+      function () {
+        if (pedindoQuadro) return;
+        pedindoQuadro = true;
+        window.requestAnimationFrame(function () {
+          atualizar();
+          pedindoQuadro = false;
+        });
+      },
+      { passive: true }
+    );
+
+    [setaEsq, setaDir].forEach(function (botao) {
+      if (!botao) return;
+      botao.addEventListener('click', function () {
+        var direcao = Number(botao.dataset.direcao);
+        trilho.scrollBy({ left: direcao * passo(), behavior: 'smooth' });
+      });
+    });
+
+    pontos.forEach(function (ponto) {
+      ponto.addEventListener('click', function () {
+        trilho.scrollTo({ left: Number(ponto.dataset.indice) * passo(), behavior: 'smooth' });
+      });
+    });
+
+    atualizar();
+    window.addEventListener('resize', atualizar);
+  }
 })();

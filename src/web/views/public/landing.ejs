@@ -32,33 +32,9 @@
       class="hero-video"
       src="/video/tutorial-passo-a-passo.mp4"
       poster="/video/tutorial-passo-a-passo-poster.jpg"
-      width="1700" height="1080"
+      width="1620" height="1000"
       autoplay muted loop playsinline preload="auto" fetchpriority="high"
       aria-label="<%= t('landing.tutorialVideoAlt') %>"
-    ></video>
-  </div>
-</section>
-
-<section class="secao secao-fluxo">
-  <div class="wrap">
-    <%# Video mudo, em loop, sem controles - pensado pra parecer parte da
-        propria pagina (nao um player incorporado). Mostra exatamente o fluxo
-        que os 3 cartoes estaticos descreviam por texto: vídeo novo no
-        YouTube, o Post Flow cortando em clipes verticais, publicação
-        automática no TikTok. Gerado com Remotion, fonte em /marketing-video
-        (fora do build do site - so o .mp4 renderizado entra aqui).
-
-        data-lazy-src (nao src) + sem autoplay: fica abaixo da dobra, entao so
-        baixa quando chega perto da tela (ver o IntersectionObserver em
-        public.js) - assim ele nao disputa banda com o video da hero logo na
-        abertura da pagina. %>
-    <video
-      class="fluxo-video"
-      data-lazy-src="/video/fluxo-automatico.mp4"
-      poster="/video/fluxo-automatico-poster.jpg"
-      width="1700" height="840"
-      muted loop playsinline
-      aria-label="<%= t('landing.fluxoVideoAlt') %>"
     ></video>
   </div>
 </section>
@@ -78,6 +54,35 @@
         </div>
       <% }); %>
     </div>
+
+    <%# Video mudo, em loop, sem controles - pensado pra parecer parte da
+        propria pagina (nao um player incorporado). Mostra exatamente o que o
+        titulo desta secao ja diz em texto ("voce participa da primeira
+        etapa"): vídeo novo no YouTube, o Post Flow cortando em clipes
+        verticais, publicação automática no TikTok. Gerado com Remotion,
+        fonte em /marketing-video (fora do build do site - so o .mp4
+        renderizado entra aqui).
+
+        data-lazy-src (nao src) + sem autoplay: fica abaixo da dobra, entao so
+        baixa quando chega perto da tela (ver o IntersectionObserver em
+        public.js) - assim ele nao disputa banda com o video da hero logo na
+        abertura da pagina.
+
+        No celular o video nao encolhe pra largura da tela (o texto por
+        dentro dele viraria ilegivel) - fica num tamanho fixo legivel dentro
+        de um contêiner com rolagem horizontal PROPRIA (a pagina em si nunca
+        rola de lado, ver overflow-x:hidden no <html>). %>
+    <div class="fluxo-video-envolt">
+      <video
+        class="fluxo-video"
+        data-lazy-src="/video/fluxo-automatico.mp4"
+        poster="/video/fluxo-automatico-poster.jpg"
+        width="1550" height="730"
+        muted loop playsinline tabindex="0"
+        aria-label="<%= t('landing.fluxoVideoAlt') %>"
+      ></video>
+    </div>
+    <p class="fluxo-dica"><%= t('landing.fluxoDica') %></p>
 
     <div class="narrow" style="margin: clamp(3rem, 6vw, 4.5rem) auto 0; text-align: center">
       <p class="eyebrow"><%= t('landing.telasOlho') %></p>
@@ -118,9 +123,6 @@
       <p class="eyebrow"><%= t('landing.whatsOlho') %></p>
       <h2><%= t('landing.whatsTitulo') %></h2>
       <p style="color: var(--muted)"><%= t('landing.whatsTexto') %></p>
-      <%# TODO: o usuario ainda vai criar o grupo e mandar o link - trocar o
-          href="#" pelo link de convite de verdade assim que ele chegar. %>
-      <a class="btn btn-primary btn-lg" href="#"><%= t('landing.whatsBotao') %></a>
     </div>
     <div class="whats-banner">
       <%- include('../partials/whatsapp-banner') %>
@@ -136,12 +138,54 @@
       <p style="color: var(--muted)"><%= t('landing.recursosTexto') %></p>
     </div>
 
-    <div class="recursos-grade">
-      <% t('landing.recursos').forEach(function (r) { %>
-        <div class="recurso-card">
-          <h3><%= r.h %></h3>
-          <p><%= r.p %></p>
-        </div>
+    <%# Carrossel, não grade: 9 caixas de texto puro empilhadas viravam uma
+        parede ilegível no celular. Cada cartão ganhou um ícone desenhado à
+        mão (mesmo estilo dos ícones de marca do cabeçalho) pra dar um ponto
+        de referência visual rápido antes do texto. Rola por toque/mouse/
+        trackpad + as setas (JS em public.js: recursos-carrossel). %>
+    <% var recursosIcones = [
+      // Estilo visual do corte: moldura com legenda
+      '<rect x="6" y="3" width="12" height="18" rx="2.2"/><path d="M8.4 15.6h7.2" stroke-linecap="round"/>',
+      // Enquadramento na mão: cantos de crop
+      '<path d="M4 9V4.6h4.4M20 9V4.6h-4.4M4 15v4.4h4.4M20 15v4.4h-4.4"/>',
+      // Imagem de fundo: foto com montanha
+      '<rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.4" cy="9.6" r="1.4"/><path d="M21 15.5l-5.4-5.2L9.2 17"/>',
+      // Numeração de série: cerquilha (Parte 1, Parte 2...)
+      '<path d="M9.5 4L7 20M17 4l-2.5 16M4 9h16M3.3 15h16"/>',
+      // Configuração por canal: sliders
+      '<path d="M4 6.5h9M17.5 6.5H20M4 12h2.5M11 12H20M4 17.5h11.5M19 17.5H20"/><circle cx="13" cy="6.5" r="1.9"/><circle cx="8.5" cy="12" r="1.9"/><circle cx="17.5" cy="17.5" r="1.9"/>',
+      // Descrição automática: linhas de texto com estrela de IA
+      '<path d="M3.5 6.5h11M3.5 12h11M3.5 17.5h7"/><path d="M19 4.2l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>',
+      // Um canal, várias contas: camadas
+      '<path d="M12 3.3l8.4 4.5-8.4 4.5-8.4-4.5z"/><path d="M3.6 12.4l8.4 4.5 8.4-4.5"/><path d="M3.6 16.9l8.4 4.5 8.4-4.5"/>',
+      // Horários que você escolhe: relógio
+      '<circle cx="12" cy="12" r="8.6"/><path d="M12 7.2V12l3.4 2"/>',
+      // Cópia no Google Drive: seta baixando pra bandeja
+      '<path d="M12 3.5v10.4M12 13.9l-3.6-3.6M12 13.9l3.6-3.6"/><path d="M4.2 15.5v3a2 2 0 002 2h11.6a2 2 0 002-2v-3"/>',
+    ]; %>
+    <div class="recursos-carrossel-envolt">
+      <button type="button" class="recursos-seta recursos-seta-esq" data-direcao="-1" aria-label="<%= t('landing.recursosAnterior') %>">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="recursos-carrossel" id="recursos-carrossel" tabindex="0" role="region" aria-label="<%= t('landing.recursosOlho') %>">
+        <% t('landing.recursos').forEach(function (r, i) { %>
+          <article class="recurso-card">
+            <span class="recurso-icone">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><%- recursosIcones[i] %></svg>
+            </span>
+            <span class="recurso-indice"><%= String(i + 1).padStart(2, '0') %></span>
+            <h3><%= r.h %></h3>
+            <p><%= r.p %></p>
+          </article>
+        <% }); %>
+      </div>
+      <button type="button" class="recursos-seta recursos-seta-dir" data-direcao="1" aria-label="<%= t('landing.recursosProximo') %>">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <div class="recursos-pontos" id="recursos-pontos" aria-hidden="true">
+      <% t('landing.recursos').forEach(function (_, i) { %>
+        <span class="recursos-ponto" data-indice="<%= i %>"></span>
       <% }); %>
     </div>
   </div>
