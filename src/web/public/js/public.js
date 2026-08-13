@@ -37,4 +37,36 @@
       window.location.reload();
     });
   }
+
+  // Vídeos abaixo da dobra (marcados com data-lazy-src) só baixam quando
+  // chegam perto da tela - sem isso o navegador competia a banda deles com o
+  // vídeo da hero logo na abertura da página, mesmo quem nunca rola até lá
+  // pagando o download inteiro à toa.
+  var videosPreguicosos = document.querySelectorAll('video[data-lazy-src]');
+  if (videosPreguicosos.length && 'IntersectionObserver' in window) {
+    var observador = new IntersectionObserver(
+      function (entradas) {
+        entradas.forEach(function (entrada) {
+          if (!entrada.isIntersecting) return;
+          var video = entrada.target;
+          video.src = video.dataset.lazySrc;
+          video.play().catch(function () {
+            // Autoplay recusado (raro, com muted já ligado) - o poster
+            // continua visível, sem erro nenhum pro visitante.
+          });
+          observador.unobserve(video);
+        });
+      },
+      { rootMargin: '400px 0px' }
+    );
+    videosPreguicosos.forEach(function (video) {
+      observador.observe(video);
+    });
+  } else {
+    // Navegador sem IntersectionObserver (bem raro hoje): carrega direto, é
+    // melhor que o vídeo nunca aparecer.
+    videosPreguicosos.forEach(function (video) {
+      video.src = video.dataset.lazySrc;
+    });
+  }
 })();

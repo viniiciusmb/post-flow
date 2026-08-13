@@ -51,6 +51,17 @@ module.exports = {
     altCelular: 'La misma pantalla de clips abierta en el móvil',
     tutorialVideoAlt:
       'Vídeo tutorial con capturas reales de la plataforma: paso 1, agregar el canal de YouTube; paso 2, configurar el estilo de corte; paso 3, conectar la cuenta de TikTok.',
+    telasOlho: 'Donde lo usas',
+    telasTitulo: 'Disponible en computadora y celular',
+    telasTexto:
+      'El panel funciona completo en los dos — revisa tus clips desde la computadora en la oficina o desde el celular en cualquier lugar.',
+
+    whatsOlho: 'Comunidad',
+    whatsTitulo: 'Hay un grupo de WhatsApp solo para quienes usan Post Flow',
+    whatsTexto:
+      'Resuelve dudas, intercambia ideas con otros creadores y entérate primero de las novedades. Gratis, sin vueltas.',
+    whatsBotao: 'Entrar al grupo',
+    whatsBannerTexto: 'Grupo Post Flow',
 
     fluxoVideoAlt:
       'Vídeo mostrando el flujo automático: un vídeo nuevo publicado en YouTube, Post Flow cortándolo en clips verticales, y la publicación automática en TikTok.',

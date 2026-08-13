@@ -28,8 +28,12 @@ const COLOR = {
   sucesso: '#15803d',
 };
 
-const COL_X = [380, 960, 1540];
-const HUB_Y = 610;
+// Canvas 1700x840 (nao 1920x1080) - ajustado ao conteudo de proposito, ver
+// Root.tsx. Colunas quase encostando nas bordas (antes tinham ~380px de
+// sobra de cada lado); HUB_Y deixando folga igual em cima (cabecalho) e
+// embaixo (legenda final).
+const COL_X = [320, 850, 1380];
+const HUB_Y = 470;
 const HUB_SIZE = 180;
 
 const clip = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
@@ -63,9 +67,9 @@ function ColumnHeader({
     <div
       style={{
         position: 'absolute',
-        left: x - 460,
+        left: x - 320,
         top: 90,
-        width: 920,
+        width: 640,
         textAlign: 'center',
         opacity: enter,
         transform: `translateY(${translateY}px)`,
@@ -143,8 +147,8 @@ function Arrow({ fromX, toX, progress }: { fromX: number; toX: number; progress:
   return (
     <svg
       style={{ position: 'absolute', left: 0, top: 0 }}
-      width={1920}
-      height={1080}
+      width={1700}
+      height={840}
     >
       <line
         x1={x1}

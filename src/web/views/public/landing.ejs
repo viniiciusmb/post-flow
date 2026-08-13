@@ -32,8 +32,8 @@
       class="hero-video"
       src="/video/tutorial-passo-a-passo.mp4"
       poster="/video/tutorial-passo-a-passo-poster.jpg"
-      width="1920" height="1080"
-      autoplay muted loop playsinline preload="auto"
+      width="1700" height="1080"
+      autoplay muted loop playsinline preload="auto" fetchpriority="high"
       aria-label="<%= t('landing.tutorialVideoAlt') %>"
     ></video>
   </div>
@@ -46,13 +46,18 @@
         que os 3 cartoes estaticos descreviam por texto: vídeo novo no
         YouTube, o Post Flow cortando em clipes verticais, publicação
         automática no TikTok. Gerado com Remotion, fonte em /marketing-video
-        (fora do build do site - so o .mp4 renderizado entra aqui). %>
+        (fora do build do site - so o .mp4 renderizado entra aqui).
+
+        data-lazy-src (nao src) + sem autoplay: fica abaixo da dobra, entao so
+        baixa quando chega perto da tela (ver o IntersectionObserver em
+        public.js) - assim ele nao disputa banda com o video da hero logo na
+        abertura da pagina. %>
     <video
       class="fluxo-video"
-      src="/video/fluxo-automatico.mp4"
+      data-lazy-src="/video/fluxo-automatico.mp4"
       poster="/video/fluxo-automatico-poster.jpg"
-      width="1920" height="1080"
-      autoplay muted loop playsinline
+      width="1700" height="840"
+      muted loop playsinline
       aria-label="<%= t('landing.fluxoVideoAlt') %>"
     ></video>
   </div>
@@ -72,6 +77,53 @@
           <p><%= passo.p %></p>
         </div>
       <% }); %>
+    </div>
+
+    <div class="narrow" style="margin: clamp(3rem, 6vw, 4.5rem) auto 0; text-align: center">
+      <p class="eyebrow"><%= t('landing.telasOlho') %></p>
+      <h2><%= t('landing.telasTitulo') %></h2>
+      <p style="color: var(--muted)"><%= t('landing.telasTexto') %></p>
+    </div>
+
+    <div class="duo">
+      <div class="macbook">
+        <div class="macbook-tampa">
+          <div class="macbook-tela">
+            <img
+              <%# Mesmo print da hero antiga - o arquivo continua sendo
+                  gerado a partir do próprio painel, por idioma. %>
+              src="/img/produto/cortes-light<%= lang === 'pt' ? '' : '-' + lang %>.png"
+              alt="<%= t('landing.altComputador') %>"
+              width="2880" height="1800" loading="lazy">
+          </div>
+        </div>
+        <div class="macbook-base"></div>
+      </div>
+
+      <div class="iphone">
+        <div class="iphone-tela">
+          <img
+            src="/img/produto/cortes-mobile<%= lang === 'pt' ? '' : '-' + lang %>.png"
+            alt="<%= t('landing.altCelular') %>"
+            width="1170" height="2532" loading="lazy">
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="secao secao-mist">
+  <div class="wrap whats-grid">
+    <div class="whats-texto">
+      <p class="eyebrow"><%= t('landing.whatsOlho') %></p>
+      <h2><%= t('landing.whatsTitulo') %></h2>
+      <p style="color: var(--muted)"><%= t('landing.whatsTexto') %></p>
+      <%# TODO: o usuario ainda vai criar o grupo e mandar o link - trocar o
+          href="#" pelo link de convite de verdade assim que ele chegar. %>
+      <a class="btn btn-primary btn-lg" href="#"><%= t('landing.whatsBotao') %></a>
+    </div>
+    <div class="whats-banner">
+      <%- include('../partials/whatsapp-banner') %>
     </div>
   </div>
 </section>

@@ -790,14 +790,17 @@ strong {
 /* ============================================================
    Vídeo da hero
    ============================================================
-   Substituiu o duo de molduras MacBook+iPhone (removidas - eram só CSS ao
-   redor de um PNG estático). O video mudo em loop com prints reais já tem
-   moldura de janela própria desenhada por dentro dele (ver marketing-video/),
-   entao aqui e so um cartao simples com sombra, sem replicar bezel nenhum. */
+   O video mudo em loop com prints reais já tem moldura de janela própria
+   desenhada por dentro dele (ver marketing-video/), entao aqui e so um
+   cartao simples com sombra, sem replicar bezel nenhum. */
 .hero-video {
   display: block;
   width: 100%;
-  max-width: 1040px;
+  /* Era 1040px - "muito espaço na tela" era reclamação real: o cartão do
+     print ocupa só o centro do quadro, o resto é fundo branco do proprio
+     video. Menor aqui esconde menos essa sobra (o cartao interno preenche
+     mais da largura visivel) e pesa menos na tela. */
+  max-width: 640px;
   margin: clamp(3rem, 6vw, 4.5rem) auto 0;
   border-radius: 16px;
   box-shadow: var(--shadow-frame);
@@ -805,6 +808,171 @@ strong {
 
 @media (max-width: 720px) {
   .hero-video { border-radius: 12px; }
+}
+
+/* ============================================================
+   Molduras de dispositivo (MacBook e iPhone)
+   ============================================================
+   Tinham saído da hero quando o video tutorial entrou no lugar - voltaram
+   como seção própria, mais abaixo ("liberado pra PC e pra celular" é
+   justamente o que essas duas telas lado a lado provam). Feitas em CSS, não
+   desenhadas dentro do PNG. Assim a captura de tela continua sendo só a
+   captura (dá pra trocar sem refazer arte), a moldura fica nítida em
+   qualquer densidade de tela, e as duas acompanham o tema claro/escuro
+   sozinhas.
+
+   O truque de proporção é o `aspect-ratio` na área da tela: a imagem entra
+   com `object-fit: cover` e `object-position: top`, então uma captura mais
+   alta que a tela mostra a parte de cima (que é onde está o conteúdo que
+   importa) em vez de espremer tudo. */
+
+.macbook {
+  --macbook-borda: #3a3d42;
+  margin: 0 auto;
+  max-width: 980px;
+}
+.macbook-tampa {
+  position: relative;
+  border: 1px solid var(--macbook-borda);
+  /* A borda de baixo some porque a base entra logo abaixo, encostada. */
+  border-radius: 14px 14px 4px 4px;
+  background: #16181c;
+  padding: 10px 10px 12px;
+  box-shadow: var(--shadow-frame);
+}
+
+/* Ilha da câmera: uma faixa fina no topo da tela, do jeito que aparece no
+   MacBook de verdade. Sem isso a moldura vira só um retângulo escuro. */
+.macbook-tampa::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 68px;
+  height: 4px;
+  border-radius: 0 0 4px 4px;
+  background: #26292e;
+}
+
+.macbook-tela {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--paper);
+}
+.macbook-tela img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+/* Base: um trapézio achatado. A alça é o entalhe semicircular do meio. */
+.macbook-base {
+  position: relative;
+  height: 12px;
+  /* A base do notebook e mais larga que a tampa, como no aparelho de verdade.
+     O quanto ela avanca pra fora e limitado a 1rem de cada lado: o respiro
+     lateral da pagina e 1.5rem, entao ela nunca encosta na borda da tela nem
+     cria rolagem lateral no celular (a versao anterior avancava 27px de cada
+     lado e vazava 3px em 390px de largura). */
+  width: calc(100% + 24px);
+  margin-left: -12px;
+  border-radius: 0 0 10px 10px;
+  background: linear-gradient(180deg, #d5d7db 0%, #a9adb4 55%, #85898f 100%);
+}
+.macbook-base::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 96px;
+  height: 6px;
+  border-radius: 0 0 8px 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+/* ---------- iPhone ---------- */
+
+.iphone {
+  --iphone-borda: #1d1f23;
+  position: relative;
+  width: 260px;
+  flex: none;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  border-radius: 40px;
+  background: var(--iphone-borda);
+  padding: 9px;
+  box-shadow: var(--shadow-frame);
+}
+.iphone-tela {
+  position: relative;
+  aspect-ratio: 390 / 844;
+  overflow: hidden;
+  border-radius: 32px;
+  background: var(--paper);
+}
+.iphone-tela img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+/* Ilha dinâmica. Fica por cima da captura, então a captura não precisa
+   reservar espaço nenhum pra ela. */
+.iphone-tela::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 78px;
+  height: 22px;
+  border-radius: 12px;
+  background: #0b0c0e;
+}
+
+/* Botões laterais: dois traços finos, só pra silhueta não ficar chapada. */
+.iphone::before,
+.iphone::after {
+  content: "";
+  position: absolute;
+  width: 2px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.35);
+}
+.iphone::before { left: -3px; top: 108px; height: 54px; }
+.iphone::after { right: -3px; top: 132px; height: 76px; }
+
+/* ---------- os dois lado a lado ---------- */
+
+.duo {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  margin: clamp(2rem, 5vw, 3rem) auto 0;
+  max-width: 1040px;
+}
+.duo .macbook { margin: 0; flex: 1 1 auto; min-width: 0; }
+
+/* No celular, dois aparelhos lado a lado ficam pequenos demais pra enxergar
+   qualquer coisa - então sobra um só. E o que sobra é o CELULAR, não o
+   notebook: a captura de tela dele já foi feita em 390px, então aqui ela
+   aparece a ~67% do tamanho real e dá pra ler. A do notebook, espremida na
+   mesma largura, ficaria a 24% - um retângulo cinza que não informa nada.
+   Quem entra pelo celular também vê o produto no formato em que vai usar. */
+@media (max-width: 720px) {
+  .duo { gap: 0; }
+  .duo .macbook { display: none; }
+  .duo .iphone { width: min(260px, 72vw); }
 }
 
 /* ---------- grade de recursos ----------
@@ -903,7 +1071,9 @@ strong {
 .fluxo-video {
   display: block;
   width: 100%;
+  max-width: 720px;
   height: auto;
+  margin: 0 auto;
   border-radius: 18px;
 }
 
@@ -993,3 +1163,34 @@ strong {
   border-color: rgba(255, 255, 255, 0.24);
 }
 .btn-fantasma-claro:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* ---------- grupo do WhatsApp ---------- */
+
+.whats-grid {
+  display: grid;
+  gap: clamp(2rem, 5vw, 3.5rem);
+  align-items: center;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 800px) {
+  .whats-grid { grid-template-columns: 1fr 1fr; }
+}
+
+.whats-texto h2 { margin-top: 0.5rem; }
+.whats-texto p { margin-top: 0.75rem; }
+.whats-texto .btn { margin-top: 1.5rem; }
+
+.whats-banner { display: flex; justify-content: center; }
+.whats-banner-img {
+  width: 100%;
+  max-width: 460px;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 20px 40px rgba(12, 138, 75, 0.25));
+}
+.whats-banner-texto {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  fill: #ffffff;
+}

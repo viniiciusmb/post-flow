@@ -246,7 +246,7 @@ function Step1() {
         {shotAOpacity > 0 && (
           <>
             <ScreenshotCard src={staticFile('screenshots/passo1-adicionar-canal.png')} width={1450} glow="rgba(255,0,0,0.06)" opacity={shotAOpacity} scale={shotAScale} />
-            <ClickRipple x={1594} y={684} frame={frame} delay={40} />
+            <ClickRipple x={1484} y={684} frame={frame} delay={40} />
           </>
         )}
         {shotBOpacity > 0 && (
@@ -283,7 +283,7 @@ function Step2() {
         {shotBOpacity > 0 && (
           <>
             <ScreenshotCard src={staticFile('screenshots/passo2-estilo-legenda.png')} width={1180} glow="rgba(79,70,229,0.08)" opacity={shotBOpacity} scale={shotBScale} />
-            <ClickRipple x={959} y={588} frame={frame} delay={106} />
+            <ClickRipple x={849} y={588} frame={frame} delay={106} />
           </>
         )}
       </div>
@@ -316,7 +316,7 @@ function Step3() {
           opacity={shotOpacity}
           scale={shotScale}
         />
-        <ClickRipple x={563} y={596} frame={frame} delay={30} />
+        <ClickRipple x={453} y={596} frame={frame} delay={30} />
       </div>
       <FollowUpCaption frame={frame} delay={56} color={COLOR.ttRosa}>
         A partir daqui os cortes saem publicados sozinhos, no horário que você escolher — sem mais um clique.
