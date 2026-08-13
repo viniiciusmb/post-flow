@@ -125,6 +125,46 @@ test('canal que não devolve vídeo nenhum também registra a tentativa', async 
   assert.equal(depois.last_check_ok, false);
 });
 
+// A listagem rapida (--flat-playlist) nunca traz data de upload (sempre
+// null) - so a consulta individual de metadados (getVideoMetadata, feita por
+// video NOVO pra pegar o titulo original) traz a data de verdade. Achado
+// numa investigacao real (13/08/2026): essa data ja era buscada mas jogada
+// fora na hora de gravar, entao NENHUM video detectado automaticamente
+// aparecia com data na tela "Videos & Cortes".
+test('a data de publicacao do video novo vem da consulta individual, nao da listagem (que e sempre null)', async () => {
+  const cliente = await createClient();
+  const canal = await createYoutubeChannel(cliente.id);
+  const dataReal = new Date('2026-08-13T11:52:58.000Z');
+  // Sem isso o canal fica no caso "primeira checagem" (last_video_id nulo),
+  // que so estabelece o marco d'agua e nunca enfileira nada - ver
+  // channelCheckJob.run().
+  await pool.query('UPDATE youtube_channels SET last_video_id = $2 WHERE id = $1', [canal.id, 'video_marco_dagua']);
+
+  const originalGetMetadata = ytDlpService.getVideoMetadata;
+  ytDlpService.getVideoMetadata = async () => ({
+    videoId: 'abc12345678',
+    title: 'Titulo original',
+    thumbnailUrl: null,
+    publishedAt: dataReal,
+    durationSeconds: 600,
+  });
+
+  try {
+    await comListagem(
+      async () => [
+        { videoId: 'abc12345678', title: 'Titulo traduzido', thumbnailUrl: null, publishedAt: null, durationSeconds: 600 },
+      ],
+      () => channelCheckJob.run(bossFalso)
+    );
+  } finally {
+    ytDlpService.getVideoMetadata = originalGetMetadata;
+  }
+
+  const { rows } = await pool.query('SELECT published_at FROM source_videos WHERE youtube_video_id = $1', ['abc12345678']);
+  assert.ok(rows[0].published_at, 'a data nao pode ficar em branco quando a consulta individual devolveu uma data valida');
+  assert.equal(new Date(rows[0].published_at).getTime(), dataReal.getTime());
+});
+
 test('o erro guardado é cortado: mensagem do yt-dlp vem enorme', async () => {
   const cliente = await createClient();
   const canal = await createYoutubeChannel(cliente.id);

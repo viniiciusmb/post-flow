@@ -69,7 +69,12 @@ async function run(boss) {
           youtubeVideoId: video.videoId,
           title: (original && original.title) || video.title,
           thumbnailUrl: video.thumbnailUrl,
-          publishedAt: video.publishedAt,
+          // A listagem flat (video.publishedAt) vem sempre null - so a consulta
+          // individual do video (original.publishedAt) traz a data de verdade.
+          // Ate agora essa data ja vinha buscada aqui em cima so pro titulo, e
+          // era jogada fora na hora de gravar - nenhum video detectado
+          // automaticamente aparecia com data nenhuma na tela.
+          publishedAt: (original && original.publishedAt) || video.publishedAt,
           durationSeconds: video.durationSeconds,
         });
 
