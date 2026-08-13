@@ -1,88 +1,13 @@
-<%# Banner do grupo do WhatsApp - SVG desenhado à mão (mesma técnica dos
-    ícones do YouTube/TikTok em partials/logo-*.ejs), não uma imagem externa:
-    não pesa nada a mais no carregamento da página (inline, sem requisição
-    HTTP própria) e escala perfeito em qualquer tela.
-
-    Cena: conversa acontecendo (3 balões, incl. um já lido com check azul),
-    o ícone oficial do WhatsApp em destaque, e uma pilha de avatares com
-    contagem de membros embaixo - deixa claro que já existe gente de verdade
-    lá dentro, não é um grupo vazio esperando o primeiro post. %>
-<svg class="whats-banner-img" viewBox="0 0 480 360" role="img" aria-label="Grupo do Post Flow no WhatsApp">
-  <defs>
-    <linearGradient id="wa-bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#2fd66b"/>
-      <stop offset="100%" stop-color="#0c8a4b"/>
-    </linearGradient>
-  </defs>
-  <rect width="480" height="360" rx="24" fill="url(#wa-bg)"/>
-
-  <circle cx="440" cy="10" r="120" fill="rgba(255,255,255,0.07)"/>
-  <circle cx="0" cy="360" r="100" fill="rgba(255,255,255,0.06)"/>
-  <circle cx="410" cy="330" r="34" fill="rgba(255,255,255,0.08)"/>
-
-  <%# faiscas decorativas - só pra dar um toque "vivo" no fundo, sem
-      concorrer com os balões %>
-  <g fill="rgba(255,255,255,0.55)">
-    <path d="M366 26l3.4 8.6 8.6 3.4-8.6 3.4-3.4 8.6-3.4-8.6-8.6-3.4 8.6-3.4Z"/>
-    <path d="M46 210l2.6 6.4 6.4 2.6-6.4 2.6-2.6 6.4-2.6-6.4-6.4-2.6 6.4-2.6Z"/>
-  </g>
-
-  <%# balão 1 - topo, com avatar e "digitando" %>
-  <g transform="translate(222,26)">
-    <rect x="0" y="0" width="188" height="70" rx="18" fill="#ffffff"/>
-    <path d="M20 70 L20 88 L42 70 Z" fill="#ffffff"/>
-    <circle cx="26" cy="24" r="13" fill="#ffb648"/>
-    <text x="26" y="29" text-anchor="middle" font-family="Inter,sans-serif" font-weight="700" font-size="13" fill="#ffffff">R</text>
-    <rect x="50" y="14" width="118" height="8.5" rx="4.25" fill="#cdeedb"/>
-    <rect x="50" y="31" width="86" height="8.5" rx="4.25" fill="#cdeedb"/>
-    <circle cx="54" cy="53" r="3" fill="#8fd9ac"/>
-    <circle cx="65" cy="53" r="3" fill="#8fd9ac"/>
-    <circle cx="76" cy="53" r="3" fill="#8fd9ac"/>
-  </g>
-
-  <%# balão 2 - meio, mensagem já lida (double-check azul) %>
-  <g transform="translate(150,120)">
-    <rect x="0" y="0" width="196" height="70" rx="18" fill="#ffffff"/>
-    <path d="M176 70 L176 88 L154 70 Z" fill="#ffffff"/>
-    <circle cx="26" cy="24" r="13" fill="#5b8def"/>
-    <text x="26" y="29" text-anchor="middle" font-family="Inter,sans-serif" font-weight="700" font-size="13" fill="#ffffff">M</text>
-    <rect x="50" y="14" width="126" height="8.5" rx="4.25" fill="#cdeedb"/>
-    <rect x="50" y="31" width="94" height="8.5" rx="4.25" fill="#cdeedb"/>
-    <path d="M50 52.5l5 5 9-10M58 52.5l5 5 9-10" fill="none" stroke="#34b7f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
-
-  <%# icone oficial do WhatsApp, como selo flutuante %>
-  <g transform="translate(268,150)">
-    <circle cx="46" cy="46" r="46" fill="#ffffff"/>
-    <g transform="translate(13,13)">
-      <path d="M33 0C14.8 0 0 14.8 0 33c0 5.8 1.5 11.3 4.2 16L0.3 66l17.4-3.7C22.3 64.7 27.5 66 33 66c18.2 0 33-14.8 33-33S51.2 0 33 0Z" fill="#20BD5C"/>
-      <path d="M33 4.7C17.4 4.7 4.7 17.4 4.7 33c0 5.3 1.4 10.2 3.9 14.5L6.1 61.9l14.1-3C24.4 60.9 28.6 62 33 62c15.6 0 28.3-12.7 28.3-28.3S48.6 4.7 33 4.7Z" fill="#ffffff"/>
-      <path d="M23.2 16.4c-.6-1.4-1.3-1.4-1.9-1.5h-1.6c-.6 0-1.4.2-2.2 1-.8.8-2.9 2.8-2.9 6.9s3 8 3.4 8.6c.4.5 5.7 9.2 14.1 12.5 7 2.7 8.4 2.2 9.9 2.1 1.5-.1 4.9-2 5.6-3.9.7-1.9.7-3.5.5-3.9-.2-.3-.9-.5-1.8-1-1-.5-5.6-2.7-6.4-3.1-.9-.3-1.5-.5-2.1.5-.6.9-2.4 3-3 3.7-.5.6-1.1.7-2 .2-1-.4-4-1.5-7.6-4.7-2.8-2.5-4.7-5.6-5.3-6.5-.5-1-.1-1.5.4-2 .4-.4 1-1.1 1.4-1.7.5-.5.6-1 .9-1.6.3-.6.2-1.2-.1-1.6-.2-.5-2-5.1-2.8-7Z" fill="#20BD5C"/>
-    </g>
-  </g>
-
-  <%# balão 3 - baixo, com emoji de reacao %>
-  <g transform="translate(60,222)">
-    <rect x="0" y="0" width="178" height="66" rx="18" fill="#ffffff"/>
-    <path d="M158 66 L158 84 L136 66 Z" fill="#ffffff"/>
-    <circle cx="26" cy="24" r="13" fill="#fe6b8f"/>
-    <text x="26" y="29" text-anchor="middle" font-family="Inter,sans-serif" font-weight="700" font-size="13" fill="#ffffff">J</text>
-    <rect x="50" y="14" width="108" height="8.5" rx="4.25" fill="#cdeedb"/>
-    <rect x="50" y="31" width="76" height="8.5" rx="4.25" fill="#cdeedb"/>
-    <circle cx="150" cy="47" r="12" fill="#fff4da"/>
-    <text x="150" y="52" text-anchor="middle" font-size="14">🔥</text>
-  </g>
-
-  <%# pilha de avatares + contagem de membros %>
-  <g transform="translate(28,300)">
-    <circle cx="14" cy="14" r="15" fill="#ffb648" stroke="#0c8a4b" stroke-width="2.5"/>
-    <circle cx="36" cy="14" r="15" fill="#5b8def" stroke="#0c8a4b" stroke-width="2.5"/>
-    <circle cx="58" cy="14" r="15" fill="#fe6b8f" stroke="#0c8a4b" stroke-width="2.5"/>
-    <circle cx="80" cy="14" r="15" fill="#20BD5C" stroke="#0c8a4b" stroke-width="2.5"/>
-    <circle cx="80" cy="1" r="5" fill="#2fd66b" stroke="#ffffff" stroke-width="1.6"/>
-  </g>
-  <text x="122" y="318" font-family="Inter,sans-serif" font-weight="700" font-size="15" fill="#ffffff">+300</text>
-  <text x="122" y="334" font-family="Inter,sans-serif" font-weight="500" font-size="11" fill="rgba(255,255,255,0.8)"><%= t('landing.whatsBannerMembros') %></text>
-
-  <text x="240" y="24" text-anchor="middle" class="whats-banner-texto"><%= t('landing.whatsBannerTexto') %></text>
-</svg>
+<%# Banner do grupo do WhatsApp - imagem de verdade (não SVG desenhado à mão
+    como as marcas do cabeçalho), pedida explicitamente pelo usuário. Só em
+    português (o texto "Entre no nosso Grupo do WhatsApp e faça parte!" está
+    dentro da própria imagem, não dá pra traduzir) - mesma limitação já
+    aceita nos vídeos de marketing desta página. Convertida de PNG (1254x1254,
+    1,3MB) pra WebP (900x900, ~39KB) - mesmo visual, ~97% mais leve. %>
+<img
+  class="whats-banner-img"
+  src="/img/whatsapp-grupo.webp"
+  width="900" height="900"
+  loading="lazy"
+  alt="Entre no nosso Grupo do WhatsApp e faça parte!"
+>

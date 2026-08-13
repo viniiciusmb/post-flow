@@ -37,7 +37,7 @@ module.exports = {
       'Post Flow watches your YouTube channel, cuts the best moments with AI and publishes them to your TikTok automatically.',
 
     selo: '100% automatic',
-    h1a: 'Post to YouTube like always.',
+    h1a: 'New video on the monitored channel.',
     h1b: 'The rest happens',
     h1c: 'on its own',
     lead:
@@ -45,6 +45,10 @@ module.exports = {
     leadForte: 'No editor to open, no TikTok to open.',
     verComoFunciona: 'See how it works',
     notaHero: 'Built for people who already make their own content and want to stop cutting clips by hand.',
+    provaOlho: 'Automatic growth',
+    provaTitulo: "See the numbers grow every day, without you doing a thing",
+    provaTexto:
+      'Simulation of an account using Post Flow since its very first clip. Followers, videos and views climb on their own, straight from the automatic work.',
     provaNome: 'Auto Clips',
     provaVivo: 'growing right now',
     provaSeguidores: 'followers',
@@ -64,14 +68,12 @@ module.exports = {
     whatsTitulo: 'There\'s a WhatsApp group just for Post Flow users',
     whatsTexto:
       'Ask questions, swap ideas with other creators, and be the first to know about new features — unlocked automatically for subscribers, no extra step needed.',
-    whatsBannerTexto: 'Post Flow Group',
-    whatsBannerMembros: 'already in the group',
 
     fluxoVideoAlt:
       'Video showing the automatic flow: a new video published on YouTube, Post Flow cutting it into vertical clips, and automatic posting to TikTok.',
     fluxo: [
       {
-        h: 'New video on your channel',
+        h: 'New video on the monitored channel',
         p: 'Post Flow notices right away, no need to tell it.',
       },
       {

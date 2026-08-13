@@ -312,7 +312,7 @@ export const FluxoAutomaticoVertical: React.FC = () => {
           y={ROW_Y[0]}
           frame={frame}
           delay={4}
-          title="Vídeo novo no seu canal"
+          title="Vídeo novo no canal monitorado"
           paragraph="Post Flow percebe na hora, sem você precisar avisar."
         />
         <RowHeader

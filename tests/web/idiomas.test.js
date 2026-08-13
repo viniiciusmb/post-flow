@@ -56,21 +56,21 @@ test('a landing realmente troca de texto, não só de rótulo', async () => {
   const en = await (await buscar('/', 'en')).text();
   const es = await (await buscar('/', 'es')).text();
 
-  assert.ok(pt.includes('Poste no YouTube como sempre'), 'português perdeu o título');
-  assert.ok(en.includes('Post to YouTube like always'), 'inglês não chegou na página');
-  assert.ok(es.includes('Publica en YouTube como siempre'), 'espanhol não chegou na página');
+  assert.ok(pt.includes('Vídeo novo no canal monitorado'), 'português perdeu o título');
+  assert.ok(en.includes('New video on the monitored channel'), 'inglês não chegou na página');
+  assert.ok(es.includes('Vídeo nuevo en el canal monitoreado'), 'espanhol não chegou na página');
 
   // O caso que dói: sobrar português no meio do inglês.
-  assert.ok(!en.includes('Poste no YouTube como sempre'), 'sobrou português na página em inglês');
-  assert.ok(!es.includes('Poste no YouTube como sempre'), 'sobrou português na página em espanhol');
+  assert.ok(!en.includes('Vídeo novo no canal monitorado'), 'sobrou português na página em inglês');
+  assert.ok(!es.includes('Vídeo novo no canal monitorado'), 'sobrou português na página em espanhol');
 });
 
 test('sem cookie, o idioma do navegador decide', async () => {
   const r = await fetch(baseUrl + '/', { headers: { 'accept-language': 'en-US,en;q=0.9' } });
-  assert.ok((await r.text()).includes('Post to YouTube like always'));
+  assert.ok((await r.text()).includes('New video on the monitored channel'));
 
   const semNada = await fetch(baseUrl + '/');
-  assert.ok((await semNada.text()).includes('Poste no YouTube como sempre'), 'o padrão deixou de ser português');
+  assert.ok((await semNada.text()).includes('Vídeo novo no canal monitorado'), 'o padrão deixou de ser português');
 });
 
 test('os documentos legais têm as MESMAS seções nos três idiomas', () => {

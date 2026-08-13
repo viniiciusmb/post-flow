@@ -49,6 +49,7 @@ function ColumnHeader({
   icon,
   iconBg,
   title,
+  titleSize,
   paragraph,
 }: {
   x: number;
@@ -57,6 +58,7 @@ function ColumnHeader({
   icon: React.ReactNode;
   iconBg: string;
   title: string;
+  titleSize?: number;
   paragraph: string;
 }) {
   const local = frame - delay;
@@ -90,7 +92,7 @@ function ColumnHeader({
       >
         {icon}
       </div>
-      <div style={{ fontFamily, fontWeight: 700, fontSize: 34, color: COLOR.ink, letterSpacing: '-0.01em' }}>
+      <div style={{ fontFamily, fontWeight: 700, fontSize: titleSize || 34, color: COLOR.ink, letterSpacing: '-0.01em' }}>
         {title}
       </div>
       <div
@@ -370,7 +372,8 @@ export const FluxoAutomatico: React.FC = () => {
         delay={4}
         icon={<YouTubeIcon size={30} />}
         iconBg={COLOR.mist2}
-        title="Vídeo novo no seu canal"
+        title="Vídeo novo no canal monitorado"
+        titleSize={28}
         paragraph="Post Flow percebe na hora, sem você precisar avisar."
       />
       <ColumnHeader

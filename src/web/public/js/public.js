@@ -127,18 +127,21 @@
     window.addEventListener('resize', atualizar);
   }
 
-  // Cartão "ao vivo" da hero: números de uma conta fictícia (seguidores,
-  // vídeos, visualizações) que só sobem sozinhos - é a prova visual mais
-  // direta do que a página promete. Formata em K/mi pra não amontoar dígito
-  // demais num cartão pequeno. Quem prefere menos movimento na tela
+  // Cartão "ao vivo" da hero: simula uma conta crescendo DO ZERO com o
+  // Post Flow - os números sobem junto (curva de desaceleração, como
+  // crescimento de conta de verdade) até um alvo, e o ciclo inteiro
+  // recomeça em loop (com uma pausa curta e um fade pra não ficar um corte
+  // seco de volta pro zero). Formata em K/M pra não amontoar dígito demais
+  // num cartão pequeno. Quem prefere menos movimento na tela
   // (prefers-reduced-motion) recebe os números já "crescidos", parados -
-  // contagem crescente contínua é exatamente o tipo de movimento que essa
+  // contagem em loop contínuo é exatamente o tipo de movimento que essa
   // preferência pede pra evitar.
   var provaCartao = document.querySelector('.hero-prova');
   if (provaCartao) {
     var elSeguidores = provaCartao.querySelector('[data-prova-seguidores]');
     var elVideos = provaCartao.querySelector('[data-prova-videos]');
     var elViews = provaCartao.querySelector('[data-prova-views]');
+    var elStats = provaCartao.querySelector('.hero-prova-stats');
 
     // K/M em vez de "mil"/"mi": esse cartão é o mesmo em português, inglês e
     // espanhol (não tem tradução própria, só os rótulos ao redor vêm de
@@ -153,35 +156,57 @@
     var pulsar = function (el) {
       el.classList.remove('hero-prova-subiu');
       // Força reflow pra reiniciar a transição mesmo se ainda estava com a
-      // classe (incrementos muito próximos um do outro).
+      // classe (atualizações muito próximas uma da outra).
       void el.offsetWidth;
       el.classList.add('hero-prova-subiu');
     };
 
-    var estado = { seguidores: 12420, videos: 87, views: 1238400 };
-    var escrever = function () {
-      elSeguidores.textContent = formatar(estado.seguidores);
-      elVideos.textContent = formatar(estado.videos);
-      elViews.textContent = formatar(estado.views);
+    // Só troca o texto (e pulsa) quando o valor FORMATADO muda de verdade -
+    // o valor bruto muda a cada quadro, mas arredondado/abreviado (K/M) boa
+    // parte dos quadros não move o dígito exibido.
+    var escreverSe = function (el, texto) {
+      if (el.textContent !== texto) {
+        el.textContent = texto;
+        pulsar(el);
+      }
     };
-    escrever();
+
+    var ALVO = { seguidores: 14800, videos: 96, views: 1950000 };
+    var DURACAO_MS = 24000;
+    var PAUSA_MS = 900;
 
     var semMovimento = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!semMovimento) {
-      setInterval(function () {
-        estado.seguidores += 1 + Math.floor(Math.random() * 4);
-        estado.views += 60 + Math.floor(Math.random() * 340);
-        pulsar(elSeguidores);
-        pulsar(elViews);
-        elSeguidores.textContent = formatar(estado.seguidores);
-        elViews.textContent = formatar(estado.views);
-      }, 2200);
-
-      setInterval(function () {
-        estado.videos += 1;
-        pulsar(elVideos);
-        elVideos.textContent = formatar(estado.videos);
-      }, 9000);
+    if (semMovimento) {
+      elSeguidores.textContent = formatar(ALVO.seguidores);
+      elVideos.textContent = formatar(ALVO.videos);
+      elViews.textContent = formatar(ALVO.views);
+    } else {
+      var inicio = Date.now();
+      var quadro = function () {
+        var decorrido = Date.now() - inicio;
+        if (decorrido >= DURACAO_MS) {
+          // Fade rápido, zera os três, espera um instante e recomeça o
+          // ciclo - deixa claro que é um "replay" da simulação, não um
+          // corte seco de volta pro zero.
+          elStats.style.opacity = '0';
+          setTimeout(function () {
+            elSeguidores.textContent = '0';
+            elVideos.textContent = '0';
+            elViews.textContent = '0';
+            elStats.style.opacity = '1';
+            inicio = Date.now();
+          }, 450);
+          setTimeout(quadro, PAUSA_MS);
+          return;
+        }
+        var t = decorrido / DURACAO_MS;
+        var suave = 1 - Math.pow(1 - t, 2); // ease-out: rápido no começo, desacelera no fim
+        escreverSe(elSeguidores, formatar(Math.round(ALVO.seguidores * suave)));
+        escreverSe(elVideos, formatar(Math.round(ALVO.videos * suave)));
+        escreverSe(elViews, formatar(Math.round(ALVO.views * suave)));
+        setTimeout(quadro, 150);
+      };
+      quadro();
     }
   }
 })();

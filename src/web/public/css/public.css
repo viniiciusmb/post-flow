@@ -837,51 +837,42 @@ strong {
   box-shadow: var(--shadow-frame);
 }
 
-/* ---------- cartão "ao vivo" flutuante ----------
-   Conta de TikTok fictícia cujos números só sobem (JS em public.js, bloco
-   "hero-prova") - a prova mais direta do que a página promete, plantada em
-   cima do próprio vídeo da hero. No desktop flutua colada no canto inferior
-   esquerdo do vídeo (como um selo); no celular vira um cartão comum abaixo
-   dele - sobrepor um elemento pequeno a um vídeo já estreito ficaria
-   ilegível. */
+/* ---------- cartão "ao vivo" ----------
+   Conta de TikTok fictícia cujos números sobem DO ZERO, em loop (JS em
+   public.js, bloco "hero-prova") - a prova mais direta do que a página
+   promete. Seção própria (não mais flutuando em cima do vídeo da hero -
+   competia com ele e ficava pequeno demais pra ler no celular), cartão
+   grande e centralizado. */
 .hero-prova {
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 20px 40px -16px rgba(8, 9, 10, 0.28);
-  padding: 0.85rem 1rem;
-  width: 15rem;
-  margin: 1rem auto 0;
-}
-@media (min-width: 640px) {
-  .hero-prova {
-    position: absolute;
-    left: -1.25rem;
-    bottom: -1.5rem;
-    margin: 0;
-  }
+  border-radius: 18px;
+  box-shadow: var(--shadow-frame);
+  padding: 1.75rem clamp(1.5rem, 5vw, 3rem);
+  max-width: 30rem;
+  margin: 0 auto;
 }
 .hero-prova-cabeca {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.85rem;
 }
 .hero-prova-avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 3rem;
+  height: 3rem;
   border-radius: 50%;
   background: var(--ink);
   flex: none;
 }
 .hero-prova-avatar svg {
-  width: 1.1rem;
-  height: 1.1rem;
+  width: 1.4rem;
+  height: 1.4rem;
 }
 .hero-prova-nome {
-  font-size: 0.875rem;
+  font-size: 1.0625rem;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -889,8 +880,8 @@ strong {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  margin-top: 0.15rem;
-  font-size: 0.75rem;
+  margin-top: 0.2rem;
+  font-size: 0.8125rem;
   color: var(--success-ink);
   font-weight: 600;
 }
@@ -909,16 +900,17 @@ strong {
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-top: 0.75rem;
-  padding-top: 0.7rem;
+  margin-top: 1.25rem;
+  padding-top: 1.15rem;
   border-top: 1px solid var(--line);
+  transition: opacity 0.45s ease;
 }
 .hero-prova-stat {
   display: flex;
   flex-direction: column;
 }
 .hero-prova-stat strong {
-  font-size: 0.9375rem;
+  font-size: 1.375rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
@@ -936,7 +928,7 @@ strong {
   100% { color: inherit; }
 }
 .hero-prova-stat span {
-  margin-top: 0.1rem;
+  margin-top: 0.15rem;
   font-size: 0.6875rem;
   color: var(--muted);
 }
@@ -1453,10 +1445,4 @@ strong {
   height: auto;
   display: block;
   filter: drop-shadow(0 20px 40px rgba(12, 138, 75, 0.25));
-}
-.whats-banner-texto {
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-weight: 700;
-  font-size: 15px;
-  fill: #ffffff;
 }
