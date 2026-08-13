@@ -58,6 +58,8 @@ module.exports = {
       'Tela de cortes do Post Flow no computador, com os vídeos do canal em etapas diferentes do processamento',
     altCelular: 'A mesma tela de cortes aberta no celular',
 
+    fluxoVideoAlt:
+      'Vídeo mostrando o fluxo automático: um vídeo novo publicado no YouTube, o Post Flow cortando ele em clipes verticais, e a publicação automática no TikTok.',
     fluxo: [
       {
         h: 'Você publica no YouTube',

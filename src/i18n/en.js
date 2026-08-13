@@ -49,6 +49,8 @@ module.exports = {
       'The Post Flow clips screen on a computer, showing the channel\'s videos at different processing stages',
     altCelular: 'The same clips screen open on a phone',
 
+    fluxoVideoAlt:
+      'Video showing the automatic flow: a new video published on YouTube, Post Flow cutting it into vertical clips, and automatic posting to TikTok.',
     fluxo: [
       {
         h: 'You publish on YouTube',

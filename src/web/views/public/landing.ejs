@@ -53,33 +53,20 @@
 
 <section class="secao secao-fluxo">
   <div class="wrap">
-    <div class="fluxo">
-      <div class="fluxo-passo fluxo-youtube">
-        <span class="fluxo-marca"><%- include('../partials/logo-youtube') %></span>
-        <h3><%= t('landing.fluxo')[0].h %></h3>
-        <p><%= t('landing.fluxo')[0].p %></p>
-      </div>
-
-      <span class="fluxo-seta" aria-hidden="true">
-        <svg viewBox="0 0 40 12"><path d="M0 6h33M28 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </span>
-
-      <div class="fluxo-passo fluxo-postflow">
-        <span class="fluxo-marca fluxo-marca-pf"><%- include('../partials/brand-mark') %></span>
-        <h3><%= t('landing.fluxo')[1].h %></h3>
-        <p><%= t('landing.fluxo')[1].p %></p>
-      </div>
-
-      <span class="fluxo-seta" aria-hidden="true">
-        <svg viewBox="0 0 40 12"><path d="M0 6h33M28 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </span>
-
-      <div class="fluxo-passo fluxo-tiktok">
-        <span class="fluxo-marca"><%- include('../partials/logo-tiktok') %></span>
-        <h3><%= t('landing.fluxo')[2].h %></h3>
-        <p><%= t('landing.fluxo')[2].p %></p>
-      </div>
-    </div>
+    <%# Video mudo, em loop, sem controles - pensado pra parecer parte da
+        propria pagina (nao um player incorporado). Mostra exatamente o fluxo
+        que os 3 cartoes estaticos descreviam por texto: vídeo novo no
+        YouTube, o Post Flow cortando em clipes verticais, publicação
+        automática no TikTok. Gerado com Remotion, fonte em /marketing-video
+        (fora do build do site - so o .mp4 renderizado entra aqui). %>
+    <video
+      class="fluxo-video"
+      src="/video/fluxo-automatico.mp4"
+      poster="/video/fluxo-automatico-poster.jpg"
+      width="1920" height="1080"
+      autoplay muted loop playsinline
+      aria-label="<%= t('landing.fluxoVideoAlt') %>"
+    ></video>
   </div>
 </section>
 

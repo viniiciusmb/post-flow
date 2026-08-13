@@ -7,3 +7,8 @@ coverage/
 
 # Skills instaladas localmente (nao fazem parte do produto)
 .agents/
+
+# Saida renderizada do video da landing (o .mp4/.jpg finais que importam
+# ficam versionados em src/web/public/video/ - isto aqui e so rascunho de
+# render, incluindo os stills de preview usados pra revisar a animacao).
+marketing-video/out/

@@ -1037,73 +1037,15 @@ strong {
      padding-top zero) os cartões pareciam parte do notebook. */
   padding-top: clamp(3.5rem, 7vw, 5.5rem);
 }
-.fluxo {
-  display: grid;
-  gap: 1rem;
-  align-items: stretch;
-  grid-template-columns: 1fr;
-}
-@media (min-width: 900px) {
-  .fluxo {
-    grid-template-columns: 1fr auto 1fr auto 1fr;
-    gap: 1.25rem;
-  }
-}
-
-.fluxo-passo {
-  position: relative;
-  padding: 1.75rem 1.5rem;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--paper);
-  box-shadow: 0 1px 2px rgba(8, 9, 10, 0.03);
-}
-/* Uma faixa fina no topo com a cor da plataforma. É o suficiente pra saber de
-   qual etapa se trata sem ler - e não colore o cartão inteiro. */
-.fluxo-passo::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 3px;
-  border-radius: 14px 14px 0 0;
-  background: var(--cor-etapa, var(--line));
-}
-.fluxo-youtube { --cor-etapa: var(--yt); }
-.fluxo-postflow { --cor-etapa: var(--acento); }
-.fluxo-tiktok { --cor-etapa: linear-gradient(90deg, var(--tt-ciano), var(--tt-rosa)); }
-
-.fluxo-marca {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  margin-bottom: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--mist);
-  font-size: 1.4rem;
-}
-.fluxo-marca svg { width: 1.4rem; height: auto; }
-.fluxo-marca-pf { background: var(--ink); color: var(--paper); }
-.fluxo-marca-pf svg { width: 1.15rem; }
-
-.fluxo-passo h3 { margin-bottom: 0.4rem; }
-.fluxo-passo p {
-  margin: 0;
-  font-size: 0.9375rem;
-  line-height: 1.55;
-  color: var(--muted);
-}
-
-.fluxo-seta {
-  display: none;
-  align-self: center;
-  color: var(--line);
-}
-.fluxo-seta svg { width: 2.5rem; height: auto; display: block; }
-@media (min-width: 900px) {
-  .fluxo-seta { display: block; }
+/* Video mudo em loop que substitui os 3 cartoes estaticos que existiam aqui -
+   mesmo conteudo (YouTube -> Post Flow -> TikTok), agora animado. Sem borda
+   nem sombra de propósito: o fundo do video é branco, igual a pagina, entao
+   ele tem que parecer parte da propria pagina, nao um player encaixado nela. */
+.fluxo-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 18px;
 }
 
 /* ---------- perguntas frequentes ---------- */
