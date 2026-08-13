@@ -816,6 +816,14 @@ strong {
 .hero-video {
   display: block;
   width: 100%;
+  /* Sem isso, o height="1000" do HTML (só uma dica de proporção pra evitar
+     salto de layout antes do vídeo carregar) prevalecia sobre a largura
+     escalada pelo width:100% - a caixa ficava travada em 1000px de altura
+     não importa a largura, virando um retângulo alto/estreito em vez de
+     acompanhar a proporção real do vídeo (1620x1000). Bug real, visto em
+     produção: a caixa parecia "do tamanho de um tablet" com o vídeo
+     sobrando no meio. */
+  height: auto;
   /* Era 1040px - "muito espaço na tela" era reclamação real: o cartão do
      print ocupa só o centro do quadro, o resto é fundo branco do proprio
      video. Menor aqui esconde menos essa sobra (o cartao interno preenche
