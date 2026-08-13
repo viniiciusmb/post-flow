@@ -370,8 +370,8 @@ export const FluxoAutomatico: React.FC = () => {
         delay={4}
         icon={<YouTubeIcon size={30} />}
         iconBg={COLOR.mist2}
-        title="Você publica no YouTube"
-        paragraph="Um vídeo longo: podcast, live, aula, entrevista."
+        title="Vídeo novo no seu canal"
+        paragraph="Post Flow percebe na hora, sem você precisar avisar."
       />
       <ColumnHeader
         x={COL_X[1]}

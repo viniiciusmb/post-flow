@@ -37,7 +37,7 @@ module.exports = {
       'Post Flow watches your YouTube channel, cuts the best moments with AI and publishes them to your TikTok automatically.',
 
     selo: '100% automatic',
-    h1a: 'You record once.',
+    h1a: 'Post to YouTube like always.',
     h1b: 'The rest happens',
     h1c: 'on its own',
     lead:
@@ -45,6 +45,11 @@ module.exports = {
     leadForte: 'No editor to open, no TikTok to open.',
     verComoFunciona: 'See how it works',
     notaHero: 'Built for people who already make their own content and want to stop cutting clips by hand.',
+    provaNome: 'Auto Clips',
+    provaVivo: 'growing right now',
+    provaSeguidores: 'followers',
+    provaVideos: 'videos',
+    provaViews: 'views',
     altComputador:
       'The Post Flow clips screen on a computer, showing the channel\'s videos at different processing stages',
     altCelular: 'The same clips screen open on a phone',
@@ -60,13 +65,14 @@ module.exports = {
     whatsTexto:
       'Ask questions, swap ideas with other creators, and be the first to know about new features — unlocked automatically for subscribers, no extra step needed.',
     whatsBannerTexto: 'Post Flow Group',
+    whatsBannerMembros: 'already in the group',
 
     fluxoVideoAlt:
       'Video showing the automatic flow: a new video published on YouTube, Post Flow cutting it into vertical clips, and automatic posting to TikTok.',
     fluxo: [
       {
-        h: 'You publish on YouTube',
-        p: 'A long video: podcast, livestream, lesson, interview. Exactly the way you already do it.',
+        h: 'New video on your channel',
+        p: 'Post Flow notices right away, no need to tell it.',
       },
       {
         h: 'Post Flow does the work',

@@ -312,8 +312,8 @@ export const FluxoAutomaticoVertical: React.FC = () => {
           y={ROW_Y[0]}
           frame={frame}
           delay={4}
-          title="Você publica no YouTube"
-          paragraph="Um vídeo longo: podcast, live, aula, entrevista."
+          title="Vídeo novo no seu canal"
+          paragraph="Post Flow percebe na hora, sem você precisar avisar."
         />
         <RowHeader
           y={ROW_Y[1]}

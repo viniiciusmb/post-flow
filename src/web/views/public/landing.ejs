@@ -28,14 +28,50 @@
         limitação já aceita no video de fluxo da seção seguinte - re-gravar
         por idioma é trabalho grande pra um ganho pequeno). Gerado com
         Remotion, fonte em /marketing-video. %>
-    <video
-      class="hero-video"
-      src="/video/tutorial-passo-a-passo.mp4"
-      poster="/video/tutorial-passo-a-passo-poster.jpg"
-      width="1620" height="1000"
-      autoplay muted loop playsinline preload="auto" fetchpriority="high"
-      aria-label="<%= t('landing.tutorialVideoAlt') %>"
-    ></video>
+    <div class="hero-video-envolt">
+      <video
+        class="hero-video"
+        src="/video/tutorial-passo-a-passo.mp4"
+        poster="/video/tutorial-passo-a-passo-poster.jpg"
+        width="1620" height="1000"
+        autoplay muted loop playsinline preload="auto" fetchpriority="high"
+        aria-label="<%= t('landing.tutorialVideoAlt') %>"
+      ></video>
+
+      <%# Cartão "ao vivo" flutuante - não é vídeo, é DOM de verdade com os
+          números subindo via JS (public.js, bloco "hero-prova"). Simula uma
+          conta do TikTok que só cresce, sem ninguém mexer nela - é a prova
+          visual mais direta do que a página promete, então fica plantada em
+          cima do vídeo principal (o elemento de maior destaque da hero) em
+          vez de disputar espaço numa seção própria. Números e formatação
+          inteiros no JS; aqui só o esqueleto + valores iniciais (pro layout
+          não pular antes do JS rodar). %>
+      <div class="hero-prova" aria-hidden="true">
+        <div class="hero-prova-cabeca">
+          <span class="hero-prova-avatar">
+            <%- include('../partials/logo-tiktok') %>
+          </span>
+          <div>
+            <div class="hero-prova-nome"><%= t('landing.provaNome') %></div>
+            <div class="hero-prova-vivo"><span class="hero-prova-ponto"></span><%= t('landing.provaVivo') %></div>
+          </div>
+        </div>
+        <div class="hero-prova-stats">
+          <div class="hero-prova-stat">
+            <strong data-prova-seguidores>12.4K</strong>
+            <span><%= t('landing.provaSeguidores') %></span>
+          </div>
+          <div class="hero-prova-stat">
+            <strong data-prova-videos>87</strong>
+            <span><%= t('landing.provaVideos') %></span>
+          </div>
+          <div class="hero-prova-stat">
+            <strong data-prova-views>1.2M</strong>
+            <span><%= t('landing.provaViews') %></span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 

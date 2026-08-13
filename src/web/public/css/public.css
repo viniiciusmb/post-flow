@@ -813,6 +813,15 @@ strong {
    O video mudo em loop com prints reais já tem moldura de janela própria
    desenhada por dentro dele (ver marketing-video/), entao aqui e so um
    cartao simples com sombra, sem replicar bezel nenhum. */
+.hero-video-envolt {
+  position: relative;
+  /* Era 1040px - "muito espaço na tela" era reclamação real: o cartão do
+     print ocupa só o centro do quadro, o resto é fundo branco do proprio
+     video. Menor aqui esconde menos essa sobra (o cartao interno preenche
+     mais da largura visivel) e pesa menos na tela. */
+  max-width: 640px;
+  margin: clamp(3rem, 6vw, 4.5rem) auto 0;
+}
 .hero-video {
   display: block;
   width: 100%;
@@ -824,14 +833,112 @@ strong {
      produção: a caixa parecia "do tamanho de um tablet" com o vídeo
      sobrando no meio. */
   height: auto;
-  /* Era 1040px - "muito espaço na tela" era reclamação real: o cartão do
-     print ocupa só o centro do quadro, o resto é fundo branco do proprio
-     video. Menor aqui esconde menos essa sobra (o cartao interno preenche
-     mais da largura visivel) e pesa menos na tela. */
-  max-width: 640px;
-  margin: clamp(3rem, 6vw, 4.5rem) auto 0;
   border-radius: 16px;
   box-shadow: var(--shadow-frame);
+}
+
+/* ---------- cartão "ao vivo" flutuante ----------
+   Conta de TikTok fictícia cujos números só sobem (JS em public.js, bloco
+   "hero-prova") - a prova mais direta do que a página promete, plantada em
+   cima do próprio vídeo da hero. No desktop flutua colada no canto inferior
+   esquerdo do vídeo (como um selo); no celular vira um cartão comum abaixo
+   dele - sobrepor um elemento pequeno a um vídeo já estreito ficaria
+   ilegível. */
+.hero-prova {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 20px 40px -16px rgba(8, 9, 10, 0.28);
+  padding: 0.85rem 1rem;
+  width: 15rem;
+  margin: 1rem auto 0;
+}
+@media (min-width: 640px) {
+  .hero-prova {
+    position: absolute;
+    left: -1.25rem;
+    bottom: -1.5rem;
+    margin: 0;
+  }
+}
+.hero-prova-cabeca {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.hero-prova-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--ink);
+  flex: none;
+}
+.hero-prova-avatar svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+.hero-prova-nome {
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.hero-prova-vivo {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--success-ink);
+  font-weight: 600;
+}
+.hero-prova-ponto {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--success-ink);
+  animation: hero-prova-pulsar 1.8s ease-in-out infinite;
+}
+@keyframes hero-prova-pulsar {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+.hero-prova-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line);
+}
+.hero-prova-stat {
+  display: flex;
+  flex-direction: column;
+}
+.hero-prova-stat strong {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+/* Animação, não classe permanente + transição: precisa VOLTAR sozinha à cor
+   normal depois do flash. Uma classe que só muda a cor via transition fica
+   acesa pra sempre (nada nunca tira a classe), e foi exatamente o bug visto
+   no teste local - todo número ficava roxo permanentemente após o primeiro
+   incremento. */
+.hero-prova-stat strong.hero-prova-subiu {
+  animation: hero-prova-flash 0.9s ease;
+}
+@keyframes hero-prova-flash {
+  0% { color: var(--acento); }
+  100% { color: inherit; }
+}
+.hero-prova-stat span {
+  margin-top: 0.1rem;
+  font-size: 0.6875rem;
+  color: var(--muted);
 }
 
 @media (max-width: 720px) {
@@ -1350,6 +1457,6 @@ strong {
 .whats-banner-texto {
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-weight: 700;
-  font-size: 22px;
+  font-size: 15px;
   fill: #ffffff;
 }

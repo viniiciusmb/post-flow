@@ -126,4 +126,62 @@
     atualizar();
     window.addEventListener('resize', atualizar);
   }
+
+  // Cartão "ao vivo" da hero: números de uma conta fictícia (seguidores,
+  // vídeos, visualizações) que só sobem sozinhos - é a prova visual mais
+  // direta do que a página promete. Formata em K/mi pra não amontoar dígito
+  // demais num cartão pequeno. Quem prefere menos movimento na tela
+  // (prefers-reduced-motion) recebe os números já "crescidos", parados -
+  // contagem crescente contínua é exatamente o tipo de movimento que essa
+  // preferência pede pra evitar.
+  var provaCartao = document.querySelector('.hero-prova');
+  if (provaCartao) {
+    var elSeguidores = provaCartao.querySelector('[data-prova-seguidores]');
+    var elVideos = provaCartao.querySelector('[data-prova-videos]');
+    var elViews = provaCartao.querySelector('[data-prova-views]');
+
+    // K/M em vez de "mil"/"mi": esse cartão é o mesmo em português, inglês e
+    // espanhol (não tem tradução própria, só os rótulos ao redor vêm de
+    // i18n), e K/M já é como o TikTok/Instagram mostram contador em
+    // qualquer idioma - não precisa de lógica de localização própria aqui.
+    var formatar = function (n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+      return String(n);
+    };
+
+    var pulsar = function (el) {
+      el.classList.remove('hero-prova-subiu');
+      // Força reflow pra reiniciar a transição mesmo se ainda estava com a
+      // classe (incrementos muito próximos um do outro).
+      void el.offsetWidth;
+      el.classList.add('hero-prova-subiu');
+    };
+
+    var estado = { seguidores: 12420, videos: 87, views: 1238400 };
+    var escrever = function () {
+      elSeguidores.textContent = formatar(estado.seguidores);
+      elVideos.textContent = formatar(estado.videos);
+      elViews.textContent = formatar(estado.views);
+    };
+    escrever();
+
+    var semMovimento = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!semMovimento) {
+      setInterval(function () {
+        estado.seguidores += 1 + Math.floor(Math.random() * 4);
+        estado.views += 60 + Math.floor(Math.random() * 340);
+        pulsar(elSeguidores);
+        pulsar(elViews);
+        elSeguidores.textContent = formatar(estado.seguidores);
+        elViews.textContent = formatar(estado.views);
+      }, 2200);
+
+      setInterval(function () {
+        estado.videos += 1;
+        pulsar(elVideos);
+        elVideos.textContent = formatar(estado.videos);
+      }, 9000);
+    }
+  }
 })();
