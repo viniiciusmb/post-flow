@@ -97,23 +97,47 @@ async function reserveBeforeDownload(sourceVideo, clientUserId) {
   await clientCreditsRepository.getOrCreate(clientUserId);
   const minutes = minutesFor(sourceVideo.duration_seconds);
   const bucket = await resolveBucketForClient(clientUserId);
-  const reservation = await clientCreditsRepository.reserve(clientUserId, bucket, minutes);
-  if (reservation) {
+
+  // Consome o que houver e diz quanto faltou - o excedente e PROPORCIONAL.
+  // Com 10 min de cota sobrando e um video de 30, usa os 10 que o cliente ja
+  // pagou e cobra so os 20 restantes. Antes isso era tudo-ou-nada: nao
+  // cabendo, o video inteiro ia pro cartao e os 10 minutos ficavam parados -
+  // cobrava a mais e ainda deixava credito preso, que e o pior dos dois mundos
+  // pra quem paga.
+  const consumo = await clientCreditsRepository.consumeUpTo(clientUserId, bucket, minutes);
+  const minutesFromCredit = consumo.minutesFromQuota + consumo.minutesFromExtra;
+  const minutesUncovered = consumo.minutesUncovered;
+
+  async function devolverCreditoConsumido() {
+    if (minutesFromCredit === 0) return;
+    await clientCreditsRepository.release(clientUserId, bucket, {
+      minutesFromQuota: consumo.minutesFromQuota,
+      minutesFromExtra: consumo.minutesFromExtra,
+    });
+  }
+
+  // Coube inteiro no credito - caminho de sempre, nenhuma cobranca envolvida.
+  if (minutesUncovered === 0) {
     await creditTransactionsRepository.createReserved({
       clientUserId,
       sourceVideoId: sourceVideo.id,
       bucket,
       minutesCharged: minutes,
-      minutesFromQuota: reservation.minutesFromQuota,
-      minutesFromExtra: reservation.minutesFromExtra,
+      minutesFromQuota: consumo.minutesFromQuota,
+      minutesFromExtra: consumo.minutesFromExtra,
     });
     return { outcome: 'reserved', bucket };
   }
 
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  if (!subscription.overage_card_enabled) return { outcome: 'blocked' };
+  if (!subscription.overage_card_enabled) {
+    // Sem cartao o video nao vai rodar, entao o que ja foi consumido tem que
+    // voltar - senao o cliente perde credito sem receber nada em troca.
+    await devolverCreditoConsumido();
+    return { outcome: 'blocked' };
+  }
 
-  // Sem saldo, mas com cartao cadastrado: cobra AGORA, antes de processar.
+  // Cobra AGORA, antes de processar, e SO os minutos que faltaram.
   //
   // Antes o excedente era acumulado e faturado depois, de hora em hora. Isso
   // significava processar primeiro e cobrar torcendo pra dar certo - se o
@@ -121,11 +145,18 @@ async function reserveBeforeDownload(sourceVideo, clientUserId) {
   // sido gasto e nao havia como desfazer. Cobrando antes, o pior caso e o video
   // esperar, nao o prejuizo.
   const rateCentsPerMin = OVERAGE_RATE_CENTS_PER_MIN[bucket];
-  const amountCents = Math.round(minutes * rateCentsPerMin);
-  const cobranca = await cobrarAgora({ subscription, clientUserId, sourceVideo, minutes, amountCents });
+  const amountCents = Math.round(minutesUncovered * rateCentsPerMin);
+  const cobranca = await cobrarAgora({
+    subscription,
+    clientUserId,
+    sourceVideo,
+    minutes: minutesUncovered,
+    amountCents,
+  });
 
   if (!cobranca.ok) {
     logger.warn(`Cobranca do video ${sourceVideo.id} recusada: ${cobranca.motivo}`);
+    await devolverCreditoConsumido();
     return { outcome: 'charge_failed', motivo: cobranca.motivo, amountCents };
   }
 
@@ -133,11 +164,27 @@ async function reserveBeforeDownload(sourceVideo, clientUserId) {
     clientUserId,
     sourceVideoId: sourceVideo.id,
     bucket,
-    minutes,
+    minutes: minutesUncovered,
     rateCentsPerMin,
     stripePaymentIntentId: cobranca.id,
   });
-  return { outcome: 'charged', bucket, minutes, amountCents };
+
+  // Parte saiu do credito: precisa do registro tambem, senao esses minutos
+  // ficam debitados sem rastro - e releaseIfReserved nao teria como devolve-los
+  // se o processamento falhar depois.
+  if (minutesFromCredit > 0) {
+    await creditTransactionsRepository.createReserved({
+      clientUserId,
+      sourceVideoId: sourceVideo.id,
+      bucket,
+      minutesCharged: minutesFromCredit,
+      minutesFromQuota: consumo.minutesFromQuota,
+      minutesFromExtra: consumo.minutesFromExtra,
+    });
+    return { outcome: 'reserved_and_charged', bucket, minutesFromCredit, minutesUncovered, amountCents };
+  }
+
+  return { outcome: 'charged', bucket, minutes: minutesUncovered, amountCents };
 }
 
 // Chamado depois que o download terminou com sucesso, quando
@@ -153,10 +200,12 @@ async function confirmAfterDownload(sourceVideo, clientUserId, reserveOutcome, d
   const realBucket = bucketForEgressType(downloadResult.egressType);
 
   // O excedente ja foi cobrado no cartao ANTES do download (ver
-  // reserveBeforeDownload), entao nao ha nada a faturar aqui.
+  // reserveBeforeDownload), entao nao ha nada a faturar aqui. So o caso
+  // 'charged' puro sai aqui: em 'reserved_and_charged' parte saiu do credito e
+  // essa parte tem transacao pra confirmar, igual a uma reserva comum.
   if (reserveOutcome.outcome === 'charged') return;
 
-  // outcome === 'reserved'
+  // outcome === 'reserved' ou 'reserved_and_charged'
   if (reserveOutcome.bucket === realBucket) {
     await creditTransactionsRepository.markConfirmed(sourceVideo.id, { downloadPath: downloadResult.egressType });
     return;
@@ -218,30 +267,59 @@ async function chargeForUpload(sourceVideo, clientUserId) {
 
   await clientCreditsRepository.getOrCreate(clientUserId);
   const minutes = minutesFor(sourceVideo.duration_seconds);
-  const reservation = await clientCreditsRepository.reserve(clientUserId, 'normal', minutes);
-  if (reservation) {
+
+  // Excedente proporcional, igual ao video de canal (ver reserveBeforeDownload).
+  const consumo = await clientCreditsRepository.consumeUpTo(clientUserId, 'normal', minutes);
+  const minutesFromCredit = consumo.minutesFromQuota + consumo.minutesFromExtra;
+  const minutesUncovered = consumo.minutesUncovered;
+
+  async function devolverCreditoConsumido() {
+    if (minutesFromCredit === 0) return;
+    await clientCreditsRepository.release(clientUserId, 'normal', {
+      minutesFromQuota: consumo.minutesFromQuota,
+      minutesFromExtra: consumo.minutesFromExtra,
+    });
+  }
+
+  async function registrarCreditoUsado(minutesCharged) {
     await creditTransactionsRepository.createReserved({
       clientUserId,
       sourceVideoId: sourceVideo.id,
       bucket: 'normal',
-      minutesCharged: minutes,
-      minutesFromQuota: reservation.minutesFromQuota,
-      minutesFromExtra: reservation.minutesFromExtra,
+      minutesCharged,
+      minutesFromQuota: consumo.minutesFromQuota,
+      minutesFromExtra: consumo.minutesFromExtra,
     });
+    // Upload nao tem etapa de download separada pra confirmar depois: o
+    // arquivo ja esta em disco, entao reserva e confirmacao acontecem juntas.
     await creditTransactionsRepository.markConfirmed(sourceVideo.id, { downloadPath: 'upload' });
+  }
+
+  if (minutesUncovered === 0) {
+    await registrarCreditoUsado(minutes);
     return { outcome: 'reserved' };
   }
 
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  if (!subscription.overage_card_enabled) return { outcome: 'blocked' };
+  if (!subscription.overage_card_enabled) {
+    await devolverCreditoConsumido();
+    return { outcome: 'blocked' };
+  }
 
   // Mesma regra do video de canal: cobra antes de processar (ver
   // reserveBeforeDownload). Aqui o arquivo ja esta em disco, mas o caro vem
   // depois - transcricao, IA e render.
-  const amountCents = Math.round(minutes * OVERAGE_RATE_CENTS_PER_MIN.normal);
-  const cobranca = await cobrarAgora({ subscription, clientUserId, sourceVideo, minutes, amountCents });
+  const amountCents = Math.round(minutesUncovered * OVERAGE_RATE_CENTS_PER_MIN.normal);
+  const cobranca = await cobrarAgora({
+    subscription,
+    clientUserId,
+    sourceVideo,
+    minutes: minutesUncovered,
+    amountCents,
+  });
   if (!cobranca.ok) {
     logger.warn(`Cobranca do upload ${sourceVideo.id} recusada: ${cobranca.motivo}`);
+    await devolverCreditoConsumido();
     return { outcome: 'charge_failed', motivo: cobranca.motivo, amountCents };
   }
 
@@ -249,11 +327,17 @@ async function chargeForUpload(sourceVideo, clientUserId) {
     clientUserId,
     sourceVideoId: sourceVideo.id,
     bucket: 'normal',
-    minutes,
+    minutes: minutesUncovered,
     rateCentsPerMin: OVERAGE_RATE_CENTS_PER_MIN.normal,
     stripePaymentIntentId: cobranca.id,
   });
-  return { outcome: 'charged', bucket: 'normal', minutes, amountCents };
+
+  if (minutesFromCredit > 0) {
+    await registrarCreditoUsado(minutesFromCredit);
+    return { outcome: 'reserved_and_charged', bucket: 'normal', minutesFromCredit, minutesUncovered, amountCents };
+  }
+
+  return { outcome: 'charged', bucket: 'normal', minutes: minutesUncovered, amountCents };
 }
 
 module.exports = {

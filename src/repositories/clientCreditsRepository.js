@@ -56,6 +56,55 @@ async function reserve(clientUserId, bucket, minutes) {
   return { minutesFromQuota: rows[0].minutes_from_quota, minutesFromExtra: rows[0].minutes_from_extra };
 }
 
+// Consome ATE `minutes` do bolso e diz quanto faltou, em vez de recusar tudo
+// quando o saldo nao basta (que e o que reserve() faz).
+//
+// Isso existe porque o excedente e proporcional: com 10 min de cota sobrando e
+// um video de 30, o cliente usa os 10 que ja pagou e so os 20 restantes vao
+// pro cartao. Com reserve() puro isso era impossivel - ou cabia tudo, ou o
+// video inteiro ia pro cartao e os 10 minutos ficavam parados sem uso, o que
+// cobrava a mais e ainda deixava credito preso.
+//
+// Mesma garantia de concorrencia do reserve(): CTE com FOR UPDATE + UPDATE
+// numa unica ida ao banco, entao duas chamadas pro mesmo cliente serializam e
+// nunca consomem o mesmo minuto duas vezes. As CTEs so projetam as colunas
+// calculadas (nao repassam quota/used/extra) pra nao existir nome ambiguo
+// entre a tabela alvo e a CTE no SET - ambiguidade assim ja quebrou uma query
+// parecida no motor de comissao.
+async function consumeUpTo(clientUserId, bucket, minutes) {
+  const { quota, used, extra } = columnsFor(bucket);
+  const { rows } = await pool.query(
+    `WITH old AS (
+       SELECT ${quota} AS quota, ${used} AS used, ${extra} AS extra
+       FROM client_credits WHERE client_user_id = $1 FOR UPDATE
+     ),
+     calc AS (
+       SELECT GREATEST(quota - used, 0) AS available_quota, extra FROM old
+     ),
+     plano AS (
+       SELECT LEAST($2, available_quota) AS from_quota,
+              LEAST(GREATEST($2 - available_quota, 0), extra) AS from_extra
+       FROM calc
+     )
+     UPDATE client_credits cc
+     SET ${used} = cc.${used} + plano.from_quota,
+         ${extra} = cc.${extra} - plano.from_extra,
+         updated_at = now()
+     FROM plano
+     WHERE cc.client_user_id = $1
+     RETURNING plano.from_quota AS minutes_from_quota,
+               plano.from_extra AS minutes_from_extra,
+               ($2 - plano.from_quota - plano.from_extra) AS minutes_uncovered`,
+    [clientUserId, minutes]
+  );
+  if (!rows[0]) return null;
+  return {
+    minutesFromQuota: rows[0].minutes_from_quota,
+    minutesFromExtra: rows[0].minutes_from_extra,
+    minutesUncovered: rows[0].minutes_uncovered,
+  };
+}
+
 // Reverte exatamente o que reserve() tirou de cada parte do bolso (download
 // falhou antes de completar - ver regra "nao debita nada" no processVideoJob).
 async function release(clientUserId, bucket, { minutesFromQuota, minutesFromExtra }) {
@@ -136,6 +185,7 @@ async function applyPlanQuotaNow(clientUserId, planId) {
 module.exports = {
   getOrCreate,
   reserve,
+  consumeUpTo,
   release,
   forceDebitUsed,
   addExtra,
