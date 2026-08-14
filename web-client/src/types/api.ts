@@ -449,7 +449,13 @@ export interface AdminBandwidthResponse {
   byEgress: BandwidthByEgress[]
   byClient: BandwidthByClient[]
   founderTunnel: { id: number; enabled: boolean; connected: boolean; lastCheckedAt: string | null } | null
-  proxy: { configured: boolean; enabled: boolean }
+  proxy: {
+    configured: boolean
+    enabled: boolean
+    purchasedBytes: number
+    consumedAllTimeBytes: number
+    remainingBytes: number
+  }
   clientTunnels: { id: number; clientUserId: number; label: string | null; enabled: boolean; connected: boolean }[]
 }
 

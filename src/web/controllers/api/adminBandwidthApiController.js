@@ -7,15 +7,18 @@ const config = require('../../../config');
 const { resolveRange } = require('../../../lib/dateRanges');
 
 const RESIDENTIAL_PROXY_ENABLED_KEY = 'residential_proxy_enabled';
+const RESIDENTIAL_PROXY_PURCHASED_BYTES_KEY = 'residential_proxy_purchased_bytes';
 
 async function overview(req, res) {
   const { range, since, until } = resolveRange(req.query.range);
 
-  const [byEgress, byClient, allTunnels, proxyEnabled] = await Promise.all([
+  const [byEgress, byClient, allTunnels, proxyEnabled, purchasedBytes, consumedAllTimeBytes] = await Promise.all([
     metricsRepository.bandwidthByEgressSince(since, until),
     metricsRepository.bandwidthByClientSince(since, until),
     downloadTunnelsRepository.listAll(),
     settingsRepository.getValue(RESIDENTIAL_PROXY_ENABLED_KEY, true),
+    settingsRepository.getValue(RESIDENTIAL_PROXY_PURCHASED_BYTES_KEY, 0),
+    metricsRepository.bandwidthProxyAllTimeBytes(),
   ]);
 
   const founderTunnel = allTunnels.find((t) => t.owner_type === 'founder') || null;
@@ -36,6 +39,9 @@ async function overview(req, res) {
     proxy: {
       configured: Boolean(config.youtube.proxyUrl),
       enabled: proxyEnabled,
+      purchasedBytes,
+      consumedAllTimeBytes,
+      remainingBytes: Math.max(0, purchasedBytes - consumedAllTimeBytes),
     },
     clientTunnels: clientTunnels.map((t) => ({
       id: t.id,
@@ -61,4 +67,16 @@ async function toggleProxy(req, res) {
   res.json({ enabled });
 }
 
-module.exports = { overview, toggleFounderTunnel, toggleProxy };
+// Saldo comprado e um numero absoluto (nao acumula sozinho) - toda vez que
+// o admin recarregar GB no provedor, atualiza aqui pro valor novo total.
+async function setProxyPurchased(req, res) {
+  const purchasedGb = Number(req.body.purchasedGb);
+  if (!Number.isFinite(purchasedGb) || purchasedGb < 0) {
+    return res.status(400).json({ error: res.locals.t('erros.valorInvalido') });
+  }
+  const purchasedBytes = Math.round(purchasedGb * 1024 ** 3);
+  await settingsRepository.setValue(RESIDENTIAL_PROXY_PURCHASED_BYTES_KEY, purchasedBytes);
+  res.json({ purchasedBytes });
+}
+
+module.exports = { overview, toggleFounderTunnel, toggleProxy, setProxyPurchased };

@@ -21,6 +21,7 @@
 'use strict';
 
 const { spawn } = require('child_process');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -100,12 +101,30 @@ function getPlayerClientCandidates() {
   return [null, 'android', 'tv'];
 }
 
+// A DataImpulse e um proxy residencial ROTATIVO por padrao: sem sessao fixa,
+// cada conexao pode sair por um IP diferente. O YouTube assina a URL de
+// download do video com o IP que pediu os metadados (player API) - se o
+// pedido do video em si sair por outro IP, da 403 mesmo com o proxy
+// funcionando perfeitamente (confirmado testando ao vivo, 2026-08-14). O
+// parametro `;sessid.X` da DataImpulse prende a mesma tentativa (um
+// processo yt-dlp = varios requests HTTP internos) num unico IP por ate
+// 30min - gerar um id aleatorio novo a cada tentativa (nao por video, nao
+// fixo) tambem evita um unico IP residencial acumular todo o trafego do
+// sistema.
+function withFreshDataImpulseSession(proxyUrl) {
+  const match = /^(https?:\/\/)([^:]+):([^@]+)@(gw\.dataimpulse\.com.*)$/.exec(proxyUrl || '');
+  if (!match) return proxyUrl;
+  const [, scheme, username, password, hostPort] = match;
+  const sessionId = crypto.randomBytes(6).toString('hex');
+  return `${scheme}${username};sessid.${sessionId}:${password}@${hostPort}`;
+}
+
 function runOnce(args, { timeoutMs = 5 * 60 * 1000, proxyUrl = null, playerClient = null, checkCancelled = null } = {}) {
   return new Promise((resolve, reject) => {
     const authArgs = [];
 
     if (proxyUrl) {
-      authArgs.push('--proxy', proxyUrl);
+      authArgs.push('--proxy', withFreshDataImpulseSession(proxyUrl));
     }
     if (playerClient) {
       authArgs.push('--extractor-args', `youtube:player_client=${playerClient}`);

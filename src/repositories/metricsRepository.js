@@ -310,6 +310,18 @@ async function bandwidthByEgressSince(since, until = new Date()) {
   return rows.map((r) => ({ egressType: r.egress_type, bytes: Number(r.bytes), videos: r.videos }));
 }
 
+// Consumo vitalicio (nao filtrado por periodo) do proxy pago - usado pra
+// comparar contra o saldo comprado (ex: "10GB comprados na DataImpulse"),
+// que e uma nocao de saldo acumulado, nao de janela de tempo.
+async function bandwidthProxyAllTimeBytes() {
+  const { rows } = await pool.query(
+    `SELECT coalesce(sum(download_bytes), 0) AS bytes
+     FROM source_videos
+     WHERE download_egress_type = 'proxy' AND download_bytes IS NOT NULL`
+  );
+  return Number(rows[0].bytes);
+}
+
 // Por cliente: quanto saiu pelo tunel DELE mesmo vs quanto caiu pro
 // fallback (tunel do founder ou proxy pago) - "fallback alto" sinaliza que
 // o tunel daquele cliente nao estava confiavel no periodo.
@@ -355,6 +367,7 @@ module.exports = {
   pruneOldSystemMetrics,
   computeDailyRollup,
   bandwidthByEgressSince,
+  bandwidthProxyAllTimeBytes,
   bandwidthByClientSince,
   pruneOldTranscripts,
 };

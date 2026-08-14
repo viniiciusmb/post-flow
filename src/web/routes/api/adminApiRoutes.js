@@ -24,6 +24,7 @@ router.get('/metrics', asyncHandler(adminMetricsApiController.overview));
 router.get('/bandwidth', asyncHandler(adminBandwidthApiController.overview));
 router.post('/bandwidth/founder-tunnel/toggle', asyncHandler(adminBandwidthApiController.toggleFounderTunnel));
 router.post('/bandwidth/proxy/toggle', asyncHandler(adminBandwidthApiController.toggleProxy));
+router.post('/bandwidth/proxy/purchased', asyncHandler(adminBandwidthApiController.setProxyPurchased));
 
 // Painel de erros. Fica atras do requireRoleApi(ADMIN) la de cima - a lista
 // junta falhas de TODOS os clientes, entao nao pode vazar pra ninguem mais.

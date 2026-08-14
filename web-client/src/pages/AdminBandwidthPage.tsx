@@ -4,6 +4,7 @@ import { IconGauge } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import { DateRangeFilter } from "@/components/dashboard/DateRangeFilter"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -13,8 +14,10 @@ import { useDateRange } from "@/hooks/useDateRange"
 import { api } from "@/lib/api"
 import type { AdminBandwidthResponse, BandwidthEgressType } from "@/types/api"
 
+const BYTES_PER_GB = 1024 ** 3
+
 function gb(bytes: number) {
-  return `${(bytes / 1024 ** 3).toFixed(2)} GB`
+  return `${(bytes / BYTES_PER_GB).toFixed(2)} GB`
 }
 
 const EGRESS_LABELS: Record<BandwidthEgressType, ChaveDeTraducao> = {
@@ -41,6 +44,8 @@ export function AdminBandwidthPage() {
   const [data, setData] = useState<AdminBandwidthResponse | null>(null)
   const [savingFounder, setSavingFounder] = useState(false)
   const [savingProxy, setSavingProxy] = useState(false)
+  const [purchasedDraft, setPurchasedDraft] = useState<string | null>(null)
+  const [savingPurchased, setSavingPurchased] = useState(false)
 
   async function load() {
     const res = await api.get<AdminBandwidthResponse>(`/api/admin/bandwidth?range=${range}`)
@@ -72,6 +77,23 @@ export function AdminBandwidthPage() {
       await load()
     } finally {
       setSavingProxy(false)
+    }
+  }
+
+  async function savePurchased() {
+    if (purchasedDraft === null) return
+    const purchasedGb = Number(purchasedDraft)
+    if (!Number.isFinite(purchasedGb) || purchasedGb < 0) {
+      setPurchasedDraft(null)
+      return
+    }
+    setSavingPurchased(true)
+    try {
+      await api.post("/api/admin/bandwidth/proxy/purchased", { purchasedGb })
+      setPurchasedDraft(null)
+      await load()
+    } finally {
+      setSavingPurchased(false)
     }
   }
 
@@ -133,6 +155,35 @@ export function AdminBandwidthPage() {
                   )}
                 </div>
                 <Metric label={t("adm.bandaDescricao")} value={gb(bytesByType("proxy"))} />
+                <div className="flex items-center gap-2 border-t pt-3">
+                  <label htmlFor="proxy-purchased" className="text-xs text-muted-foreground">
+                    {t("adm.gbComprados")}
+                  </label>
+                  <Input
+                    id="proxy-purchased"
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={purchasedDraft ?? String(data.proxy.purchasedBytes / BYTES_PER_GB)}
+                    disabled={savingPurchased}
+                    onChange={(e) => setPurchasedDraft(e.target.value)}
+                    onBlur={savePurchased}
+                    className="w-24"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <Metric label={t("adm.gbConsumidoTotal")} value={gb(data.proxy.consumedAllTimeBytes)} />
+                  <div className="text-right">
+                    <div className="font-heading text-2xl font-semibold tabular-nums">
+                      {data.proxy.purchasedBytes > 0 && data.proxy.remainingBytes < BYTES_PER_GB ? (
+                        <TonePill tone="danger">{gb(data.proxy.remainingBytes)}</TonePill>
+                      ) : (
+                        gb(data.proxy.remainingBytes)
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{t("adm.gbRestante")}</div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
