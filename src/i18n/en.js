@@ -55,8 +55,8 @@ module.exports = {
     provaVideos: 'videos',
     provaViews: 'views',
     altComputador:
-      'The Post Flow clips screen on a computer, showing the channel\'s videos at different processing stages',
-    altCelular: 'The same clips screen open on a phone',
+      'Post Flow\'s queue of ready clips on a computer, with a preview of each finished clip',
+    altCelular: 'The same queue of ready clips open on a phone',
     tutorialVideoAlt:
       'Tutorial video with real platform screenshots: step 1, add the YouTube channel; step 2, configure the clip style; step 3, connect the TikTok account.',
     telasOlho: 'Where you use it',

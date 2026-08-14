@@ -64,8 +64,8 @@ module.exports = {
     provaVideos: 'vídeos',
     provaViews: 'visualizações',
     altComputador:
-      'Tela de cortes do Post Flow no computador, com os vídeos do canal em etapas diferentes do processamento',
-    altCelular: 'A mesma tela de cortes aberta no celular',
+      'Fila de cortes prontos do Post Flow no computador, com a prévia de cada clipe já cortado',
+    altCelular: 'A mesma fila de cortes prontos aberta no celular',
     tutorialVideoAlt:
       'Vídeo tutorial com prints reais da plataforma: passo 1, adicionar o canal do YouTube; passo 2, configurar o estilo de corte; passo 3, conectar a conta do TikTok.',
     telasOlho: 'Onde você usa',

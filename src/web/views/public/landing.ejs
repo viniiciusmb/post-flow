@@ -151,9 +151,13 @@
         <div class="macbook-tampa">
           <div class="macbook-tela">
             <img
-              <%# Mesmo print da hero antiga - o arquivo continua sendo
-                  gerado a partir do próprio painel, por idioma. %>
-              src="/img/produto/cortes-light<%= lang === 'pt' ? '' : '-' + lang %>.png"
+              <%# Print da fila de cortes de verdade (painel autenticado,
+                  tela "Vídeos & Cortes" expandida mostrando os clipes
+                  prontos com preview) - gerado a partir do próprio painel,
+                  por idioma. JPEG (não PNG): esse print tem muita foto de
+                  verdade dentro dos clipes, PNG comprimia mal esse tipo de
+                  conteúdo. %>
+              src="/img/produto/cortes-light<%= lang === 'pt' ? '' : '-' + lang %>.jpg"
               alt="<%= t('landing.altComputador') %>"
               width="2880" height="1800" loading="lazy">
           </div>
@@ -164,9 +168,9 @@
       <div class="iphone">
         <div class="iphone-tela">
           <img
-            src="/img/produto/cortes-mobile<%= lang === 'pt' ? '' : '-' + lang %>.png"
+            src="/img/produto/cortes-mobile<%= lang === 'pt' ? '' : '-' + lang %>.jpg"
             alt="<%= t('landing.altCelular') %>"
-            width="1170" height="2532" loading="lazy">
+            width="1170" height="2993" loading="lazy">
         </div>
       </div>
     </div>
