@@ -142,8 +142,8 @@ function TikTokAccountCard({ opacity, scale }: { opacity: number; scale: number 
   const stat = (icon: React.ReactNode, valor: string, rotulo: string) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
       {icon}
-      <span style={{ fontFamily, fontWeight: 700, fontSize: 30, color: COLOR.ink }}>{valor}</span>
-      <span style={{ fontFamily, fontWeight: 500, fontSize: 22, color: COLOR.muted }}>{rotulo}</span>
+      <span style={{ fontFamily, fontWeight: 700, fontSize: 33, color: COLOR.ink }}>{valor}</span>
+      <span style={{ fontFamily, fontWeight: 500, fontSize: 24, color: COLOR.muted }}>{rotulo}</span>
     </div>
   );
 
@@ -188,7 +188,7 @@ function TikTokAccountCard({ opacity, scale }: { opacity: number; scale: number 
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <span style={{ fontFamily, fontWeight: 700, fontSize: 36, color: COLOR.ink }}>Aqueles Clipes</span>
+                <span style={{ fontFamily, fontWeight: 700, fontSize: 40, color: COLOR.ink }}>Aqueles Clipes</span>
                 <span
                   style={{
                     display: 'inline-flex',
@@ -200,36 +200,36 @@ function TikTokAccountCard({ opacity, scale }: { opacity: number; scale: number 
                     color: COLOR.sucesso,
                     fontFamily,
                     fontWeight: 700,
-                    fontSize: 18,
+                    fontSize: 20,
                   }}
                 >
                   <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'currentColor' }} />
                   Conectada
                 </span>
               </div>
-              <div style={{ marginTop: 8, fontFamily, fontWeight: 500, fontSize: 22, color: COLOR.muted }}>
+              <div style={{ marginTop: 8, fontFamily, fontWeight: 500, fontSize: 24, color: COLOR.muted }}>
                 Conectada em 29/07/2026
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: COLOR.destrutivo, fontFamily, fontWeight: 600, fontSize: 22 }}>
-            <TrashIcon size={26} color={COLOR.destrutivo} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: COLOR.destrutivo, fontFamily, fontWeight: 600, fontSize: 24 }}>
+            <TrashIcon size={28} color={COLOR.destrutivo} />
             Desconectar
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 56, borderTop: `1px solid ${COLOR.line}`, paddingTop: 40 }}>
-          {stat(<UsersIcon size={30} />, '762', 'seguidores')}
-          {stat(<HeartIcon size={30} />, '63,6mil', 'curtidas')}
-          {stat(<FilmIcon size={30} />, '9', 'vídeos no perfil')}
+          {stat(<UsersIcon size={32} />, '762', 'seguidores')}
+          {stat(<HeartIcon size={32} />, '63,6mil', 'curtidas')}
+          {stat(<FilmIcon size={32} />, '9', 'vídeos no perfil')}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: `1px solid ${COLOR.line}`, paddingTop: 40 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontFamily, fontWeight: 500, fontSize: 22, color: COLOR.muted }}>
-            <ClockIcon size={28} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontFamily, fontWeight: 500, fontSize: 24, color: COLOR.muted }}>
+            <ClockIcon size={30} />
             3 cortes na fila
             <span style={{ color: COLOR.line }}>·</span>
-            <CheckIcon size={20} color={COLOR.sucesso} />
+            <CheckIcon size={22} color={COLOR.sucesso} />
             <span style={{ color: COLOR.sucesso, fontWeight: 600 }}>128 já publicados</span>
           </div>
           <div
@@ -239,7 +239,7 @@ function TikTokAccountCard({ opacity, scale }: { opacity: number; scale: number 
               border: `1px solid ${COLOR.line}`,
               fontFamily,
               fontWeight: 600,
-              fontSize: 20,
+              fontSize: 22,
               color: COLOR.ink,
             }}
           >
@@ -297,14 +297,14 @@ function StepBadge({ n, frame, color }: { n: number; frame: number; color: strin
     >
       <div
         style={{
-          width: 22,
-          height: 22,
+          width: 25,
+          height: 25,
           borderRadius: '50%',
           background: 'rgba(255,255,255,0.25)',
           color: COLOR.paper,
           fontFamily,
           fontWeight: 800,
-          fontSize: 13,
+          fontSize: 15,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -312,7 +312,7 @@ function StepBadge({ n, frame, color }: { n: number; frame: number; color: strin
       >
         {n}
       </div>
-      <span style={{ fontFamily, fontWeight: 700, fontSize: 15, color: COLOR.paper, letterSpacing: '0.02em' }}>
+      <span style={{ fontFamily, fontWeight: 700, fontSize: 17, color: COLOR.paper, letterSpacing: '0.02em' }}>
         PASSO {n}
       </span>
     </div>
@@ -338,10 +338,10 @@ function StepHeader({
       <StepBadge n={n} frame={frame} color={color} />
       <div
         style={{
-          marginTop: 22,
+          marginTop: 24,
           fontFamily,
           fontWeight: 800,
-          fontSize: 46,
+          fontSize: 54,
           color: COLOR.ink,
           letterSpacing: '-0.02em',
           opacity: textIn,
@@ -352,10 +352,10 @@ function StepHeader({
       </div>
       <div
         style={{
-          marginTop: 10,
+          marginTop: 12,
           fontFamily,
           fontWeight: 500,
-          fontSize: 22,
+          fontSize: 26,
           color: COLOR.muted,
           opacity: textIn,
         }}
@@ -378,17 +378,17 @@ function FollowUpCaption({ frame, delay, color, children }: { frame: number; del
         left: '50%',
         transform: `translate(-50%, ${interpolate(enter, [0, 1], [14, 0])}px)`,
         opacity: Math.max(0, enter),
-        maxWidth: 980,
+        maxWidth: 1040,
         textAlign: 'center',
         background: COLOR.paper,
         border: `1px solid ${COLOR.line}`,
         borderRadius: 14,
-        padding: '16px 28px',
+        padding: '18px 30px',
         boxShadow: '0 16px 32px -18px rgba(8,9,10,0.25)',
       }}
     >
-      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: color, marginRight: 10 }} />
-      <span style={{ fontFamily, fontWeight: 600, fontSize: 19, color: COLOR.ink, lineHeight: 1.5 }}>{children}</span>
+      <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: color, marginRight: 10 }} />
+      <span style={{ fontFamily, fontWeight: 600, fontSize: 22, color: COLOR.ink, lineHeight: 1.5 }}>{children}</span>
     </div>
   );
 }
@@ -516,7 +516,7 @@ function Outro() {
             </div>
           ))}
         </div>
-        <div style={{ fontFamily, fontWeight: 800, fontSize: 48, color: COLOR.ink, letterSpacing: '-0.02em' }}>
+        <div style={{ fontFamily, fontWeight: 800, fontSize: 52, color: COLOR.ink, letterSpacing: '-0.02em' }}>
           3 passos. Depois disso, é tudo automático.
         </div>
         <div
@@ -527,14 +527,14 @@ function Outro() {
             gap: 8,
             fontFamily,
             fontWeight: 600,
-            fontSize: 18,
+            fontSize: 20,
             color: COLOR.sucesso,
           }}
         >
-          <CheckIcon size={16} color={COLOR.sucesso} />
+          <CheckIcon size={18} color={COLOR.sucesso} />
           Zero esforço depois de configurar uma vez
         </div>
-        <div style={{ marginTop: 26, fontFamily, fontWeight: 600, fontSize: 16, letterSpacing: '0.04em', color: COLOR.muted }}>
+        <div style={{ marginTop: 26, fontFamily, fontWeight: 600, fontSize: 17, letterSpacing: '0.04em', color: COLOR.muted }}>
           POSTFLOWCLIPS.COM
         </div>
       </div>

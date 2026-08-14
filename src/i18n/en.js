@@ -185,11 +185,11 @@ module.exports = {
     numerosTitulo: 'Post Flow in numbers',
     numerosTexto:
       'All this automation has already published thousands of clips and helped accounts grow without anyone opening a video editor.',
-    numerosVideosValor: '+18K',
+    numerosVideosValor: '+85K',
     numerosVideosRotulo: 'videos published',
-    numerosContasValor: '+2,300',
+    numerosContasValor: '+9,400',
     numerosContasRotulo: 'connected accounts',
-    numerosViewsValor: '42 million',
+    numerosViewsValor: '340 million',
     numerosViewsRotulo: 'views generated',
 
     finalOlho: 'Start today',
