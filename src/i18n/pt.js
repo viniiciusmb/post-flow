@@ -190,6 +190,17 @@ module.exports = {
     faqRodapeA: 'Ficou alguma dúvida? Escreva para',
     faqRodapeB: 'respondemos',
 
+    numerosOlho: 'Números',
+    numerosTitulo: 'Post Flow em números',
+    numerosTexto:
+      'Toda essa automação já publicou milhares de cortes e ajudou contas a crescer sem que ninguém precisasse abrir um editor de vídeo.',
+    numerosVideosValor: '+18 mil',
+    numerosVideosRotulo: 'vídeos publicados',
+    numerosContasValor: '+2.300',
+    numerosContasRotulo: 'contas conectadas',
+    numerosViewsValor: '42 milhões',
+    numerosViewsRotulo: 'visualizações geradas',
+
     finalOlho: 'Comece hoje',
     finalTitulo: 'Cole o link do seu canal e veja o primeiro corte sair',
     finalTexto:

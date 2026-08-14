@@ -1388,6 +1388,64 @@ strong {
 }
 .faq-rodape a { color: var(--signal); }
 
+/* ---------- números (prova social) ---------- */
+
+.secao-numeros {
+  background: var(--ink);
+  color: #fff;
+}
+.secao-numeros .eyebrow {
+  color: rgba(255, 255, 255, 0.5);
+}
+.secao-numeros h2 {
+  color: #fff;
+}
+.secao-numeros .narrow > p:not(.eyebrow) {
+  color: rgba(255, 255, 255, 0.66);
+}
+.numeros-grade {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  max-width: 64rem;
+  margin: 0 auto;
+}
+.numeros-item {
+  text-align: center;
+  padding: 0 1rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+.numeros-item:first-child {
+  border-left: none;
+}
+.numeros-valor {
+  font-size: clamp(1.75rem, 5vw, 3.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.numeros-rotulo {
+  margin-top: 0.6rem;
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+@media (max-width: 640px) {
+  .numeros-grade {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    max-width: 20rem;
+  }
+  .numeros-item {
+    padding: 1.5rem 0 0;
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+  }
+  .numeros-item:first-child {
+    padding-top: 0;
+    border-top: none;
+  }
+}
+
 /* ---------- fechamento ---------- */
 
 .final-caixa {
@@ -1441,8 +1499,9 @@ strong {
 .whats-banner { display: flex; justify-content: center; }
 .whats-banner-img {
   width: 100%;
-  max-width: 460px;
+  max-width: 320px;
   height: auto;
   display: block;
+  border-radius: 20px;
   filter: drop-shadow(0 20px 40px rgba(12, 138, 75, 0.25));
 }

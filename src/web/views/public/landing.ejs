@@ -383,6 +383,36 @@
   </div>
 </section>
 
+<%# Números fictícios (declarado de propósito - não vêm de contagem real do
+    banco, é só prova social estilo "empresa em números"), inflados a pedido
+    do usuário. Seção escura full-bleed, mesmo tratamento visual de
+    .secao-final (var(--ink) + texto branco), reaproveitado aqui como uma
+    seção própria em vez de caixa arredondada, pra servir de "respiro forte"
+    antes do CTA final. %>
+<section class="secao secao-numeros">
+  <div class="wrap">
+    <div class="narrow" style="margin: 0 auto 3rem; text-align: center">
+      <p class="eyebrow"><%= t('landing.numerosOlho') %></p>
+      <h2><%= t('landing.numerosTitulo') %></h2>
+      <p><%= t('landing.numerosTexto') %></p>
+    </div>
+    <div class="numeros-grade">
+      <div class="numeros-item">
+        <div class="numeros-valor"><%= t('landing.numerosVideosValor') %></div>
+        <div class="numeros-rotulo"><%= t('landing.numerosVideosRotulo') %></div>
+      </div>
+      <div class="numeros-item">
+        <div class="numeros-valor"><%= t('landing.numerosContasValor') %></div>
+        <div class="numeros-rotulo"><%= t('landing.numerosContasRotulo') %></div>
+      </div>
+      <div class="numeros-item">
+        <div class="numeros-valor"><%= t('landing.numerosViewsValor') %></div>
+        <div class="numeros-rotulo"><%= t('landing.numerosViewsRotulo') %></div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="secao secao-final">
   <div class="wrap">
     <div class="final-caixa">

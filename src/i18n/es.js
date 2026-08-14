@@ -182,6 +182,17 @@ module.exports = {
     faqRodapeA: '¿Te quedó alguna duda? Escribe a',
     faqRodapeB: 'respondemos',
 
+    numerosOlho: 'Números',
+    numerosTitulo: 'Post Flow en números',
+    numerosTexto:
+      'Toda esta automatización ya publicó miles de clips y ayudó a cuentas a crecer sin que nadie abriera un editor de vídeo.',
+    numerosVideosValor: '+18 mil',
+    numerosVideosRotulo: 'vídeos publicados',
+    numerosContasValor: '+2.300',
+    numerosContasRotulo: 'cuentas conectadas',
+    numerosViewsValor: '42 millones',
+    numerosViewsRotulo: 'visualizaciones generadas',
+
     finalOlho: 'Empieza hoy',
     finalTitulo: 'Pega el enlace de tu canal y mira salir el primer clip',
     finalTexto:
