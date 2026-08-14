@@ -65,6 +65,10 @@ function rotuloRetencao(horas: number, t: (c: ChaveDeTraducao, v?: Record<string
   return dias === 1 ? t("pub.umDia") : t("pub.nDias", { n: dias })
 }
 
+// Teto de publicações por dia, por conta. O servidor é quem manda (vem em
+// options.maxPostsPerDay); este valor é só o espelho para montar os controles.
+const MAX_POSTS_POR_DIA = 10
+
 function formatCount(n: number | null | undefined) {
   if (n === null || n === undefined) return "—"
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -171,9 +175,13 @@ function PauseQueueBar({ accountId }: { accountId: number }) {
 function PublishDefaultsCard({
   accountId,
   onChange,
+  onSaved,
 }: {
   accountId: number
   onChange: (d: PublishDefaults) => void
+  /** Só no SALVAR, não na carga inicial: quem ouve isto recarrega a lista de
+      contas, e chamar na carga faria uma busca extra a cada abertura. */
+  onSaved: () => void
 }) {
   const t = useT()
   const [defaults, setDefaults] = useState<PublishDefaults | null>(null)
@@ -243,6 +251,7 @@ function PublishDefaultsCard({
             onSaved={(novo) => {
               setDefaults(novo)
               onChange(novo)
+              onSaved()
               setEditando(false)
             }}
           />
@@ -363,7 +372,7 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
             id={`videosPerDay-${accountId}`}
             type="number"
             min={1}
-            max={20}
+            max={MAX_POSTS_POR_DIA}
             className="w-24"
             value={videosPerDayDraft}
             onChange={(e) => setVideosPerDayDraft(Number(e.target.value))}
@@ -399,11 +408,19 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
                   </Button>
                 </div>
               ))}
-              <Button variant="outline" size="sm" className="w-fit" onClick={addManualTime}>
-                <IconPlus />{t("pub.adicionarHorario")}</Button>
+              {manualTimesDraft.length < MAX_POSTS_POR_DIA && (
+                <Button variant="outline" size="sm" className="w-fit" onClick={addManualTime}>
+                  <IconPlus />{t("pub.adicionarHorario")}</Button>
+              )}
             </div>
           </Field>
         )}
+
+        {/* O limite existe a favor do criador, não como restrição do produto -
+            por isso o aviso explica o motivo em vez de só informar o número. */}
+        <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          {t("pub.limiteDiario", { n: MAX_POSTS_POR_DIA })}
+        </p>
 
         <Field>
           <FieldLabel>{t("pub.excluirDepoisPostado")}</FieldLabel>
@@ -1349,6 +1366,10 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
               <PublishDefaultsCard
                 accountId={account.id}
                 onChange={(d) => setPadraoDefinido(d.definido)}
+                // Sem isto, a fila que fica DENTRO do cartão da conta continua
+                // com o valor antigo de "tem padrão?" e mantém "Postar agora"
+                // desabilitado mesmo depois de tudo configurado.
+                onSaved={onChanged}
               />
             )}
             <ScheduleCard accountId={account.id} publishMode={publishMode} />

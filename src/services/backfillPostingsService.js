@@ -17,6 +17,7 @@
 // postado, já cancelado ou já esperando em outra conta não é "esquecido", e
 // duplicá-lo seria pior que o problema original.
 
+const fs = require('fs');
 const pool = require('../db/pool');
 const postingsRepository = require('../repositories/postingsRepository');
 const logger = require('../lib/logger');
@@ -73,11 +74,29 @@ async function garantirVideo(clip) {
  * Nunca derruba a conexão: se algo falhar aqui, a conta já está conectada e o
  * pior caso é a fila continuar como estava.
  */
+// Caminho gravado no banco nao e o mesmo que arquivo existindo em disco.
+// Renderizacao interrompida no meio deixa um arquivo de 0 byte, e a retencao
+// apaga o arquivo sem limpar a coluna - nos dois casos o corte parece pronto e
+// nao e. Enfileirar um desses enche a fila com algo que abre a previa vazia e
+// falha na publicacao (aconteceu de verdade, 2026-08-15).
+function arquivoUtilizavel(caminho) {
+  try {
+    return fs.statSync(caminho).size > 0;
+  } catch {
+    return false;
+  }
+}
+
 async function enfileirarCortesProntos({ clientUserId, tiktokAccountId }) {
   let enfileirados = 0;
+  let ignorados = 0;
   try {
     const cortes = await listarCortesOrfaos(clientUserId);
     for (const clip of cortes) {
+      if (!arquivoUtilizavel(clip.local_clip_path)) {
+        ignorados++;
+        continue;
+      }
       const videoId = await garantirVideo(clip);
       const criado = await postingsRepository.createIfNotExists({
         videoId,
@@ -90,6 +109,11 @@ async function enfileirarCortesProntos({ clientUserId, tiktokAccountId }) {
     if (enfileirados > 0) {
       logger.info(
         `Conta TikTok ${tiktokAccountId}: ${enfileirados} corte(s) que estavam prontos sem conta foram pra fila.`
+      );
+    }
+    if (ignorados > 0) {
+      logger.warn(
+        `Conta TikTok ${tiktokAccountId}: ${ignorados} corte(s) marcados como prontos foram ignorados - o arquivo nao existe mais ou esta vazio.`
       );
     }
   } catch (err) {

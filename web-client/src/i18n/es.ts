@@ -238,6 +238,7 @@ export const es: Dicionario = {
   "pub.comoEscolherHorarios": "Cómo elegir los horarios",
   "pub.automatico": "Automático",
   "pub.euEscolho": "Yo elijo los horarios",
+  "pub.limiteDiario": "Publicamos como máximo {n} vídeos al día en cada cuenta de TikTok. No es una limitación nuestra: publicar demasiado en el mismo perfil reduce el alcance, y TikTok trata el volumen alto como automatización abusiva.",
   "pub.quantosPorDia": "Cuántos por día",
   "pub.horarios24h": "Horarios (formato 24h)",
   "pub.adicionarHorario": "Añadir horario",

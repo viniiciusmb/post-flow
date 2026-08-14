@@ -13,7 +13,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const pool = require('../../src/db/pool');
+
+// O serviço só enfileira corte cujo arquivo existe DE VERDADE em disco (um
+// caminho gravado no banco pode apontar pra arquivo que a retenção apagou, ou
+// pra um arquivo de 0 byte de uma renderização interrompida). Então o teste
+// precisa criar arquivo mesmo, senão testaria um cenário que nunca enfileira.
+function arquivoDeCorte() {
+  const caminho = path.join(os.tmpdir(), `corte-teste-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`);
+  fs.writeFileSync(caminho, Buffer.alloc(2048, 1));
+  return caminho;
+}
 const backfill = require('../../src/services/backfillPostingsService');
 const { createClient } = require('../helpers/db');
 
@@ -47,7 +60,7 @@ async function corteProntoAvulso(clienteId, { status = 'ready', comArquivo = tru
   const { rows: [clip] } = await pool.query(
     `INSERT INTO clips (source_video_id, start_seconds, end_seconds, status, title, description, local_clip_path)
      VALUES ($1, 0, 30, $2, 'corte', 'legenda', $3) RETURNING *`,
-    [video.id, status, comArquivo ? '/tmp/corte.mp4' : null]
+    [video.id, status, comArquivo ? arquivoDeCorte() : null]
   );
   return clip;
 }
@@ -69,8 +82,8 @@ async function corteProntoDeCanal(clienteId) {
   );
   const { rows: [clip] } = await pool.query(
     `INSERT INTO clips (source_video_id, start_seconds, end_seconds, status, title, local_clip_path)
-     VALUES ($1, 0, 30, 'ready', 'corte de canal', '/tmp/corte.mp4') RETURNING *`,
-    [video.id]
+     VALUES ($1, 0, 30, 'ready', 'corte de canal', $2) RETURNING *`,
+    [video.id, arquivoDeCorte()]
   );
   return clip;
 }
@@ -196,4 +209,27 @@ test('falha no meio não derruba a conexão', async () => {
   // Conectar a conta é o que o cliente pediu; o preenchimento da fila é bônus.
   const n = await backfill.enfileirarCortesProntos({ clientUserId: 999999999, tiktokAccountId: 999999999 });
   assert.equal(n, 0);
+});
+
+test('corte marcado como pronto mas com arquivo VAZIO não entra na fila', async () => {
+  // Renderização interrompida no meio deixa um arquivo de 0 byte, e a retenção
+  // apaga o arquivo sem limpar a coluna: nos dois casos o corte parece pronto e
+  // não é. Enfileirar um desses enche a fila com algo que abre a prévia vazia e
+  // falha na publicação — aconteceu de verdade (2026-08-15), num corte que foi
+  // parar na fila de uma demonstração.
+  const cliente = await createClient();
+  const conta = await contaTiktok(cliente.id);
+
+  const bom = await corteProntoAvulso(cliente.id);
+  const ruim = await corteProntoAvulso(cliente.id);
+  // Zera o arquivo do segundo, mantendo o caminho no banco.
+  const { rows: [linha] } = await pool.query('SELECT local_clip_path FROM clips WHERE id = $1', [ruim.id]);
+  fs.writeFileSync(linha.local_clip_path, Buffer.alloc(0));
+
+  await backfill.enfileirarCortesProntos({ clientUserId: cliente.id, tiktokAccountId: conta.id });
+
+  const fila = await filaDa(conta.id);
+  const idsNaFila = fila.map((p) => Number(p.clip_id));
+  assert.ok(idsNaFila.includes(Number(bom.id)), 'o corte com arquivo tem que entrar');
+  assert.ok(!idsNaFila.includes(Number(ruim.id)), 'o corte de arquivo vazio NÃO pode entrar na fila');
 });

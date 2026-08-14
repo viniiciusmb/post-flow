@@ -9,6 +9,10 @@ const logger = require('../../../lib/logger');
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const RETENTION_PRESETS = [24, 72, 168, 720]; // 1d, 3d, 7d, 30d
+// Teto de publicacoes por dia, por conta. Vale pros DOIS modos: no automatico
+// limita videos_per_day, no manual limita quantos horarios podem ser
+// cadastrados - sem isso, o modo manual furava o limite com 30 horarios.
+const MAX_POSTS_POR_DIA = 10;
 
 // Busca seguidores/curtidas na API do TikTok so se os dados estiverem
 // ausentes ou velhos (30min) - evita bater na API do TikTok a cada refresh.
@@ -205,7 +209,7 @@ function scheduleToApi(settings) {
     timezone: settings.timezone,
     autoDeleteAfterHours: settings.auto_delete_after_hours,
     paused: settings.paused,
-    options: { retentionPresetsHours: RETENTION_PRESETS },
+    options: { retentionPresetsHours: RETENTION_PRESETS, maxPostsPerDay: MAX_POSTS_POR_DIA },
   };
 }
 
@@ -227,7 +231,7 @@ async function setSchedule(req, res) {
   }
 
   const videosPerDay = Number(req.body.videosPerDay);
-  if (!Number.isInteger(videosPerDay) || videosPerDay < 1 || videosPerDay > 20) {
+  if (!Number.isInteger(videosPerDay) || videosPerDay < 1 || videosPerDay > MAX_POSTS_POR_DIA) {
     return res.status(400).json({ error: res.locals.t('erros.videosPorDiaInvalido') });
   }
 
@@ -235,6 +239,11 @@ async function setSchedule(req, res) {
   if (mode === 'manual') {
     if (manualTimes.length === 0 || !manualTimes.every((t) => TIME_RE.test(t))) {
       return res.status(400).json({ error: res.locals.t('erros.informeHorario') });
+    }
+    // Cada horario e uma publicacao: mais horarios que o teto seria o mesmo que
+    // furar o limite por outro caminho.
+    if (manualTimes.length > MAX_POSTS_POR_DIA) {
+      return res.status(400).json({ error: res.locals.t('erros.horariosDemais') });
     }
   }
 

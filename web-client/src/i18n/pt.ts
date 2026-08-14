@@ -244,6 +244,7 @@ export const pt = {
   "pub.comoEscolherHorarios": "Como escolher os horários",
   "pub.automatico": "Automático",
   "pub.euEscolho": "Eu escolho os horários",
+  "pub.limiteDiario": "Publicamos no máximo {n} vídeos por dia em cada conta do TikTok. Não é limitação nossa: publicar demais no mesmo perfil derruba o alcance, e o TikTok trata volume alto como automação abusiva.",
   "pub.quantosPorDia": "Quantos por dia",
   "pub.horarios24h": "Horários (formato 24h)",
   "pub.adicionarHorario": "Adicionar horário",

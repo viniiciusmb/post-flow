@@ -366,7 +366,8 @@ module.exports = {
     videoNaoPausado: "Ese vídeo no está pausado ahora (o no existe).",
     videoNaoProcessando: "Ese vídeo no se está procesando ahora (o no existe).",
     videoSemCanal: "Ese vídeo no vino de un canal de YouTube, así que no tiene carpeta de destino.",
-    videosPorDiaInvalido: "Vídeos por día tiene que ser un número entre 1 y 20.",
+    videosPorDiaInvalido: "Vídeos por día debe ser un número entre 1 y 10.",
+    horariosDemais: "Puedes configurar como máximo 10 horarios por día.",
     zoomInvalido: "Zoom de encuadre no válido (0 a 100).",
   },
 
