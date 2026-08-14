@@ -33,6 +33,7 @@ const DEFAULTS = {
   background_template_path: null,
   background_video_height_percent: 100,
   background_video_offset_percent: 50,
+  thumbnail_position: 'top',
 };
 
 const COLUNAS = [
@@ -56,6 +57,7 @@ const COLUNAS = [
   'background_template_path',
   'background_video_height_percent',
   'background_video_offset_percent',
+  'thumbnail_position',
 ];
 
 function doCamelParaColuna(entrada) {
@@ -80,6 +82,7 @@ function doCamelParaColuna(entrada) {
     background_template_path: entrada.backgroundTemplatePath ?? null,
     background_video_height_percent: entrada.backgroundVideoHeightPercent ?? 100,
     background_video_offset_percent: entrada.backgroundVideoOffsetPercent ?? 50,
+    thumbnail_position: entrada.thumbnailPosition || 'top',
   };
 }
 

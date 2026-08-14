@@ -30,7 +30,31 @@ async function refreshStatsIfStale(account) {
   }
 }
 
-function accountToApi(account, counts) {
+// Horario previsto e so exibicao: um horario que ja passou (fila atrasada)
+// vira "agora" em vez de mostrar hora no passado. Mesma regra da fila
+// completa, em clientPostingsApiController.
+function displayScheduledFor(scheduledFor) {
+  if (!scheduledFor) return null;
+  const date = new Date(scheduledFor);
+  const now = new Date();
+  return (date < now ? now : date).toISOString();
+}
+
+function nextInQueueToApi(row) {
+  if (!row) return null;
+  return {
+    postingId: Number(row.id),
+    clipId: Number(row.clip_id),
+    clipTitle: row.clip_title,
+    thumbnailUrl: row.thumbnail_path ? `/api/client/source-videos/clips/${row.clip_id}/thumbnail` : null,
+    channelName: row.channel_name,
+    startSeconds: Number(row.start_seconds),
+    endSeconds: Number(row.end_seconds),
+    scheduledFor: displayScheduledFor(row.scheduled_for),
+  };
+}
+
+function accountToApi(account, counts, nextInQueue) {
   return {
     id: account.id,
     displayName: account.display_name || account.tiktok_open_id,
@@ -46,16 +70,31 @@ function accountToApi(account, counts) {
     pendingCount: counts.pending,
     postedCount: counts.posted,
     errorCount: counts.error,
+    // null = fila vazia. A tela mostra a caixa do mesmo jeito, dizendo que
+    // nao ha nada na fila - some-la faria o cartao "pular de tamanho"
+    // conforme a fila esvazia.
+    nextInQueue: nextInQueueToApi(nextInQueue),
   };
 }
 
-// Contagens (fila/postados/erro) pra caixa fechada de cada conta na tela -
-// da pra ver de relance sem precisar selecionar/abrir nada.
+// Contagens (fila/postados/erro) e o proximo da fila pra caixa fechada de
+// cada conta - da pra ver de relance sem precisar selecionar/abrir nada.
 async function list(req, res) {
   const accounts = await tiktokAccountsRepository.listActiveByClientId(req.session.user.id);
   const refreshed = await Promise.all(accounts.map(refreshStatsIfStale));
+
+  // Uma consulta so pro proximo de todas as contas, em vez de uma por conta.
+  const proximos = await postingsRepository.findNextPendingForAccounts(refreshed.map((a) => a.id));
+  const proximoPorConta = new Map(proximos.map((p) => [String(p.tiktok_account_id), p]));
+
   const withCounts = await Promise.all(
-    refreshed.map(async (account) => accountToApi(account, await postingsRepository.countByStatusForAccount(account.id)))
+    refreshed.map(async (account) =>
+      accountToApi(
+        account,
+        await postingsRepository.countByStatusForAccount(account.id),
+        proximoPorConta.get(String(account.id)) || null
+      )
+    )
   );
   res.json({ accounts: withCounts });
 }

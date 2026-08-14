@@ -43,6 +43,7 @@ function toApi(settings) {
     hasBackgroundTemplate: Boolean(settings.background_template_path),
     backgroundVideoHeightPercent: settings.background_video_height_percent ?? 100,
     backgroundVideoOffsetPercent: settings.background_video_offset_percent ?? 50,
+    thumbnailPosition: settings.thumbnail_position || 'top',
   };
 }
 
@@ -194,22 +195,32 @@ async function update(req, res) {
   // se um deles nao mandar o campo, um padrao aqui apagaria em silencio a
   // escolha feita no outro. E exatamente o bug que ja aconteceu com os
   // horarios de postagem.
-  const ESTILOS_DE_FUNDO = ['blur', 'black', 'white', 'template'];
+  const ESTILOS_DE_FUNDO = ['blur', 'black', 'white', 'template', 'thumbnail'];
   const backgroundStyle = ESTILOS_DE_FUNDO.includes(req.body.backgroundStyle)
     ? req.body.backgroundStyle
     : atual.background_style || 'blur';
 
   // Escolher "template" sem ter enviado imagem nenhuma renderizaria com o
   // fundo desfocado sem explicar por que - melhor recusar aqui e dizer.
+  //
+  // O estilo "thumbnail" nao precisa dessa checagem: a imagem e a capa do
+  // proprio video, baixada na hora de renderizar - nao ha nada pra enviar.
   if (backgroundStyle === 'template' && !atual.background_template_path) {
     return res.status(400).json({ error: res.locals.t('erros.envieImagemAntes') });
   }
+
+  // De que lado fica a faixa da capa. Campo ausente preserva o salvo, pelo
+  // mesmo motivo do estilo de fundo (dois cartoes salvam esta mesma tela).
+  const thumbnailPosition = ['top', 'bottom'].includes(req.body.thumbnailPosition)
+    ? req.body.thumbnailPosition
+    : atual.thumbnail_position || 'top';
 
   const saved = await clientVideoSettingsRepository.upsert(req.session.user.id, {
     backgroundStyle,
     backgroundTemplatePath: atual.background_template_path,
     backgroundVideoHeightPercent: backgroundHeight,
     backgroundVideoOffsetPercent: backgroundOffset,
+    thumbnailPosition,
     aspectRatio,
     framing,
     quality,

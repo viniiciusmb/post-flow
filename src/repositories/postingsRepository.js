@@ -126,6 +126,30 @@ const YOUTUBE_CHANNEL_JOIN = `LEFT JOIN youtube_channels yc ON yc.id = sv.youtub
 // mas nao mudaria o que sai de verdade no TikTok.
 const PENDING_ORDER = 'COALESCE(p.queue_order, p.id) ASC';
 
+// O proximo de CADA conta, pra caixa fechada da tela de Publicacao mostrar
+// o que sai a seguir sem precisar abrir as configuracoes.
+//
+// Usa exatamente o mesmo PENDING_ORDER do job de publicacao: anunciar um
+// "proximo" diferente do que realmente vai sair no TikTok seria pior do que
+// nao anunciar nada. DISTINCT ON traz so a primeira linha de cada conta numa
+// unica consulta, em vez de uma consulta por conta na tela.
+async function findNextPendingForAccounts(accountIds) {
+  if (!accountIds.length) return [];
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (p.tiktok_account_id)
+            p.tiktok_account_id, p.id, p.scheduled_for,
+            c.id AS clip_id, c.title AS clip_title, c.thumbnail_path,
+            c.start_seconds, c.end_seconds, yc.channel_name
+     FROM postings p
+     ${CLIP_FILE_JOIN}
+     ${YOUTUBE_CHANNEL_JOIN}
+     WHERE p.status = 'pending' AND p.tiktok_account_id = ANY($1::bigint[])
+     ORDER BY p.tiktok_account_id, ${PENDING_ORDER}`,
+    [accountIds]
+  );
+  return rows;
+}
+
 // Postagem pendente mais antiga (na ordem da fila) de uma conta - e o que
 // o job de publicacao pega quando ha espaco na cota do dia.
 async function findOldestPendingForAccount(tiktokAccountId) {
@@ -466,6 +490,7 @@ module.exports = {
   listAllWithDetails,
   updateStatus,
   findOldestPendingForAccount,
+  findNextPendingForAccounts,
   findPublishableByIdOwnedByClient,
   countTodayForAccount,
   countPendingForAccount,

@@ -163,6 +163,19 @@ export interface TikTokAccountSummary extends TikTokAccountStats {
   pendingCount: number
   postedCount: number
   errorCount: number
+  /** O próximo corte que sai nessa conta. null = fila vazia. */
+  nextInQueue: NextInQueue | null
+}
+
+export interface NextInQueue {
+  postingId: number
+  clipId: number
+  clipTitle: string
+  thumbnailUrl: string | null
+  channelName: string | null
+  startSeconds: number
+  endSeconds: number
+  scheduledFor: string | null
 }
 
 export interface TikTokAccountsResponse {
@@ -302,11 +315,17 @@ export interface ClientVideoSettings {
   showPartLabel: boolean
   partLabelPosition: PartLabelPosition
   titleStyle: VideoCaptionStyle
-  /** O que aparece atrás do vídeo quando ele não ocupa a tela inteira. */
-  backgroundStyle: "blur" | "black" | "white" | "template"
+  /**
+   * O que aparece atrás do vídeo quando ele não ocupa a tela inteira.
+   * "thumbnail" é diferente dos outros: não é fundo, é uma faixa com a capa
+   * daquele vídeo colada ao vídeo (ver thumbnailPosition).
+   */
+  backgroundStyle: "blur" | "black" | "white" | "template" | "thumbnail"
   hasBackgroundTemplate: boolean
   backgroundVideoHeightPercent: number
   backgroundVideoOffsetPercent: number
+  /** De que lado fica a faixa da capa. Só vale para backgroundStyle "thumbnail". */
+  thumbnailPosition: "top" | "bottom"
 }
 
 export interface ClientVideoSettingsResponse extends ClientVideoSettings {

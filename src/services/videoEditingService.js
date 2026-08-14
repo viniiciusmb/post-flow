@@ -273,6 +273,43 @@ function escapeForFilter(filePath) {
 // O video entra POR CIMA do fundo, com a altura e a posicao vertical que o
 // cliente escolheu. Antes so o template tinha esses controles; com fundo liso
 // eles fazem o mesmo sentido (video no meio, cor sobrando em cima e embaixo).
+// Thumbnail do video como FAIXA colada ao video: imagem em cima e video
+// embaixo (ou o contrario). Diferente do fundo 'template', em que a imagem
+// preenche o quadro inteiro e o video flutua sobre ela.
+//
+// As duas peças sao empilhadas com vstack, nao sobrepostas com overlay. E
+// essa escolha que garante o "sem espaco branco" pedido: vstack exige largura
+// igual e a altura final e a soma exata das duas, entao nao existe pixel de
+// fundo nenhum pra vazar entre elas nem sobrar nas bordas. Com overlay sobre
+// um fundo, qualquer erro de arredondamento de 1px viraria uma linha visivel.
+//
+// Cada peça é escalada para COBRIR sua faixa e o excedente e cortado
+// (increase + crop). Com 'decrease' a imagem caberia dentro da faixa deixando
+// vazio nas laterais - foi exatamente a faixa branca que ja apareceu num
+// corte real com o fundo 'template'.
+function buildThumbnailBandFilter({ w, h, subtitlesFilter, heightPercent, position }) {
+  // Altura PAR nas duas faixas: h264 com yuv420p amostra croma de 2 em 2
+  // pixels, e uma faixa de altura impar faz o filtro reclamar em vez de
+  // renderizar. Como h ja e par, forcar a do video par deixa a da imagem par
+  // automaticamente - e a soma continua exata.
+  let alturaVideo = Math.round((h * Math.max(10, Math.min(90, heightPercent))) / 100);
+  if (alturaVideo % 2 !== 0) alturaVideo -= 1;
+  const alturaImagem = h - alturaVideo;
+
+  const chain = [
+    `[1:v]scale=${w}:${alturaImagem}:force_original_aspect_ratio=increase,crop=${w}:${alturaImagem},setsar=1[faixaimg]`,
+    `[0:v]scale=${w}:${alturaVideo}:force_original_aspect_ratio=increase,crop=${w}:${alturaVideo},setsar=1[faixavid]`,
+  ];
+
+  const ordem = position === 'bottom' ? '[faixavid][faixaimg]' : '[faixaimg][faixavid]';
+  // A legenda entra depois do empilhamento, pra ser posicionada em relacao ao
+  // quadro final (1080x1920) e nao ao retangulo do video.
+  const legenda = subtitlesFilter ? `,${subtitlesFilter}` : '';
+  chain.push(`${ordem}vstack=inputs=2${legenda}[outv]`);
+
+  return { filterComplex: chain.join(';'), outputLabel: '[outv]' };
+}
+
 function buildBackgroundFilter({ w, h, subtitlesFilter, style, heightPercent, offsetPercent }) {
   const alturaVideo = Math.round((h * Math.max(10, Math.min(100, heightPercent))) / 100);
   // O offset e medido sobre o espaco que sobra, entao 50% sempre centraliza,
@@ -336,6 +373,17 @@ function buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, fundo })
   // 'blur' so entra por aqui quando ha altura definida - com o video ocupando
   // o quadro inteiro, o caminho antigo (com zoom continuo) continua valendo.
   if (fundo) {
+    // A thumbnail nao e "fundo": e uma faixa colada ao video, com layout
+    // proprio (ver buildThumbnailBandFilter).
+    if (fundo.style === 'thumbnail') {
+      return buildThumbnailBandFilter({
+        w,
+        h,
+        subtitlesFilter,
+        heightPercent: fundo.heightPercent,
+        position: fundo.thumbnailPosition,
+      });
+    }
     return buildBackgroundFilter({
       w,
       h,
@@ -389,6 +437,9 @@ async function renderClip({
   checkCancelled,
   partIndex,
   partTotal,
+  // Capa do video ja baixada em disco (ver processVideoJob). So usada quando
+  // o estilo escolhido e 'thumbnail'.
+  thumbnailImagePath = null,
 }) {
   const aspectRatio = settings.aspect_ratio || '9:16';
   const framing = settings.framing || 'crop';
@@ -418,6 +469,17 @@ async function renderClip({
     estiloDeFundo = 'blur';
   }
 
+  // A capa daquele video, baixada pelo processVideoJob antes de renderizar.
+  // Video enviado do computador costuma nao ter capa nenhuma, e o download
+  // tambem pode falhar - nos dois casos cai no desfocado, que e o padrao de
+  // sempre, em vez de derrubar o corte.
+  if (estiloDeFundo === 'thumbnail' && (!thumbnailImagePath || !fs.existsSync(thumbnailImagePath))) {
+    logger.warn(
+      `Capa do video nao disponivel (${thumbnailImagePath || 'sem url'}) - renderizando com fundo desfocado.`
+    );
+    estiloDeFundo = 'blur';
+  }
+
   // Fundo so entra em jogo no modo manual e quando ha espaco pra ele. Com o
   // video ocupando o quadro inteiro (100%) nao sobra fundo visivel, entao o
   // caminho antigo (zoom continuo sobre o desfocado) continua valendo - e e o
@@ -428,11 +490,19 @@ async function renderClip({
           style: estiloDeFundo,
           heightPercent: alturaDoVideo,
           offsetPercent: Number(settings.background_video_offset_percent ?? 50),
+          thumbnailPosition: settings.thumbnail_position === 'bottom' ? 'bottom' : 'top',
         }
       : null;
 
-  // A imagem so vira entrada do ffmpeg quando e ela o fundo escolhido.
-  const template = fundo && fundo.style === 'template' ? { path: templatePath } : null;
+  // A imagem so vira entrada do ffmpeg quando e ela o fundo escolhido. Os dois
+  // estilos que usam imagem entram como a MESMA segunda entrada ([1:v]) - o
+  // que muda e o filtro que a consome.
+  const template =
+    fundo && fundo.style === 'template'
+      ? { path: templatePath }
+      : fundo && fundo.style === 'thumbnail'
+        ? { path: thumbnailImagePath }
+        : null;
 
   const { w, h } = ASPECT_RATIOS[aspectRatio] || ASPECT_RATIOS['9:16'];
   const { crf, preset } = QUALITY_PRESETS[quality] || QUALITY_PRESETS.high;
@@ -511,6 +581,9 @@ async function renderClip({
 // quebrou uma vez - o video precisa PREENCHER a caixa, nao caber dentro dela.
 module.exports = {
   buildBackgroundFilter,
+  // Exportado pro teste: e o filtro que garante o encaixe exato entre a faixa
+  // da capa e o video (sem essa garantia, aparece faixa branca no corte).
+  buildThumbnailBandFilter,
   extractAudio,
   renderClip,
   extractThumbnail,

@@ -33,6 +33,36 @@ const CLIP_LENGTH_PRESETS = {
   long: { minDuration: 60, maxDuration: 180 },
 };
 
+// Baixa a capa do video pro disco, pro estilo "thumbnail como template".
+//
+// Nunca derruba o corte: sem capa (video enviado do computador costuma nao
+// ter) ou com o download falhando, devolve null e o videoEditingService cai
+// no fundo desfocado. Perder o estilo escolhido e ruim; perder o video
+// inteiro por causa de uma imagem seria bem pior.
+async function baixarCapaDoVideo(sourceVideo, workDir) {
+  if (!sourceVideo.thumbnail_url) {
+    logger.warn(`Video ${sourceVideo.id} nao tem capa - o estilo "thumbnail" vai cair no fundo desfocado.`);
+    return null;
+  }
+  const destino = path.join(workDir, `capa-${sourceVideo.id}.jpg`);
+  // Ja baixada numa tentativa anterior (retomada depois de pausa/erro): nao
+  // baixa de novo.
+  if (fs.existsSync(destino)) return destino;
+
+  try {
+    const resposta = await fetch(sourceVideo.thumbnail_url, { signal: AbortSignal.timeout(20_000) });
+    if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+    const bytes = Buffer.from(await resposta.arrayBuffer());
+    if (bytes.length === 0) throw new Error('arquivo vazio');
+    fs.mkdirSync(workDir, { recursive: true });
+    fs.writeFileSync(destino, bytes);
+    return destino;
+  } catch (err) {
+    logger.warn(`Nao consegui baixar a capa do video ${sourceVideo.id} (${err.message}) - caindo no fundo desfocado.`);
+    return null;
+  }
+}
+
 // Pausa cooperativa: confere a flag entre as etapas principais (e a cada
 // corte do loop de renderizacao) e para no proximo checkpoint. Alem disso,
 // download/transcricao/renderizacao (as 3 etapas longas) recebem esse mesmo
@@ -293,6 +323,14 @@ async function run(sourceVideoId) {
       tiktokAccounts = (await Promise.all(accountIds.map((id) => tiktokAccountsRepository.findById(id)))).filter(Boolean);
     }
 
+    // Capa do video pro estilo "thumbnail como template". Baixada UMA vez pro
+    // video inteiro, nao por corte: e o mesmo arquivo pros N cortes, e baixar
+    // de novo a cada um seria N requisicoes iguais.
+    const thumbnailImagePath =
+      settings.background_style === 'thumbnail'
+        ? await baixarCapaDoVideo(sourceVideo, workDir)
+        : null;
+
     for (const clip of clips) {
       if (clip.status === 'ready') continue; // ja renderizado antes de pausar
       await checkPaused(sourceVideo.id);
@@ -300,6 +338,7 @@ async function run(sourceVideoId) {
         await clipsRepository.updateStatus(clip.id, 'rendering');
         const outputPath = path.join(workDir, `clip-${clip.id}.mp4`);
         await videoEditingService.renderClip({
+          thumbnailImagePath,
           videoPath,
           startSeconds: Number(clip.start_seconds),
           endSeconds: Number(clip.end_seconds),

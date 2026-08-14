@@ -1102,14 +1102,66 @@ function AccountBox({
           </div>
         )}
 
+        {/* Próximo da fila. A caixa aparece SEMPRE, mesmo com a fila vazia:
+            some-la faria o cartão mudar de tamanho conforme a fila esvazia,
+            e some justo quando o cliente mais quer saber o que houve. */}
+        <div className="border-t border-border pt-4">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">{t("pub.proximoDaFila")}</p>
+          {account.nextInQueue ? (
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
+              {account.nextInQueue.thumbnailUrl ? (
+                <img
+                  src={account.nextInQueue.thumbnailUrl}
+                  alt=""
+                  className="h-16 w-9 shrink-0 rounded object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="flex h-16 w-9 shrink-0 items-center justify-center rounded bg-muted">
+                  <IconMovie className="size-4 text-muted-foreground" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{account.nextInQueue.clipTitle}</p>
+                {account.nextInQueue.channelName && (
+                  <p className="truncate text-xs text-muted-foreground">{account.nextInQueue.channelName}</p>
+                )}
+                {account.nextInQueue.scheduledFor && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {t("pub.vaiPostar")} {formatScheduledFor(account.nextInQueue.scheduledFor)}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border p-3">
+              <p className="text-sm text-muted-foreground">{t("pub.nenhumVideoNaFila")}</p>
+            </div>
+          )}
+          {account.pendingCount > 1 && (
+            <Button size="sm" variant="ghost" className="mt-2 w-full" onClick={onSelect}>
+              {t("pub.verFilaCompleta", { n: account.pendingCount })}
+            </Button>
+          )}
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+            {/* O espaço precisa vir do JSX: a tradução carrega só a palavra,
+                senão cada idioma teria que lembrar de embutir espaço no texto
+                (e "7na fila" era o que aparecia). */}
             <span>
-              <strong className="font-semibold text-foreground">{account.pendingCount}</strong>{t("pub.naFila")}</span>
+              <strong className="font-semibold text-foreground">{account.pendingCount}</strong>{" "}
+              {t("pub.naFila")}
+            </span>
             <span>
-              <strong className="font-semibold text-foreground">{account.postedCount}</strong>{t("pub.postadosMinusculo")}</span>
+              <strong className="font-semibold text-foreground">{account.postedCount}</strong>{" "}
+              {t("pub.postadosMinusculo")}
+            </span>
             <span className={account.errorCount > 0 ? "text-destructive" : undefined}>
-              <strong className="font-semibold">{account.errorCount}</strong>{t("pub.comErro")}</span>
+              <strong className="font-semibold">{account.errorCount}</strong>{" "}
+              {t("pub.comErro")}
+            </span>
           </div>
           <Button size="sm" variant={selected ? "default" : "outline"} onClick={onSelect}>
             {selected ? t("pub.fecharConfiguracoes") : t("pub.configurarPostagens")}

@@ -428,13 +428,14 @@ export function ClipStyleEditorCard() {
                   quisesse fundo liso tinha que criar uma imagem de 1080x1920
                   preenchida de uma cor só - trabalho por algo que o sistema
                   gera sozinho. */}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                 {(
                   [
                     { valor: "blur", titulo: t("ce.videoDesfocado"), amostra: "desfocado" },
                     { valor: "black", titulo: t("ce.preto"), amostra: "preto" },
                     { valor: "white", titulo: t("ce.branco"), amostra: "branco" },
                     { valor: "template", titulo: t("ce.minhaImagem"), amostra: "imagem" },
+                    { valor: "thumbnail", titulo: t("ce.capaDoVideo"), amostra: "capa" },
                   ] as const
                 ).map((op) => {
                   const escolhido = settings.backgroundStyle === op.valor
@@ -448,7 +449,18 @@ export function ClipStyleEditorCard() {
                       type="button"
                       disabled={bloqueado}
                       title={bloqueado ? t("ce.envieImagemPrimeiro") : undefined}
-                      onClick={() => save({ ...settings, backgroundStyle: op.valor })}
+                      onClick={() => {
+                        // Com o vídeo em 100% não sobra espaço pra faixa da
+                        // capa: a escolha ficaria selecionada sem mudar nada
+                        // no corte. Abre espaço junto, pra escolher já valer.
+                        const precisaAbrirEspaco =
+                          op.valor === "thumbnail" && settings.backgroundVideoHeightPercent >= 100
+                        save({
+                          ...settings,
+                          backgroundStyle: op.valor,
+                          ...(precisaAbrirEspaco ? { backgroundVideoHeightPercent: 65 } : {}),
+                        })
+                      }}
                       className={`rounded-lg border p-2 text-left transition-colors disabled:opacity-45 ${
                         escolhido ? "border-primary bg-primary/5" : "border-border hover:bg-muted/60"
                       }`}
@@ -461,9 +473,20 @@ export function ClipStyleEditorCard() {
                               ? "border border-border bg-white"
                               : op.amostra === "desfocado"
                                 ? "bg-gradient-to-br from-indigo-300 via-fuchsia-200 to-cyan-200 blur-[2px]"
-                                : "bg-[repeating-linear-gradient(45deg,#e7e7ea_0_6px,#f6f6f7_6px_12px)]"
+                                : op.amostra === "capa"
+                                  ? ""
+                                  : "bg-[repeating-linear-gradient(45deg,#e7e7ea_0_6px,#f6f6f7_6px_12px)]"
                         }`}
-                      />
+                      >
+                        {/* A amostra da capa mostra a ideia: duas faixas
+                            encostadas, imagem e vídeo, sem nada entre elas. */}
+                        {op.amostra === "capa" && (
+                          <span className="flex h-full w-full flex-col overflow-hidden rounded">
+                            <span className="h-2/5 w-full bg-gradient-to-br from-amber-300 to-rose-300" />
+                            <span className="h-3/5 w-full bg-gradient-to-br from-slate-500 to-slate-700" />
+                          </span>
+                        )}
+                      </span>
                       <span className="text-[11.5px] leading-tight font-medium">{op.titulo}</span>
                     </button>
                   )
@@ -471,6 +494,54 @@ export function ClipStyleEditorCard() {
               </div>
             </Field>
 
+            {/* Seletor de lado da capa. Só aparece com "capa do vídeo"
+                escolhida: aqui as duas peças ficam coladas, então escolher
+                "em cima" já determina que o vídeo fica embaixo, encostado. */}
+            {settings.backgroundStyle === "thumbnail" && (
+              <Field>
+                <FieldLabel>{t("ce.ondeFicaACapa")}</FieldLabel>
+                <p className="text-xs text-muted-foreground">{t("ce.ondeFicaACapaTexto")}</p>
+                <div className="grid grid-cols-2 gap-2 sm:max-w-xs">
+                  {(
+                    [
+                      { valor: "top", titulo: t("ce.capaEmCima") },
+                      { valor: "bottom", titulo: t("ce.capaEmBaixo") },
+                    ] as const
+                  ).map((op) => {
+                    const escolhido = (settings.thumbnailPosition || "top") === op.valor
+                    return (
+                      <button
+                        key={op.valor}
+                        type="button"
+                        onClick={() => save({ ...settings, thumbnailPosition: op.valor })}
+                        className={`rounded-lg border p-2 transition-colors ${
+                          escolhido ? "border-primary bg-primary/5" : "border-border hover:bg-muted/60"
+                        }`}
+                      >
+                        <span className="mx-auto mb-1.5 flex h-14 w-8 flex-col overflow-hidden rounded border border-border">
+                          {op.valor === "top" ? (
+                            <>
+                              <span className="h-2/5 w-full bg-gradient-to-br from-amber-300 to-rose-300" />
+                              <span className="h-3/5 w-full bg-gradient-to-br from-slate-500 to-slate-700" />
+                            </>
+                          ) : (
+                            <>
+                              <span className="h-3/5 w-full bg-gradient-to-br from-slate-500 to-slate-700" />
+                              <span className="h-2/5 w-full bg-gradient-to-br from-amber-300 to-rose-300" />
+                            </>
+                          )}
+                        </span>
+                        <span className="block text-center text-[11.5px] font-medium">{op.titulo}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </Field>
+            )}
+
+            {/* Enviar imagem só faz sentido pro fundo "minha imagem" - a capa
+                do vídeo o sistema pega sozinho. */}
+            {settings.backgroundStyle !== "thumbnail" && (
             <Field>
               <FieldLabel>{t("ce.suaImagemDeFundo")}</FieldLabel>
               <p className="text-xs text-muted-foreground">
@@ -499,6 +570,7 @@ export function ClipStyleEditorCard() {
               </div>
               {erroTemplate && <p className="text-xs text-destructive">{erroTemplate}</p>}
             </Field>
+            )}
 
             {/* Valem pros quatro fundos: definem onde o vídeo fica no quadro, e
                 o fundo escolhido preenche o resto. Com 100% não sobra fundo
@@ -509,7 +581,9 @@ export function ClipStyleEditorCard() {
                   <Input
                     type="range"
                     min={10}
-                    max={100}
+                    /* No modo capa o teto é 90%: em 100% não sobraria faixa
+                       nenhuma e a capa sumiria sem explicação. */
+                    max={settings.backgroundStyle === "thumbnail" ? 90 : 100}
                     value={settings.backgroundVideoHeightPercent}
                     onChange={(e) =>
                       setSettings({ ...settings, backgroundVideoHeightPercent: Number(e.target.value) })
@@ -520,9 +594,15 @@ export function ClipStyleEditorCard() {
                   <p className="text-xs text-muted-foreground">
                     {settings.backgroundVideoHeightPercent === 100
                       ? t("ce.telaInteira")
-                      : `${settings.backgroundVideoHeightPercent}% da altura. O resto fica sendo o fundo.`}
+                      : settings.backgroundStyle === "thumbnail"
+                        ? t("ce.restoEhACapa", { n: settings.backgroundVideoHeightPercent })
+                        : `${settings.backgroundVideoHeightPercent}% da altura. O resto fica sendo o fundo.`}
                   </p>
                 </Field>
+                {/* No modo capa a posição do vídeo não é livre: ele fica
+                    encostado do lado oposto à faixa da capa. Um slider que
+                    não muda nada seria pior que não ter slider. */}
+                {settings.backgroundStyle !== "thumbnail" && (
                 <Field>
                   <FieldLabel>{t("ce.posicaoDoVideo")}</FieldLabel>
                   <Input
@@ -544,6 +624,7 @@ export function ClipStyleEditorCard() {
                         : t("ce.noMeio")}
                   </p>
                 </Field>
+                )}
             </div>
 
             <Field>
