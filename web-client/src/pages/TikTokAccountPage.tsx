@@ -1037,6 +1037,9 @@ function AccountBox({
 }) {
   const t = useT()
   const [deactivating, setDeactivating] = useState(false)
+  // A fila abre AQUI DENTRO, não no painel de configurações: quem clica em
+  // "ver fila completa" quer ver a fila, não mexer em ajuste nenhum.
+  const [mostrandoFila, setMostrandoFila] = useState(false)
   const hasStats = account.followerCount !== null && account.followerCount !== undefined
 
   async function disconnect() {
@@ -1138,10 +1141,43 @@ function AccountBox({
               <p className="text-sm text-muted-foreground">{t("pub.nenhumVideoNaFila")}</p>
             </div>
           )}
-          {account.pendingCount > 1 && (
-            <Button size="sm" variant="ghost" className="mt-2 w-full" onClick={onSelect}>
-              {t("pub.verFilaCompleta", { n: account.pendingCount })}
+          {(account.pendingCount > 0 || account.postedCount > 0 || account.errorCount > 0) && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="mt-2 w-full"
+              onClick={() => setMostrandoFila((v) => !v)}
+            >
+              {mostrandoFila
+                ? t("pub.ocultarFila")
+                : t("pub.verFilaCompleta", { n: account.pendingCount })}
             </Button>
+          )}
+
+          {mostrandoFila && (
+            <div className="mt-3 border-t border-border pt-3">
+              <Tabs defaultValue="queue">
+                <TabsList>
+                  <TabsTrigger value="queue">{t("pub.abaFila")}</TabsTrigger>
+                  <TabsTrigger value="posted">{t("pub.abaPostados")}</TabsTrigger>
+                  <TabsTrigger value="error">{t("pub.abaErro")}</TabsTrigger>
+                </TabsList>
+                <TabsContent value="queue">
+                  <QueueCard
+                    accountId={account.id}
+                    accountName={account.displayName}
+                    publishMode={account.publishMode}
+                    padraoDefinido={account.hasPublishDefaults}
+                  />
+                </TabsContent>
+                <TabsContent value="posted">
+                  <PostedCard accountId={account.id} />
+                </TabsContent>
+                <TabsContent value="error">
+                  <ErrorCard accountId={account.id} accountName={account.displayName} />
+                </TabsContent>
+              </Tabs>
+            </div>
           )}
         </div>
 

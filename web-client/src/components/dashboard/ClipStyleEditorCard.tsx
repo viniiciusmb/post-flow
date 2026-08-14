@@ -40,6 +40,8 @@ function CropZoomEditor({
   templateUrl,
   templateHeightPercent,
   templateOffsetPercent,
+  modoCapa,
+  capaPosition,
 }: {
   value: number
   onChange: (v: number) => void
@@ -50,21 +52,36 @@ function CropZoomEditor({
   templateUrl?: string | null
   templateHeightPercent?: number
   templateOffsetPercent?: number
+  /** Estilo "capa do vídeo": a capa vira uma faixa colada ao vídeo. Aqui não
+      há imagem pra mostrar (ela muda a cada vídeo), então a prévia desenha a
+      faixa como um bloco — o que importa é ver o ENCAIXE e de que lado ela
+      fica. Sem isso, escolher a capa não mudava nada na prévia e a pessoa
+      posicionava no escuro. */
+  modoCapa?: boolean
+  capaPosition?: "top" | "bottom"
 }) {
   const t = useT()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
-  const comTemplate = Boolean(templateUrl)
+  const comCapa = Boolean(modoCapa)
+  // A imagem enviada só entra quando NÃO é o modo capa (são estilos distintos).
+  const comTemplate = Boolean(templateUrl) && !comCapa
   // Com template, quem manda na altura do vídeo é o controle de altura, não o
   // zoom: o zoom passa a controlar só o quanto se corta das laterais.
-  const videoHeight = comTemplate
-    ? (FRAME_HEIGHT * Math.max(10, Math.min(100, templateHeightPercent ?? 70))) / 100
+  const alturaEmPercent = Math.max(10, Math.min(100, templateHeightPercent ?? 70))
+  const videoHeight = comTemplate || comCapa
+    ? (FRAME_HEIGHT * alturaEmPercent) / 100
     : videoHeightForZoom(value)
-  const videoWidth = comTemplate ? FRAME_WIDTH : videoHeight * (16 / 9)
+  const videoWidth = comTemplate || comCapa ? FRAME_WIDTH : videoHeight * (16 / 9)
   const videoLeftInFrame = (FRAME_WIDTH - videoWidth) / 2
-  const videoTop = comTemplate
-    ? ((FRAME_HEIGHT - videoHeight) * Math.max(0, Math.min(100, templateOffsetPercent ?? 50))) / 100
-    : (FRAME_HEIGHT - videoHeight) / 2
+  // No modo capa a posição não é livre: o vídeo encosta no lado oposto ao da
+  // faixa, sem sobra entre os dois (é o que o corte faz de verdade).
+  const videoTop = comCapa
+    ? (capaPosition === 'bottom' ? 0 : FRAME_HEIGHT - videoHeight)
+    : comTemplate
+      ? ((FRAME_HEIGHT - videoHeight) * Math.max(0, Math.min(100, templateOffsetPercent ?? 50))) / 100
+      : (FRAME_HEIGHT - videoHeight) / 2
+  const alturaDaCapa = FRAME_HEIGHT - videoHeight
 
   function handlePointerDown(e: React.PointerEvent) {
     e.preventDefault()
@@ -102,11 +119,26 @@ function CropZoomEditor({
             ...(templateUrl ? { backgroundImage: `url(${templateUrl})` } : {}),
           }}
         >
+          {/* Faixa da capa: encostada na borda oposta ao vídeo. As duas somam
+              exatamente a altura da moldura, igual ao corte final. */}
+          {comCapa && alturaDaCapa > 0 && (
+            <div
+              className="absolute flex items-center justify-center bg-gradient-to-br from-amber-300 to-rose-300 text-center text-[10px] font-medium text-black/70"
+              style={{
+                width: FRAME_WIDTH,
+                height: alturaDaCapa,
+                left: 0,
+                top: capaPosition === 'bottom' ? videoHeight : 0,
+              }}
+            >
+              {t("ce.capaDoVideo")}
+            </div>
+          )}
           <div
             className="absolute flex items-center justify-center bg-neutral-700/95 text-center text-[10px] text-white/70"
             style={{ width: videoWidth, height: videoHeight, left: videoLeftInFrame, top: videoTop }}
           >
-            {comTemplate ? t("ce.seuVideo") : t("ce.videoOriginal")}
+            {comTemplate || comCapa ? t("ce.seuVideo") : t("ce.videoOriginal")}
           </div>
         </div>
 
@@ -114,7 +146,7 @@ function CropZoomEditor({
             ficariam impossiveis de clicar quando o video passa das bordas.
             Com template a largura é travada na moldura, então não há o que
             arrastar: quem posiciona é o controle de altura/posição. */}
-        {!comTemplate && (<><div
+        {!comTemplate && !comCapa && (<><div
           className="absolute top-1/2 h-10 w-3 -translate-y-1/2 cursor-ew-resize rounded bg-primary shadow"
           style={{ left: FRAME_LEFT + videoLeftInFrame - 6 }}
           onPointerDown={handlePointerDown}
@@ -130,7 +162,9 @@ function CropZoomEditor({
         /></>)}
       </div>
       <p className="max-w-[220px] text-center text-xs text-muted-foreground">
-        {comTemplate
+        {comCapa
+          ? t("ce.capaColadaAoVideo", { n: alturaEmPercent })
+          : comTemplate
           ? t("ce.templateAoFundo")
           : value >= 90
           ? t("ce.bemApertado")
@@ -636,6 +670,8 @@ export function ClipStyleEditorCard() {
                 templateUrl={urlTemplate}
                 templateHeightPercent={settings.backgroundVideoHeightPercent}
                 templateOffsetPercent={settings.backgroundVideoOffsetPercent}
+                modoCapa={settings.backgroundStyle === "thumbnail"}
+                capaPosition={settings.thumbnailPosition || "top"}
               />
             </Field>
 

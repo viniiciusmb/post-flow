@@ -163,6 +163,8 @@ export interface TikTokAccountSummary extends TikTokAccountStats {
   pendingCount: number
   postedCount: number
   errorCount: number
+  /** true = a conta já tem padrão de publicação definido (libera "postar agora"). */
+  hasPublishDefaults: boolean
   /** O próximo corte que sai nessa conta. null = fila vazia. */
   nextInQueue: NextInQueue | null
 }

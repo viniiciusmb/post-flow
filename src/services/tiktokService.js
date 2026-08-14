@@ -184,7 +184,13 @@ async function initDirectPost(accessToken, videoSizeBytes, postInfo) {
 
   const data = await response.json();
   if (!response.ok || data.error?.code !== 'ok') {
-    throw new Error(`TikTok recusou publicar no perfil: ${data.error?.message || response.statusText}`);
+    // O CODIGO junto da mensagem, sempre. A TikTok manda quase todo erro de
+    // publicacao com o mesmo texto generico ("review our integration
+    // guidelines" + link), entao so a mensagem nao distingue "app sem
+    // auditoria" de "video longo demais" de "privacidade invalida" - e sem
+    // isso o log vira um erro sem pista, que foi o que aconteceu em producao.
+    const codigo = data.error?.code || `http_${response.status}`;
+    throw new Error(`TikTok recusou publicar no perfil [${codigo}]: ${data.error?.message || response.statusText}`);
   }
   return { publishId: data.data.publish_id, uploadUrl: data.data.upload_url, chunkSize, totalChunkCount };
 }

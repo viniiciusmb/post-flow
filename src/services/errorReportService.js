@@ -52,6 +52,14 @@ function resumir(err) {
   if (/did not authorize the scope/i.test(bruto)) {
     return 'O TikTok recusou a publicação por falta de permissão no aplicativo.';
   }
+  // Este erro NAO se resolve mexendo no sistema: a TikTok so libera publicacao
+  // direta no perfil depois de auditar o aplicativo. Sem auditoria, o unico
+  // caminho que funciona e o rascunho. A mensagem crua da TikTok e um link
+  // generico de diretrizes, que nao diz nada disso - e ficou horas parecendo
+  // bug nosso em producao (2026-08-14).
+  if (/unaudited_client_can_only_post_to_private_accounts/i.test(bruto)) {
+    return 'O TikTok ainda não liberou a publicação direta no perfil para este aplicativo (falta a auditoria deles). Enquanto isso, mude a conta para o modo "rascunho": o corte chega pronto no seu TikTok e você só toca em publicar.';
+  }
   if (/ECONNREFUSED|ETIMEDOUT|ENOTFOUND|socket hang up/i.test(bruto)) {
     return 'Não consegui me conectar ao serviço externo.';
   }

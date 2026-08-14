@@ -70,6 +70,9 @@ function accountToApi(account, counts, nextInQueue) {
     pendingCount: counts.pending,
     postedCount: counts.posted,
     errorCount: counts.error,
+    // A fila dentro da caixa precisa saber disso pra liberar "postar agora":
+    // sem padrao definido, publicacao direta nao sai (ver publishOptions).
+    hasPublishDefaults: publishOptions.contaTemPadrao(account),
     // null = fila vazia. A tela mostra a caixa do mesmo jeito, dizendo que
     // nao ha nada na fila - some-la faria o cartao "pular de tamanho"
     // conforme a fila esvazia.
