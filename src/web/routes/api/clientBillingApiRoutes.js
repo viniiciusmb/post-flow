@@ -20,5 +20,9 @@ router.post('/subscribe', asyncHandler(controller.subscribe));
 router.post('/buy-package', asyncHandler(controller.buyPackage));
 router.post('/overage-card/setup', asyncHandler(controller.setupOverageCard));
 router.post('/overage-card/disable', asyncHandler(controller.disableOverageCard));
+// Cartoes salvos + extrato. Separado do /overview porque fala com a Stripe:
+// se ela cair, a tela de plano continua abrindo sem este pedaco.
+router.get('/payments', asyncHandler(controller.payments));
+router.post('/payments/default-card', asyncHandler(controller.setDefaultCard));
 
 module.exports = router;

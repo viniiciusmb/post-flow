@@ -1,16 +1,23 @@
 import { Rico } from "@/components/dashboard/Rico"
-import { useT } from "@/i18n"
+import { useT, type ChaveDeTraducao } from "@/i18n"
 import { useEffect, useState } from "react"
-import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter, IconClock, IconBrandYoutube, IconBrandTiktok } from "@tabler/icons-react"
+import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter, IconClock, IconBrandYoutube, IconBrandTiktok, IconReceipt } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
-import type { ClientBillingOverviewResponse, CreditBucket, CreditBucketView } from "@/types/api"
+import type {
+  ClientBillingOverviewResponse,
+  ClientPaymentsResponse,
+  CreditBucket,
+  CreditBucketView,
+  StatementKind,
+} from "@/types/api"
 
 function formatCents(cents: number) {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -134,6 +141,47 @@ function estimativaVideos(
   return t("plano.daProcessarVarios", { n: quantos, min: VIDEO_EXEMPLO_MIN })
 }
 
+// A Stripe manda a bandeira em minúsculo e sem acento ("visa", "mastercard",
+// "amex"). Só o nome bonito é traduzido aqui; bandeira desconhecida cai no
+// próprio código que veio, que é melhor do que esconder a informação.
+const EXTRATO_ROTULO: Record<StatementKind, ChaveDeTraducao> = {
+  avulso: "plano.extratoAvulso",
+  excedente: "plano.extratoExcedente",
+  plano: "plano.extratoMensalidade",
+  outro: "plano.extratoOutro",
+}
+
+const BANDEIRAS: Record<string, string> = {
+  visa: "Visa",
+  mastercard: "Mastercard",
+  amex: "American Express",
+  elo: "Elo",
+  hipercard: "Hipercard",
+  discover: "Discover",
+  diners: "Diners Club",
+  jcb: "JCB",
+  unionpay: "UnionPay",
+}
+
+function nomeDaBandeira(brand: string) {
+  return BANDEIRAS[brand] ?? brand.charAt(0).toUpperCase() + brand.slice(1)
+}
+
+function CartaoLinha({ card }: { card: { brand: string; last4: string } }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <IconCreditCard className="size-3.5 shrink-0 text-muted-foreground" />
+      <span>
+        {nomeDaBandeira(card.brand)} <span className="tabular-nums">•••• {card.last4}</span>
+      </span>
+    </span>
+  )
+}
+
+function formatarData(iso: string) {
+  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+}
+
 export function ClientBillingPage() {
   const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
@@ -141,15 +189,28 @@ export function ClientBillingPage() {
   const [error, setError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [minutosAvulsos, setMinutosAvulsos] = useState<number | null>(null)
+  const [payments, setPayments] = useState<ClientPaymentsResponse | null>(null)
 
   async function load() {
     const res = await api.get<ClientBillingOverviewResponse>("/api/client/billing/overview")
     setData(res)
   }
 
+  // Cartões e extrato vêm da Stripe, então carregam separado: se a Stripe
+  // estiver fora do ar, o resto da tela (saldo, cota, planos) continua abrindo
+  // em vez de a página inteira morrer junto.
+  async function loadPayments() {
+    try {
+      setPayments(await api.get<ClientPaymentsResponse>("/api/client/billing/payments"))
+    } catch {
+      setPayments({ cards: [], statement: [] })
+    }
+  }
+
   useEffect(() => {
     if (!user) return
     load()
+    loadPayments()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
@@ -188,6 +249,19 @@ export function ClientBillingPage() {
 
   function disableOverageCard() {
     return runAction("overage-disable", () => api.post("/api/client/billing/overage-card/disable"))
+  }
+
+  async function selecionarCartao(paymentMethodId: string) {
+    setError(null)
+    setBusyKey(`card-${paymentMethodId}`)
+    try {
+      await api.post("/api/client/billing/payments/default-card", { paymentMethodId })
+      await Promise.all([load(), loadPayments()])
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("plano.naoFoiPossivelCompletar"))
+    } finally {
+      setBusyKey(null)
+    }
   }
 
   // Os limites da barra só chegam com a resposta da API, então o estado começa
@@ -328,19 +402,74 @@ export function ClientBillingPage() {
                   </TonePill>
                 )}
 
-                <div className="mt-auto flex flex-wrap items-center gap-2">
+                <div className="mt-auto flex flex-col gap-3">
                   {data.subscription.overageCardEnabled ? (
                     <>
-                      <TonePill tone="success" icon={<IconCircleCheck className="size-3.5" />}>{t("plano.cartaoAtivo")}</TonePill>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busyKey === "overage-disable"}
-                        onClick={disableOverageCard}
-                      >{t("plano.desligarCobranca")}</Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <TonePill tone="success" icon={<IconCircleCheck className="size-3.5" />}>{t("plano.cartaoAtivo")}</TonePill>
+                        {/* Com 1 cartão só, a bandeira e os 4 dígitos ficam
+                            aqui mesmo; com vários, a lista abaixo já mostra
+                            qual está selecionado e repetir seria ruído. */}
+                        {payments && payments.cards.length === 1 && (
+                          <span className="text-sm text-muted-foreground">
+                            <CartaoLinha card={payments.cards[0]} />
+                          </span>
+                        )}
+                      </div>
+
+                      {payments && payments.cards.length > 1 && (
+                        <div className="flex flex-col gap-1.5">
+                          <span className="text-xs text-muted-foreground">{t("plano.cartaoUsadoNasCobrancas")}</span>
+                          {payments.cards.map((card) => {
+                            const selecionado = card.isDefault
+                            return (
+                              <button
+                                key={card.id}
+                                type="button"
+                                disabled={selecionado || busyKey === `card-${card.id}`}
+                                onClick={() => selecionarCartao(card.id)}
+                                className={`flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                                  selecionado
+                                    ? "border-primary bg-primary/[0.04]"
+                                    : "border-border hover:bg-muted disabled:opacity-60"
+                                }`}
+                              >
+                                <CartaoLinha card={card} />
+                                <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span className="tabular-nums">
+                                    {String(card.expMonth).padStart(2, "0")}/{card.expYear}
+                                  </span>
+                                  {selecionado ? (
+                                    <IconCircleCheck className="size-4 text-primary" />
+                                  ) : (
+                                    <span>{busyKey === `card-${card.id}` ? "…" : t("plano.usarEste")}</span>
+                                  )}
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busyKey === "overage-disable"}
+                          onClick={disableOverageCard}
+                        >{t("plano.desligarCobranca")}</Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busyKey === "overage-setup"}
+                          onClick={setupOverageCard}
+                        >{t("plano.cadastrarOutroCartao")}</Button>
+                      </div>
                     </>
                   ) : (
-                    <Button disabled={busyKey === "overage-setup"} onClick={setupOverageCard}>{t("plano.cadastrarCartao")}</Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button disabled={busyKey === "overage-setup"} onClick={setupOverageCard}>{t("plano.cadastrarCartao")}</Button>
+                    </div>
                   )}
                 </div>
               </CardContent>
@@ -488,6 +617,79 @@ export function ClientBillingPage() {
               })}
             </CardContent>
           </Card>
+
+          {payments && payments.statement.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <IconReceipt className="size-4 text-muted-foreground" />
+                  {t("plano.extrato")}
+                </CardTitle>
+                <CardDescription>{t("plano.extratoDescricao")}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead>{t("plano.data")}</TableHead>
+                        <TableHead>{t("plano.oQueFoi")}</TableHead>
+                        <TableHead>{t("plano.cartao")}</TableHead>
+                        <TableHead className="text-right">{t("plano.valor")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {payments.statement.map((linha) => (
+                        <TableRow key={linha.id}>
+                          <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
+                            {formatarData(linha.createdAt)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span>{t(EXTRATO_ROTULO[linha.kind])}</span>
+                              {linha.minutes !== null && (
+                                <span className="text-xs text-muted-foreground tabular-nums">
+                                  {linha.minutes} min
+                                </span>
+                              )}
+                              {linha.status !== "pago" && (
+                                <TonePill tone={linha.status === "reembolsado" ? "neutral" : "danger"}>
+                                  {t(linha.status === "reembolsado" ? "plano.reembolsado" : "plano.falhou")}
+                                </TonePill>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {linha.card ? <CartaoLinha card={linha.card} /> : "—"}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {linha.receiptUrl ? (
+                              <a
+                                href={linha.receiptUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline decoration-dotted underline-offset-4 hover:decoration-solid"
+                                title={t("plano.verRecibo")}
+                              >
+                                {formatCents(linha.amountCents)}
+                              </a>
+                            ) : (
+                              formatCents(linha.amountCents)
+                            )}
+                            {linha.refundedCents > 0 && (
+                              <div className="text-xs text-muted-foreground">
+                                −{formatCents(linha.refundedCents)} {t("plano.devolvido")}
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {data.recentTransactions.length > 0 && (
             <Card>

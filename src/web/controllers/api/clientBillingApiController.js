@@ -242,6 +242,126 @@ async function setupOverageCard(req, res) {
   res.json({ checkoutUrl: session.url });
 }
 
+// ---------------------------------------------------------------------------
+// Cartoes e extrato.
+//
+// Ficam FORA do /overview de proposito: aquele endpoint nao fala com a Stripe,
+// entao a tela de plano continua abrindo (saldo, cota, planos) mesmo com a
+// Stripe fora do ar ou lenta. Aqui a Stripe e obrigatoria, e uma falha derruba
+// so este pedaco da tela.
+// ---------------------------------------------------------------------------
+
+// Junta as cobrancas de verdade (que sabem qual cartao pagou, mas nao sabem o
+// que foi comprado) com os nossos registros (que sabem o que foi, mas nao o
+// cartao). O cruzamento e por payment_intent no caso do avulso e por fatura no
+// caso do excedente; fatura que nao e de excedente so pode ser mensalidade.
+function montarExtrato(charges, compras, excedentes) {
+  const porPaymentIntent = new Map(
+    compras.filter((c) => c.stripe_payment_intent_id).map((c) => [c.stripe_payment_intent_id, c])
+  );
+  const porFatura = new Map(excedentes.map((e) => [e.stripe_invoice_id, e]));
+
+  return charges.map((ch) => {
+    const compra = ch.paymentIntentId ? porPaymentIntent.get(ch.paymentIntentId) : null;
+    const excedente = ch.invoiceId ? porFatura.get(ch.invoiceId) : null;
+
+    let kind = 'outro';
+    let minutes = null;
+    if (compra) {
+      kind = 'avulso';
+      minutes = compra.minutes;
+    } else if (excedente) {
+      kind = 'excedente';
+      minutes = excedente.minutes;
+    } else if (ch.invoiceId) {
+      // Sobrou fatura que nao e de excedente: no sistema so existe um outro
+      // tipo de fatura, a da mensalidade.
+      kind = 'plano';
+    }
+
+    return {
+      id: ch.id,
+      createdAt: ch.createdAt,
+      kind,
+      minutes,
+      amountCents: ch.amountCents,
+      // Reembolso parcial ou total muda o que o cliente de fato pagou - mostrar
+      // so o valor original faria o extrato divergir da fatura do cartao dele.
+      refundedCents: ch.amountRefundedCents || 0,
+      status: ch.amountRefundedCents >= ch.amountCents && ch.amountCents > 0
+        ? 'reembolsado'
+        : ch.paid && ch.status === 'succeeded'
+          ? 'pago'
+          : 'falhou',
+      card: ch.card,
+      receiptUrl: ch.receiptUrl,
+    };
+  });
+}
+
+async function payments(req, res) {
+  if (!stripeService.isConfigured()) {
+    return res.status(400).json({ error: res.locals.t('erros.pagamentoIndisponivel') });
+  }
+
+  const clientUserId = req.session.user.id;
+  const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
+
+  // Sem customer ainda: cliente que nunca fez nenhuma acao de pagamento. Nao e
+  // erro - so nao ha cartao nem extrato pra mostrar. Criar um customer so pra
+  // responder isso poluiria a Stripe com cliente vazio a cada visita na tela.
+  if (!subscription.stripe_customer_id) {
+    return res.json({ cards: [], statement: [] });
+  }
+
+  const [cards, charges, compras, excedentes] = await Promise.all([
+    stripeService.listPaymentMethods(subscription.stripe_customer_id),
+    stripeService.listCharges(subscription.stripe_customer_id),
+    creditPurchasesRepository.listByClientId(clientUserId, { limit: 100 }),
+    overageChargesRepository.listInvoicedByClient(clientUserId),
+  ]);
+
+  res.json({ cards, statement: montarExtrato(charges, compras, excedentes) });
+}
+
+// Troca qual cartao e usado nas cobrancas automaticas.
+async function setDefaultCard(req, res) {
+  if (!stripeService.isConfigured()) {
+    return res.status(400).json({ error: res.locals.t('erros.pagamentoIndisponivel') });
+  }
+
+  const paymentMethodId = String(req.body.paymentMethodId || '');
+  if (!paymentMethodId) {
+    return res.status(400).json({ error: res.locals.t('erros.valorInvalido') });
+  }
+
+  const clientUserId = req.session.user.id;
+  const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
+  if (!subscription.stripe_customer_id) {
+    return res.status(400).json({ error: res.locals.t('erros.nenhumCartaoCadastrado') });
+  }
+
+  // O id do cartao vem da tela, entao um POST montado na mao poderia mandar o
+  // cartao de outra pessoa. Sem esta checagem, isso viraria "apontar a minha
+  // cobranca pro cartao alheio" - a Stripe recusaria a cobranca depois, mas o
+  // vinculo errado ja teria sido gravado.
+  const ehDele = await stripeService.paymentMethodBelongsToCustomer(
+    subscription.stripe_customer_id,
+    paymentMethodId
+  );
+  if (!ehDele) {
+    return res.status(404).json({ error: res.locals.t('erros.cartaoNaoEncontrado') });
+  }
+
+  await stripeService.setDefaultPaymentMethod(subscription.stripe_customer_id, paymentMethodId);
+  await clientSubscriptionsRepository.setOverageCard(clientUserId, {
+    enabled: subscription.overage_card_enabled,
+    stripeDefaultPaymentMethodId: paymentMethodId,
+  });
+
+  res.json({ paymentMethodId });
+}
+
 // Desliga a cobranca automatica de excedente (nao mexe no cartao salvo na
 // Stripe, so para de usar - o cliente pode ligar de novo depois sem
 // recadastrar o cartao).
@@ -257,7 +377,10 @@ module.exports = {
   buyPackage,
   setupOverageCard,
   disableOverageCard,
+  payments,
+  setDefaultCard,
   // Exportadas pro teste: sao a trava que impede uma cobranca errada.
+  montarExtrato,
   minutosPedidos,
   centsPorMinutoAvulso,
   CREDITO_MIN_MINUTOS,

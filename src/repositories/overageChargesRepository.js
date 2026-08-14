@@ -37,6 +37,20 @@ async function listPendingByClient(clientUserId) {
   return rows;
 }
 
+// Excedente agrupado por fatura da Stripe - usado pelo extrato pra dizer
+// quantos minutos entraram em cada cobranca (uma fatura junta varios videos).
+async function listInvoicedByClient(clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT stripe_invoice_id, sum(minutes)::int AS minutes, sum(amount_cents)::int AS amount_cents,
+            count(*)::int AS videos
+     FROM client_overage_charges
+     WHERE client_user_id = $1 AND stripe_invoice_id IS NOT NULL
+     GROUP BY stripe_invoice_id`,
+    [clientUserId]
+  );
+  return rows;
+}
+
 // Todos os clientes com pelo menos 1 cobranca pendente - usado pelo
 // overageBillingJob semanal pra saber quem faturar.
 async function listClientsWithPending() {
@@ -108,6 +122,7 @@ module.exports = {
   createAlreadyPaid,
   findBySourceVideoId,
   listPendingByClient,
+  listInvoicedByClient,
   listClientsWithPending,
   markInvoiced,
   markPaid,

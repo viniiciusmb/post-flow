@@ -479,6 +479,35 @@ export interface BillingPlan {
   maxTiktokAccounts: number | null
 }
 
+export interface SavedCard {
+  id: string
+  brand: string
+  last4: string
+  expMonth: number
+  expYear: number
+  isDefault: boolean
+}
+
+/** avulso = crédito comprado; excedente = passou da cota; plano = mensalidade. */
+export type StatementKind = "avulso" | "excedente" | "plano" | "outro"
+
+export interface StatementEntry {
+  id: string
+  createdAt: string
+  kind: StatementKind
+  minutes: number | null
+  amountCents: number
+  refundedCents: number
+  status: "pago" | "falhou" | "reembolsado"
+  card: { brand: string; last4: string } | null
+  receiptUrl: string | null
+}
+
+export interface ClientPaymentsResponse {
+  cards: SavedCard[]
+  statement: StatementEntry[]
+}
+
 export interface CreditTransactionView {
   id: number
   sourceVideoId: number

@@ -356,6 +356,8 @@ module.exports = {
     tiktokIndisponivel: "No se pudo contactar con TikTok ahora. Inténtalo de nuevo en un momento.",
     tipoChavePixInvalido: "Tipo de clave Pix no válido.",
     valorInvalido: "Valor no válido.",
+    cartaoNaoEncontrado: "Tarjeta no encontrada.",
+    nenhumCartaoCadastrado: "Aún no hay ninguna tarjeta guardada.",
     videoJaAdicionado: "Ese vídeo ya se añadió antes.",
     videoJaProcessado: "Ya has procesado ese vídeo antes.",
     videoNaoComErro: "Ese vídeo no está con error ni cancelado ahora mismo.",

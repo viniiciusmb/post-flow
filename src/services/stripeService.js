@@ -146,6 +146,68 @@ async function retrieveSetupIntent(setupIntentId) {
   return stripe.setupIntents.retrieve(setupIntentId);
 }
 
+// Cartoes salvos do cliente. A Stripe e a unica fonte da verdade aqui: dado
+// de cartao (bandeira, 4 ultimos, validade) nao e copiado pro nosso banco de
+// proposito - guardar copia significaria mante-la em sincronia com trocas
+// feitas do lado da Stripe, e dado de cartao desatualizado na tela e pior do
+// que nenhum. O unico id que guardamos e o do cartao padrao, pro job de
+// excedente conseguir cobrar sem consultar a Stripe.
+async function listPaymentMethods(customerId) {
+  const stripe = getClient();
+  const [{ data: methods }, customer] = await Promise.all([
+    stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 20 }),
+    stripe.customers.retrieve(customerId),
+  ]);
+  const defaultId = customer.deleted ? null : customer.invoice_settings?.default_payment_method || null;
+  return methods.map((pm) => ({
+    id: pm.id,
+    brand: pm.card.brand,
+    last4: pm.card.last4,
+    expMonth: pm.card.exp_month,
+    expYear: pm.card.exp_year,
+    isDefault: pm.id === defaultId,
+  }));
+}
+
+// Cobrancas de verdade do cliente. Todo tipo de pagamento do sistema
+// (mensalidade, credito avulso, excedente) termina virando um charge, e o
+// charge e o unico lugar que sabe QUAL cartao pagou - por isso o extrato sai
+// daqui, e nao das nossas tabelas. O rotulo de cada linha e que vem do nosso
+// banco (ver montarExtrato no controller).
+async function listCharges(customerId, { limit = 50 } = {}) {
+  const stripe = getClient();
+  const { data } = await stripe.charges.list({ customer: customerId, limit });
+  return data.map((ch) => ({
+    id: ch.id,
+    createdAt: new Date(ch.created * 1000).toISOString(),
+    amountCents: ch.amount,
+    amountRefundedCents: ch.amount_refunded,
+    paid: ch.paid,
+    status: ch.status,
+    invoiceId: typeof ch.invoice === 'string' ? ch.invoice : ch.invoice?.id || null,
+    paymentIntentId: typeof ch.payment_intent === 'string' ? ch.payment_intent : ch.payment_intent?.id || null,
+    receiptUrl: ch.receipt_url || null,
+    card: ch.payment_method_details?.card
+      ? { brand: ch.payment_method_details.card.brand, last4: ch.payment_method_details.card.last4 }
+      : null,
+  }));
+}
+
+// Confere que o cartao pertence MESMO a este customer antes de qualquer acao
+// sobre ele. Sem isso, mandar um id de cartao de outra pessoa no corpo da
+// requisicao viraria acao sobre o cartao alheio - o id vem da tela, e tela e
+// coisa que qualquer um remonta na mao.
+async function paymentMethodBelongsToCustomer(customerId, paymentMethodId) {
+  const stripe = getClient();
+  try {
+    const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+    return pm.customer === customerId;
+  } catch (err) {
+    if (err.code === 'resource_missing') return false;
+    throw err;
+  }
+}
+
 // Marca o cartao como padrao do customer na Stripe - e o que
 // overageBillingJob usa (default_payment_method) pra cobrar off-session.
 async function setDefaultPaymentMethod(customerId, paymentMethodId) {
@@ -261,6 +323,9 @@ module.exports = {
   createCheckoutSessionForPackage,
   createSetupSessionForOverageCard,
   retrieveSetupIntent,
+  listPaymentMethods,
+  listCharges,
+  paymentMethodBelongsToCustomer,
   setDefaultPaymentMethod,
   constructWebhookEvent,
   createInvoiceItemsAndPay,
