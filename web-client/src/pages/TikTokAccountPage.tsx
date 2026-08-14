@@ -1354,11 +1354,22 @@ function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSumm
   )
 }
 
+// Resultado da conexão, que agora volta pra esta tela. Sem isto, conectar
+// terminaria sem nenhuma confirmação visível — e um erro passaria batido.
+function lerAvisoDaUrl() {
+  const params = new URLSearchParams(window.location.search)
+  return {
+    conectada: params.get("tiktok_connected") === "1",
+    erro: params.get("tiktok_error"),
+  }
+}
+
 export function TikTokAccountPage() {
   const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
   const [accounts, setAccounts] = useState<TikTokAccountSummary[] | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
+  const [aviso] = useState(lerAvisoDaUrl)
 
   async function load() {
     const data = await api.get<{ accounts: TikTokAccountSummary[] }>("/api/client/tiktok-accounts")
@@ -1388,6 +1399,17 @@ export function TikTokAccountPage() {
         title={t("pub.titulo")}
         description={t("pub.descricao")}
       />
+
+      {aviso.conectada && (
+        <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
+          {t("inicio.contaConectada")}
+        </p>
+      )}
+      {aviso.erro && (
+        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {t("inicio.erroTikTok")}: {aviso.erro}
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           {accounts && accounts.length > 0 && (
@@ -1397,7 +1419,7 @@ export function TikTokAccountPage() {
           )}
         </div>
         <Button asChild size="sm" className="shrink-0">
-          <a href="/auth/tiktok/connect">
+          <a href="/auth/tiktok/connect?from=/client/tiktok-account">
             <IconPlus className="size-4" />
             {t("pub.conectarPalavra")} {accounts && accounts.length > 0 ? t("pub.outraConta") : t("pub.contaTikTokMinusculo")}
           </a>
