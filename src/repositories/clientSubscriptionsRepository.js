@@ -78,6 +78,24 @@ async function setStripeCustomer(clientUserId, stripeCustomerId) {
   );
 }
 
+// Zera TODOS os ids da Stripe de uma vez. Usado quando o customer guardado
+// nao existe mais do lado da Stripe (troca de chave teste->producao, ou conta
+// trocada): a assinatura e o cartao padrao pertenciam aquele customer morto,
+// entao continuam apontando pro nada. Deixar esses dois preenchidos faria a
+// cobranca automatica de excedente falhar depois, longe da tela, sem ninguem
+// ver. NAO mexe em status/plano: quem decide isso e o admin, e o cliente
+// segue com o plano que tem enquanto recadastra o pagamento.
+async function clearStripeLinks(clientUserId) {
+  await pool.query(
+    `UPDATE client_subscriptions
+     SET stripe_customer_id = NULL, stripe_subscription_id = NULL,
+         stripe_default_payment_method_id = NULL, overage_card_enabled = false,
+         updated_at = now()
+     WHERE client_user_id = $1`,
+    [clientUserId]
+  );
+}
+
 async function setStripeSubscription(clientUserId, stripeSubscriptionId) {
   await pool.query(
     `UPDATE client_subscriptions SET stripe_subscription_id = $2, updated_at = now() WHERE client_user_id = $1`,
@@ -103,6 +121,7 @@ module.exports = {
   setPlan,
   setStatus,
   setStripeCustomer,
+  clearStripeLinks,
   setStripeSubscription,
   setOverageCard,
 };

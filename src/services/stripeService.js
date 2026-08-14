@@ -35,6 +35,29 @@ async function ensureCustomer(existingCustomerId, { email, name, clientUserId })
   return customer.id;
 }
 
+// Confere se um customer guardado no nosso banco ainda existe DESTE lado da
+// Stripe. Modo de teste e modo de producao sao dois mundos separados: um
+// customer criado com chave de teste simplesmente nao existe pra chave ao
+// vivo (a Stripe responde "No such customer ... a similar object exists in
+// test mode"). O mesmo vale se a conta da Stripe for trocada.
+//
+// Isso ja quebrou a producao de verdade (2026-08-14): depois de trocar as
+// chaves de teste pelas de producao, os 2 clientes que ja tinham customer
+// salvo nao conseguiam mais assinar, comprar credito avulso nem cadastrar
+// cartao - todo botao de pagamento morria com "Algo deu errado" generico.
+// Devolve false tambem pra customer apagado no painel da Stripe (nesse caso
+// a Stripe nao lanca erro, devolve o objeto com deleted: true).
+async function customerExists(customerId) {
+  const stripe = getClient();
+  try {
+    const customer = await stripe.customers.retrieve(customerId);
+    return !customer.deleted;
+  } catch (err) {
+    if (err.code === 'resource_missing') return false;
+    throw err;
+  }
+}
+
 async function createCheckoutSessionForSubscription({ customerId, priceId, successUrl, cancelUrl, metadata }) {
   const stripe = getClient();
   return stripe.checkout.sessions.create({
@@ -231,6 +254,7 @@ module.exports = {
   chargeNow,
   isConfigured,
   ensureCustomer,
+  customerExists,
   createCheckoutSessionForSubscription,
   changeSubscriptionPrice,
   cancelSubscription,

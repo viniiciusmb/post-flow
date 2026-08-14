@@ -1,10 +1,10 @@
 // Tela "Planos e credito" do cliente - saldo dos 2 bolsos, os 3 planos lado
 // a lado, compra de pacote avulso e cadastro de cartao de excedente. Toda
 // acao que depende da Stripe de verdade checa stripeService.isConfigured()
-// primeiro e devolve 400 com mensagem clara em vez de deixar o SDK explodir
-// (as chaves ainda nao chegaram - ver CLAUDE.md).
+// primeiro e devolve 400 com mensagem clara em vez de deixar o SDK explodir.
 'use strict';
 
+const logger = require('../../../lib/logger');
 const subscriptionPlansRepository = require('../../../repositories/subscriptionPlansRepository');
 const clientSubscriptionsRepository = require('../../../repositories/clientSubscriptionsRepository');
 const clientCreditsRepository = require('../../../repositories/clientCreditsRepository');
@@ -45,7 +45,22 @@ function minutosPedidos(valorRecebido) {
 // acao de pagamento (assinar, comprar avulso, cadastrar cartao) e guarda o
 // id pra reaproveitar dai em diante.
 async function resolveStripeCustomerId(clientUserId, subscription) {
-  if (subscription.stripe_customer_id) return subscription.stripe_customer_id;
+  // O id salvo so serve se o customer ainda existir DESTE lado da Stripe.
+  // Trocar a chave de teste pela de producao (ou trocar de conta) deixa todo
+  // id antigo apontando pro vazio - e ai TODO botao de pagamento daquele
+  // cliente morria com "Algo deu errado" generico, sem pista nenhuma na tela.
+  // Em vez de exigir conserto manual no banco a cada troca de chave, o proprio
+  // fluxo detecta e recria o customer na hora.
+  if (subscription.stripe_customer_id) {
+    if (await stripeService.customerExists(subscription.stripe_customer_id)) {
+      return subscription.stripe_customer_id;
+    }
+    logger.warn(
+      `Customer da Stripe ${subscription.stripe_customer_id} (cliente #${clientUserId}) nao existe mais nesta conta/modo - recriando e limpando os vinculos antigos.`
+    );
+    await clientSubscriptionsRepository.clearStripeLinks(clientUserId);
+  }
+
   const user = await usersRepository.findById(clientUserId);
   const customerId = await stripeService.ensureCustomer(null, {
     email: user.email,
