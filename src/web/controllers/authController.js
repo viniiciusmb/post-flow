@@ -3,7 +3,20 @@
 const authService = require('../../services/authService');
 const publicController = require('./publicController');
 const affiliateService = require('../../services/affiliateService');
+const subscriptionCheckoutService = require('../../services/subscriptionCheckoutService');
 const { ROLES } = require('../../config/constants');
+
+// Le e CONSOME o plano guardado: usado uma vez so, senao um checkout
+// reapareceria em todo login seguinte da mesma sessao.
+function consumirPlanoEscolhido(req) {
+  const planKey = req.session.planoEscolhido;
+  if (planKey) delete req.session.planoEscolhido;
+  return planKey || null;
+}
+
+function origemDe(req) {
+  return `${req.protocol}://${req.get('host')}`;
+}
 
 async function login(req, res) {
   const { email, password } = req.body;
@@ -13,8 +26,11 @@ async function login(req, res) {
     return res.status(401).render('auth/login', { title: 'Entrar', error: res.locals.t('erros.credenciaisInvalidas') });
   }
 
+  const planKey = consumirPlanoEscolhido(req);
   req.session.user = { id: user.id, role: user.role, email: user.email };
-  res.redirect(user.role === ROLES.ADMIN ? '/admin' : '/client');
+  res.redirect(
+    await subscriptionCheckoutService.destinoDepoisDeEntrar({ user, planKey, origin: origemDe(req) })
+  );
 }
 
 function showRegister(req, res) {
@@ -61,8 +77,11 @@ async function register(req, res) {
       delete req.session.affiliateAttribution;
     }
 
+    const planKey = consumirPlanoEscolhido(req);
     req.session.user = { id: user.id, role: user.role, email: user.email };
-    res.redirect('/client');
+    res.redirect(
+      await subscriptionCheckoutService.destinoDepoisDeEntrar({ user, planKey, origin: origemDe(req) })
+    );
   } catch (err) {
     res.status(400).render('auth/register', { title: res.locals.t('cadastro.titulo'), error: err.message, values });
   }

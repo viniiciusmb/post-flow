@@ -39,6 +39,8 @@
 
     <p style="margin-top: 1.75rem">
       <%= t('cadastro.jaTemConta') %>
+      <%# O plano escolhido já está na sessão, então ir pro login não perde a
+          escolha: quem entra por lá também cai no checkout. %>
       <a href="/login" style="color: var(--signal)"><%= t('cadastro.entrar') %></a>
     </p>
   </article>

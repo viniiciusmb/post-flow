@@ -159,12 +159,14 @@ export function LoginPage() {
     setLoading(true)
 
     try {
-      const { user } = await api.post<{ user: SessionUser }>("/api/auth/login", {
-        email,
-        password,
-        rememberMe,
-      })
-      window.location.href = user.role === "admin" ? "/admin" : "/client"
+      const { user, redirectTo } = await api.post<{ user: SessionUser; redirectTo?: string }>(
+        "/api/auth/login",
+        { email, password, rememberMe }
+      )
+      // O servidor manda o destino quando ele sabe de algo que esta tela não
+      // sabe — hoje: a pessoa escolheu um plano na landing antes de entrar, e
+      // o destino é o checkout desse plano.
+      window.location.href = redirectTo || (user.role === "admin" ? "/admin" : "/client")
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("auth.naoFoiPossivelEntrar"))
       setLoading(false)

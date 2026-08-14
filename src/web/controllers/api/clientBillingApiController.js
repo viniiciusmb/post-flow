@@ -14,6 +14,8 @@ const creditTransactionsRepository = require('../../../repositories/creditTransa
 const usersRepository = require('../../../repositories/usersRepository');
 const stripeService = require('../../../services/stripeService');
 const creditsService = require('../../../services/creditsService');
+const subscriptionCheckoutService = require('../../../services/subscriptionCheckoutService');
+const { resolveStripeCustomerId } = subscriptionCheckoutService;
 
 // Credito avulso: o cliente escolhe MINUTOS numa barra, e o preco por minuto e
 // exatamente o mesmo do excedente pela nossa internet. Isso e de proposito: se
@@ -39,36 +41,6 @@ function minutosPedidos(valorRecebido) {
   if (!Number.isFinite(numero)) return CREDITO_MIN_MINUTOS;
   const emPassos = Math.round(numero / CREDITO_PASSO_MINUTOS) * CREDITO_PASSO_MINUTOS;
   return Math.min(Math.max(emPassos, CREDITO_MIN_MINUTOS), CREDITO_MAX_MINUTOS);
-}
-
-// Cria o customer na Stripe na primeira vez que o cliente faz qualquer
-// acao de pagamento (assinar, comprar avulso, cadastrar cartao) e guarda o
-// id pra reaproveitar dai em diante.
-async function resolveStripeCustomerId(clientUserId, subscription) {
-  // O id salvo so serve se o customer ainda existir DESTE lado da Stripe.
-  // Trocar a chave de teste pela de producao (ou trocar de conta) deixa todo
-  // id antigo apontando pro vazio - e ai TODO botao de pagamento daquele
-  // cliente morria com "Algo deu errado" generico, sem pista nenhuma na tela.
-  // Em vez de exigir conserto manual no banco a cada troca de chave, o proprio
-  // fluxo detecta e recria o customer na hora.
-  if (subscription.stripe_customer_id) {
-    if (await stripeService.customerExists(subscription.stripe_customer_id)) {
-      return subscription.stripe_customer_id;
-    }
-    logger.warn(
-      `Customer da Stripe ${subscription.stripe_customer_id} (cliente #${clientUserId}) nao existe mais nesta conta/modo - recriando e limpando os vinculos antigos.`
-    );
-    await clientSubscriptionsRepository.clearStripeLinks(clientUserId);
-  }
-
-  const user = await usersRepository.findById(clientUserId);
-  const customerId = await stripeService.ensureCustomer(null, {
-    email: user.email,
-    name: user.business_name,
-    clientUserId,
-  });
-  await clientSubscriptionsRepository.setStripeCustomer(clientUserId, customerId);
-  return customerId;
 }
 
 function bucketView(credits, key) {

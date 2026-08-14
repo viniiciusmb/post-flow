@@ -17,6 +17,7 @@ const usersRepository = require('../../repositories/usersRepository');
 const publicController = require('./publicController');
 const affiliateService = require('../../services/affiliateService');
 const logger = require('../../lib/logger');
+const subscriptionCheckoutService = require('../../services/subscriptionCheckoutService');
 
 function paraLogin(res, mensagem) {
   return res.redirect(`/login?erro=${encodeURIComponent(mensagem)}`);
@@ -102,15 +103,21 @@ async function callback(req, res) {
     return paraLogin(res, 'Esta conta está desativada. Fale com o suporte.');
   }
 
+  // Lido ANTES do regenerate: ele descarta a sessao inteira, entao o plano
+  // escolhido na landing sumiria junto (mesmo cuidado que a atribuicao de
+  // afiliado acima ja tomava).
+  const planKey = req.session.planoEscolhido || null;
+  const origin = `${req.protocol}://${req.get('host')}`;
+
   // Sessão nova a cada login, com o id antigo descartado: sem isso, um id de
   // sessão obtido antes do login continuaria valendo depois dele.
-  req.session.regenerate((err) => {
+  req.session.regenerate(async (err) => {
     if (err) {
       logger.error('Falha ao renovar a sessao no login com Google:', err.message);
       return paraLogin(res, 'Não consegui abrir sua sessão. Tente de novo.');
     }
     req.session.user = { id: user.id, role: user.role, email: user.email };
-    res.redirect(user.role === 'admin' ? '/admin' : '/client');
+    res.redirect(await subscriptionCheckoutService.destinoDepoisDeEntrar({ user, planKey, origin }));
   });
 }
 

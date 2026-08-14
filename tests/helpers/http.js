@@ -80,7 +80,10 @@ function createAgent(url) {
     } catch {
       json = null;
     }
-    return { status: response.status, body: json, text: texto };
+    // headers vem junto porque redirecionamento e comportamento testavel: em
+    // fluxo de pagina (cadastro, login) o que importa e PRA ONDE foi, e isso
+    // so esta no Location.
+    return { status: response.status, body: json, text: texto, headers: response.headers };
   }
 
   return {

@@ -7,7 +7,20 @@
 // (alguem pode compartilhar um link direto pra /termos, por exemplo).
 const REF_PATTERN = /^[a-zA-Z0-9_-]{1,32}$/;
 
+// Plano escolhido na landing, guardado ate a conta existir - so depois de
+// existir conta da pra abrir um checkout. Fica na sessao pelo mesmo motivo da
+// atribuicao de afiliado: e o unico carregador que sobrevive ao ida-e-volta do
+// login com Google (o cookie e sameSite:lax, entao volta na navegacao).
+// Lista fechada: o valor vai direto numa busca de plano, e aceitar qualquer
+// texto seria deixar a URL mandar no que a gente procura.
+const PLANOS_VALIDOS = ['starter', 'pro', 'max'];
+
 function affiliateAttribution(req, res, next) {
+  const plano = req.query.plano;
+  if (typeof plano === 'string' && PLANOS_VALIDOS.includes(plano)) {
+    req.session.planoEscolhido = plano;
+  }
+
   const ref = req.query.ref;
   if (typeof ref === 'string' && REF_PATTERN.test(ref)) {
     req.session.affiliateAttribution = req.session.affiliateAttribution || {};
