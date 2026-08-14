@@ -61,6 +61,16 @@ async function handleCheckoutCompleted(session) {
   }
 }
 
+// So vale pra compra de credito avulso (mode 'payment'): assinatura e cartao
+// nao deixam registro nosso antes do pagamento, entao nao ha o que corrigir.
+async function handleCheckoutExpired(session) {
+  if (session.mode !== 'payment') return;
+  const purchase = await creditPurchasesRepository.markExpiredByCheckoutSession(session.id);
+  if (purchase) {
+    logger.info(`Compra de credito #${purchase.id} marcada como falhou: checkout expirou sem pagamento.`);
+  }
+}
+
 // Sincroniza status (ativo/inadimplente/cancelado) quando a Stripe muda a
 // assinatura por conta propria (falha de cobranca, cliente cancela no
 // portal etc) - nao mexe na cota de credito aqui, so no proximo reset
@@ -122,6 +132,14 @@ async function webhook(req, res) {
     switch (event.type) {
       case 'checkout.session.completed':
         await handleCheckoutCompleted(event.data.object);
+        break;
+      // Cliente abriu o checkout e desistiu (a Stripe expira sozinha em ~24h).
+      // Sem tratar isso, a compra ficava "pendente" pra sempre no historico
+      // dele, que numa tela de pagamento e o pior estado: nao da pra saber se
+      // pagou ou nao. Nada e cobrado nem creditado aqui - so o registro deixa
+      // de mentir.
+      case 'checkout.session.expired':
+        await handleCheckoutExpired(event.data.object);
         break;
       // Todo evento que mexe no ciclo de vida da assinatura cai no mesmo
       // tratamento: ele le o status que a Stripe mandou e sincroniza o nosso.

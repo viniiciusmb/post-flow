@@ -193,3 +193,51 @@ test('falha da Stripe vira mensagem de pagamento, não "algo deu errado"', async
     await stopServer();
   }
 });
+
+// --------------------------------------------------------------------------
+// Checkout abandonado.
+//
+// A Stripe expira sozinha um checkout que ninguém pagou (~24h), mas o webhook
+// não tratava esse evento: a linha de compra ficava "pendente" pra sempre no
+// histórico do cliente. Numa tela de pagamento esse é o pior estado possível,
+// porque não dá pra saber se pagou ou não. Havia uma linha assim em produção,
+// parada desde 03/08.
+// --------------------------------------------------------------------------
+
+const creditPurchasesRepository = require('../../src/repositories/creditPurchasesRepository');
+
+async function compraPendente(clientUserId, sessionId) {
+  return creditPurchasesRepository.create({
+    clientUserId,
+    bucket: 'normal',
+    minutes: 25,
+    amountCents: 625,
+    stripeCheckoutSessionId: sessionId,
+  });
+}
+
+test('checkout que expirou marca a compra como falhou, não deixa pendente pra sempre', async () => {
+  const cliente = await createLoginableClient();
+  await compraPendente(cliente.id, 'cs_expirou_1');
+
+  const atualizada = await creditPurchasesRepository.markExpiredByCheckoutSession('cs_expirou_1');
+
+  assert.ok(atualizada, 'a compra tinha que ser encontrada pela sessão');
+  assert.strictEqual(atualizada.status, 'falhou');
+});
+
+test('checkout expirado NUNCA desfaz uma compra já paga', async () => {
+  // Evento fora de ordem ou reenviado pela Stripe não pode tirar o crédito de
+  // quem pagou - por isso o UPDATE exige status = 'pendente'.
+  const cliente = await createLoginableClient();
+  await compraPendente(cliente.id, 'cs_ja_paga');
+  await creditPurchasesRepository.markPaidByCheckoutSession('cs_ja_paga', 'pi_123');
+
+  const resultado = await creditPurchasesRepository.markExpiredByCheckoutSession('cs_ja_paga');
+
+  assert.strictEqual(resultado, null, 'não pode alterar uma compra já paga');
+  const { rows } = await pool.query(
+    `SELECT status FROM credit_purchases WHERE stripe_checkout_session_id = 'cs_ja_paga'`
+  );
+  assert.strictEqual(rows[0].status, 'pago', 'a compra paga tem que continuar paga');
+});
