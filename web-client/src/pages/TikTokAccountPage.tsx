@@ -1105,6 +1105,32 @@ function AccountBox({
           </div>
         )}
 
+        {/* Aviso de conta que ainda não publica.
+            Existe por exigência da TikTok: o criador precisa ver, de forma
+            inequívoca, que nada sai no perfil dele antes de ele mesmo definir
+            privacidade, interações e divulgação comercial.
+            A mensagem muda conforme o motivo real — um aviso genérico que
+            continuasse aparecendo depois de tudo configurado viraria ruído e
+            deixaria de ser lido. */}
+        {(() => {
+          const faltaOpcoes = account.publishMode === "direct" && !account.hasPublishDefaults
+          const faltaLigar = !account.autoPostEnabled
+          if (!faltaOpcoes && !faltaLigar) return null
+          return (
+            <div className="flex items-start gap-2 rounded-lg border border-status-processing/40 bg-status-processing/10 p-3">
+              <IconAlertTriangle className="mt-0.5 size-4 shrink-0 text-status-processing" />
+              <div className="text-sm">
+                <p className="font-medium text-status-processing">
+                  {faltaOpcoes ? t("pub.avisoNadaSeraPublicado") : t("pub.avisoNaoEstaPublicando")}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {faltaOpcoes ? t("pub.avisoConfigureOpcoes") : t("pub.avisoLigueAutomatico")}
+                </p>
+              </div>
+            </div>
+          )
+        })()}
+
         {/* Próximo da fila. A caixa aparece SEMPRE, mesmo com a fila vazia:
             some-la faria o cartão mudar de tamanho conforme a fila esvazia,
             e some justo quando o cliente mais quer saber o que houve. */}
