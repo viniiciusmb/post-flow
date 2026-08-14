@@ -1,7 +1,7 @@
 import { Rico } from "@/components/dashboard/Rico"
 import { useT } from "@/i18n"
 import { useEffect, useState } from "react"
-import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter } from "@tabler/icons-react"
+import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter, IconClock, IconBrandYoutube, IconBrandTiktok } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -425,40 +425,64 @@ export function ClientBillingPage() {
                   : t("plano.escolhaUmPlano")}
               </CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-3">
-              {data.plans.map((plan) => {
+            <CardContent className="grid gap-5 sm:grid-cols-3 sm:items-start">
+              {data.plans.map((plan, index) => {
                 const isCurrent = plan.key === data.subscription.planKey
+                // Sem conceito de "recomendado" vindo do backend - o plano do
+                // meio (Pro) e o candidato natural, igual a referencia visual.
+                const isPopular = data.plans.length === 3 && index === 1
+                const emphasized = isCurrent || isPopular
                 return (
                   <div
                     key={plan.key}
-                    className={`flex flex-col gap-3 rounded-lg border p-4 ${isCurrent ? "border-primary bg-primary/5" : "border-border"}`}
+                    className={`relative flex flex-col gap-4 rounded-xl border p-5 ${
+                      emphasized
+                        ? "border-primary bg-primary/[0.03] shadow-[var(--shadow-raised)]"
+                        : "border-border"
+                    }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-heading text-base font-semibold">{plan.name}</span>
+                    {isPopular && (
+                      <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
+                        {t("plano.maisPopular")}
+                      </span>
+                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-heading text-lg font-semibold">{plan.name}</span>
                       {isCurrent && (
                         <TonePill tone="success" icon={<IconCircleCheck className="size-3.5" />}>
                           Atual
                         </TonePill>
                       )}
                     </div>
-                    <div className="font-heading text-2xl font-semibold tabular-nums">
+                    <div className="font-heading text-3xl font-semibold tabular-nums">
                       {formatCents(plan.priceCents)}
-                      <span className="text-xs font-normal text-muted-foreground">/mês</span>
+                      <span className="text-sm font-normal text-muted-foreground">/mês</span>
                     </div>
-                    <ul className="flex flex-1 flex-col gap-1 text-xs text-muted-foreground">
-                      <li>{t("plano.minutosPorSemana", { n: plan.weeklyMinutesNormal })}</li>
-                      <li>{t("plano.minutosSuaInternet", { n: plan.weeklyMinutesBonus })}</li>
-                      <li>{plural(plan.maxYoutubeChannels, t("plano.canalYoutube"), t("plano.canaisYoutube"), t("plano.canaisIlimitados"))}</li>
-                      <li>{plural(plan.maxTiktokAccounts, t("plano.contaTiktok"), t("plano.contasTiktok"), t("plano.contasIlimitadas"))}</li>
-                    </ul>
                     <Button
                       variant={isCurrent ? "outline" : "default"}
-                      size="sm"
                       disabled={isCurrent || busyKey === `subscribe-${plan.key}`}
                       onClick={() => subscribe(plan.key)}
                     >
                       {isCurrent ? "Plano atual" : t("plano.assinarTrocar")}
                     </Button>
+                    <ul className="flex flex-1 flex-col gap-2 border-t border-border pt-4 text-sm text-muted-foreground">
+                      <li className="flex items-start gap-2">
+                        <IconClock className="mt-0.5 size-4 shrink-0 text-primary" />
+                        {t("plano.minutosPorSemana", { n: plan.weeklyMinutesNormal })}
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <IconRouter className="mt-0.5 size-4 shrink-0 text-primary" />
+                        {t("plano.minutosSuaInternet", { n: plan.weeklyMinutesBonus })}
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <IconBrandYoutube className="mt-0.5 size-4 shrink-0 text-primary" />
+                        {plural(plan.maxYoutubeChannels, t("plano.canalYoutube"), t("plano.canaisYoutube"), t("plano.canaisIlimitados"))}
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <IconBrandTiktok className="mt-0.5 size-4 shrink-0 text-primary" />
+                        {plural(plan.maxTiktokAccounts, t("plano.contaTiktok"), t("plano.contasTiktok"), t("plano.contasIlimitadas"))}
+                      </li>
+                    </ul>
                   </div>
                 )
               })}

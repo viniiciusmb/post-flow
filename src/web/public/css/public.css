@@ -480,6 +480,7 @@ strong {
   align-items: start;
 }
 .plano {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 1.75rem;
@@ -489,22 +490,30 @@ strong {
 }
 .plano.destaque {
   border-color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 3%, var(--paper));
+  box-shadow: var(--shadow-frame);
 }
 .plano .marcador {
+  position: absolute;
+  top: -0.7rem;
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 0.4rem;
-  min-height: 1.2em;
+  color: var(--paper);
+  background: var(--ink);
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 .plano .preco {
   font-size: 2.375rem;
   font-weight: 600;
   letter-spacing: -0.038em;
   font-variant-numeric: tabular-nums;
-  margin: 0.4rem 0 0.25rem;
+  margin: 0.4rem 0 1.25rem;
 }
 .plano .preco span {
   font-size: 0.9375rem;
@@ -515,7 +524,9 @@ strong {
 .plano ul {
   list-style: none;
   padding: 0;
-  margin: 1.5rem 0 1.75rem;
+  margin: 1.5rem 0 0;
+  border-top: 1px solid var(--line);
+  padding-top: 1.5rem;
   display: grid;
   gap: 0.65rem;
   flex: 1;
@@ -523,20 +534,30 @@ strong {
 .plano li {
   font-size: 0.9375rem;
   color: var(--muted);
-  padding-left: 1.5rem;
-  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
 }
-.plano li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0.62em;
-  width: 0.5rem;
-  height: 1px;
-  background: currentColor;
-  opacity: 0.6;
+.plano li .icone {
+  flex-shrink: 0;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 999px;
+  display: grid;
+  place-content: center;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+  margin-top: 0.05em;
+}
+.plano li .icone svg {
+  width: 15px;
+  height: 15px;
 }
 .plano li.bonus {
+  color: var(--success-ink);
+}
+.plano li.bonus .icone {
+  background: color-mix(in srgb, var(--success-ink) 12%, transparent);
   color: var(--success-ink);
 }
 .plano li strong {

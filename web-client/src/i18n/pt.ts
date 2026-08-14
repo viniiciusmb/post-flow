@@ -782,6 +782,7 @@ export const pt = {
   "adm.rotuloErro": "erro",
   "adm.cortesPostadosGerados": "cortes postados / gerados",
   "plano.assinarTrocar": "Assinar / trocar de plano",
+  "plano.maisPopular": "Mais popular",
   "inicio.verCortes": "Ver cortes",
   "inicio.verAFila": "Ver a fila",
   "inicio.verCanais": "Ver canais",

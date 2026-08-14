@@ -776,6 +776,7 @@ export const es: Dicionario = {
   "adm.rotuloErro": "error",
   "adm.cortesPostadosGerados": "clips publicados / generados",
   "plano.assinarTrocar": "Suscribirse / cambiar de plan",
+  "plano.maisPopular": "Más popular",
   "inicio.verCortes": "Ver clips",
   "inicio.verAFila": "Ver la cola",
   "inicio.verCanais": "Ver canales",
