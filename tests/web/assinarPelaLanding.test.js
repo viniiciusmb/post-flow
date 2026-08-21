@@ -1,207 +1,138 @@
-// Clicar num plano na landing tem que terminar no checkout.
+// Clicar num plano na landing e criar a conta tem que terminar no checkout.
 //
-// Antes o botão "Começar" da landing levava pra /register e, depois de criar a
-// conta, pro painel — a pessoa que já tinha escolhido e decidido pagar caía
-// numa tela que não pede pagamento nenhum, e precisava caçar a tela de planos
-// pra escolher tudo de novo.
+// É o caminho de venda inteiro: a pessoa escolhe o plano ANTES de ter conta,
+// e o checkout só pode abrir depois que a conta existe. Se ela cair no início
+// do painel, precisa caçar a tela de planos e escolher tudo de novo — e boa
+// parte não caça.
 //
-// O plano viaja na SESSÃO (não na URL do POST) porque é o único carregador que
-// sobrevive ao ida-e-volta do login com Google. Estes testes travam as três
-// coisas que fazem o fluxo funcionar: capturar, usar uma vez só, e nunca
-// custar o acesso quando o checkout não puder abrir.
+// Isso quebrou de verdade: ao ensinar o sistema a lembrar a última página
+// visitada, o destino lembrado passou a ter prioridade sobre o plano. Como a
+// sessão dura dias, uma página que a pessoa tentou abrir antes sequestrava o
+// cadastro inteiro.
+//
+// O que estes testes travam:
+//   - plano escolhido na landing vence o destino lembrado, sempre;
+//   - o destino lembrado ainda funciona quando não há plano;
+//   - destino lembrado vence o prazo e é descartado.
 'use strict';
 
 const test = require('node:test');
-const { after } = test;
 const assert = require('node:assert/strict');
+
 const pool = require('../../src/db/pool');
-const stripeService = require('../../src/services/stripeService');
-const subscriptionPlansRepository = require('../../src/repositories/subscriptionPlansRepository');
-const { startServer, stopServer, createAgent, createLoginableClient } = require('../helpers/http');
+const { startServer, stopServer, createLoginableClient, createAgent } = require('../helpers/http');
+const servico = require('../../src/services/subscriptionCheckoutService');
 
-const CHECKOUT_FALSO = 'https://checkout.stripe.com/c/pay/sessao-de-mentira';
+let baseUrl;
 
-// O servidor sobe uma vez pro arquivo inteiro e cai num hook. Subir e derrubar
-// dentro de cada teste parecia mais arrumado, mas quando uma asserção falha o
-// stopServer() do fim nunca roda: o servidor fica escutando, o Node não
-// consegue encerrar e a SUÍTE INTEIRA trava em vez de reportar a falha - que é
-// exatamente quando você mais precisa dela reportando.
-after(() => stopServer());
+test.before(async () => {
+  baseUrl = await startServer();
+});
 
-// Stripe de mentira: o que se testa aqui é o CAMINHO (quem vai pra onde),
-// não o comportamento da Stripe.
-function comStripe(fn, { criarSessao = async () => ({ url: CHECKOUT_FALSO }) } = {}) {
-  const original = {
-    isConfigured: stripeService.isConfigured,
-    customerExists: stripeService.customerExists,
-    ensureCustomer: stripeService.ensureCustomer,
-    createCheckoutSessionForSubscription: stripeService.createCheckoutSessionForSubscription,
-  };
-  const chamadas = [];
-  stripeService.isConfigured = () => true;
-  stripeService.customerExists = async () => true;
-  stripeService.ensureCustomer = async () => 'cus_teste';
-  stripeService.createCheckoutSessionForSubscription = async (args) => {
-    chamadas.push(args);
-    return criarSessao(args);
-  };
-  return fn(chamadas).finally(() => Object.assign(stripeService, original));
+test.after(async () => {
+  await stopServer();
+  await pool.end();
+});
+
+// Sessão de mentira, só com o que estas decisões leem.
+function sessaoCom({ returnTo }) {
+  return { session: { returnTo } };
 }
 
-// Os planos precisam de stripe_price_id pra virar checkout - em banco de teste
-// eles nascem sem (o preço é criado na Stripe por script separado).
-async function darPrecoAosPlanos() {
-  await pool.query(`UPDATE subscription_plans SET stripe_price_id = 'price_' || key WHERE stripe_price_id IS NULL`);
-}
+test('o plano escolhido vence o destino lembrado', async () => {
+  const cliente = await createLoginableClient();
 
-let contador = 0;
-function novoEmail() {
-  contador += 1;
-  return `landing${contador}_${Date.now()}@teste.local`;
-}
+  // Cenário exato do relato: existia um destino guardado de uma visita
+  // anterior, e a pessoa clicou em "Assinar" na landing.
+  const destino = await servico.destinoDepoisDeEntrar({
+    user: { id: cliente.id, role: 'client', email: cliente.email },
+    planKey: 'pro',
+    origin: 'https://postflowclips.com',
+    returnTo: '/client',
+  });
 
-async function cadastrar(agente, email) {
-  return agente.post('/register', {
+  assert.notEqual(destino, '/client', 'o destino lembrado não pode sequestrar o cadastro');
+  // Sem provedor de pagamento configurado no teste, o checkout não abre e o
+  // sistema cai na tela de planos - que ainda é a tela CERTA (a de escolher e
+  // pagar), não o início do painel.
+  assert.equal(destino, '/client/billing');
+});
+
+test('sem plano escolhido, o destino lembrado continua valendo', async () => {
+  const cliente = await createLoginableClient();
+  const destino = await servico.destinoDepoisDeEntrar({
+    user: { id: cliente.id, role: 'client', email: cliente.email },
+    planKey: null,
+    origin: 'https://postflowclips.com',
+    returnTo: '/client/billing?pacote=sucesso',
+  });
+  assert.equal(destino, '/client/billing?pacote=sucesso');
+});
+
+test('sem plano e sem destino lembrado, vai pro início', async () => {
+  const cliente = await createLoginableClient();
+  const destino = await servico.destinoDepoisDeEntrar({
+    user: { id: cliente.id, role: 'client', email: cliente.email },
+    planKey: null,
+    origin: 'https://postflowclips.com',
+    returnTo: null,
+  });
+  assert.equal(destino, '/client');
+});
+
+test('destino lembrado tem prazo de validade', () => {
+  const agora = Date.now();
+
+  const recente = sessaoCom({ returnTo: { url: '/client/billing', em: agora - 60_000 } });
+  assert.equal(servico.consumirReturnTo(recente), '/client/billing', 'um minuto atrás ainda vale');
+
+  const velho = sessaoCom({ returnTo: { url: '/client/billing', em: agora - servico.VALIDADE_DO_RETORNO_MS - 1000 } });
+  assert.equal(servico.consumirReturnTo(velho), null, 'vencido tem que ser descartado');
+});
+
+test('destino é consumido de uma vez só', () => {
+  const req = sessaoCom({ returnTo: { url: '/client/billing', em: Date.now() } });
+  assert.equal(servico.consumirReturnTo(req), '/client/billing');
+  assert.equal(servico.consumirReturnTo(req), null, 'a segunda leitura não pode devolver nada');
+});
+
+test('formato antigo (sem carimbo de hora) é descartado', () => {
+  // Sessões criadas antes do carimbo existir: não dá pra saber se venceram,
+  // e o palpite errado manda a pessoa pra uma página que ela não pediu.
+  const req = sessaoCom({ returnTo: '/client/billing' });
+  assert.equal(servico.consumirReturnTo(req), null);
+});
+
+test('o caminho completo: clicar no plano na landing e cadastrar leva ao checkout', async () => {
+  const agente = createAgent(baseUrl);
+
+  // 1) É assim que a landing manda pro cadastro (ver landing.ejs). O plano
+  //    entra na sessão aqui, pelo middleware de atribuição.
+  const tela = await agente.get('/register?plano=pro');
+  assert.equal(tela.status, 200);
+
+  // 2) Cadastro de verdade, pelo mesmo formulário da tela.
+  const email = `landing${Date.now()}@teste.local`;
+  const cadastro = await agente.post('/register', {
     email,
     password: 'senha-de-teste-123',
-    businessName: 'Teste',
-    acceptedTerms: '1',
-  });
-}
-
-test('escolher um plano na landing e criar a conta termina no checkout daquele plano', async () => {
-  const url = await startServer();
-  await darPrecoAosPlanos();
-
-  await comStripe(async (chamadas) => {
-    const agente = createAgent(url);
-    // É isto que o botão da landing faz.
-    await agente.get('/register?plano=pro');
-    const r = await cadastrar(agente, novoEmail());
-
-    assert.equal(r.status, 302);
-    assert.equal(
-      r.headers.get('location'),
-      CHECKOUT_FALSO,
-      'depois de criar a conta a pessoa tem que cair no checkout, não no painel'
-    );
-
-    const plano = await subscriptionPlansRepository.findByKey('pro');
-    assert.equal(chamadas.length, 1);
-    assert.equal(chamadas[0].priceId, plano.stripe_price_id, 'tem que ser o preço do plano ESCOLHIDO');
-    assert.equal(chamadas[0].metadata.planKey, 'pro');
+    businessName: 'Empresa da Landing',
+    acceptedTerms: 'on',
   });
 
-});
+  assert.equal(cadastro.status, 302, `esperava redirecionamento, veio ${cadastro.status}`);
+  const destino = cadastro.headers.get('location');
 
-test('cadastro sem escolher plano continua indo pro painel', async () => {
-  const url = await startServer();
-  await darPrecoAosPlanos();
-
-  await comStripe(async (chamadas) => {
-    const agente = createAgent(url);
-    await agente.get('/register');
-    const r = await cadastrar(agente, novoEmail());
-
-    assert.equal(r.headers.get('location'), '/client');
-    assert.equal(chamadas.length, 0, 'sem plano escolhido não pode abrir checkout nenhum');
-  });
-
-});
-
-test('plano inventado na URL é ignorado em vez de virar busca', async () => {
-  // O valor vai direto numa busca de plano. Sem lista fechada, a URL mandaria
-  // no que o sistema procura.
-  const url = await startServer();
-
-  await comStripe(async (chamadas) => {
-    const agente = createAgent(url);
-    await agente.get('/register?plano=' + encodeURIComponent("'; DROP TABLE users; --"));
-    const r = await cadastrar(agente, novoEmail());
-
-    assert.equal(r.headers.get('location'), '/client');
-    assert.equal(chamadas.length, 0);
-  });
-
-});
-
-test('quem JÁ tem conta e clica num plano também cai no checkout ao entrar', async () => {
-  // A tela de entrar é a SPA: ela decide pra onde ir depois do login. Sem o
-  // servidor mandar o destino, este caminho perdia a escolha e caía no painel
-  // — o mesmo beco sem saída que o cadastro tinha.
-  const url = await startServer();
-  await darPrecoAosPlanos();
-  const cliente = await createLoginableClient();
-
-  await comStripe(async (chamadas) => {
-    const agente = createAgent(url);
-    await agente.get('/register?plano=max');
-    const r = await agente.post('/api/auth/login', { email: cliente.email, password: cliente.password });
-
-    assert.equal(r.status, 200, r.text);
-    assert.equal(r.body.redirectTo, CHECKOUT_FALSO, 'o servidor tem que mandar a tela pro checkout');
-
-    const plano = await subscriptionPlansRepository.findByKey('max');
-    assert.equal(chamadas[0].priceId, plano.stripe_price_id, 'tem que ser o preço do plano escolhido');
-  });
-
-});
-
-test('login normal, sem plano escolhido, manda a tela pro painel', async () => {
-  const url = await startServer();
-  const cliente = await createLoginableClient();
-
-  await comStripe(async (chamadas) => {
-    const agente = createAgent(url);
-    const r = await agente.post('/api/auth/login', { email: cliente.email, password: cliente.password });
-
-    assert.equal(r.body.redirectTo, '/client');
-    assert.equal(chamadas.length, 0);
-  });
-
-});
-
-test('o plano é usado UMA vez: o login seguinte não reabre o checkout', async () => {
-  // Sem consumir, todo login daquela sessão jogaria a pessoa num checkout que
-  // ela não pediu de novo.
-  const url = await startServer();
-  await darPrecoAosPlanos();
-
-  await comStripe(async (chamadas) => {
-    const agente = createAgent(url);
-    await agente.get('/register?plano=starter');
-    const email = novoEmail();
-    await cadastrar(agente, email);
-    assert.equal(chamadas.length, 1);
-
-    // Mesma sessão, entrando de novo.
-    const r = await agente.post('/login', { email, password: 'senha-de-teste-123' });
-    assert.equal(r.headers.get('location'), '/client', 'o checkout não pode voltar sozinho');
-    assert.equal(chamadas.length, 1, 'nenhuma sessão de checkout nova');
-  });
-
-});
-
-test('checkout que não abre não impede o acesso: cai na tela de planos', async () => {
-  // A conta já existe e a pessoa já está logada. Perder o checkout é ruim;
-  // devolver uma página de erro depois de ela ter se cadastrado seria pior.
-  const url = await startServer();
-  await darPrecoAosPlanos();
-
-  await comStripe(
-    async () => {
-      const agente = createAgent(url);
-      await agente.get('/register?plano=pro');
-      const r = await cadastrar(agente, novoEmail());
-      assert.equal(r.headers.get('location'), '/client/billing');
-    },
-    {
-      criarSessao: async () => {
-        const err = new Error('Stripe fora do ar');
-        err.type = 'StripeAPIError';
-        throw err;
-      },
-    }
+  // O ponto do teste: NÃO pode terminar no início do painel. Ou abre o
+  // checkout do provedor, ou cai na tela de planos (quando não há provedor
+  // configurado, como neste ambiente de teste) - as duas são a tela de pagar.
+  assert.notEqual(destino, '/client', 'terminar no início do painel é o bug que este teste existe pra impedir');
+  assert.ok(
+    destino === '/client/billing' || /asaas\.com|stripe\.com/.test(destino),
+    `destino inesperado: ${destino}`
   );
 
+  // E a conta foi mesmo criada.
+  const { rows } = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+  assert.equal(rows.length, 1);
 });

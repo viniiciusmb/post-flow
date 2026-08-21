@@ -92,28 +92,54 @@ async function criarCheckoutDeAssinatura({ clientUserId, planKey, origin, user }
 async function destinoDepoisDeEntrar({ user, planKey, origin, returnTo = null }) {
   if (user.role === ROLES.ADMIN) return '/admin';
 
+  // O PLANO VEM PRIMEIRO. Ele so existe na sessao porque a pessoa acabou de
+  // clicar num plano na landing - e a intencao mais explicita e mais recente
+  // que existe. O destino lembrado e passivo (ela tentou abrir uma pagina e
+  // foi barrada), entao nunca pode passar na frente.
+  //
+  // Ao contrario disso, quem clicava em "Assinar" na landing e criava a conta
+  // caia no inicio do painel: um returnTo guardado dias antes sequestrava o
+  // cadastro inteiro e a pessoa nunca via o checkout.
+  if (planKey) {
+    try {
+      const url = await criarCheckoutDeAssinatura({ clientUserId: user.id, planKey, origin, user });
+      // Nada disso pode custar o acesso: se o checkout nao abrir, cai na tela
+      // de planos, nunca numa pagina de erro - a conta ja existe e a pessoa
+      // ja esta logada.
+      return url || '/client/billing';
+    } catch (err) {
+      logger.error(`Nao consegui abrir o checkout do plano "${planKey}" pro cliente ${user.id}:`, err);
+      return '/client/billing';
+    }
+  }
+
   // Quem foi parar no login porque tentou abrir uma pagina do painel sem
-  // sessao volta pra ONDE queria ir - inclusive quem estava voltando da tela
-  // de pagamento. Vem antes do plano porque e um pedido explicito e recente.
+  // sessao volta pra onde queria ir - inclusive quem estava voltando da tela
+  // de pagamento.
   if (returnTo) return returnTo;
 
-  if (!planKey) return '/client';
-
-  try {
-    const url = await criarCheckoutDeAssinatura({ clientUserId: user.id, planKey, origin, user });
-    return url || '/client/billing';
-  } catch (err) {
-    logger.error(`Nao consegui abrir o checkout do plano "${planKey}" pro cliente ${user.id}:`, err);
-    return '/client/billing';
-  }
+  return '/client';
 }
 
-// Uso unico: se o destino ficasse guardado na sessao, um login futuro
+// 30 minutos. O destino lembrado serve pra emendar uma ida ao login que
+// acabou de acontecer - tipicamente voltar de um pagamento. A sessao dura
+// dias; sem prazo, uma pagina que a pessoa tentou abrir na semana passada
+// ainda estaria esperando pra sequestrar o proximo login dela.
+const VALIDADE_DO_RETORNO_MS = 30 * 60 * 1000;
+
+// Uso unico E com prazo: se o destino ficasse guardado, um login futuro
 // mandaria a pessoa pra uma pagina antiga sem ela ter pedido nada.
 function consumirReturnTo(req) {
-  const destino = req.session && req.session.returnTo;
+  const guardado = req.session && req.session.returnTo;
   if (req.session) delete req.session.returnTo;
-  return destino || null;
+  if (!guardado) return null;
+
+  // Formato antigo (string pura) de sessoes criadas antes do carimbo de hora:
+  // descartado, porque nao da pra saber se ja venceu.
+  if (typeof guardado === 'string') return null;
+  if (!guardado.url || typeof guardado.em !== 'number') return null;
+  if (Date.now() - guardado.em > VALIDADE_DO_RETORNO_MS) return null;
+  return guardado.url;
 }
 
 module.exports = {
@@ -121,4 +147,5 @@ module.exports = {
   criarCheckoutDeAssinatura,
   destinoDepoisDeEntrar,
   consumirReturnTo,
+  VALIDADE_DO_RETORNO_MS,
 };

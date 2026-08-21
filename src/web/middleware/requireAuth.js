@@ -21,7 +21,12 @@ function requireAuth(req, res, next) {
     //
     // So GET: reenviar um POST depois do login repetiria uma acao (uma
     // compra, por exemplo) que a pessoa nao pediu de novo.
-    if (req.method === 'GET') req.session.returnTo = destinoSeguro(req.originalUrl);
+    if (req.method === 'GET') {
+      const destino = destinoSeguro(req.originalUrl);
+      // Com carimbo de hora: a sessao dura dias, e um destino guardado ontem
+      // nao tem nada a ver com o login de hoje. Ver VALIDADE_DO_RETORNO_MS.
+      req.session.returnTo = destino ? { url: destino, em: Date.now() } : null;
+    }
     return res.redirect('/login');
   }
   next();
