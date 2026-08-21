@@ -169,6 +169,13 @@ async function webhook(req, res) {
   const evento = req.body && req.body.event;
   if (!evento) return res.status(400).json({ error: 'evento ausente' });
 
+  // Registra TODO evento que chega, inclusive os que ignoramos. Sem isto não
+  // havia como responder a pergunta mais básica durante um problema de
+  // pagamento - "o aviso chegou?" -, porque um evento ignorado passava em
+  // silêncio absoluto e ficava idêntico a um evento que nunca chegou.
+  const alvo = (req.body.checkout && req.body.checkout.id) || (req.body.payment && req.body.payment.id) || '-';
+  logger.info(`Asaas: evento ${evento} recebido (${alvo}).`);
+
   try {
     switch (evento) {
       case 'CHECKOUT_PAID':
