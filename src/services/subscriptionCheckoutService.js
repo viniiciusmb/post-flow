@@ -12,6 +12,7 @@ const clientSubscriptionsRepository = require('../repositories/clientSubscriptio
 const subscriptionPlansRepository = require('../repositories/subscriptionPlansRepository');
 const usersRepository = require('../repositories/usersRepository');
 const stripeService = require('./stripeService');
+const asaasBillingService = require('./asaasBillingService');
 const logger = require('../lib/logger');
 const { ROLES } = require('../config/constants');
 
@@ -50,15 +51,24 @@ async function resolveStripeCustomerId(clientUserId, subscription) {
 // lancar e proposital: no cadastro vindo da landing, nada disso pode custar a
 // CONTA da pessoa - ela acabou de se cadastrar, e o certo e cair na tela de
 // planos, nao numa pagina de erro.
-async function criarCheckoutDeAssinatura({ clientUserId, planKey, origin }) {
-  if (!stripeService.isConfigured()) return null;
-
+async function criarCheckoutDeAssinatura({ clientUserId, planKey, origin, user }) {
   const plan = await subscriptionPlansRepository.findByKey(String(planKey || ''));
-  if (!plan || !plan.stripe_price_id) return null;
+  if (!plan) return null;
 
+  await clientSubscriptionsRepository.getOrCreate(clientUserId);
+
+  // Mesmo caminho do botao de dentro do painel. Antes esta funcao tinha a
+  // propria versao (Stripe) enquanto o botao ja usava o Asaas - ou seja, o
+  // mesmo cliente ia parar em provedores diferentes dependendo de ter clicado
+  // no plano na landing ou dentro do sistema.
+  if (asaasBillingService.clientePodeUsarAsaas(user || { role: 'client' })) {
+    const { checkoutUrl } = await asaasBillingService.createSubscriptionCheckout({ clientUserId, plan, origin });
+    return checkoutUrl;
+  }
+
+  if (!stripeService.isConfigured() || !plan.stripe_price_id) return null;
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
   const customerId = await resolveStripeCustomerId(clientUserId, subscription);
-
   const session = await stripeService.createCheckoutSessionForSubscription({
     customerId,
     priceId: plan.stripe_price_id,
@@ -66,7 +76,6 @@ async function criarCheckoutDeAssinatura({ clientUserId, planKey, origin }) {
     cancelUrl: `${origin}/client/billing?assinatura=cancelado`,
     metadata: { clientUserId: String(clientUserId), planKey: plan.key },
   });
-
   return session.url;
 }
 
@@ -80,12 +89,18 @@ async function criarCheckoutDeAssinatura({ clientUserId, planKey, origin }) {
 // Nada disso pode custar o acesso: se o checkout nao abrir por qualquer
 // motivo, cai na tela de planos, nunca numa pagina de erro - a conta ja existe
 // e a pessoa ja esta logada.
-async function destinoDepoisDeEntrar({ user, planKey, origin }) {
+async function destinoDepoisDeEntrar({ user, planKey, origin, returnTo = null }) {
   if (user.role === ROLES.ADMIN) return '/admin';
+
+  // Quem foi parar no login porque tentou abrir uma pagina do painel sem
+  // sessao volta pra ONDE queria ir - inclusive quem estava voltando da tela
+  // de pagamento. Vem antes do plano porque e um pedido explicito e recente.
+  if (returnTo) return returnTo;
+
   if (!planKey) return '/client';
 
   try {
-    const url = await criarCheckoutDeAssinatura({ clientUserId: user.id, planKey, origin });
+    const url = await criarCheckoutDeAssinatura({ clientUserId: user.id, planKey, origin, user });
     return url || '/client/billing';
   } catch (err) {
     logger.error(`Nao consegui abrir o checkout do plano "${planKey}" pro cliente ${user.id}:`, err);
@@ -93,4 +108,17 @@ async function destinoDepoisDeEntrar({ user, planKey, origin }) {
   }
 }
 
-module.exports = { resolveStripeCustomerId, criarCheckoutDeAssinatura, destinoDepoisDeEntrar };
+// Uso unico: se o destino ficasse guardado na sessao, um login futuro
+// mandaria a pessoa pra uma pagina antiga sem ela ter pedido nada.
+function consumirReturnTo(req) {
+  const destino = req.session && req.session.returnTo;
+  if (req.session) delete req.session.returnTo;
+  return destino || null;
+}
+
+module.exports = {
+  resolveStripeCustomerId,
+  criarCheckoutDeAssinatura,
+  destinoDepoisDeEntrar,
+  consumirReturnTo,
+};

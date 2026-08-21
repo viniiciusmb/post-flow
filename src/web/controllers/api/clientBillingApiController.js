@@ -16,6 +16,7 @@ const stripeService = require('../../../services/stripeService');
 const asaasService = require('../../../services/asaasService');
 const asaasBillingService = require('../../../services/asaasBillingService');
 const asaasPixAuthorizationsRepository = require('../../../repositories/asaasPixAuthorizationsRepository');
+const asaasCheckoutsRepository = require('../../../repositories/asaasCheckoutsRepository');
 const cpfCnpj = require('../../../lib/cpfCnpj');
 const creditsService = require('../../../services/creditsService');
 const subscriptionCheckoutService = require('../../../services/subscriptionCheckoutService');
@@ -276,6 +277,60 @@ async function pixAuthorizationStatus(req, res) {
   });
 }
 
+// O que a pessoa acabou de pagar, pra tela poder confirmar na cara dela.
+//
+// Existe porque voltar da tela de pagamento NAO significa que o dinheiro
+// chegou: quem confirma e o aviso do Asaas, que leva alguns segundos. Sem
+// isto, a tela ou mentiria ("pagamento recebido!") antes de saber, ou nao
+// diria nada - e a pessoa que acabou de pagar ficaria sem resposta.
+async function ultimoPagamento(req, res) {
+  const clientUserId = req.session.user.id;
+
+  const [checkouts, autorizacao] = await Promise.all([
+    asaasCheckoutsRepository.listForClient(clientUserId, { limit: 1 }),
+    asaasPixAuthorizationsRepository.findLatestForClient(clientUserId),
+  ]);
+  const checkout = checkouts[0] || null;
+
+  // O mais recente dos dois caminhos (checkout de cartao/PIX avulso, ou
+  // autorizacao de PIX Automatico).
+  const usarPix =
+    autorizacao && (!checkout || new Date(autorizacao.created_at) > new Date(checkout.created_at));
+
+  if (usarPix) {
+    const plano = await subscriptionPlansRepository.findById(Number(autorizacao.plan_id));
+    return res.json({
+      tipo: 'assinatura',
+      status: autorizacao.status === 'ativa' ? 'pago' : autorizacao.status,
+      planName: plano ? plano.name : null,
+      amountCents: autorizacao.amount_cents,
+      paidAt: autorizacao.activated_at,
+    });
+  }
+
+  if (!checkout) return res.json({ tipo: null });
+
+  if (checkout.purpose === 'credit_package') {
+    const compra = await creditPurchasesRepository.findById(Number(checkout.credit_purchase_id));
+    return res.json({
+      tipo: 'credito',
+      status: checkout.status,
+      minutes: compra ? compra.minutes : null,
+      amountCents: checkout.amount_cents,
+      paidAt: checkout.paid_at,
+    });
+  }
+
+  const plano = await subscriptionPlansRepository.findById(Number(checkout.plan_id));
+  res.json({
+    tipo: 'assinatura',
+    status: checkout.status,
+    planName: plano ? plano.name : null,
+    amountCents: checkout.amount_cents,
+    paidAt: checkout.paid_at,
+  });
+}
+
 // Cadastra cartao pra cobranca automatica de excedente (modo "setup" - nao
 // cobra nada na hora, so guarda o cartao pro overageBillingJob semanal usar).
 async function setupOverageCard(req, res) {
@@ -429,6 +484,7 @@ async function disableOverageCard(req, res) {
 
 module.exports = {
   subscribePix,
+  ultimoPagamento,
   pixAuthorizationStatus,
   overview,
   subscribe,

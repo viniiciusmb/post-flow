@@ -30,6 +30,7 @@ async function login(req, res) {
     user,
     planKey,
     origin: `${req.protocol}://${req.get('host')}`,
+    returnTo: subscriptionCheckoutService.consumirReturnTo(req),
   });
   res.json({ user: req.session.user, redirectTo });
 }

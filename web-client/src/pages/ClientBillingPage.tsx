@@ -239,6 +239,61 @@ export function ClientBillingPage() {
     return runAction(`subscribe-${planKey}`, () => api.post("/api/client/billing/subscribe", { planKey }))
   }
 
+  // ---- confirmação de pagamento ao voltar da tela do Asaas ----
+  //
+  // Voltar do pagamento NÃO significa que o dinheiro chegou: quem confirma é
+  // o aviso do Asaas, que leva alguns segundos. Por isso a tela mostra
+  // "confirmando..." e só afirma que recebeu quando o servidor confirma —
+  // dizer "pagamento recebido!" antes de saber seria mentir para quem
+  // acabou de pagar.
+  type UltimoPagamento = {
+    tipo: "credito" | "assinatura" | null
+    status?: string
+    minutes?: number | null
+    planName?: string | null
+    amountCents?: number
+  }
+  const [recibo, setRecibo] = useState<UltimoPagamento | null>(null)
+  const [reciboAberto, setReciboAberto] = useState(false)
+  const [reciboConfirmando, setReciboConfirmando] = useState(false)
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const voltouDePagamento = q.get("pacote") === "sucesso" || q.get("assinatura") === "sucesso"
+    if (!voltouDePagamento) return
+
+    setReciboAberto(true)
+    setReciboConfirmando(true)
+    // Tira o marcador da barra de endereço: sem isso, recarregar a página (ou
+    // voltar a ela depois) mostraria o mesmo aviso de pagamento de novo.
+    window.history.replaceState({}, "", window.location.pathname)
+
+    let tentativas = 0
+    const timer = setInterval(async () => {
+      tentativas += 1
+      try {
+        const r = await api.get<UltimoPagamento>("/api/client/billing/ultimo-pagamento")
+        setRecibo(r)
+        if (r.status === "pago") {
+          setReciboConfirmando(false)
+          clearInterval(timer)
+          load()
+          return
+        }
+      } catch {
+        // Erro de rede não precisa virar mensagem: a próxima tentativa vem aí.
+      }
+      // ~40 segundos. Passou disso, o aviso do Asaas provavelmente vai chegar,
+      // só não agora - e é melhor dizer isso do que girar para sempre.
+      if (tentativas >= 20) {
+        setReciboConfirmando(false)
+        clearInterval(timer)
+      }
+    }, 2000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ---- PIX Automático ----
   // O cliente lê um QR Code que paga a primeira mensalidade E autoriza as
   // próximas. Ele sai daqui para o app do banco e pode nunca voltar, então
@@ -793,6 +848,52 @@ export function ClientBillingPage() {
           )}
         </>
       )}
+      {/* Confirmação de pagamento ao voltar da tela do Asaas. */}
+      <Dialog open={reciboAberto} onOpenChange={setReciboAberto}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {reciboConfirmando
+                ? t("recibo.confirmando")
+                : recibo?.status === "pago"
+                  ? t("recibo.recebemos")
+                  : t("recibo.aindaProcessando")}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col items-center gap-4 py-2 text-center">
+            {reciboConfirmando ? (
+              <>
+                <div className="size-12 animate-spin rounded-full border-4 border-muted border-t-primary" />
+                <p className="text-sm text-muted-foreground">{t("recibo.esperandoBanco")}</p>
+              </>
+            ) : recibo?.status === "pago" ? (
+              <>
+                <IconCircleCheck className="size-14 text-emerald-500" />
+                <div>
+                  <p className="font-heading text-lg font-semibold">
+                    {recibo.tipo === "credito"
+                      ? t("recibo.minutosCreditados", { n: recibo.minutes ?? 0 })
+                      : t("recibo.planoAtivo", { plano: recibo.planName ?? "" })}
+                  </p>
+                  {typeof recibo.amountCents === "number" && (
+                    <p className="text-sm text-muted-foreground">{formatCents(recibo.amountCents)}</p>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {recibo.tipo === "credito" ? t("recibo.jaNoSaldo") : t("recibo.jaAtualizado")}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("recibo.avisamosQuandoCair")}</p>
+            )}
+            <Button className="w-full" onClick={() => setReciboAberto(false)}>
+              {t("comum.fechar")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* PIX Automático: um QR Code paga a primeira mensalidade e autoriza
           as próximas. É o caminho de quem não usa cartão de crédito. */}
       <Dialog open={pixPlano !== null} onOpenChange={(aberto) => !aberto && setPixPlano(null)}>

@@ -376,3 +376,4 @@ test('recusa atrasada NÃO derruba uma autorização que já ativou', async () =
   const assinatura = await clientSubscriptionsRepository.getOrCreate(cliente.id);
   assert.equal(assinatura.status, 'ativo');
 });
+

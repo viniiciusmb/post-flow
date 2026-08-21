@@ -29,7 +29,12 @@ async function login(req, res) {
   const planKey = consumirPlanoEscolhido(req);
   req.session.user = { id: user.id, role: user.role, email: user.email };
   res.redirect(
-    await subscriptionCheckoutService.destinoDepoisDeEntrar({ user, planKey, origin: origemDe(req) })
+    await subscriptionCheckoutService.destinoDepoisDeEntrar({
+      user,
+      planKey,
+      origin: origemDe(req),
+      returnTo: subscriptionCheckoutService.consumirReturnTo(req),
+    })
   );
 }
 
@@ -80,7 +85,12 @@ async function register(req, res) {
     const planKey = consumirPlanoEscolhido(req);
     req.session.user = { id: user.id, role: user.role, email: user.email };
     res.redirect(
-      await subscriptionCheckoutService.destinoDepoisDeEntrar({ user, planKey, origin: origemDe(req) })
+      await subscriptionCheckoutService.destinoDepoisDeEntrar({
+      user,
+      planKey,
+      origin: origemDe(req),
+      returnTo: subscriptionCheckoutService.consumirReturnTo(req),
+    })
     );
   } catch (err) {
     res.status(400).render('auth/register', { title: res.locals.t('cadastro.titulo'), error: err.message, values });

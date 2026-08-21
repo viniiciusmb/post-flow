@@ -111,13 +111,19 @@ async function callback(req, res) {
 
   // Sessão nova a cada login, com o id antigo descartado: sem isso, um id de
   // sessão obtido antes do login continuaria valendo depois dele.
+  // Lido ANTES do regenerate: ele zera a sessao, e o destino guardado iria
+  // junto - a pessoa voltaria pro inicio em vez de pra onde estava indo.
+  const returnTo = subscriptionCheckoutService.consumirReturnTo(req);
+
   req.session.regenerate(async (err) => {
     if (err) {
       logger.error('Falha ao renovar a sessao no login com Google:', err.message);
       return paraLogin(res, 'Não consegui abrir sua sessão. Tente de novo.');
     }
     req.session.user = { id: user.id, role: user.role, email: user.email };
-    res.redirect(await subscriptionCheckoutService.destinoDepoisDeEntrar({ user, planKey, origin }));
+    res.redirect(
+      await subscriptionCheckoutService.destinoDepoisDeEntrar({ user, planKey, origin, returnTo })
+    );
   });
 }
 

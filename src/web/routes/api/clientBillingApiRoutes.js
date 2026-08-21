@@ -21,6 +21,8 @@ router.post('/buy-package', asyncHandler(controller.buyPackage));
 // Assinatura por PIX Automatico (um QR Code paga e autoriza as proximas).
 router.post('/subscribe-pix', asyncHandler(controller.subscribePix));
 router.get('/pix-authorization', asyncHandler(controller.pixAuthorizationStatus));
+// O que a pessoa acabou de pagar - a tela usa pra confirmar o recebimento.
+router.get('/ultimo-pagamento', asyncHandler(controller.ultimoPagamento));
 router.post('/overage-card/setup', asyncHandler(controller.setupOverageCard));
 router.post('/overage-card/disable', asyncHandler(controller.disableOverageCard));
 // Cartoes salvos + extrato. Separado do /overview porque fala com a Stripe:

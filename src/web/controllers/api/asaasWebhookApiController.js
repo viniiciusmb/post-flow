@@ -32,7 +32,10 @@ const logger = require('../../../lib/logger');
 
 // ---------- checkout pago ----------
 
-async function handleCheckoutPaid(checkout) {
+// paymentId chega quando quem avisou foi o evento de PAGAMENTO (o aviso de
+// checkout nao traz o id da cobranca). Guardar esse id e o que permite achar
+// depois, no painel do Asaas, exatamente qual cobranca gerou qual credito.
+async function handleCheckoutPaid(checkout, { paymentId = null } = {}) {
   const registro = await asaasCheckoutsRepository.findByAsaasId(checkout.id);
   if (!registro) {
     // Checkout que não foi criado por nós (teste manual no painel do Asaas,
@@ -50,7 +53,7 @@ async function handleCheckoutPaid(checkout) {
   const clientUserId = Number(registro.client_user_id);
 
   if (registro.purpose === 'credit_package') {
-    await liberarCreditoAvulso(registro, clientUserId);
+    await liberarCreditoAvulso(registro, clientUserId, paymentId);
     return;
   }
   if (registro.purpose === 'subscription') {
@@ -58,8 +61,8 @@ async function handleCheckoutPaid(checkout) {
   }
 }
 
-async function liberarCreditoAvulso(registro, clientUserId) {
-  const compra = await creditPurchasesRepository.markPaidById(Number(registro.credit_purchase_id));
+async function liberarCreditoAvulso(registro, clientUserId, paymentId = null) {
+  const compra = await creditPurchasesRepository.markPaidById(Number(registro.credit_purchase_id), paymentId);
   if (!compra) {
     logger.error(
       `Asaas: compra de credito ${registro.credit_purchase_id} nao estava pendente ao confirmar o checkout ${registro.asaas_checkout_id}.`
@@ -190,7 +193,10 @@ async function handlePaymentReceived(payment) {
   // ficado sem crédito. markPaidOnce garante que receber os DOIS avisos ainda
   // credita uma vez só.
   if (payment.checkoutSession) {
-    await handleCheckoutPaid({ id: payment.checkoutSession, customer: payment.customer });
+    await handleCheckoutPaid(
+      { id: payment.checkoutSession, customer: payment.customer },
+      { paymentId: payment.id || null }
+    );
   }
 
   if (!payment.subscription) return; // cobrança que não é mensalidade
