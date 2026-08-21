@@ -107,6 +107,64 @@ const config = {
     publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
   },
+
+  // Asaas: assinatura mensal e compra de credito avulso (PIX e cartao).
+  // A cobranca automatica de excedente continua na Stripe por enquanto -
+  // depende da tokenizacao de cartao, que so o gerente da conta Asaas libera.
+  asaas: {
+    apiKey: process.env.ASAAS_API_KEY || '',
+
+    // O ambiente NAO e adivinhado a partir do prefixo da chave. Chave de
+    // sandbox comeca com "$aact_hmlg_" e a de producao com "$aact_prod_",
+    // mas deduzir isso significaria que uma chave colada errada faria o
+    // sistema apontar sozinho pro ambiente errado - no pior caso, cobrando
+    // dinheiro de verdade achando que era teste. Aqui o ambiente e uma
+    // escolha explicita, e validateAsaasConfig() recusa a combinacao errada.
+    environment: process.env.ASAAS_ENVIRONMENT || 'sandbox',
+
+    // Token que o Asaas manda de volta no cabecalho asaas-access-token de
+    // cada webhook. E o unico jeito de saber que a chamada veio mesmo deles:
+    // o endereco do webhook e publico, entao sem isso qualquer um poderia
+    // avisar "pagamento recebido" e ganhar credito de graca.
+    webhookToken: process.env.ASAAS_WEBHOOK_TOKEN || '',
+
+    // Redireciona as chamadas pra outro endereco. Existe pros testes
+    // apontarem pra um Asaas de mentira levantado na propria maquina.
+    //
+    // So vale pra localhost, de proposito: sem essa trava, uma variavel de
+    // ambiente errada (ou mexida por alguem) mandaria pagamento de verdade
+    // pro servidor de outra pessoa, e tudo pareceria funcionar. Ver baseUrl()
+    // em asaasService.js.
+    baseUrlOverride: process.env.ASAAS_BASE_URL || '',
+  },
 };
+
+// Chave de sandbox apontando pra producao (ou o contrario) e o erro que faz
+// "nada funciona" parecer bug de codigo: o Asaas simplesmente responde 401 e
+// os dois mundos sao completamente separados (cliente criado num nao existe
+// no outro). Conferir no boot custa nada e evita horas de investigacao.
+const PREFIXO_POR_AMBIENTE = { sandbox: '$aact_hmlg_', production: '$aact_prod_' };
+
+function validateAsaasConfig() {
+  const { apiKey, environment } = config.asaas;
+  if (!apiKey) return { ok: true, motivo: 'Asaas nao configurado (sem ASAAS_API_KEY).' };
+
+  if (!PREFIXO_POR_AMBIENTE[environment]) {
+    return { ok: false, motivo: `ASAAS_ENVIRONMENT invalido: "${environment}". Use "sandbox" ou "production".` };
+  }
+  const esperado = PREFIXO_POR_AMBIENTE[environment];
+  if (!apiKey.startsWith(esperado)) {
+    const outro = environment === 'sandbox' ? 'production' : 'sandbox';
+    return {
+      ok: false,
+      motivo:
+        `A chave do Asaas nao combina com ASAAS_ENVIRONMENT="${environment}" ` +
+        `(esperava uma chave comecando com "${esperado}"). Parece uma chave de ${outro}.`,
+    };
+  }
+  return { ok: true };
+}
+
+config.validateAsaasConfig = validateAsaasConfig;
 
 module.exports = config;
