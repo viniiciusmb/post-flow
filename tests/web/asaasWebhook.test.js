@@ -195,6 +195,39 @@ test('aviso de expiração que chega DEPOIS do pagamento não desfaz o crédito'
   assert.equal(creditos.extra_normal, 50);
 });
 
+test('pagamento avisado SEM o CHECKOUT_PAID ainda libera o crédito', async () => {
+  // Achado num teste real: um PIX de checkout confirmado pelo painel do Asaas
+  // gerou PAYMENT_RECEIVED e nenhum CHECKOUT_PAID. Sem esta rede de
+  // segurança, o cliente pagava e ficava sem crédito.
+  const cliente = await createLoginableClient();
+  const { compra, checkoutId } = await compraPendente(cliente.id, { minutes: 60 });
+
+  const r = await enviarWebhook({
+    event: 'PAYMENT_RECEIVED',
+    payment: { id: 'pay_sem_checkout_paid', checkoutSession: checkoutId, customer: 'cus_x', value: 15.0 },
+  });
+  assert.equal(r.status, 200);
+
+  const depois = await creditPurchasesRepository.findById(compra.id);
+  assert.equal(depois.status, 'pago');
+  const creditos = await readCredits(cliente.id);
+  assert.equal(creditos.extra_normal, 60);
+});
+
+test('receber os DOIS avisos do mesmo pagamento credita uma vez só', async () => {
+  const cliente = await createLoginableClient();
+  const { checkoutId } = await compraPendente(cliente.id, { minutes: 80 });
+
+  await enviarWebhook({ event: 'CHECKOUT_PAID', checkout: { id: checkoutId } });
+  await enviarWebhook({
+    event: 'PAYMENT_RECEIVED',
+    payment: { id: 'pay_dobrado', checkoutSession: checkoutId, customer: 'cus_y', value: 20.0 },
+  });
+
+  const creditos = await readCredits(cliente.id);
+  assert.equal(creditos.extra_normal, 80, 'os dois avisos do mesmo pagamento não podem creditar duas vezes');
+});
+
 test('mensalidade paga reativa quem estava inadimplente', async () => {
   const cliente = await createLoginableClient();
   const planos = await subscriptionPlansRepository.listActive();
@@ -244,4 +277,102 @@ test('evento que não nos interessa é aceito sem fazer nada', async () => {
 test('corpo sem evento é recusado', async () => {
   const r = await enviarWebhook({ semEvento: true });
   assert.equal(r.status, 400);
+});
+
+// ---------- PIX Automático ----------
+//
+// O cliente lê um QR Code que paga a primeira mensalidade E autoriza as
+// próximas. Ele sai do nosso site para o app do banco e pode nunca voltar —
+// então o aviso do Asaas é a ÚNICA forma de saber que a assinatura começou.
+
+const asaasPixAuthorizationsRepository = require('../../src/repositories/asaasPixAuthorizationsRepository');
+
+async function autorizacaoPendente(clientUserId, plano) {
+  contador += 1;
+  const id = `auth_${contador}_${Date.now()}`;
+  await clientSubscriptionsRepository.getOrCreate(clientUserId);
+  await asaasPixAuthorizationsRepository.create({
+    asaasAuthorizationId: id,
+    clientUserId,
+    planId: plano.id,
+    asaasCustomerId: `cus_pix_${contador}`,
+    amountCents: plano.price_cents,
+  });
+  return id;
+}
+
+test('autorização de PIX ativada liga o plano e aplica a cota', async () => {
+  const cliente = await createLoginableClient();
+  const planos = await subscriptionPlansRepository.listActive();
+  const id = await autorizacaoPendente(cliente.id, planos[0]);
+
+  const r = await enviarWebhook({
+    event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED',
+    pixAutomaticAuthorization: id,
+  });
+  assert.equal(r.status, 200);
+
+  const assinatura = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+  assert.equal(assinatura.status, 'ativo');
+  assert.equal(Number(assinatura.plan_id), Number(planos[0].id));
+  assert.equal(assinatura.subscription_provider, 'asaas_pix');
+  assert.equal(assinatura.asaas_pix_authorization_id, id);
+
+  const creditos = await readCredits(cliente.id);
+  assert.ok(creditos.quota_normal > 0);
+});
+
+test('ativação repetida não aplica a cota duas vezes', async () => {
+  const cliente = await createLoginableClient();
+  const planos = await subscriptionPlansRepository.listActive();
+  const id = await autorizacaoPendente(cliente.id, planos[0]);
+
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', pixAutomaticAuthorization: id });
+  const cotaDepoisDeUma = (await readCredits(cliente.id)).quota_normal;
+
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', pixAutomaticAuthorization: id });
+  const cotaDepoisDeDuas = (await readCredits(cliente.id)).quota_normal;
+
+  assert.equal(cotaDepoisDeDuas, cotaDepoisDeUma, 'aviso repetido não pode dobrar a cota do plano');
+});
+
+test('autorização recusada no banco não liga plano nenhum', async () => {
+  const cliente = await createLoginableClient();
+  const planos = await subscriptionPlansRepository.listActive();
+  const id = await autorizacaoPendente(cliente.id, planos[0]);
+
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_REFUSED', pixAutomaticAuthorization: id });
+
+  const assinatura = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+  assert.notEqual(assinatura.status, 'ativo');
+  const autorizacao = await asaasPixAuthorizationsRepository.findByAsaasId(id);
+  assert.equal(autorizacao.status, 'recusada');
+});
+
+test('cancelar a autorização depois de ativa marca inadimplente', async () => {
+  const cliente = await createLoginableClient();
+  const planos = await subscriptionPlansRepository.listActive();
+  const id = await autorizacaoPendente(cliente.id, planos[0]);
+
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', pixAutomaticAuthorization: id });
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_CANCELLED', pixAutomaticAuthorization: id });
+
+  // Sem autorização não há cobrança - mas não cancelamos de imediato: pode
+  // ter sido engano, e ele pode autorizar de novo.
+  const assinatura = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+  assert.equal(assinatura.status, 'inadimplente');
+});
+
+test('recusa atrasada NÃO derruba uma autorização que já ativou', async () => {
+  const cliente = await createLoginableClient();
+  const planos = await subscriptionPlansRepository.listActive();
+  const id = await autorizacaoPendente(cliente.id, planos[0]);
+
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', pixAutomaticAuthorization: id });
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_EXPIRED', pixAutomaticAuthorization: id });
+
+  const autorizacao = await asaasPixAuthorizationsRepository.findByAsaasId(id);
+  assert.equal(autorizacao.status, 'ativa', 'aviso fora de ordem não pode desfazer uma ativação');
+  const assinatura = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+  assert.equal(assinatura.status, 'ativo');
 });

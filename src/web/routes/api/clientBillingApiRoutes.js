@@ -18,6 +18,9 @@ router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 router.get('/overview', asyncHandler(controller.overview));
 router.post('/subscribe', asyncHandler(controller.subscribe));
 router.post('/buy-package', asyncHandler(controller.buyPackage));
+// Assinatura por PIX Automatico (um QR Code paga e autoriza as proximas).
+router.post('/subscribe-pix', asyncHandler(controller.subscribePix));
+router.get('/pix-authorization', asyncHandler(controller.pixAuthorizationStatus));
 router.post('/overage-card/setup', asyncHandler(controller.setupOverageCard));
 router.post('/overage-card/disable', asyncHandler(controller.disableOverageCard));
 // Cartoes salvos + extrato. Separado do /overview porque fala com a Stripe:

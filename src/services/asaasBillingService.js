@@ -14,6 +14,7 @@ const config = require('../config');
 const asaasService = require('./asaasService');
 const asaasCheckoutsRepository = require('../repositories/asaasCheckoutsRepository');
 const creditPurchasesRepository = require('../repositories/creditPurchasesRepository');
+const asaasPixAuthorizationsRepository = require('../repositories/asaasPixAuthorizationsRepository');
 const logger = require('../lib/logger');
 
 // Quem pode pagar pelo Asaas neste momento.
@@ -138,8 +139,70 @@ async function createPackageCheckout({ clientUserId, minutes, bucket, priceCents
   }
 }
 
+// ---------- PIX Automático ----------
+
+// A chave Pix é da CONTA (não do cliente) e não muda. Consultada uma vez e
+// guardada em memória: é uma ida à API por processo, não por pagamento.
+let chavePixEmCache = null;
+
+async function resolverChavePix() {
+  if (chavePixEmCache) return chavePixEmCache;
+  const chaves = await asaasService.listPixKeys();
+  const ativa = chaves.find((k) => k.status === 'ACTIVE');
+  if (!ativa) {
+    throw new Error(
+      'A conta do Asaas nao tem chave Pix ativa - sem ela o Asaas recusa qualquer cobranca por Pix.'
+    );
+  }
+  chavePixEmCache = ativa.key;
+  return chavePixEmCache;
+}
+
+// Quanto tempo a autorização vale. 2 anos: o cliente autoriza uma vez e não
+// é incomodado de novo enquanto for cliente. Prazo curto significaria pedir
+// autorização de novo no meio da assinatura, que é exatamente o atrito que o
+// PIX Automático existe para eliminar.
+const ANOS_DE_AUTORIZACAO = 2;
+
+async function createPixAutomaticSubscription({ clientUserId, plan, customerId }) {
+  const pixKey = await resolverChavePix();
+  const hoje = new Date();
+  // A primeira cobrança é o próprio QR Code que o cliente vai pagar agora; a
+  // recorrência começa no ciclo seguinte.
+  const inicio = new Date(hoje.getTime() + 2 * 864e5);
+  const fim = new Date(hoje.getTime() + ANOS_DE_AUTORIZACAO * 365 * 864e5);
+
+  const autorizacao = await asaasService.createPixAutomaticAuthorization({
+    customerId,
+    planName: nomeDeItem(`Post Flow ${plan.name}`),
+    amountCents: Number(plan.price_cents),
+    pixKey,
+    contractId: `postflow-${clientUserId}-${plan.key}`,
+    startDate: inicio.toISOString().slice(0, 10),
+    finishDate: fim.toISOString().slice(0, 10),
+  });
+
+  await asaasPixAuthorizationsRepository.create({
+    asaasAuthorizationId: autorizacao.id,
+    clientUserId,
+    planId: plan.id,
+    asaasCustomerId: customerId,
+    amountCents: Number(plan.price_cents),
+  });
+
+  return {
+    authorizationId: autorizacao.id,
+    // Copia-e-cola: quem paga no computador não consegue ler o QR da própria
+    // tela, então os dois caminhos precisam existir.
+    pixCopiaECola: autorizacao.payload,
+    qrCodeBase64: autorizacao.encodedImage,
+    status: autorizacao.status,
+  };
+}
+
 module.exports = {
   clientePodeUsarAsaas,
+  createPixAutomaticSubscription,
   createSubscriptionCheckout,
   createPackageCheckout,
   nomeDeItem,

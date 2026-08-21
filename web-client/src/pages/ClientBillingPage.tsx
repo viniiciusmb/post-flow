@@ -6,6 +6,8 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TonePill } from "@/components/ui/tone-pill"
@@ -236,6 +238,66 @@ export function ClientBillingPage() {
   function subscribe(planKey: string) {
     return runAction(`subscribe-${planKey}`, () => api.post("/api/client/billing/subscribe", { planKey }))
   }
+
+  // ---- PIX Automático ----
+  // O cliente lê um QR Code que paga a primeira mensalidade E autoriza as
+  // próximas. Ele sai daqui para o app do banco e pode nunca voltar, então
+  // quem realmente ativa o plano é o aviso do Asaas — esta tela só acompanha.
+  const [pixPlano, setPixPlano] = useState<string | null>(null)
+  const [pixNome, setPixNome] = useState("")
+  const [pixDoc, setPixDoc] = useState("")
+  const [pixErro, setPixErro] = useState<string | null>(null)
+  const [pixGerando, setPixGerando] = useState(false)
+  const [pixCodigo, setPixCodigo] = useState<{ copiaECola: string; qr: string } | null>(null)
+  const [pixPago, setPixPago] = useState(false)
+  const [copiado, setCopiado] = useState(false)
+
+  function abrirPix(planKey: string) {
+    setPixPlano(planKey)
+    setPixNome("")
+    setPixDoc("")
+    setPixErro(null)
+    setPixCodigo(null)
+    setPixPago(false)
+  }
+
+  async function gerarPix() {
+    if (!pixPlano) return
+    setPixGerando(true)
+    setPixErro(null)
+    try {
+      const r = await api.post<{ pixCopiaECola: string; qrCodeBase64: string }>(
+        "/api/client/billing/subscribe-pix",
+        { planKey: pixPlano, name: pixNome, cpfCnpj: pixDoc }
+      )
+      setPixCodigo({ copiaECola: r.pixCopiaECola, qr: r.qrCodeBase64 })
+    } catch (e) {
+      setPixErro(e instanceof Error ? e.message : "Não consegui gerar o código.")
+    } finally {
+      setPixGerando(false)
+    }
+  }
+
+  // Enquanto o QR está na tela, pergunta ao servidor se o pagamento já
+  // chegou. É a única forma de a tela saber: o pagamento acontece no app do
+  // banco, fora daqui.
+  useEffect(() => {
+    if (!pixCodigo || pixPago) return
+    const t = setInterval(async () => {
+      try {
+        const r = await api.get<{ status: string | null }>("/api/client/billing/pix-authorization")
+        if (r.status === "ativa") {
+          setPixPago(true)
+          load()
+        }
+      } catch {
+        // Falha de rede aqui não precisa virar erro na tela: a próxima
+        // tentativa acontece em 5 segundos.
+      }
+    }, 5000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pixCodigo, pixPago])
 
   function buyPackage(bucket: CreditBucket, minutes: number) {
     return runAction(`package-${bucket}`, () =>
@@ -587,13 +649,20 @@ export function ClientBillingPage() {
                       {formatCents(plan.priceCents)}
                       <span className="text-sm font-normal text-muted-foreground">/mês</span>
                     </div>
-                    <Button
-                      variant={isCurrent ? "outline" : "default"}
-                      disabled={isCurrent || busyKey === `subscribe-${plan.key}`}
-                      onClick={() => subscribe(plan.key)}
-                    >
-                      {isCurrent ? "Plano atual" : t("plano.assinarTrocar")}
-                    </Button>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        variant={isCurrent ? "outline" : "default"}
+                        disabled={isCurrent || busyKey === `subscribe-${plan.key}`}
+                        onClick={() => subscribe(plan.key)}
+                      >
+                        {isCurrent ? "Plano atual" : t("plano.assinarTrocar")}
+                      </Button>
+                      {!isCurrent && (
+                        <Button variant="outline" size="sm" onClick={() => abrirPix(plan.key)}>
+                          {t("plano.assinarPix")}
+                        </Button>
+                      )}
+                    </div>
                     <ul className="flex flex-1 flex-col gap-2 border-t border-border pt-4 text-sm text-muted-foreground">
                       <li className="flex items-start gap-2">
                         <IconClock className="mt-0.5 size-4 shrink-0 text-primary" />
@@ -724,6 +793,63 @@ export function ClientBillingPage() {
           )}
         </>
       )}
+      {/* PIX Automático: um QR Code paga a primeira mensalidade e autoriza
+          as próximas. É o caminho de quem não usa cartão de crédito. */}
+      <Dialog open={pixPlano !== null} onOpenChange={(aberto) => !aberto && setPixPlano(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{pixPago ? t("pix.tudoCerto") : t("pix.assinarComPix")}</DialogTitle>
+            <DialogDescription>
+              {pixPago ? t("pix.planoAtivado") : pixCodigo ? t("pix.leiaNoBanco") : t("pix.precisamosDoDocumento")}
+            </DialogDescription>
+          </DialogHeader>
+
+          {pixPago ? (
+            <div className="flex flex-col items-center gap-3 py-4">
+              <IconCircleCheck className="size-14 text-emerald-500" />
+              <Button onClick={() => setPixPlano(null)}>{t("comum.fechar")}</Button>
+            </div>
+          ) : pixCodigo ? (
+            <div className="flex flex-col items-center gap-4">
+              <img
+                src={`data:image/png;base64,${pixCodigo.qr}`}
+                alt="QR Code do PIX"
+                className="size-56 rounded-lg border border-border bg-white p-2"
+              />
+              {/* Quem paga pelo computador não consegue ler o QR da própria
+                  tela - por isso o copia-e-cola tem que estar aqui também. */}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  navigator.clipboard.writeText(pixCodigo.copiaECola)
+                  setCopiado(true)
+                  setTimeout(() => setCopiado(false), 2000)
+                }}
+              >
+                {copiado ? t("pix.copiado") : t("pix.copiarCodigo")}
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">{t("pix.esperandoPagamento")}</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium" htmlFor="pix-nome">{t("pix.nomeCompleto")}</label>
+                <Input id="pix-nome" value={pixNome} onChange={(e) => setPixNome(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium" htmlFor="pix-doc">{t("pix.cpfOuCnpj")}</label>
+                <Input id="pix-doc" value={pixDoc} onChange={(e) => setPixDoc(e.target.value)} inputMode="numeric" />
+              </div>
+              {pixErro && <p className="text-sm text-destructive">{pixErro}</p>}
+              <Button onClick={gerarPix} disabled={pixGerando || pixNome.trim().length < 3 || pixDoc.length < 11}>
+                {pixGerando ? t("pix.gerando") : t("pix.gerarCodigo")}
+              </Button>
+              <p className="text-xs text-muted-foreground">{t("pix.porqueDocumento")}</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   )
 }

@@ -346,6 +346,8 @@ module.exports = {
     pagamentoIndisponivel: "Pagamento por cartão ainda não está disponível. Fale com o suporte.",
     percentualInvalido: "Percentual inválido (0 a 100).",
     planoInvalido: "Plano inválido.",
+    documentoInvalido: "CPF ou CNPJ inválido. Confira os números e tente de novo.",
+    nomeInvalido: "Informe o nome completo.",
     posicaoNumeracaoInvalida: "Posicao da numeracao de parte inválida.",
     posicaoVideoInvalida: "Posição do vídeo no template inválida (0 a 100).",
     postagemNaoNaFila: "Postagem não encontrada ou já saiu da fila de espera.",

@@ -103,7 +103,20 @@ async function listClientsWithStats() {
   return rows;
 }
 
+// CPF/CNPJ so e pedido (e so existe) pra quem paga por PIX Automatico - a
+// autorizacao exige um cliente cadastrado no Asaas, e o Asaas nao cria
+// cliente sem documento. Quem paga com cartao nunca informa CPF pra nos: a
+// tela do proprio Asaas coleta o que precisa.
+async function setCpfCnpj(id, cpfCnpj) {
+  const { rows } = await pool.query(
+    'UPDATE users SET cpf_cnpj = $2, updated_at = now() WHERE id = $1 RETURNING *',
+    [id, cpfCnpj]
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
+  setCpfCnpj,
   findByGoogleSub,
   linkGoogleAccount,
   createFromGoogle,

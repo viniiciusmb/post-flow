@@ -223,6 +223,63 @@ async function listPaymentsByCustomer(customerId, { limit = 50, offset = 0 } = {
   return request('GET', '/payments', { query: { customer: customerId, limit, offset } });
 }
 
+// ---------- PIX Automático ----------
+
+// Cria a autorização de débito recorrente. A resposta traz o QR Code que o
+// cliente lê no app do banco: ele paga a primeira mensalidade E autoriza as
+// próximas no mesmo gesto.
+//
+// paymentCreationMode 'SUBSCRIPTION' é o que faz o Asaas gerar as cobranças
+// seguintes sozinho. Com 'MANUAL', cada mês viraria responsabilidade nossa -
+// e uma cobrança esquecida é receita perdida em silêncio.
+async function createPixAutomaticAuthorization({
+  customerId,
+  planName,
+  amountCents,
+  pixKey,
+  contractId,
+  startDate,
+  finishDate,
+}) {
+  return request('POST', '/pix/automatic/authorizations', {
+    body: {
+      customerId,
+      frequency: 'MONTHLY',
+      contractId,
+      startDate,
+      finishDate,
+      value: amountCents / 100,
+      description: planName,
+      paymentCreationMode: 'SUBSCRIPTION',
+      // Cobrança que falha (sem saldo na conta do cliente) é tentada de novo
+      // até 3x em 7 dias antes de desistir - o padrão do Banco Central para
+      // Pix Automático. Sem política de repetição, um único dia sem saldo
+      // cancelaria a mensalidade.
+      retryPolicy: 'ALLOW_THREE_IN_SEVEN_DAYS',
+      // minLimitValue NÃO vai junto: o Asaas recusa valor mínimo quando o
+      // valor já é fixo ("Não é permitido definir um valor mínimo quando um
+      // valor fixo já foi especificado").
+      immediateQrCode: {
+        originalValue: amountCents / 100,
+        expirationSeconds: 3600,
+        description: planName,
+        pixKey,
+      },
+    },
+  });
+}
+
+async function getPixAutomaticAuthorization(authorizationId) {
+  return request('GET', `/pix/automatic/authorizations/${encodeURIComponent(authorizationId)}`);
+}
+
+// A conta precisa de pelo menos uma chave Pix para gerar qualquer cobrança
+// por Pix - sem isso o Asaas recusa com "é necessário criar uma chave Pix".
+async function listPixKeys() {
+  const r = await request('GET', '/pix/addressKeys');
+  return Array.isArray(r?.data) ? r.data : [];
+}
+
 // ---------- webhook ----------
 
 // O endereço do webhook é público: sem conferir o token, qualquer um poderia
@@ -254,6 +311,9 @@ module.exports = {
   customerExists,
   createCheckout,
   listSubscriptionsByCustomer,
+  createPixAutomaticAuthorization,
+  getPixAutomaticAuthorization,
+  listPixKeys,
   getSubscription,
   updateSubscription,
   cancelSubscription,

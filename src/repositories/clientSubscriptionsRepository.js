@@ -82,6 +82,22 @@ async function setAsaasSubscription(clientUserId, { customerId, subscriptionId }
   return rows[0] || null;
 }
 
+// PIX Automatico: nao ha "assinatura" no sentido do Asaas ate a autorizacao
+// ser ativada - quem manda e a autorizacao, entao e ela que guardamos.
+async function setAsaasPixAuthorization(clientUserId, { customerId, authorizationId }) {
+  const { rows } = await pool.query(
+    `UPDATE client_subscriptions
+        SET asaas_customer_id = $2,
+            asaas_pix_authorization_id = $3,
+            subscription_provider = 'asaas_pix',
+            updated_at = now()
+      WHERE client_user_id = $1
+      RETURNING *`,
+    [clientUserId, customerId, authorizationId]
+  );
+  return rows[0] || null;
+}
+
 async function findByAsaasCustomerId(asaasCustomerId) {
   const { rows } = await pool.query('SELECT * FROM client_subscriptions WHERE asaas_customer_id = $1', [asaasCustomerId]);
   return rows[0] || null;
@@ -156,6 +172,7 @@ module.exports = {
   clearStripeLinks,
   setStripeSubscription,
   setAsaasSubscription,
+  setAsaasPixAuthorization,
   findByAsaasCustomerId,
   findByAsaasSubscriptionId,
   setOverageCard,

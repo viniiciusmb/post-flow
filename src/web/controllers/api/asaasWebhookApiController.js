@@ -21,6 +21,7 @@
 
 const asaasService = require('../../../services/asaasService');
 const asaasCheckoutsRepository = require('../../../repositories/asaasCheckoutsRepository');
+const asaasPixAuthorizationsRepository = require('../../../repositories/asaasPixAuthorizationsRepository');
 const creditPurchasesRepository = require('../../../repositories/creditPurchasesRepository');
 const clientSubscriptionsRepository = require('../../../repositories/clientSubscriptionsRepository');
 const clientCreditsRepository = require('../../../repositories/clientCreditsRepository');
@@ -110,12 +111,88 @@ async function ativarAssinatura(registro, clientUserId, checkout) {
   logger.info(`Asaas: cliente ${clientUserId} ativou o plano ${plan.key} (assinatura ${subscriptionId || 'sem id'}).`);
 }
 
+// ---------- PIX Automático ----------
+
+// O cliente leu o QR Code, pagou a primeira mensalidade e autorizou as
+// próximas no app do banco. É ESTE aviso que ativa o plano - o cliente sai do
+// nosso site para o banco e pode nunca voltar, então não existe clique de
+// "concluí" para escutar.
+async function handlePixAuthorizationActivated(authorizationId) {
+  const registro = await asaasPixAuthorizationsRepository.findByAsaasId(authorizationId);
+  if (!registro) {
+    logger.warn(`Asaas: autorizacao Pix desconhecida ativada (${authorizationId}) - ignorando.`);
+    return;
+  }
+
+  const ativada = await asaasPixAuthorizationsRepository.markActiveOnce(authorizationId);
+  if (!ativada) {
+    logger.info(`Asaas: autorizacao Pix ${authorizationId} ja estava ativa - aviso repetido.`);
+    return;
+  }
+
+  const clientUserId = Number(registro.client_user_id);
+  const plan = await subscriptionPlansRepository.findById(Number(registro.plan_id));
+  if (!plan) {
+    logger.error(`Asaas: plano ${registro.plan_id} nao encontrado ao ativar Pix Automatico do cliente ${clientUserId}.`);
+    return;
+  }
+
+  const antes = await clientSubscriptionsRepository.getOrCreate(clientUserId);
+  const primeiraAtivacao = antes.status === 'sem_plano' || !antes.plan_id;
+
+  await clientSubscriptionsRepository.setPlan(clientUserId, plan.id);
+  await clientSubscriptionsRepository.setAsaasPixAuthorization(clientUserId, {
+    customerId: registro.asaas_customer_id,
+    authorizationId,
+  });
+  await clientSubscriptionsRepository.setStatus(clientUserId, 'ativo');
+
+  if (primeiraAtivacao) await clientCreditsRepository.applyPlanQuotaNow(clientUserId, plan.id);
+  await creditsUnlockService.unlockAwaitingCreditsForClient(clientUserId);
+  logger.info(`Asaas: cliente ${clientUserId} ativou o plano ${plan.key} por PIX Automatico.`);
+}
+
+// Autorização recusada, expirada ou cancelada pelo cliente no app do banco.
+// Sem autorização ativa não há cobrança nenhuma, então a assinatura para.
+async function handlePixAuthorizationEncerrada(authorizationId, status) {
+  const registro = await asaasPixAuthorizationsRepository.markFinalIfPending(authorizationId, status);
+  if (!registro) return;
+  logger.warn(`Asaas: autorizacao Pix ${authorizationId} terminou como "${status}" (cliente ${registro.client_user_id}).`);
+}
+
+// Cliente cancelou no app do banco uma autorização que JÁ estava ativa: a
+// mensalidade para de ser cobrada, então a assinatura fica inadimplente. Não
+// cancelamos de imediato - ele pode ter cancelado por engano e refazer.
+async function handlePixAuthorizationCancelada(authorizationId) {
+  const registro = await asaasPixAuthorizationsRepository.findByAsaasId(authorizationId);
+  if (!registro) return;
+  await asaasPixAuthorizationsRepository.markFinalIfPending(authorizationId, 'cancelada');
+  if (registro.status !== 'ativa') return;
+  await clientSubscriptionsRepository.setStatus(Number(registro.client_user_id), 'inadimplente');
+  logger.warn(
+    `Asaas: cliente ${registro.client_user_id} cancelou a autorizacao de PIX Automatico - assinatura marcada como inadimplente.`
+  );
+}
+
 // ---------- cobrança recebida (renovação mensal) ----------
 
 // A primeira mensalidade chega como CHECKOUT_PAID; as seguintes, como
 // pagamento avulso ligado à assinatura. É aqui que a renovação reativa quem
 // estava inadimplente e paga a comissão do afiliado.
 async function handlePaymentReceived(payment) {
+  // Rede de segurança: a cobrança gerada por um checkout nosso carrega o id
+  // dele em checkoutSession. Se o CHECKOUT_PAID não chegar, chegar fora de
+  // ordem, ou o pagamento for confirmado por fora (PIX conciliado, baixa
+  // manual no painel), este é o segundo caminho para o crédito sair.
+  //
+  // Descoberto testando de verdade: um PIX de checkout confirmado pelo painel
+  // gerou PAYMENT_RECEIVED e nenhum CHECKOUT_PAID - o cliente teria pago e
+  // ficado sem crédito. markPaidOnce garante que receber os DOIS avisos ainda
+  // credita uma vez só.
+  if (payment.checkoutSession) {
+    await handleCheckoutPaid({ id: payment.checkoutSession, customer: payment.customer });
+  }
+
   if (!payment.subscription) return; // cobrança que não é mensalidade
 
   const assinatura = await clientSubscriptionsRepository.findByAsaasSubscriptionId(payment.subscription);
@@ -209,6 +286,21 @@ async function webhook(req, res) {
         await handlePaymentOverdue(req.body.payment || {});
         break;
 
+      // PIX Automático. O id da autorização vem numa chave própria do corpo,
+      // não dentro de payment/checkout.
+      case 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED':
+        await handlePixAuthorizationActivated(req.body.pixAutomaticAuthorization);
+        break;
+      case 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_REFUSED':
+        await handlePixAuthorizationEncerrada(req.body.pixAutomaticAuthorization, 'recusada');
+        break;
+      case 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_EXPIRED':
+        await handlePixAuthorizationEncerrada(req.body.pixAutomaticAuthorization, 'expirada');
+        break;
+      case 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_CANCELLED':
+        await handlePixAuthorizationCancelada(req.body.pixAutomaticAuthorization);
+        break;
+
       default:
         // O Asaas manda dezenas de eventos que não mudam nada do nosso lado
         // (PAYMENT_CREATED, PAYMENT_UPDATED, BANK_SLIP_VIEWED...). Responder
@@ -224,4 +316,10 @@ async function webhook(req, res) {
   }
 }
 
-module.exports = { webhook, handleCheckoutPaid, handlePaymentReceived, handlePaymentOverdue };
+module.exports = {
+  webhook,
+  handleCheckoutPaid,
+  handlePaymentReceived,
+  handlePaymentOverdue,
+  handlePixAuthorizationActivated,
+};

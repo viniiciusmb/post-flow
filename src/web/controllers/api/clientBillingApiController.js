@@ -15,6 +15,8 @@ const usersRepository = require('../../../repositories/usersRepository');
 const stripeService = require('../../../services/stripeService');
 const asaasService = require('../../../services/asaasService');
 const asaasBillingService = require('../../../services/asaasBillingService');
+const asaasPixAuthorizationsRepository = require('../../../repositories/asaasPixAuthorizationsRepository');
+const cpfCnpj = require('../../../lib/cpfCnpj');
 const creditsService = require('../../../services/creditsService');
 const subscriptionCheckoutService = require('../../../services/subscriptionCheckoutService');
 const { resolveStripeCustomerId } = subscriptionCheckoutService;
@@ -215,6 +217,65 @@ async function buyPackage(req, res) {
   res.json({ checkoutUrl: session.url });
 }
 
+// Assinatura por PIX Automatico: o cliente le UM QR Code que paga a primeira
+// mensalidade e autoriza as proximas. Dali em diante o Asaas debita sozinho.
+//
+// Unico caminho de pagamento que precisa do CPF/CNPJ: a autorizacao exige um
+// cliente ja cadastrado no Asaas, e o Asaas nao cria cliente sem documento.
+// No cartao, quem coleta tudo e a tela do proprio Asaas.
+async function subscribePix(req, res) {
+  if (!asaasBillingService.clientePodeUsarAsaas(req.session.user)) {
+    return res.status(400).json({ error: res.locals.t('erros.pagamentoIndisponivel') });
+  }
+
+  const plan = await subscriptionPlansRepository.findByKey(String(req.body.planKey || ''));
+  if (!plan) return res.status(400).json({ error: res.locals.t('erros.planoInvalido') });
+
+  // Validado aqui pra o cliente ver o erro no campo, na hora - e nao depois
+  // de esperar uma recusa vinda da API no meio do fluxo de pagamento.
+  const documento = cpfCnpj.normalizar(req.body.cpfCnpj);
+  if (!documento) return res.status(400).json({ error: res.locals.t('erros.documentoInvalido') });
+
+  const nome = String(req.body.name || '').trim();
+  if (nome.length < 3) return res.status(400).json({ error: res.locals.t('erros.nomeInvalido') });
+
+  const clientUserId = req.session.user.id;
+  const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
+
+  await usersRepository.setCpfCnpj(clientUserId, documento);
+
+  // Reaproveita o cliente do Asaas se ja existir; recria se tiver sumido
+  // (troca de conta/ambiente deixa todo id salvo apontando pro nada - mesma
+  // licao que a Stripe deu em 14/08/2026).
+  let customerId = subscription.asaas_customer_id;
+  if (customerId && !(await asaasService.customerExists(customerId))) customerId = null;
+  if (!customerId) {
+    const criado = await asaasService.createCustomer({
+      name: nome,
+      cpfCnpj: documento,
+      email: req.session.user.email,
+      clientUserId,
+    });
+    customerId = criado.id;
+  }
+
+  const resultado = await asaasBillingService.createPixAutomaticSubscription({ clientUserId, plan, customerId });
+  res.json(resultado);
+}
+
+// A tela fica perguntando se ja pagou: o cliente sai do site pro app do banco
+// e volta, entao nao ha clique de "conclui" pra escutar. O aviso do Asaas e
+// quem realmente ativa o plano; isto aqui so atualiza a tela.
+async function pixAuthorizationStatus(req, res) {
+  const autorizacao = await asaasPixAuthorizationsRepository.findLatestForClient(req.session.user.id);
+  if (!autorizacao) return res.json({ status: null });
+  res.json({
+    authorizationId: autorizacao.asaas_authorization_id,
+    status: autorizacao.status,
+    activatedAt: autorizacao.activated_at,
+  });
+}
+
 // Cadastra cartao pra cobranca automatica de excedente (modo "setup" - nao
 // cobra nada na hora, so guarda o cartao pro overageBillingJob semanal usar).
 async function setupOverageCard(req, res) {
@@ -367,6 +428,8 @@ async function disableOverageCard(req, res) {
 }
 
 module.exports = {
+  subscribePix,
+  pixAuthorizationStatus,
   overview,
   subscribe,
   buyPackage,

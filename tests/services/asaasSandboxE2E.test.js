@@ -161,3 +161,48 @@ test('o nome do item respeita o limite de 30 caracteres do Asaas', opcoes, async
   const r = await agente.post('/api/client/billing/buy-package', { minutes: 1000, bucket: 'normal' });
   assert.equal(r.status, 200, `o Asaas recusaria o nome longo demais: ${r.text}`);
 });
+
+test('PIX Automático: gera o QR Code real que paga e autoriza de uma vez', opcoes, async () => {
+  const { cliente, agente } = await clienteLogado();
+  const planos = await subscriptionPlansRepository.listActive();
+  const plano = planos[0];
+
+  const r = await agente.post('/api/client/billing/subscribe-pix', {
+    planKey: plano.key,
+    name: 'Cliente De Teste',
+    cpfCnpj: '529.982.247-25',
+  });
+  assert.equal(r.status, 200, `esperava 200, veio ${r.status}: ${r.text}`);
+
+  // O copia-e-cola tem que ser um Pix de verdade (começa com o payload do
+  // padrão do Banco Central) e trazer a parte de recorrência.
+  assert.ok(r.body.pixCopiaECola.startsWith('000201'), 'não parece um código Pix');
+  assert.match(r.body.pixCopiaECola, /br\.gov\.bcb\.pix/);
+  assert.ok(r.body.qrCodeBase64 && r.body.qrCodeBase64.length > 500, 'QR Code ausente');
+  assert.equal(r.body.status, 'CREATED');
+
+  const { rows } = await pool.query(
+    'SELECT * FROM asaas_pix_authorizations WHERE client_user_id = $1 ORDER BY id DESC LIMIT 1',
+    [cliente.id]
+  );
+  assert.equal(rows[0].status, 'criada');
+  assert.equal(rows[0].amount_cents, plano.price_cents);
+  assert.equal(rows[0].asaas_authorization_id, r.body.authorizationId);
+
+  // O documento fica guardado só neste caminho - no cartão nunca é pedido.
+  const { rows: u } = await pool.query('SELECT cpf_cnpj FROM users WHERE id = $1', [cliente.id]);
+  assert.equal(u[0].cpf_cnpj, '52998224725', 'guardado sem máscara, como o Asaas espera');
+});
+
+test('PIX Automático recusa CPF inválido antes de falar com o Asaas', opcoes, async () => {
+  const { agente } = await clienteLogado();
+  const planos = await subscriptionPlansRepository.listActive();
+
+  const r = await agente.post('/api/client/billing/subscribe-pix', {
+    planKey: planos[0].key,
+    name: 'Cliente De Teste',
+    cpfCnpj: '111.111.111-11',
+  });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /CPF|CNPJ/i);
+});

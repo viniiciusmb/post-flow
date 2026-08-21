@@ -337,6 +337,8 @@ module.exports = {
     pagamentoIndisponivel: "Card payment is not available yet. Contact support.",
     percentualInvalido: "Invalid percentage (0 to 100).",
     planoInvalido: "Invalid plan.",
+    documentoInvalido: "Invalid CPF or CNPJ. Check the numbers and try again.",
+    nomeInvalido: "Enter the full name.",
     posicaoNumeracaoInvalida: "Invalid part numbering position.",
     posicaoVideoInvalida: "Invalid video position in the template (0 to 100).",
     postagemNaoNaFila: "Post not found or already out of the waiting queue.",
