@@ -280,6 +280,39 @@ async function listPixKeys() {
   return Array.isArray(r?.data) ? r.data : [];
 }
 
+// Chave Pix aleatoria (EVP): nao expoe CNPJ, telefone nem e-mail da empresa
+// dentro do codigo Pix que o cliente enxerga.
+async function criarChavePixAleatoria() {
+  return request('POST', '/pix/addressKeys', { body: { type: 'EVP' } });
+}
+
+async function listWebhooks() {
+  const r = await request('GET', '/webhooks');
+  return Array.isArray(r?.data) ? r.data : [];
+}
+
+async function createWebhook({ name, url, email, authToken, events }) {
+  return request('POST', '/webhooks', {
+    body: {
+      name,
+      url,
+      email,
+      enabled: true,
+      interrupted: false,
+      apiVersion: 3,
+      authToken,
+      // Em ordem: reduz a chance de um aviso de "expirou" chegar antes do
+      // "pago" do mesmo checkout (o codigo ja trata, mas ordem ajuda).
+      sendType: 'SEQUENTIALLY',
+      events,
+    },
+  });
+}
+
+async function updateWebhook(webhookId, campos) {
+  return request('PUT', `/webhooks/${encodeURIComponent(webhookId)}`, { body: campos });
+}
+
 // ---------- webhook ----------
 
 // O endereço do webhook é público: sem conferir o token, qualquer um poderia
@@ -314,6 +347,10 @@ module.exports = {
   createPixAutomaticAuthorization,
   getPixAutomaticAuthorization,
   listPixKeys,
+  criarChavePixAleatoria,
+  listWebhooks,
+  createWebhook,
+  updateWebhook,
   getSubscription,
   updateSubscription,
   cancelSubscription,

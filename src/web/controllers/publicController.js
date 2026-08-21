@@ -13,7 +13,7 @@ const { CONTACT, COMPANY } = require('../../config/constants');
 // ser atualizada A MAO sempre que o texto de termos/privacidade mudar - e o
 // que diz ao usuario (e ao revisor da plataforma) que o documento nao esta
 // abandonado.
-const LEGAL_UPDATED_AT = '02/08/2026';
+const LEGAL_UPDATED_AT = '21/08/2026';
 
 // Se o banco estiver fora do ar, a landing nao pode cair junto: melhor mostrar
 // a pagina sem a tabela de precos do que devolver erro 500 pra quem chegou

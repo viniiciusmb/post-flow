@@ -120,7 +120,7 @@ module.exports = {
               'Se os minutos da semana acabarem, o processamento fica parado até a renovação. Você pode comprar um pacote avulso (que <strong>não expira</strong> e carrega de semana pra semana) ou ligar a cobrança de excedente.',
               '<strong>Nada é cobrado além da assinatura sem você autorizar explicitamente.</strong> A cobrança de excedente é desligada por padrão.',
               'Os minutos são debitados com base na duração do vídeo de origem, e a reserva acontece antes do download começar.',
-              'Pagamentos são processados pela Stripe. Não guardamos dados do seu cartão.',
+              'Pagamentos são processados pelo <strong>Asaas</strong> (assinatura e crédito avulso, por cartão ou PIX). <strong>Não guardamos dados do seu cartão</strong> — eles são digitados na tela do próprio Asaas e nunca passam pelos nossos servidores.',
             ],
           },
         ],
@@ -284,16 +284,20 @@ module.exports = {
                 'Detectar vídeo novo e mostrar o andamento no painel',
                 'Enquanto a conta existir',
               ],
-              ['Arquivo do vídeo baixado', 'Cortar e legendar', 'Apagado assim que os cortes ficam prontos'],
+              [
+                'Arquivo do vídeo baixado',
+                'Cortar e legendar. Quando dois clientes acompanham o mesmo canal do YouTube, o vídeo é baixado uma vez só e o arquivo serve aos dois — é conteúdo público idêntico, e isso reduz o consumo de banda',
+                'Apagado assim que ninguém mais precisa dele, e no máximo em 48 horas',
+              ],
               [
                 'Transcrição do áudio',
-                'A IA usa pra escolher os trechos e pra gerar a legenda',
-                'Enquanto o vídeo existir no seu painel',
+                'A IA usa pra escolher os trechos e pra gerar a legenda. A transcrição de um vídeo público do YouTube é guardada e reaproveitada se outro cliente pedir o mesmo vídeo — é o mesmo texto falado, e isso evita transcrever de novo',
+                'Até 90 dias, mesmo que você apague o vídeo do painel',
               ],
               [
                 'Arquivos dos cortes prontos',
                 'Publicar no TikTok e exportar pro seu Drive',
-                'Apagados automaticamente após a publicação (7 dias por padrão, ajustável por você)',
+                'Apagados automaticamente 3 dias após a publicação no TikTok'
               ],
               [
                 'Histórico de créditos, assinatura e cobranças',
@@ -302,8 +306,13 @@ module.exports = {
               ],
               [
                 'Dados de pagamento (cartão)',
-                'Cobrança da assinatura',
-                '<strong>Nunca passam pelos nossos servidores</strong>. Ficam só com a Stripe',
+                'Cobrança da assinatura e do crédito avulso',
+                '<strong>Nunca passam pelos nossos servidores</strong>. São digitados na tela do Asaas e ficam só com ele',
+              ],
+              [
+                'CPF ou CNPJ',
+                'Exigido pelo Banco Central para o PIX Automático (o débito recorrente autorizado por você). <strong>Só pedimos de quem escolhe pagar por PIX</strong> — quem paga com cartão nunca informa CPF pra nós',
+                'Enquanto a conta existir, e pelo prazo exigido por lei fiscal após o encerramento',
               ],
             ],
           },
@@ -393,7 +402,8 @@ module.exports = {
               '<strong>Anthropic (Claude)</strong>. Recebe a <em>transcrição em texto</em> pra escolher os melhores trechos. Não recebe o vídeo nem o áudio.',
               '<strong>TikTok</strong>. Recebe os cortes que você mandou publicar.',
               '<strong>Google Drive</strong>. Recebe os cortes que você mandou exportar.',
-              '<strong>Stripe</strong>. Processa os pagamentos e guarda os dados do cartão.',
+              '<strong>Asaas</strong>. Processa a assinatura e a compra de crédito (cartão e PIX) e guarda os dados do cartão. Recebe seu nome, e-mail e, no caso do PIX Automático, seu CPF ou CNPJ.',
+              '<strong>Stripe</strong>. Usada apenas para a cobrança automática de excedente de quem ativou essa opção, e guarda os dados desse cartão.',
               '<strong>Hostinger</strong>. Hospeda o servidor onde o sistema roda.',
             ],
           },
@@ -489,7 +499,7 @@ module.exports = {
               'Todos os canais, vídeos, transcrições e cortes;',
               'Os arquivos de vídeo que ainda estiverem no servidor;',
               'Os tokens de acesso do TikTok e do Google (o acesso é revogado imediatamente);',
-              'O histórico de créditos e o vínculo com a Stripe.',
+              'O histórico de créditos e os vínculos com o Asaas e com a Stripe.',
             ],
           },
           {
