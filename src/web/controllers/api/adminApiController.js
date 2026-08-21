@@ -7,17 +7,22 @@ const sourceVideosRepository = require('../../../repositories/sourceVideosReposi
 const clipsRepository = require('../../../repositories/clipsRepository');
 const referralsRepository = require('../../../repositories/referralsRepository');
 const { ROLES } = require('../../../config/constants');
+const tiktokCapacityService = require('../../../services/tiktokCapacityService');
 const { resolveRange } = require('../../../lib/dateRanges');
 
 async function dashboard(req, res) {
   const { range, since, until } = resolveRange(req.query.range);
 
-  const [clients, postings, channels, videosInProgress, clipsInRange] = await Promise.all([
+  const [clients, postings, channels, videosInProgress, clipsInRange, tiktokCapacity] = await Promise.all([
     usersRepository.listByRole(ROLES.CLIENT),
     postingsRepository.listAllWithDetails(),
     youtubeChannelsRepository.listActive(),
     sourceVideosRepository.countInProgress(),
     clipsRepository.countCreatedSince(since, until),
+    // Teto de criadores ativos do app no TikTok. Vem junto do dashboard (em
+    // vez de numa chamada propria) porque o aviso precisa aparecer sem
+    // ninguem ir procurar - o risco dele e justamente passar despercebido.
+    tiktokCapacityService.avaliar(),
   ]);
 
   const postingsInRange = postings.filter((p) => {
@@ -27,6 +32,7 @@ async function dashboard(req, res) {
 
   res.json({
     range: { key: range, since, until },
+    tiktokCapacity,
     counts: {
       clients: clients.length,
       postings: postings.length,
@@ -105,4 +111,22 @@ async function clients(req, res) {
   });
 }
 
-module.exports = { dashboard, postings, clients };
+// O fundador informa o teto que o TikTok concedeu na auditoria. Sem isso o
+// sistema trabalha com um chute conservador, que erra nos dois sentidos:
+// avisa cedo demais (irrita) ou tarde demais (deixa cliente sem publicar).
+async function setTiktokLimit(req, res) {
+  const salvo = await tiktokCapacityService.definirLimite(req.body.limite);
+  if (salvo === null) return res.status(400).json({ error: res.locals.t('erros.valorInvalido') });
+  res.json(await tiktokCapacityService.avaliar());
+}
+
+// "Ja pedi o aumento." Silencia o aviso por um tempo, nao para sempre: pedido
+// pode ser recusado, e aviso silenciado pra sempre e o mesmo que nao existir.
+async function snoozeTiktokLimit(req, res) {
+  await tiktokCapacityService.adiarAviso(Number(req.body.dias) || 14);
+  res.json(await tiktokCapacityService.avaliar());
+}
+
+module.exports = {
+  setTiktokLimit,
+  snoozeTiktokLimit, dashboard, postings, clients };

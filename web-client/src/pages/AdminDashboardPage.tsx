@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { useDateRange } from "@/hooks/useDateRange"
 import { api } from "@/lib/api"
 import type { AdminDashboardResponse } from "@/types/api"
+import { TiktokLimitAlert } from "@/components/dashboard/TiktokLimitAlert"
 
 export function AdminDashboardPage() {
   const t = useT()
@@ -17,10 +18,15 @@ export function AdminDashboardPage() {
   const { range, setRange } = useDateRange()
   const [data, setData] = useState<AdminDashboardResponse | null>(null)
 
+  function load() {
+    return api.get<AdminDashboardResponse>(`/api/admin/dashboard?range=${range}`).then(setData)
+  }
+
   useEffect(() => {
     if (!user) return
     setData(null)
-    api.get<AdminDashboardResponse>(`/api/admin/dashboard?range=${range}`).then(setData)
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, range])
 
   if (authLoading || !user) return null
@@ -106,6 +112,11 @@ export function AdminDashboardPage() {
           <Skeleton className="h-64" />
         )}
       </div>
+
+      {/* Avisa ANTES de bater o teto de criadores do TikTok. O pedido de
+          aumento demora dias; descobrir o limite pelo sintoma significa ficar
+          esses dias com os clientes sem publicar. */}
+      {data && <TiktokLimitAlert capacidade={data.tiktokCapacity} onMudou={load} />}
     </DashboardLayout>
   )
 }

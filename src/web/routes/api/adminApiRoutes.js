@@ -17,6 +17,9 @@ router.use(requireAuthApi, requireRoleApi(ROLES.ADMIN));
 
 router.get('/dashboard', asyncHandler(adminApiController.dashboard));
 router.get('/clients', asyncHandler(adminApiController.clients));
+// Teto de criadores ativos do app no TikTok - ver tiktokCapacityService.
+router.post('/tiktok-limit', asyncHandler(adminApiController.setTiktokLimit));
+router.post('/tiktok-limit/snooze', asyncHandler(adminApiController.snoozeTiktokLimit));
 router.get('/postings', asyncHandler(adminApiController.postings));
 router.get('/queue', asyncHandler(adminQueueApiController.overview));
 router.post('/queue/:id/retry', asyncHandler(adminQueueApiController.retry));

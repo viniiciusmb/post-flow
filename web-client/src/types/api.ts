@@ -36,8 +36,23 @@ export interface AdminPosting {
   createdAt: string
 }
 
+// Teto de CRIADORES ATIVOS por 24h que o TikTok concede ao app. Não é o
+// limite de posts (esse é ~15 por conta): é quantas contas distintas podem
+// publicar por dia, e ele não aparece em lugar nenhum até começar a recusar.
+export interface TiktokCapacity {
+  contas_conectadas: number
+  criadores_ativos_24h: number
+  pico_30_dias: number
+  limite: number
+  limiteConfirmado: boolean
+  percentual: number
+  alertar: boolean
+  dispensadoAte: string | null
+}
+
 export interface AdminDashboardResponse {
   range: RangeInfo
+  tiktokCapacity: TiktokCapacity
   counts: {
     clients: number
     postings: number
