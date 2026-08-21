@@ -1,39 +1,43 @@
-// Apaga postagens ja publicadas ha mais tempo do que a retencao configurada
-// pelo cliente (posting_schedule_settings.auto_delete_after_hours) - o corte,
-// a capa e os arquivos em disco somem, mantendo o servidor enxuto. Se era o
-// ultimo corte daquele video-fonte, o video-fonte tambem some (isso resolve
-// de quebra a reclamacao antiga de "canal mostra video velho demais").
+// Apaga postagens ja publicadas ha mais tempo que a retencao - o corte, a capa
+// e os arquivos em disco somem, mantendo o servidor enxuto. Se era o ultimo
+// corte daquele video-fonte, o video-fonte tambem some (isso resolve de quebra
+// a reclamacao antiga de "canal mostra video velho demais").
+//
+// A retencao e um valor unico e fixo do sistema (RETENCAO_CORTE_POSTADO_HORAS
+// = 3 dias), nao uma configuracao por conta - ver o porque em
+// src/config/constants.js e na migration 062. Antes era escolha do cliente com
+// padrao de 7 dias, e o resultado foi 33 GB de disco ocupado sem ninguem
+// perceber.
+//
 // Roda de hora em hora (ver videoScheduler.js).
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 const postingsRepository = require('../../repositories/postingsRepository');
-const postingScheduleSettingsRepository = require('../../repositories/postingScheduleSettingsRepository');
 const clipsRepository = require('../../repositories/clipsRepository');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
+const sharedVideoFiles = require('../../lib/sharedVideoFiles');
 const config = require('../../config');
+const { RETENCAO_CORTE_POSTADO_HORAS } = require('../../config/constants');
 const logger = require('../../lib/logger');
 
 async function run() {
-  const accountsWithRetention = await postingScheduleSettingsRepository.listWithAutoDelete();
-  for (const settings of accountsWithRetention) {
+  const postings = await postingsRepository.listPostedOlderThan(RETENCAO_CORTE_POSTADO_HORAS);
+  let apagadas = 0;
+
+  for (const posting of postings) {
     try {
-      await cleanupAccount(settings);
+      await deletePostingAndClip(posting);
+      apagadas += 1;
     } catch (err) {
-      logger.error(`Falha na limpeza automatica da conta TikTok ${settings.tiktok_account_id}:`, err);
+      // Uma postagem problematica nao pode impedir a limpeza das outras - era
+      // assim que o disco enchia sem ninguem perceber.
+      logger.error(`Falha na limpeza automatica da postagem ${posting.id}:`, err);
     }
   }
-}
 
-async function cleanupAccount(settings) {
-  const postings = await postingsRepository.listPostedOlderThan(
-    settings.tiktok_account_id,
-    settings.auto_delete_after_hours
-  );
-  for (const posting of postings) {
-    await deletePostingAndClip(posting);
-  }
+  return { apagadas };
 }
 
 async function deletePostingAndClip(posting) {
@@ -48,12 +52,18 @@ async function deletePostingAndClip(posting) {
     const sourceVideo = await sourceVideosRepository.findById(posting.source_video_id);
     if (sourceVideo) {
       await sourceVideosRepository.deleteById(sourceVideo.id);
-      if (sourceVideo.local_video_path) fs.rm(sourceVideo.local_video_path, { force: true }, () => {});
+      // O arquivo compartilhado NAO sai daqui: ele pertence a todos os
+      // clientes que monitoram o mesmo canal, e quem decide apaga-lo e o
+      // sharedAssetsCleanupJob. Apagar aqui faria a limpeza de UM cliente
+      // obrigar os outros a baixar o video de novo.
+      if (sourceVideo.local_video_path && !sharedVideoFiles.isShared(sourceVideo.local_video_path)) {
+        fs.rm(sourceVideo.local_video_path, { force: true }, () => {});
+      }
       fs.rm(path.join(config.videoProcessing.workDir, String(sourceVideo.id)), { recursive: true, force: true }, () => {});
     }
   }
 
-  logger.info(`Postagem ${posting.id} apagada automaticamente (retencao configurada expirou).`);
+  logger.info(`Postagem ${posting.id} apagada automaticamente (${RETENCAO_CORTE_POSTADO_HORAS}h desde a publicacao).`);
 }
 
 module.exports = { run };

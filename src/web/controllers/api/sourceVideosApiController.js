@@ -15,6 +15,7 @@ const queueService = require('../../../services/queueService');
 const queuePriorityService = require('../../../services/queuePriorityService');
 const metricsRepository = require('../../../repositories/metricsRepository');
 const config = require('../../../config');
+const sharedVideoFiles = require('../../../lib/sharedVideoFiles');
 const logger = require('../../../lib/logger');
 
 const QUEUE_VIDEO_PROCESSING = 'video-processing';
@@ -336,7 +337,11 @@ async function remove(req, res) {
   const filesToRemove = [
     sourceVideo.local_video_path,
     ...clips.flatMap((c) => [c.local_clip_path, c.thumbnail_path]),
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    // Ver o mesmo cuidado na exclusao em lote abaixo: arquivo compartilhado
+    // nao e apagado pela exclusao de um cliente so.
+    .filter((filePath) => !sharedVideoFiles.isShared(filePath));
 
   const deleted = await sourceVideosRepository.deleteByIdOwnedByClient(id, req.session.user.id);
   if (!deleted) return res.status(404).json({ error: res.locals.t('erros.videoNaoEncontrado') });
@@ -466,7 +471,13 @@ async function bulkRemove(req, res) {
     const filesToRemove = [
       sourceVideo.local_video_path,
       ...clips.flatMap((c) => [c.local_clip_path, c.thumbnail_path]),
-    ].filter(Boolean);
+    ]
+      .filter(Boolean)
+      // O video-fonte baixado pode ser o arquivo COMPARTILHADO com outros
+      // clientes que monitoram o mesmo canal (ver sharedVideoFiles). Excluir
+      // o video na tela de um cliente nao pode obrigar os outros a baixar
+      // tudo de novo - quem apaga esse arquivo e o sharedAssetsCleanupJob.
+      .filter((filePath) => !sharedVideoFiles.isShared(filePath));
 
     const deleted = await sourceVideosRepository.deleteByIdOwnedByClient(id, req.session.user.id);
     if (!deleted) continue;

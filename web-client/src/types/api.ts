@@ -191,9 +191,10 @@ export interface PostingScheduleResponse {
   videosPerDay: number
   manualTimes: string[]
   timezone: string
-  autoDeleteAfterHours: number | null
   paused: boolean
-  options: { retentionPresetsHours: number[] }
+  // retentionHours é informativo: o prazo é fixo no sistema (3 dias), o
+  // cliente só é avisado dele. Ver src/config/constants.js.
+  options: { retentionHours: number; maxPostsPerDay: number }
 }
 
 export interface CreatorOptions {
@@ -449,7 +450,9 @@ export interface ClientTunnelResponse {
   tunnel: ClientTunnel | null
 }
 
-export type BandwidthEgressType = "client_tunnel" | "founder_tunnel" | "proxy" | "direct"
+// "reuse" = o vídeo já estava em disco porque outro cliente monitora o
+// mesmo canal do YouTube. Sempre com 0 bytes: reaproveitar não gasta banda.
+export type BandwidthEgressType = "client_tunnel" | "founder_tunnel" | "proxy" | "direct" | "reuse"
 
 export interface BandwidthByEgress {
   egressType: BandwidthEgressType
@@ -465,10 +468,18 @@ export interface BandwidthByClient {
   videos: number
 }
 
+export interface BandwidthEconomia {
+  downloadsReaproveitados: number
+  bytesEconomizados: number
+  transcricoesReaproveitadas: number
+  whisperUsdEconomizado: number
+}
+
 export interface AdminBandwidthResponse {
   range: RangeInfo
   byEgress: BandwidthByEgress[]
   byClient: BandwidthByClient[]
+  economia: BandwidthEconomia
   founderTunnel: { id: number; enabled: boolean; connected: boolean; lastCheckedAt: string | null } | null
   proxy: {
     configured: boolean

@@ -6,6 +6,7 @@ const videoErrorRetryJob = require('./jobs/videoErrorRetryJob');
 const videoStuckRecoveryJob = require('./jobs/videoStuckRecoveryJob');
 const tiktokPostingJob = require('./jobs/tiktokPostingJob');
 const postingCleanupJob = require('./jobs/postingCleanupJob');
+const sharedAssetsCleanupJob = require('./jobs/sharedAssetsCleanupJob');
 const driveExportJob = require('./jobs/driveExportJob');
 const tunnelTestJob = require('./jobs/tunnelTestJob');
 const creditWeeklyResetJob = require('./jobs/creditWeeklyResetJob');
@@ -18,6 +19,7 @@ const QUEUE_VIDEO_ERROR_RETRY = 'video-error-retry';
 const QUEUE_VIDEO_STUCK_RECOVERY = 'video-stuck-recovery';
 const QUEUE_TIKTOK_POSTING = 'tiktok-posting';
 const QUEUE_POSTING_CLEANUP = 'posting-cleanup';
+const QUEUE_SHARED_ASSETS_CLEANUP = 'shared-assets-cleanup';
 const QUEUE_DRIVE_EXPORT = 'drive-export';
 const QUEUE_TUNNEL_TEST_ONE = 'tunnel-test-one';
 const QUEUE_TUNNEL_TEST_ALL = 'tunnel-test-all';
@@ -31,6 +33,7 @@ async function start(boss) {
   await boss.createQueue(QUEUE_VIDEO_STUCK_RECOVERY);
   await boss.createQueue(QUEUE_TIKTOK_POSTING);
   await boss.createQueue(QUEUE_POSTING_CLEANUP);
+  await boss.createQueue(QUEUE_SHARED_ASSETS_CLEANUP);
   await boss.createQueue(QUEUE_DRIVE_EXPORT);
   await boss.createQueue(QUEUE_TUNNEL_TEST_ONE);
   await boss.createQueue(QUEUE_TUNNEL_TEST_ALL);
@@ -57,6 +60,17 @@ async function start(boss) {
 
   await boss.schedule(QUEUE_POSTING_CLEANUP, '5 * * * *');
   logger.info('Limpeza de postagens antigas agendada de hora em hora.');
+
+  // A cada 15 minutos, nao de hora em hora: o arquivo compartilhado deixou de
+  // ser apagado pelo pipeline no fim do processamento (outro cliente ainda
+  // pode precisar dele), entao o intervalo desta varredura e exatamente quanto
+  // tempo um video de ~700 MB fica ocupando disco sem ninguem precisar dele.
+  // A varredura e barata: duas consultas e um readdir.
+  //
+  // Roda no video-worker (e nao no worker leve) porque precisa mexer em
+  // arquivo de video em disco - so este processo tem o volume montado.
+  await boss.schedule(QUEUE_SHARED_ASSETS_CLEANUP, '*/15 * * * *');
+  logger.info('Limpeza de videos compartilhados agendada a cada 15 minutos.');
 
   await boss.schedule(QUEUE_DRIVE_EXPORT, '*/15 * * * *');
   logger.info('Exportacao de cortes prontos pro Drive do cliente agendada a cada 15 minutos.');
@@ -93,6 +107,10 @@ async function start(boss) {
 
   await boss.work(QUEUE_POSTING_CLEANUP, async () => {
     await postingCleanupJob.run();
+  });
+
+  await boss.work(QUEUE_SHARED_ASSETS_CLEANUP, async () => {
+    await sharedAssetsCleanupJob.run();
   });
 
   await boss.work(QUEUE_DRIVE_EXPORT, async () => {

@@ -1,0 +1,18 @@
+-- Retenção de corte postado passa a ser FIXA em 3 dias, sem escolha.
+--
+-- Por que tirar a escolha em vez de só mudar o padrão: o disco da VPS é o
+-- recurso mais caro e mais silencioso do sistema. Em 21/08/2026 os cortes
+-- ocupavam 33 GB (55% do disco) com todo mundo no padrão de 7 dias e ninguém
+-- tinha percebido — a conta só aparece quando o servidor para. Um cliente que
+-- escolhe "Nunca" (ou 30 dias) não paga essa conta e não tem como saber que
+-- ela existe; quem paga é o servidor de todo mundo.
+--
+-- 3 dias é folga de sobra para o caso de uso real: depois de publicado no
+-- TikTok, o arquivo local só serve para reexportar pro Drive — e quem quer o
+-- arquivo tem a exportação automática pro Drive, que roda a cada 15 minutos.
+--
+-- A coluna sai do banco em vez de ficar fixada em 72: coluna de configuração
+-- que ninguém pode mudar é convite para alguém achar que ela ainda decide algo.
+-- O valor único agora mora em src/config/constants.js (RETENCAO_CORTE_POSTADO_HORAS),
+-- e o postingCleanupJob varre as postagens direto, sem passar por conta nenhuma.
+ALTER TABLE posting_schedule_settings DROP COLUMN auto_delete_after_hours;

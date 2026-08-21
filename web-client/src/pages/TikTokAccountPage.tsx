@@ -46,7 +46,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
-import { useT, type ChaveDeTraducao } from "@/i18n"
+import { useT } from "@/i18n"
 import type {
   ErrorPostingItem,
   PostedItem,
@@ -60,11 +60,6 @@ import type {
 // Rótulo em dias. Era um mapa fixo com o texto em português; virou função
 // porque "1 dia"/"1 day"/"1 día" mudam com o idioma, e o mapa é montado uma vez
 // no carregamento do módulo, antes de existir idioma escolhido.
-function rotuloRetencao(horas: number, t: (c: ChaveDeTraducao, v?: Record<string, string | number>) => string) {
-  const dias = horas / 24
-  return dias === 1 ? t("pub.umDia") : t("pub.nDias", { n: dias })
-}
-
 // Teto de publicações por dia, por conta. O servidor é quem manda (vem em
 // options.maxPostsPerDay); este valor é só o espelho para montar os controles.
 const MAX_POSTS_POR_DIA = 10
@@ -422,27 +417,13 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
           {t("pub.limiteDiario", { n: MAX_POSTS_POR_DIA })}
         </p>
 
-        <Field>
-          <FieldLabel>{t("pub.excluirDepoisPostado")}</FieldLabel>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            value={String(settings.autoDeleteAfterHours ?? "never")}
-            onValueChange={(next) =>
-              next && save({ ...settings, autoDeleteAfterHours: next === "never" ? null : Number(next) })
-            }
-            className="flex-wrap"
-          >
-            <ToggleGroupItem value="never" className="text-xs">
-              {t("pub.nunca")}
-            </ToggleGroupItem>
-            {settings.options.retentionPresetsHours.map((h) => (
-              <ToggleGroupItem key={h} value={String(h)} className="text-xs">
-                {rotuloRetencao(h, t)}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </Field>
+        {/* A retenção deixou de ser escolha do cliente: o disco é compartilhado
+            por todos os clientes, mas guardar por mais tempo seria decisão de
+            um só. O aviso explica o prazo e o que fazer para ficar com o
+            arquivo, em vez de só informar um número. */}
+        <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          {t("pub.retencaoFixa", { n: settings.options.retentionHours / 24 })}
+        </p>
 
         <p className="text-xs text-muted-foreground">{saving ? "Salvando..." : savedFlash ? "Salvo ✓" : ""}</p>
       </CardContent>

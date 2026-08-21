@@ -25,6 +25,7 @@ const EGRESS_LABELS: Record<BandwidthEgressType, ChaveDeTraducao> = {
   founder_tunnel: "adm.minhaInternet",
   proxy: "adm.proxyResidencial",
   direct: "adm.direto",
+  reuse: "adm.reaproveitado",
 }
 
 function Metric({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
@@ -197,6 +198,30 @@ export function AdminBandwidthPage() {
               <Metric label={EGRESS_LABELS.client_tunnel} value={gb(bytesByType("client_tunnel"))} />
               <Metric label={EGRESS_LABELS.founder_tunnel} value={gb(bytesByType("founder_tunnel"))} />
               <Metric label={EGRESS_LABELS.direct} value={gb(bytesByType("direct"))} />
+            </CardContent>
+          </Card>
+
+          {/* O que este sistema economiza: dois clientes que monitoram o mesmo
+              canal do YouTube baixam e transcrevem o vídeo uma vez só. O
+              cliente paga o mesmo de sempre — a economia é de custo, não um
+              desconto. */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t("adm.economiaReaproveitamento")}</CardTitle>
+              <CardDescription>{t("adm.economiaReaproveitamentoDescricao")}</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+              <Metric
+                label={t("adm.bandaEconomizada")}
+                value={gb(data.economia.bytesEconomizados)}
+                sub={t("adm.emNDownloads", { n: data.economia.downloadsReaproveitados })}
+              />
+              <Metric label={t("adm.downloadsEvitados")} value={data.economia.downloadsReaproveitados} />
+              <Metric label={t("adm.transcricoesEvitadas")} value={data.economia.transcricoesReaproveitadas} />
+              <Metric
+                label={t("adm.whisperEconomizado")}
+                value={`US$ ${data.economia.whisperUsdEconomizado.toFixed(2)}`}
+              />
             </CardContent>
           </Card>
 

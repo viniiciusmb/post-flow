@@ -2,6 +2,7 @@
 
 const metricsRepository = require('../../../repositories/metricsRepository');
 const downloadTunnelsRepository = require('../../../repositories/downloadTunnelsRepository');
+const sharedVideoAssetsRepository = require('../../../repositories/sharedVideoAssetsRepository');
 const settingsRepository = require('../../../repositories/settingsRepository');
 const config = require('../../../config');
 const { resolveRange } = require('../../../lib/dateRanges');
@@ -12,14 +13,18 @@ const RESIDENTIAL_PROXY_PURCHASED_BYTES_KEY = 'residential_proxy_purchased_bytes
 async function overview(req, res) {
   const { range, since, until } = resolveRange(req.query.range);
 
-  const [byEgress, byClient, allTunnels, proxyEnabled, purchasedBytes, consumedAllTimeBytes] = await Promise.all([
-    metricsRepository.bandwidthByEgressSince(since, until),
-    metricsRepository.bandwidthByClientSince(since, until),
-    downloadTunnelsRepository.listAll(),
-    settingsRepository.getValue(RESIDENTIAL_PROXY_ENABLED_KEY, true),
-    settingsRepository.getValue(RESIDENTIAL_PROXY_PURCHASED_BYTES_KEY, 0),
-    metricsRepository.bandwidthProxyAllTimeBytes(),
-  ]);
+  const [byEgress, byClient, allTunnels, proxyEnabled, purchasedBytes, consumedAllTimeBytes, economia] =
+    await Promise.all([
+      metricsRepository.bandwidthByEgressSince(since, until),
+      metricsRepository.bandwidthByClientSince(since, until),
+      downloadTunnelsRepository.listAll(),
+      settingsRepository.getValue(RESIDENTIAL_PROXY_ENABLED_KEY, true),
+      settingsRepository.getValue(RESIDENTIAL_PROXY_PURCHASED_BYTES_KEY, 0),
+      metricsRepository.bandwidthProxyAllTimeBytes(),
+      // Quanto deixou de ser gasto porque dois clientes monitoram o mesmo
+      // canal e o video foi baixado/transcrito uma vez so.
+      sharedVideoAssetsRepository.savingsSince(since, until),
+    ]);
 
   const founderTunnel = allTunnels.find((t) => t.owner_type === 'founder') || null;
   const clientTunnels = allTunnels.filter((t) => t.owner_type === 'client');
@@ -28,6 +33,7 @@ async function overview(req, res) {
     range: { key: range, since, until },
     byEgress,
     byClient,
+    economia,
     founderTunnel: founderTunnel
       ? {
           id: founderTunnel.id,

@@ -197,7 +197,16 @@ async function confirmAfterDownload(sourceVideo, clientUserId, reserveOutcome, d
   if (reserveOutcome.outcome === 'isento') return;
   if (reserveOutcome.outcome === 'already_charged') return;
 
-  const realBucket = bucketForEgressType(downloadResult.egressType);
+  // 'reuse' = o arquivo ja estava em disco (outro cliente que monitora o
+  // mesmo canal ja tinha baixado). Nao houve caminho de egress nenhum, entao
+  // nao ha nada com que reconciliar: vale o bolso que foi reservado. Isso e o
+  // que garante que o cliente paga exatamente o mesmo que pagaria se o video
+  // tivesse sido baixado pra ele - a economia do reaproveitamento e de custo
+  // nosso, nao um desconto (nem uma cobranca a mais) pra ele.
+  const realBucket =
+    downloadResult.egressType === 'reuse'
+      ? reserveOutcome.bucket
+      : bucketForEgressType(downloadResult.egressType);
 
   // O excedente ja foi cobrado no cartao ANTES do download (ver
   // reserveBeforeDownload), entao nao ha nada a faturar aqui. So o caso

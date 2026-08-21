@@ -79,7 +79,9 @@ async function main() {
     // arquivos em paralelo criaria interferencia entre eles.
     exitCode = await run(
       'node',
-      ['--test', '--test-concurrency=1', 'tests/**/*.test.js'],
+      // Padrao de arquivo opcional na linha de comando, pra rodar um teste
+      // so enquanto se investiga uma falha: npm test tests/services/x.test.js
+      ['--test', '--test-concurrency=1', process.argv[2] || 'tests/**/*.test.js'],
       {
         DATABASE_URL,
         SESSION_SECRET: 'test-secret',

@@ -109,7 +109,8 @@ async function resetForRetry(id) {
   const { rows } = await pool.query(
     `UPDATE source_videos
      SET status = 'detected', error_message = NULL, local_video_path = NULL,
-         transcript_text = NULL, transcript_words = NULL, processing_started_at = NULL,
+         transcript_text = NULL, transcript_words = NULL, transcript_reused = false,
+         processing_started_at = NULL,
          cancel_requested = false, auto_retry_count = 0, updated_at = now()
      WHERE id = $1 AND status IN ('error', 'cancelled')
      RETURNING *`,
@@ -124,7 +125,8 @@ async function resetForAutoRetry(id) {
   const { rows } = await pool.query(
     `UPDATE source_videos
      SET status = 'detected', error_message = NULL, local_video_path = NULL,
-         transcript_text = NULL, transcript_words = NULL, processing_started_at = NULL,
+         transcript_text = NULL, transcript_words = NULL, transcript_reused = false,
+         processing_started_at = NULL,
          cancel_requested = false, auto_retry_count = auto_retry_count + 1, updated_at = now()
      WHERE id = $1 AND status = 'error'
      RETURNING *`,
@@ -261,19 +263,57 @@ async function saveDownload(id, localVideoPath, { bytes = null, egressType = nul
   );
 }
 
+// reused = a transcricao veio pronta de shared_video_assets (outro cliente
+// ja tinha pago o Whisper por este mesmo video do YouTube). Fica gravado
+// porque o painel "Banda" mede a economia - deduzir por "custo zero" mentiria,
+// ja que existe mais de um jeito de o custo ser zero.
 async function saveTranscript(
   id,
-  { transcriptText, transcriptWords, whisperAudioSeconds = null, whisperCostUsd = null, language = null }
+  {
+    transcriptText,
+    transcriptWords,
+    whisperAudioSeconds = null,
+    whisperCostUsd = null,
+    language = null,
+    reused = false,
+  }
 ) {
   await pool.query(
     `UPDATE source_videos
      SET transcript_text = $2, transcript_words = $3,
          whisper_audio_seconds = $4, whisper_cost_usd = $5,
-         transcript_language = $6,
+         transcript_language = $6, transcript_reused = $7,
          transcription_completed_at = now(), updated_at = now()
      WHERE id = $1`,
-    [id, transcriptText, JSON.stringify(transcriptWords), whisperAudioSeconds, whisperCostUsd, language]
+    [id, transcriptText, JSON.stringify(transcriptWords), whisperAudioSeconds, whisperCostUsd, language, reused]
   );
+}
+
+// Quantos videos ainda vao PRECISAR do arquivo baixado deste video do
+// YouTube. Usado pelo sharedAssetsCleanupJob pra decidir se ja pode apagar o
+// arquivo compartilhado - 'ready' e 'cancelled' ficam de fora porque quem ja
+// terminou nao volta a ler o video original; 'error' entra porque o retry
+// automatico ainda pode reprocessa-lo.
+const STATUS_QUE_AINDA_PRECISA_DO_ARQUIVO = [
+  'detected',
+  'downloading',
+  'transcribing',
+  'selecting_clips',
+  'cutting',
+  'paused',
+  'aguardando_creditos',
+  'aguardando_conexao',
+  'error',
+];
+
+async function countPendingByYoutubeVideoId(youtubeVideoId) {
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS n
+       FROM source_videos
+      WHERE youtube_video_id = $1 AND status = ANY($2::text[])`,
+    [youtubeVideoId, STATUS_QUE_AINDA_PRECISA_DO_ARQUIVO]
+  );
+  return rows[0].n;
 }
 
 async function saveClaudeUsage(id, { inputTokens, outputTokens, costUsd }) {
@@ -496,6 +536,8 @@ module.exports = {
   updateStatus,
   saveDownload,
   saveTranscript,
+  countPendingByYoutubeVideoId,
+  STATUS_QUE_AINDA_PRECISA_DO_ARQUIVO,
   saveClaudeUsage,
   markClipSelectionCompleted,
   markProcessingStarted,

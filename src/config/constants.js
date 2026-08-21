@@ -53,4 +53,26 @@ const COMPANY = Object.freeze({
   city: 'Cuiabá/MT',
 });
 
-module.exports = { ROLES, POSTING_STATUS, DRIVE_FOLDER_TYPE, CONTACT, COMPANY };
+// Quanto tempo um corte já publicado no TikTok continua ocupando disco antes
+// de ser apagado automaticamente (arquivo, capa e, se era o último corte
+// daquele vídeo, o vídeo-fonte junto). Ver postingCleanupJob.js.
+//
+// Valor único e fixo, não configurável pelo cliente, de propósito: o disco da
+// VPS é compartilhado por todo mundo, mas a escolha de guardar por mais tempo
+// seria individual - quem escolhe "30 dias" não paga essa conta e não tem como
+// saber que ela existe. Em 21/08/2026 os cortes ocupavam 33 GB (55% do disco)
+// com todo mundo no padrão antigo de 7 dias, e ninguém tinha percebido.
+//
+// 3 dias é folga de sobra: depois de publicado, o arquivo local só serve para
+// reexportar pro Drive, e quem quer o arquivo tem a exportação automática pro
+// Drive rodando a cada 15 minutos.
+const RETENCAO_CORTE_POSTADO_HORAS = 72;
+
+module.exports = {
+  ROLES,
+  POSTING_STATUS,
+  DRIVE_FOLDER_TYPE,
+  CONTACT,
+  COMPANY,
+  RETENCAO_CORTE_POSTADO_HORAS,
+};

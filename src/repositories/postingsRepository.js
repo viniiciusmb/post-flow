@@ -263,15 +263,21 @@ async function listStaleProcessing() {
   return rows;
 }
 
-// Postagens 'posted' mais velhas que a retencao configurada - usado pelo
-// job de limpeza automatica.
-async function listPostedOlderThan(tiktokAccountId, hours) {
+// Postagens 'posted' mais velhas que a retencao - usado pelo job de limpeza
+// automatica.
+//
+// Varre o sistema inteiro de uma vez, sem passar por conta do TikTok: a
+// retencao virou um valor unico e fixo (RETENCAO_CORTE_POSTADO_HORAS), entao
+// nao existe mais "a retencao daquela conta" pra consultar. De quebra, isso
+// resolve um buraco silencioso da versao anterior - uma conta que nunca teve
+// linha em posting_schedule_settings nunca era varrida.
+async function listPostedOlderThan(hours) {
   const { rows } = await pool.query(
     `SELECT p.*, c.id AS clip_id, c.local_clip_path, c.thumbnail_path, sv.id AS source_video_id
      FROM postings p
      ${CLIP_FILE_JOIN}
-     WHERE p.tiktok_account_id = $1 AND p.status = 'posted' AND p.posted_at < now() - ($2 || ' hours')::interval`,
-    [tiktokAccountId, hours]
+     WHERE p.status = 'posted' AND p.posted_at < now() - ($1 || ' hours')::interval`,
+    [hours]
   );
   return rows;
 }

@@ -5,10 +5,10 @@ const postingScheduleSettingsRepository = require('../../../repositories/posting
 const postingsRepository = require('../../../repositories/postingsRepository');
 const tiktokService = require('../../../services/tiktokService');
 const publishOptions = require('../../../lib/publishOptions');
+const { RETENCAO_CORTE_POSTADO_HORAS } = require('../../../config/constants');
 const logger = require('../../../lib/logger');
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
-const RETENTION_PRESETS = [24, 72, 168, 720]; // 1d, 3d, 7d, 30d
 // Teto de publicacoes por dia, por conta. Vale pros DOIS modos: no automatico
 // limita videos_per_day, no manual limita quantos horarios podem ser
 // cadastrados - sem isso, o modo manual furava o limite com 30 horarios.
@@ -207,9 +207,11 @@ function scheduleToApi(settings) {
     videosPerDay: settings.videos_per_day,
     manualTimes: settings.manual_times,
     timezone: settings.timezone,
-    autoDeleteAfterHours: settings.auto_delete_after_hours,
     paused: settings.paused,
-    options: { retentionPresetsHours: RETENTION_PRESETS, maxPostsPerDay: MAX_POSTS_POR_DIA },
+    // A retencao deixou de ser configuravel (ver constants.js e migration
+    // 062), mas continua vindo na resposta: a tela mostra o prazo pro cliente
+    // saber quanto tempo o corte fica guardado - so nao deixa escolher.
+    options: { retentionHours: RETENCAO_CORTE_POSTADO_HORAS, maxPostsPerDay: MAX_POSTS_POR_DIA },
   };
 }
 
@@ -249,16 +251,6 @@ async function setSchedule(req, res) {
 
   const timezone = String(req.body.timezone || '').trim() || 'America/Sao_Paulo';
 
-  let autoDeleteAfterHours = req.body.autoDeleteAfterHours;
-  if (autoDeleteAfterHours !== null && autoDeleteAfterHours !== undefined) {
-    autoDeleteAfterHours = Number(autoDeleteAfterHours);
-    if (!Number.isInteger(autoDeleteAfterHours) || autoDeleteAfterHours < 1) {
-      return res.status(400).json({ error: res.locals.t('erros.retencaoInvalida') });
-    }
-  } else {
-    autoDeleteAfterHours = null;
-  }
-
   // Guarda manualTimes como veio, mesmo em modo 'auto' - forcar pra [] aqui
   // era o bug real: cliente configurava os horarios, clicava em
   // "Automatico" (de proposito ou sem querer) e ao voltar pra "Manual" os
@@ -270,7 +262,6 @@ async function setSchedule(req, res) {
     videosPerDay,
     manualTimes,
     timezone,
-    autoDeleteAfterHours,
   });
   res.json(scheduleToApi(updated));
 }

@@ -354,7 +354,6 @@ module.exports = {
     proporcaoInvalida: "Proporcao inválida.",
     publicKeyInvalida: "publicKey inválida.",
     qualidadeInvalida: "Qualidade inválida.",
-    retencaoInvalida: "Retencao inválida.",
     saldoAbaixoDoMinimo: "Seu saldo ainda não chegou no valor mínimo de saque.",
     saldoInsuficiente: "Saldo insuficiente para esse saque.",
     saqueNaoPendente: "Esse saque não está mais pendente.",

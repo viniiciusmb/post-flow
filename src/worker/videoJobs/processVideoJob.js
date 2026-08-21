@@ -20,6 +20,8 @@ const postingsRepository = require('../../repositories/postingsRepository');
 const tiktokAccountsRepository = require('../../repositories/tiktokAccountsRepository');
 const sourceVideoTiktokTargetsRepository = require('../../repositories/sourceVideoTiktokTargetsRepository');
 const clientVideoSettingsRepository = require('../../repositories/clientVideoSettingsRepository');
+const sharedVideoAssetsRepository = require('../../repositories/sharedVideoAssetsRepository');
+const sharedVideoFiles = require('../../lib/sharedVideoFiles');
 const ytDlpService = require('../../services/ytDlpService');
 const videoEditingService = require('../../services/videoEditingService');
 const openaiTranscriptionService = require('../../services/openaiTranscriptionService');
@@ -61,6 +63,29 @@ async function baixarCapaDoVideo(sourceVideo, workDir) {
     logger.warn(`Nao consegui baixar a capa do video ${sourceVideo.id} (${err.message}) - caindo no fundo desfocado.`);
     return null;
   }
+}
+
+// Tira o video recem-baixado da pasta do source_video e poe na pasta
+// compartilhada, para que o proximo cliente que monitore o mesmo canal use o
+// MESMO arquivo em vez de baixar de novo.
+//
+// Nunca derruba o video: se por algum motivo nao der pra mover, segue com o
+// arquivo onde ele esta e so perde o compartilhamento. O download ja foi pago
+// e ja aconteceu - falhar aqui jogaria fora justamente a parte cara.
+function guardarComoCompartilhado(filePath, youtubeVideoId) {
+  const destino = sharedVideoFiles.pathFor(youtubeVideoId, path.extname(filePath) || '.mp4');
+  fs.mkdirSync(sharedVideoFiles.dir(), { recursive: true });
+  try {
+    fs.renameSync(filePath, destino);
+  } catch (err) {
+    // rename nao atravessa sistemas de arquivos (EXDEV). Nao acontece em
+    // producao (mesma pasta montada), mas acontece em dev/teste com TMPDIR
+    // em outro volume - copia e apaga.
+    if (err.code !== 'EXDEV') throw err;
+    fs.copyFileSync(filePath, destino);
+    fs.rmSync(filePath, { force: true });
+  }
+  return destino;
 }
 
 // Pausa cooperativa: confere a flag entre as etapas principais (e a cada
@@ -141,6 +166,14 @@ async function run(sourceVideoId) {
   try {
     await sourceVideosRepository.markProcessingStarted(sourceVideo.id);
 
+    // Cria a pasta de trabalho deste video ANTES de qualquer etapa. Antes,
+    // quem a criava era o download (ytDlpService.downloadVideo) - e quando o
+    // download passou a poder ser pulado por reaproveitamento, a pasta deixava
+    // de existir e o primeiro corte quebrava com ENOENT. A pasta guarda o
+    // audio, a capa e os arquivos dos cortes, entao ela e necessaria com ou
+    // sem download.
+    fs.mkdirSync(workDir, { recursive: true });
+
     let videoPath = sourceVideo.local_video_path;
     if (sourceVideo.input_type === 'upload') {
       // Arquivo ja esta em disco (upload direto) - so confirma que ainda
@@ -158,23 +191,42 @@ async function run(sourceVideoId) {
       if (uploadCharge.outcome === 'charge_failed') {
         throw new ChargeFailedError(uploadCharge.motivo);
       }
-      fs.mkdirSync(workDir, { recursive: true });
     } else if (videoPath && fs.existsSync(videoPath)) {
       // Ja baixado numa execucao anterior (retomando de uma pausa) - pula o
       // download de novo.
     } else {
+      // Este MESMO video do YouTube ja foi baixado por outro cliente (dois
+      // clientes monitorando o mesmo canal geram dois source_videos para o
+      // mesmo video) e o arquivo ainda esta em disco? Entao nao ha nada pra
+      // baixar - e o mesmo arquivo, byte por byte.
+      const compartilhado = await sharedVideoAssetsRepository.findByYoutubeVideoId(sourceVideo.youtube_video_id);
+      const reaproveitavel =
+        compartilhado && compartilhado.local_video_path && fs.existsSync(compartilhado.local_video_path)
+          ? compartilhado
+          : null;
+
       // O cliente pode ter pedido pra so baixar com o computador dele ligado.
       // Conferir ANTES de cobrar credito: cobrar e depois descobrir que nao da
       // pra baixar deixaria o credito reservado a toa.
-      const politica = await downloadTunnelsRepository.clientTunnelPolicy(clientUserId);
-      if (politica.exige && !politica.conectado) {
-        throw new WaitingForTunnelError(
-          'O cliente escolheu baixar so pela internet dele, e o computador dele nao esta conectado agora.'
-        );
+      //
+      // Com reaproveitamento nao ha download nenhum pra fazer, entao exigir o
+      // computador ligado so seguraria a fila do cliente por um download que
+      // nao vai acontecer - e a internet dele nao seria usada de qualquer jeito.
+      if (!reaproveitavel) {
+        const politica = await downloadTunnelsRepository.clientTunnelPolicy(clientUserId);
+        if (politica.exige && !politica.conectado) {
+          throw new WaitingForTunnelError(
+            'O cliente escolheu baixar so pela internet dele, e o computador dele nao esta conectado agora.'
+          );
+        }
       }
 
       // Reserva o credito ANTES de baixar - se nao houver saldo (e sem
       // cartao de excedente ligado), nao inicia o download nenhum.
+      //
+      // Vale igual no reaproveitamento: o cliente paga o mesmo que pagaria se
+      // o video tivesse sido baixado pra ele. A economia do reaproveitamento e
+      // de custo nosso (banda e Whisper), nao um desconto no preco dele.
       const reserveOutcome = await creditsService.reserveBeforeDownload(sourceVideo, clientUserId);
       if (reserveOutcome.outcome === 'blocked') {
         throw new AwaitingCreditsError('Sem credito disponivel pra baixar este video.');
@@ -186,21 +238,64 @@ async function run(sourceVideoId) {
         throw new ChargeFailedError(reserveOutcome.motivo);
       }
 
-      await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
-      const downloadResult = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir, { checkCancelled, clientUserId });
-      videoPath = downloadResult.filePath;
-      // Tamanho real do arquivo baixado = consumo de banda de verdade pra
-      // essa origem (tunel do cliente/founder ou proxy) - alimenta o painel
-      // "Banda" (custo/margem).
-      const downloadBytes = fs.statSync(videoPath).size;
-      await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath, {
-        bytes: downloadBytes,
-        egressType: downloadResult.egressType,
-        tunnelId: downloadResult.tunnelId,
-      });
-      // Download terminou com sucesso - confirma a cobranca (ou fatura de
-      // excedente) definitiva agora que o caminho real de egress e conhecido.
-      await creditsService.confirmAfterDownload(sourceVideo, clientUserId, reserveOutcome, downloadResult);
+      if (reaproveitavel) {
+        videoPath = reaproveitavel.local_video_path;
+        // egress 'reuse' com 0 bytes e a verdade literal: nenhuma banda saiu
+        // por este video. E assim que o painel "Banda" mostra a economia.
+        await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath, {
+          bytes: 0,
+          egressType: 'reuse',
+          tunnelId: null,
+        });
+        await sharedVideoAssetsRepository.registerDownloadReuse(sourceVideo.youtube_video_id);
+        await creditsService.confirmAfterDownload(sourceVideo, clientUserId, reserveOutcome, {
+          egressType: 'reuse',
+          tunnelId: null,
+        });
+        logger.info(
+          `Video-fonte ${sourceVideo.id}: download reaproveitado do arquivo ja baixado para ${sourceVideo.youtube_video_id} - nenhuma banda gasta.`
+        );
+      } else {
+        await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
+        const downloadResult = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir, { checkCancelled, clientUserId });
+
+        // Tamanho real do arquivo baixado = consumo de banda de verdade pra
+        // essa origem (tunel do cliente/founder ou proxy) - alimenta o painel
+        // "Banda" (custo/margem).
+        const downloadBytes = fs.statSync(downloadResult.filePath).size;
+
+        // Guarda numa pasta compartilhada pra que o proximo cliente que
+        // monitore o mesmo canal reaproveite este arquivo em vez de baixar
+        // tudo de novo.
+        let compartilhou = true;
+        try {
+          videoPath = guardarComoCompartilhado(downloadResult.filePath, sourceVideo.youtube_video_id);
+        } catch (err) {
+          logger.error(
+            `Nao consegui mover o video ${sourceVideo.id} pra pasta compartilhada (seguindo sem compartilhar):`,
+            err
+          );
+          videoPath = downloadResult.filePath;
+          compartilhou = false;
+        }
+
+        await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath, {
+          bytes: downloadBytes,
+          egressType: downloadResult.egressType,
+          tunnelId: downloadResult.tunnelId,
+        });
+        if (compartilhou) {
+          await sharedVideoAssetsRepository.saveDownload(sourceVideo.youtube_video_id, {
+            localVideoPath: videoPath,
+            bytes: downloadBytes,
+            egressType: downloadResult.egressType,
+            tunnelId: downloadResult.tunnelId,
+          });
+        }
+        // Download terminou com sucesso - confirma a cobranca (ou fatura de
+        // excedente) definitiva agora que o caminho real de egress e conhecido.
+        await creditsService.confirmAfterDownload(sourceVideo, clientUserId, reserveOutcome, downloadResult);
+      }
     }
 
     await checkPaused(sourceVideo.id);
@@ -217,18 +312,66 @@ async function run(sourceVideoId) {
         language: sourceVideo.transcript_language,
       };
     } else {
-      await sourceVideosRepository.updateStatus(sourceVideo.id, 'transcribing');
-      const audioPath = path.join(workDir, 'audio.mp3');
-      await videoEditingService.extractAudio(videoPath, audioPath);
-      transcript = await openaiTranscriptionService.transcribeAudio(audioPath, { checkCancelled });
-      await sourceVideosRepository.saveTranscript(sourceVideo.id, {
-        transcriptText: transcript.text,
-        transcriptWords: transcript.words,
-        whisperAudioSeconds: transcript.durationSeconds,
-        whisperCostUsd: transcript.costUsd,
-        language: transcript.language,
-      });
-      fs.unlinkSync(audioPath);
+      // Mesma ideia do download: a transcricao do MESMO video do YouTube e
+      // identica para todo cliente, entao o Whisper so roda na primeira vez.
+      // A partir daqui tudo volta a ser individual - a IA que escolhe os
+      // trechos, o corte, a legenda e o titulo seguem a configuracao de cada
+      // cliente.
+      //
+      // A transcricao guardada dura MUITO mais que o arquivo de video: mesmo
+      // depois do arquivo ser apagado do disco, um cliente que adicionar o
+      // canal semanas depois baixa o video de novo mas nao paga o Whisper.
+      const compartilhado = await sharedVideoAssetsRepository.findByYoutubeVideoId(sourceVideo.youtube_video_id);
+
+      if (compartilhado && compartilhado.transcript_words) {
+        transcript = {
+          text: compartilhado.transcript_text,
+          words: compartilhado.transcript_words,
+          // NUMERIC volta do Postgres como string - sem o Number() a duracao
+          // entraria como texto nas contas de quantos cortes cabem no video.
+          durationSeconds:
+            compartilhado.whisper_audio_seconds === null ? null : Number(compartilhado.whisper_audio_seconds),
+          language: compartilhado.transcript_language,
+        };
+        await sourceVideosRepository.saveTranscript(sourceVideo.id, {
+          transcriptText: transcript.text,
+          transcriptWords: transcript.words,
+          whisperAudioSeconds: transcript.durationSeconds,
+          // Zero e o custo real desta vez: o Whisper nao foi chamado.
+          whisperCostUsd: 0,
+          language: transcript.language,
+          reused: true,
+        });
+        await sharedVideoAssetsRepository.registerTranscriptReuse(sourceVideo.youtube_video_id);
+        logger.info(
+          `Video-fonte ${sourceVideo.id}: transcricao reaproveitada de ${sourceVideo.youtube_video_id} - Whisper nao foi chamado.`
+        );
+      } else {
+        await sourceVideosRepository.updateStatus(sourceVideo.id, 'transcribing');
+        const audioPath = path.join(workDir, 'audio.mp3');
+        await videoEditingService.extractAudio(videoPath, audioPath);
+        transcript = await openaiTranscriptionService.transcribeAudio(audioPath, { checkCancelled });
+        await sourceVideosRepository.saveTranscript(sourceVideo.id, {
+          transcriptText: transcript.text,
+          transcriptWords: transcript.words,
+          whisperAudioSeconds: transcript.durationSeconds,
+          whisperCostUsd: transcript.costUsd,
+          language: transcript.language,
+        });
+        // Video avulso enviado do computador nao tem youtube_video_id, entao
+        // nao ha o que compartilhar (nao existe "o mesmo video" pra outro
+        // cliente).
+        if (sourceVideo.youtube_video_id) {
+          await sharedVideoAssetsRepository.saveTranscript(sourceVideo.youtube_video_id, {
+            transcriptText: transcript.text,
+            transcriptWords: transcript.words,
+            whisperAudioSeconds: transcript.durationSeconds,
+            whisperCostUsd: transcript.costUsd,
+            language: transcript.language,
+          });
+        }
+        fs.unlinkSync(audioPath);
+      }
     }
 
     await checkPaused(sourceVideo.id);
@@ -408,10 +551,15 @@ async function run(sourceVideoId) {
       }
     }
 
-    // O video original baixado nao e mais necessario - os cortes ja existem
-    // em arquivos proprios. Mantem os cortes em disco (a postagem de verdade
-    // ainda vai precisar deles).
-    if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
+    // O video original baixado nao e mais necessario PRA ESTE cliente - os
+    // cortes ja existem em arquivos proprios. Mantem os cortes em disco (a
+    // postagem de verdade ainda vai precisar deles).
+    //
+    // Se o arquivo e compartilhado, quem apaga e o sharedAssetsCleanupJob,
+    // quando ninguem mais precisar dele. Apagar aqui devolveria exatamente o
+    // problema que o compartilhamento resolve: o proximo cliente do mesmo
+    // canal baixaria tudo de novo.
+    if (!sharedVideoFiles.isShared(videoPath) && fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
 
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'ready');
   } catch (err) {

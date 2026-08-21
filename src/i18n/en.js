@@ -345,7 +345,6 @@ module.exports = {
     proporcaoInvalida: "Invalid aspect ratio.",
     publicKeyInvalida: "Invalid publicKey.",
     qualidadeInvalida: "Invalid quality.",
-    retencaoInvalida: "Invalid retention.",
     saldoAbaixoDoMinimo: "Your balance hasn't reached the minimum withdrawal amount yet.",
     saldoInsuficiente: "Insufficient balance for this withdrawal.",
     saqueNaoPendente: "This withdrawal is no longer pending.",

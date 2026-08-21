@@ -102,8 +102,14 @@ async function stageTimingsSince(since, until = new Date()) {
   const { rows } = await pool.query(
     `SELECT
        count(*)::int AS sample_size,
-       avg(EXTRACT(EPOCH FROM (download_completed_at - processing_started_at)) / (duration_seconds / 60.0)) AS avg_download_seconds_per_min,
-       avg(EXTRACT(EPOCH FROM (transcription_completed_at - download_completed_at)) / (duration_seconds / 60.0)) AS avg_transcription_seconds_per_min,
+       -- Video que reaproveitou o download/transcricao de outro cliente leva ~0s
+       -- nessas duas etapas. Incluir esses zeros na media faria a tela dizer
+       -- que baixar ficou mais rapido, quando na verdade nem chegou a baixar -
+       -- e esta media existe justamente pra estimar capacidade real.
+       avg(EXTRACT(EPOCH FROM (download_completed_at - processing_started_at)) / (duration_seconds / 60.0))
+         FILTER (WHERE coalesce(download_egress_type, '') <> 'reuse') AS avg_download_seconds_per_min,
+       avg(EXTRACT(EPOCH FROM (transcription_completed_at - download_completed_at)) / (duration_seconds / 60.0))
+         FILTER (WHERE NOT transcript_reused) AS avg_transcription_seconds_per_min,
        avg(EXTRACT(EPOCH FROM (clip_selection_completed_at - transcription_completed_at)) / (duration_seconds / 60.0)) AS avg_selection_seconds_per_min,
        avg(EXTRACT(EPOCH FROM (updated_at - clip_selection_completed_at)) / (duration_seconds / 60.0)) AS avg_cutting_seconds_per_min,
        avg(EXTRACT(EPOCH FROM (updated_at - processing_started_at)) / (duration_seconds / 60.0)) AS avg_total_seconds_per_min
