@@ -62,6 +62,38 @@ async function findByStripeCustomerId(stripeCustomerId) {
   return rows[0] || null;
 }
 
+// ---------- Asaas (mensalidade) ----------
+//
+// O cartao de excedente continua na Stripe, com os campos stripe_* proprios -
+// por isso a origem da ASSINATURA e uma coluna separada. Deduzir de qual id
+// esta preenchido funcionaria ate o dia em que os dois existem na mesma linha,
+// que e exatamente o periodo de convivencia em que estamos.
+async function setAsaasSubscription(clientUserId, { customerId, subscriptionId }) {
+  const { rows } = await pool.query(
+    `UPDATE client_subscriptions
+        SET asaas_customer_id = $2,
+            asaas_subscription_id = $3,
+            subscription_provider = 'asaas',
+            updated_at = now()
+      WHERE client_user_id = $1
+      RETURNING *`,
+    [clientUserId, customerId, subscriptionId]
+  );
+  return rows[0] || null;
+}
+
+async function findByAsaasCustomerId(asaasCustomerId) {
+  const { rows } = await pool.query('SELECT * FROM client_subscriptions WHERE asaas_customer_id = $1', [asaasCustomerId]);
+  return rows[0] || null;
+}
+
+async function findByAsaasSubscriptionId(asaasSubscriptionId) {
+  const { rows } = await pool.query('SELECT * FROM client_subscriptions WHERE asaas_subscription_id = $1', [
+    asaasSubscriptionId,
+  ]);
+  return rows[0] || null;
+}
+
 async function setStatus(clientUserId, status) {
   const { rows } = await pool.query(
     `UPDATE client_subscriptions SET status = $2, updated_at = now() WHERE client_user_id = $1 RETURNING *`,
@@ -123,5 +155,8 @@ module.exports = {
   setStripeCustomer,
   clearStripeLinks,
   setStripeSubscription,
+  setAsaasSubscription,
+  findByAsaasCustomerId,
+  findByAsaasSubscriptionId,
   setOverageCard,
 };

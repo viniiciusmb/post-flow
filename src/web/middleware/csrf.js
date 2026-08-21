@@ -28,6 +28,8 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 //
 //  - /api/stripe/webhook: quem chama e a Stripe, sem navegador e sem sessao.
 //    Ja e autenticada pela assinatura stripe-signature no corpo bruto.
+//  - /api/asaas/webhook: mesmo caso, quem chama e o Asaas. Autenticada pelo
+//    token combinado no cabecalho asaas-access-token.
 //  - /api/tunnel/register-pending: quem chama e o programa de bandeja
 //    instalado na maquina do cliente, sem sessao de login.
 //  - /login, /register, /api/auth/login: acontecem ANTES de existir sessao,
@@ -35,6 +37,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 //    pelo limite de tentativas (rate limit).
 const EXEMPT_PATHS = [
   '/api/stripe/webhook',
+  '/api/asaas/webhook',
   '/api/tunnel/register-pending',
   '/login',
   '/register',

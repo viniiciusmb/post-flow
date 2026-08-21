@@ -30,6 +30,7 @@ const clientTunnelApiRoutes = require('./routes/api/clientTunnelApiRoutes');
 const clientBillingApiRoutes = require('./routes/api/clientBillingApiRoutes');
 const adminBillingApiRoutes = require('./routes/api/adminBillingApiRoutes');
 const stripeWebhookApiRoutes = require('./routes/api/stripeWebhookApiRoutes');
+const asaasWebhookApiRoutes = require('./routes/api/asaasWebhookApiRoutes');
 const clientCommissionsApiRoutes = require('./routes/api/clientCommissionsApiRoutes');
 const adminCommissionsApiRoutes = require('./routes/api/adminCommissionsApiRoutes');
 const errorHandler = require('./middleware/errorHandler');
@@ -166,8 +167,14 @@ app.use(
   rateLimits.billing
 );
 app.use('/api/client/source-videos/upload', rateLimits.upload);
+// Os webhooks ficam fora do limite de requisicoes: os dois provedores mandam
+// eventos em rajada, e no caso do Asaas 15 recusas seguidas PAUSAM a fila da
+// conta inteira (os eventos somem em 14 dias). Um 429 nosso viraria perda de
+// aviso de pagamento.
 app.use('/api', (req, res, next) =>
-  req.path.startsWith('/stripe/webhook') ? next() : rateLimits.geral(req, res, next)
+  req.path.startsWith('/stripe/webhook') || req.path.startsWith('/asaas/webhook')
+    ? next()
+    : rateLimits.geral(req, res, next)
 );
 
 // Paginas publicas (landing, termos, privacidade, contato). Nao exigem login
@@ -197,6 +204,7 @@ app.use('/api/admin/billing', adminBillingApiRoutes);
 app.use('/api/client/commissions', clientCommissionsApiRoutes);
 app.use('/api/admin/commissions', adminCommissionsApiRoutes);
 app.use('/api/stripe/webhook', stripeWebhookApiRoutes);
+app.use('/api/asaas/webhook', asaasWebhookApiRoutes);
 app.use('/api', (req, res) => res.status(404).json({ error: 'Rota nao encontrada.' }));
 
 app.use((req, res) => {

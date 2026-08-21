@@ -13,6 +13,8 @@ const creditPurchasesRepository = require('../../../repositories/creditPurchases
 const creditTransactionsRepository = require('../../../repositories/creditTransactionsRepository');
 const usersRepository = require('../../../repositories/usersRepository');
 const stripeService = require('../../../services/stripeService');
+const asaasService = require('../../../services/asaasService');
+const asaasBillingService = require('../../../services/asaasBillingService');
 const creditsService = require('../../../services/creditsService');
 const subscriptionCheckoutService = require('../../../services/subscriptionCheckoutService');
 const { resolveStripeCustomerId } = subscriptionCheckoutService;
@@ -125,21 +127,33 @@ async function overview(req, res) {
 // Checkout da Stripe (assinatura). Sem Stripe configurada ainda, devolve
 // 400 - o admin pode atribuir o plano manualmente enquanto isso (tela de
 // admin, sem depender daqui).
+// Mensalidade pelo Asaas. Nao precisa de preco cadastrado la (como o
+// stripe_price_id exigia): o valor vai no proprio checkout, direto da nossa
+// tabela de planos - uma fonte da verdade a menos pra sair de sincronia.
 async function subscribe(req, res) {
-  if (!stripeService.isConfigured()) {
+  const usarAsaas = asaasBillingService.clientePodeUsarAsaas(req.session.user);
+  if (!usarAsaas && !stripeService.isConfigured()) {
     return res.status(400).json({ error: res.locals.t('erros.pagamentoIndisponivel') });
   }
 
   const plan = await subscriptionPlansRepository.findByKey(String(req.body.planKey || ''));
-  if (!plan || !plan.stripe_price_id) {
+  // O Asaas nao precisa de preco cadastrado la (como o stripe_price_id
+  // exigia): o valor vai no proprio checkout, direto da nossa tabela de
+  // planos - uma fonte da verdade a menos pra sair de sincronia.
+  if (!plan || (!usarAsaas && !plan.stripe_price_id)) {
     return res.status(400).json({ error: res.locals.t('erros.planoInvalido') });
   }
 
   const clientUserId = req.session.user.id;
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  const customerId = await resolveStripeCustomerId(clientUserId, subscription);
-
   const origin = `${req.protocol}://${req.get('host')}`;
+
+  if (usarAsaas) {
+    const { checkoutUrl } = await asaasBillingService.createSubscriptionCheckout({ clientUserId, plan, origin });
+    return res.json({ checkoutUrl });
+  }
+
+  const customerId = await resolveStripeCustomerId(clientUserId, subscription);
   const session = await stripeService.createCheckoutSessionForSubscription({
     customerId,
     priceId: plan.stripe_price_id,
@@ -147,14 +161,14 @@ async function subscribe(req, res) {
     cancelUrl: `${origin}/client/billing?assinatura=cancelado`,
     metadata: { clientUserId: String(clientUserId), planKey: plan.key },
   });
-
   res.json({ checkoutUrl: session.url });
 }
 
 // Compra de credito avulso. O preco NAO e mais um pacote fechado vindo da
 // tabela settings: e minutos x a taxa de excedente (ver as constantes no topo).
 async function buyPackage(req, res) {
-  if (!stripeService.isConfigured()) {
+  const usarAsaas = asaasBillingService.clientePodeUsarAsaas(req.session.user);
+  if (!usarAsaas && !stripeService.isConfigured()) {
     return res.status(400).json({ error: res.locals.t('erros.pagamentoIndisponivel') });
   }
 
@@ -167,10 +181,20 @@ async function buyPackage(req, res) {
   // um centavo.
   const minutes = minutosPedidos(req.body.minutes);
   const priceCents = minutes * centsPorMinutoAvulso();
+  const origin = `${req.protocol}://${req.get('host')}`;
+
+  if (usarAsaas) {
+    const { checkoutUrl } = await asaasBillingService.createPackageCheckout({
+      clientUserId,
+      minutes,
+      bucket,
+      priceCents,
+      origin,
+    });
+    return res.json({ checkoutUrl });
+  }
 
   const customerId = await resolveStripeCustomerId(clientUserId, subscription);
-
-  const origin = `${req.protocol}://${req.get('host')}`;
   const session = await stripeService.createCheckoutSessionForPackage({
     customerId,
     amountCents: priceCents,
@@ -180,15 +204,14 @@ async function buyPackage(req, res) {
     cancelUrl: `${origin}/client/billing?pacote=cancelado`,
     metadata: { clientUserId: String(clientUserId) },
   });
-
   await creditPurchasesRepository.create({
     clientUserId,
     bucket,
     minutes,
     amountCents: priceCents,
     stripeCheckoutSessionId: session.id,
+    provider: 'stripe',
   });
-
   res.json({ checkoutUrl: session.url });
 }
 

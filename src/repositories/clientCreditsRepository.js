@@ -132,12 +132,28 @@ async function forceDebitUsed(clientUserId, bucket, minutes) {
 
 // Credito avulso comprado - nunca expira sozinho, carrega de ciclo em ciclo
 // (nao mexe em quota_*/used_*).
+// Credita minutos comprados avulso.
+//
+// INSERT ... ON CONFLICT, e nao um UPDATE simples: quem compra credito antes
+// de ter processado qualquer video ainda nao tem linha em client_credits (ela
+// so nascia no primeiro download ou ao receber um plano). O UPDATE anterior
+// atualizava ZERO linhas nesse caso - o cliente pagava, o pagamento era
+// marcado como pago, e o credito simplesmente nao existia. Sem erro em lugar
+// nenhum, o pior tipo de falha com dinheiro no meio.
+//
+// Devolve a linha resultante pra quem chamou poder conferir que creditou de
+// verdade, em vez de confiar que sim.
 async function addExtra(clientUserId, bucket, minutes) {
   const { extra } = columnsFor(bucket);
-  await pool.query(
-    `UPDATE client_credits SET ${extra} = ${extra} + $2, updated_at = now() WHERE client_user_id = $1`,
+  const { rows } = await pool.query(
+    `INSERT INTO client_credits (client_user_id, ${extra})
+     VALUES ($1, $2)
+     ON CONFLICT (client_user_id) DO UPDATE
+       SET ${extra} = client_credits.${extra} + $2, updated_at = now()
+     RETURNING *`,
     [clientUserId, minutes]
   );
+  return rows[0];
 }
 
 // Reset semanal (job) - so mexe nos clientes com assinatura ativa cujo

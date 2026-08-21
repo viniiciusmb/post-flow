@@ -191,6 +191,16 @@ async function createCheckout(body) {
 
 // ---------- assinaturas ----------
 
+// Depois que o cliente paga um checkout de assinatura, o aviso do Asaas traz
+// o id do CHECKOUT e do cliente - não o da assinatura criada. Como é ela que
+// precisamos guardar (para trocar de plano ou cancelar depois), buscamos a
+// assinatura pelo cliente. Ordenado pelo mais recente porque o cliente pode
+// ter uma assinatura antiga cancelada.
+async function listSubscriptionsByCustomer(customerId, { limit = 10 } = {}) {
+  const r = await request('GET', '/subscriptions', { query: { customer: customerId, limit } });
+  return Array.isArray(r?.data) ? r.data : [];
+}
+
 async function getSubscription(subscriptionId) {
   return request('GET', `/subscriptions/${encodeURIComponent(subscriptionId)}`);
 }
@@ -243,6 +253,7 @@ module.exports = {
   updateCustomer,
   customerExists,
   createCheckout,
+  listSubscriptionsByCustomer,
   getSubscription,
   updateSubscription,
   cancelSubscription,

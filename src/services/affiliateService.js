@@ -75,13 +75,29 @@ async function captureAttribution({ referredUserId, refCode, utm, landingPath })
 // - excedente/credito avulso nao geram comissao (decisao do usuario). Sai
 // silenciosamente (sem lancar erro) em qualquer caso onde nao ha o que
 // creditar, pra nunca derrubar o processamento do webhook.
+// Adaptador da Stripe: traduz o formato de fatura dela e delega. A regra de
+// comissao em si nao conhece provedor nenhum - ver recordCommissionForPayment.
 async function recordCommissionForInvoice(invoice) {
   if (!invoice || !invoice.subscription) return { skipped: 'naoEhMensalidade' };
 
   const subscription = await clientSubscriptionsRepository.findByStripeCustomerId(invoice.customer);
   if (!subscription) return { skipped: 'clienteNaoEncontrado' };
 
-  const referredUserId = subscription.client_user_id;
+  return recordCommissionForPayment({
+    clientUserId: subscription.client_user_id,
+    provider: 'stripe',
+    externalPaymentId: invoice.id,
+    amountPaidCents: Number(invoice.amount_paid || 0),
+  });
+}
+
+// A regra de comissao, sem saber de qual provedor veio o dinheiro. Recebe
+// quem pagou, quanto, e um id que identifica o pagamento de forma unica -
+// e esse id que garante que reenvio de aviso nao paga comissao duas vezes.
+async function recordCommissionForPayment({ clientUserId, provider, externalPaymentId, amountPaidCents }) {
+  if (!clientUserId || !externalPaymentId) return { skipped: 'dadosInsuficientes' };
+
+  const referredUserId = clientUserId;
   const referral = await referralsRepository.findByReferredUserId(referredUserId);
   if (!referral || !referral.referrer_user_id) return { skipped: 'semIndicacao' };
 
@@ -103,8 +119,7 @@ async function recordCommissionForInvoice(invoice) {
     ? Number(affiliate.commission_percent_override)
     : Number(percentDefault);
 
-  const amountPaidCents = Number(invoice.amount_paid || 0);
-  const commissionCents = Math.round((amountPaidCents * percent) / 100);
+  const commissionCents = Math.round((Number(amountPaidCents) * percent) / 100);
   if (commissionCents <= 0) return { skipped: 'valorZerado' };
 
   const client = await pool.connect();
@@ -113,19 +128,22 @@ async function recordCommissionForInvoice(invoice) {
     const entry = await commissionEntriesRepository.insertIfNotExists(client, {
       affiliateUserId,
       referredUserId,
-      stripeInvoiceId: invoice.id,
-      amountPaidCents,
+      externalPaymentId,
+      provider,
+      amountPaidCents: Number(amountPaidCents),
       commissionPercent: percent,
       commissionCents,
     });
     if (!entry) {
-      // Fatura ja processada antes (reenvio de webhook) - nada a fazer.
+      // Pagamento ja processado antes (reenvio de aviso) - nada a fazer.
       await client.query('ROLLBACK');
       return { skipped: 'jaProcessada' };
     }
     await affiliatesRepository.credit(client, affiliateUserId, commissionCents);
     await client.query('COMMIT');
-    logger.info(`Comissao de ${commissionCents} centavos creditada ao afiliado ${affiliateUserId} (fatura ${invoice.id}).`);
+    logger.info(
+      `Comissao de ${commissionCents} centavos creditada ao afiliado ${affiliateUserId} (${provider} ${externalPaymentId}).`
+    );
     return { credited: commissionCents, affiliateUserId };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -140,4 +158,5 @@ module.exports = {
   setSettings,
   captureAttribution,
   recordCommissionForInvoice,
+  recordCommissionForPayment,
 };

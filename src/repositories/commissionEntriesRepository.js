@@ -6,21 +6,27 @@ const pool = require('../db/pool');
 // affiliateService.recordCommissionForInvoice) - por isso recebe o `client`
 // da transacao em vez de usar o pool direto. ON CONFLICT DO NOTHING e a
 // trava de idempotencia: reenvio do mesmo webhook nunca duplica.
+// external_payment_id e o id do pagamento no provedor (fatura da Stripe ou
+// cobranca do Asaas). O indice unico nessa coluna e o que impede pagar a
+// mesma comissao duas vezes quando o aviso e reenviado - e reenvio e
+// comportamento normal nos dois provedores, nao excecao.
 async function insertIfNotExists(client, {
   affiliateUserId,
   referredUserId,
-  stripeInvoiceId,
+  externalPaymentId,
+  provider = 'stripe',
   amountPaidCents,
   commissionPercent,
   commissionCents,
 }) {
   const { rows } = await client.query(
     `INSERT INTO commission_entries
-       (affiliate_user_id, referred_user_id, stripe_invoice_id, amount_paid_cents, commission_percent, commission_cents)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (stripe_invoice_id) DO NOTHING
+       (affiliate_user_id, referred_user_id, external_payment_id, provider,
+        amount_paid_cents, commission_percent, commission_cents)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (external_payment_id) DO NOTHING
      RETURNING *`,
-    [affiliateUserId, referredUserId, stripeInvoiceId, amountPaidCents, commissionPercent, commissionCents]
+    [affiliateUserId, referredUserId, externalPaymentId, provider, amountPaidCents, commissionPercent, commissionCents]
   );
   return rows[0] || null;
 }
