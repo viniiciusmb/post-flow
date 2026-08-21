@@ -216,8 +216,6 @@ export function ClientBillingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
-  if (authLoading || !user) return null
-
   async function runAction(key: string, action: () => Promise<{ checkoutUrl: string } | void>) {
     setError(null)
     setBusyKey(key)
@@ -353,6 +351,14 @@ export function ClientBillingPage() {
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pixCodigo, pixPago])
+
+  // Sai só DEPOIS de todos os hooks. React exige que a quantidade e a ordem
+  // dos hooks sejam idênticas em toda renderização; sair antes fazia a
+  // primeira renderização (enquanto a sessão carrega) declarar 5 hooks e a
+  // seguinte declarar 16 - e a tela inteira virava branca com "Rendered more
+  // hooks than during the previous render". Tudo daqui pra cima é declaração
+  // de hook ou de função, nada que dependa de `user` já existir.
+  if (authLoading || !user) return null
 
   function buyPackage(bucket: CreditBucket, minutes: number) {
     return runAction(`package-${bucket}`, () =>
