@@ -419,6 +419,35 @@ async function run(sourceVideoId) {
         return;
       }
 
+      // A IA as vezes devolve trecho que nao existe: no video-fonte 1900 (42
+      // minutos) vieram 4 trechos comecando depois dos 8 HORAS. Renderizar
+      // isso gera corte vazio ou quebrado, que o cliente so descobre ao abrir
+      // - e no TikTok o arquivo e recusado. Melhor perder o trecho invalido
+      // do que entregar um corte que nao presta.
+      const duracaoReal = Number(transcript.durationSeconds) || Number(sourceVideo.duration_seconds) || 0;
+      if (duracaoReal > 0) {
+        const antes = selected.length;
+        selected = selected.filter((c) => Number(c.startSeconds) < duracaoReal);
+        if (selected.length !== antes) {
+          logger.warn(
+            `Video-fonte ${sourceVideo.id}: ${antes - selected.length} trecho(s) descartado(s) por comecarem depois do fim do video (${Math.round(duracaoReal)}s).`
+          );
+        }
+        // Trecho que passa do fim e cortado no fim, em vez de descartado: o
+        // comeco dele e valido e costuma ser o melhor pedaco.
+        selected = selected.map((c) =>
+          Number(c.endSeconds) > duracaoReal ? { ...c, endSeconds: duracaoReal } : c
+        );
+        selected = selected.filter((c) => Number(c.endSeconds) - Number(c.startSeconds) >= 5);
+      }
+
+      if (selected.length === 0) {
+        await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', {
+          errorMessage: 'A IA nao encontrou nenhum trecho adequado nesse video.',
+        });
+        return;
+      }
+
       // Descricao: 'auto' usa a que a IA ja sugeriu por corte, 'fixed' troca
       // todas pelo mesmo texto do cliente, 'none' deixa em branco.
       clips = await clipsRepository.createMany(
@@ -436,6 +465,10 @@ async function run(sourceVideoId) {
         }))
       );
     }
+    // Uma fonte de ordem so: o banco, sempre por tempo. Vale pros dois
+    // caminhos (cortes recem-criados e cortes de um video retomado), pra nao
+    // existir a chance de um deles renderizar numa ordem e o outro noutra.
+    clips = await clipsRepository.listBySourceVideoId(sourceVideo.id);
     await sourceVideosRepository.markClipSelectionCompleted(sourceVideo.id);
 
     await checkPaused(sourceVideo.id);

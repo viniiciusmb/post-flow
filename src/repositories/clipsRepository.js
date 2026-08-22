@@ -2,9 +2,16 @@
 
 const pool = require('../db/pool');
 
+// Insere SEMPRE em ordem cronologica, e nao na ordem em que a IA devolveu.
+//
+// Duas coisas dependem disso: o corte "Parte 1" tem que ser o do comeco do
+// video, e a fila de publicacao sai por id de postagem - que segue esta ordem
+// de insercao. Sem ordenar aqui, o cliente via o corte do fim do video ser
+// publicado antes do comeco, porque a IA nao devolve os trechos em ordem.
 async function createMany(sourceVideoId, clips) {
   const created = [];
-  for (const clip of clips) {
+  const emOrdem = [...clips].sort((a, b) => Number(a.startSeconds) - Number(b.startSeconds));
+  for (const clip of emOrdem) {
     const { rows } = await pool.query(
       `INSERT INTO clips (source_video_id, title, description, start_seconds, end_seconds)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
