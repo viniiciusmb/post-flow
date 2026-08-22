@@ -22,7 +22,7 @@ const path = require('path');
 const Module = require('module');
 
 // Captura os argumentos interceptando o spawn, e devolve sem executar nada.
-function argumentosDe(settings) {
+function argumentosDe(settings, extras = {}) {
   const cp = require('child_process');
   const spawnOriginal = cp.spawn;
   let capturados = null;
@@ -55,6 +55,7 @@ function argumentosDe(settings) {
       settings,
       partIndex: 1,
       partTotal: 1,
+      ...extras,
     })
     .then(
       () => capturados,
@@ -174,4 +175,95 @@ test('a imagem da faixa entra com taxa de quadros definida', async () => {
   } finally {
     fs.rmSync(imagem, { force: true });
   }
+});
+
+// ---------- taxa de quadros quando entra imagem parada ----------
+//
+// Bug real de produção, 22/08/2026. Um corte de 106s com "frame do vídeo" na
+// faixa gerou 31.247 quadros para 1,3 SEGUNDO de saída (dup_frames=31.176,
+// speed=0,0034x): renderizar levaria 8h30, sem erro nenhum no log — só um
+// ffmpeg rodando pra sempre. O vídeo era 23,976 fps (24000/1001) e a imagem,
+// 30. O vstack casa os dois lados por TIMESTAMP, e quando as taxas não batem
+// ele emite um quadro para cada instante da união das duas.
+//
+// A correção é alinhar as pontas antes de empilhar. Medido na VPS depois:
+// mesmo trecho de 3s renderizou em 5,8s com os 90 quadros certos.
+//
+// O que estes testes travam:
+//   - filtro com imagem alinha as duas pontas;
+//   - a saída fica com taxa fixa (rede de segurança);
+//   - corte SEM imagem não é forçado a 30 (senão um 60 fps perde metade).
+
+function filtroDe(args) {
+  const i = args.indexOf('-filter_complex');
+  return i === -1 ? args[args.indexOf('-vf') + 1] || '' : args[i + 1];
+}
+
+test('faixa de imagem: as duas pontas entram no vstack com a mesma taxa', async () => {
+  const capa = path.join(os.tmpdir(), `capa-${Date.now()}.jpg`);
+  fs.writeFileSync(capa, 'imagem de mentira');
+  try {
+    const args = await argumentosDe({
+      ...SEM_LEGENDA,
+      crop_style_mode: 'manual',
+      background_style: 'thumbnail',
+      background_video_height_percent: 66,
+      background_band_position: 'top',
+    }, { thumbnailImagePath: capa });
+
+    const filtro = filtroDe(args);
+    assert.ok(filtro.includes('vstack'), 'a faixa deveria ser montada com vstack');
+
+    const antesDoVstack = filtro.slice(0, filtro.indexOf('vstack'));
+    const alinhamentos = antesDoVstack.match(/fps=30/g) || [];
+    assert.strictEqual(
+      alinhamentos.length,
+      2,
+      'as DUAS pontas (imagem e vídeo) precisam ser alinhadas antes do vstack — ' +
+        'alinhar só uma deixa os timestamps sem casar e o ffmpeg duplica quadro sem parar'
+    );
+
+    const posR = args.indexOf('-r');
+    assert.ok(posR > args.lastIndexOf('-i'), 'a taxa fixa é opção de SAÍDA, tem que vir depois das entradas');
+    assert.strictEqual(args[posR + 1], '30');
+  } finally {
+    fs.rmSync(capa, { force: true });
+  }
+});
+
+test('fundo de cor lisa declara a própria taxa', async () => {
+  // O filtro `color` gera a 25 fps quando ninguém diz o contrário — que também
+  // não bate com um vídeo 23,976 e cairia na mesma armadilha.
+  const args = await argumentosDe({
+    ...SEM_LEGENDA,
+    crop_style_mode: 'manual',
+    background_style: 'black',
+    background_video_height_percent: 60,
+    background_video_offset_percent: 0,
+  });
+
+  const filtro = filtroDe(args);
+  assert.ok(/color=[^[]*r=30/.test(filtro), `o fundo de cor precisa declarar a taxa: ${filtro}`);
+});
+
+test('fundo desfocado NÃO é forçado a 30 — os dois lados já saem do mesmo vídeo', async () => {
+  // Aqui as duas metades vêm do mesmo `split`, então os timestamps já batem.
+  // Forçar 30 só jogaria fora metade dos quadros de um vídeo 60 fps.
+  const args = await argumentosDe({
+    ...SEM_LEGENDA,
+    crop_style_mode: 'manual',
+    background_style: 'blur',
+    background_video_height_percent: 60,
+    background_video_offset_percent: 0,
+  });
+
+  assert.ok(filtroDe(args).includes('split'), 'o fundo desfocado deveria usar split');
+  assert.ok(!filtroDe(args).includes('fps=30'), 'não há imagem parada aqui: alinhar seria perda de quadro à toa');
+  assert.strictEqual(args.indexOf('-r'), -1, 'sem imagem, a taxa do original tem que ser preservada');
+});
+
+test('corte comum, sem fundo nenhum, mantém a taxa do vídeo original', async () => {
+  const args = await argumentosDe({ ...SEM_LEGENDA });
+  assert.strictEqual(args.indexOf('-r'), -1);
+  assert.ok(!filtroDe(args).includes('fps='));
 });

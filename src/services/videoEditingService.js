@@ -460,6 +460,25 @@ function escapeForFilter(filePath) {
 // (increase + crop). Com 'decrease' a imagem caberia dentro da faixa deixando
 // vazio nas laterais - foi exatamente a faixa branca que ja apareceu num
 // corte real com o fundo 'template'.
+// Taxa de quadros usada quando o corte mistura video com imagem parada.
+//
+// NAO E COSMETICO, e a diferenca entre renderizar e travar. O vstack (e o
+// overlay) casa os dois lados pelo TIMESTAMP: quando as taxas nao batem, os
+// instantes nunca coincidem e o filtro gera um quadro pra cada instante da
+// uniao dos dois. Com video a 23,976 fps (24000/1001, o padrao de quem grava
+// em cinema/NTSC) contra imagem a 30, isso explode.
+//
+// Medido em producao em 22/08/2026, num corte real de 106 segundos: 31.247
+// quadros gerados pra 1,3 SEGUNDO de saida, dup_frames=31.176, speed=0,0034x
+// - o corte levaria 8h30 e ninguem veria erro nenhum, so um ffmpeg eterno.
+// Alinhando as duas pontas em 30, o mesmo trecho de 3s renderizou em 5,8s com
+// os 90 quadros certos.
+//
+// Por que 30 e nao a taxa do proprio video: a imagem em loop precisa de uma
+// taxa fixa declarada de qualquer jeito (-framerate), entao alguem tem que
+// ceder. 30 e o padrao de entrega do TikTok e ja era a taxa da imagem.
+const FPS_COM_IMAGEM = 30;
+
 function buildThumbnailBandFilter({ w, h, subtitlesFilter, heightPercent, position }) {
   // Altura PAR nas duas faixas: h264 com yuv420p amostra croma de 2 em 2
   // pixels, e uma faixa de altura impar faz o filtro reclamar em vez de
@@ -469,9 +488,11 @@ function buildThumbnailBandFilter({ w, h, subtitlesFilter, heightPercent, positi
   if (alturaVideo % 2 !== 0) alturaVideo -= 1;
   const alturaImagem = h - alturaVideo;
 
+  // fps nas DUAS pontas antes do vstack: e o que faz os timestamps baterem.
+  // Ver FPS_COM_IMAGEM.
   const chain = [
-    `[1:v]scale=${w}:${alturaImagem}:force_original_aspect_ratio=increase,crop=${w}:${alturaImagem},setsar=1[faixaimg]`,
-    `[0:v]scale=${w}:${alturaVideo}:force_original_aspect_ratio=increase,crop=${w}:${alturaVideo},setsar=1[faixavid]`,
+    `[1:v]scale=${w}:${alturaImagem}:force_original_aspect_ratio=increase,crop=${w}:${alturaImagem},setsar=1,fps=${FPS_COM_IMAGEM}[faixaimg]`,
+    `[0:v]scale=${w}:${alturaVideo}:force_original_aspect_ratio=increase,crop=${w}:${alturaVideo},setsar=1,fps=${FPS_COM_IMAGEM}[faixavid]`,
   ];
 
   const ordem = position === 'bottom' ? '[faixavid][faixaimg]' : '[faixaimg][faixavid]';
@@ -514,7 +535,9 @@ function buildBackgroundFilter({ w, h, subtitlesFilter, style, heightPercent, of
       // ffmpeg - uma imagem de cor solida seria um arquivo a mais pra criar,
       // guardar e limpar, por um retangulo de uma cor so.
       const cor = style === 'white' ? 'white' : 'black';
-      chain.push(`color=c=${cor}:s=${w}x${h}[fundo]`);
+      // r= explicito: sem ele o filtro `color` gera a 25 fps, que tambem nao
+      // bate com um video 23,976 e cai na mesma armadilha do vstack.
+      chain.push(`color=c=${cor}:s=${w}x${h}:r=${FPS_COM_IMAGEM}[fundo]`);
     }
   }
 
@@ -526,7 +549,10 @@ function buildBackgroundFilter({ w, h, subtitlesFilter, style, heightPercent, of
   // primeiro corte real. Amplia ate cobrir (increase) e corta o excedente
   // (crop), garantindo o retangulo exato.
   chain.push(
-    `${entradaDoVideo}scale=${w}:${alturaVideo}:force_original_aspect_ratio=increase,crop=${w}:${alturaVideo},setsar=1[video]`
+    `${entradaDoVideo}scale=${w}:${alturaVideo}:force_original_aspect_ratio=increase,crop=${w}:${alturaVideo},setsar=1` +
+      // O overlay logo abaixo casa imagem e video por timestamp, igual ao
+      // vstack - mesma armadilha, mesma protecao (ver FPS_COM_IMAGEM).
+      `${fundoVisivel && style !== 'blur' ? `,fps=${FPS_COM_IMAGEM}` : ''}[video]`
   );
 
   // A legenda entra DEPOIS da composicao, pra poder ser posicionada em relacao
@@ -855,6 +881,14 @@ async function renderClip({
       // isso gerou cortes de 150-200 MB (maiores que o proprio video original)
       // e renderizacao que nunca terminava.
       '-t', String(duration),
+      // Trava a taxa da SAIDA sempre que uma imagem parada entra na conta.
+      //
+      // Os filtros ja alinham as pontas (ver FPS_COM_IMAGEM), mas isto e o
+      // cinto de seguranca: se um caminho novo de composicao esquecer o
+      // alinhamento, o pior caso vira "quadro descartado" em vez de "corte que
+      // nunca termina". So entra quando ha imagem - forcar 30 num corte comum
+      // jogaria fora metade dos quadros de um video 60 fps sem motivo.
+      ...(template || usaPapel ? ['-r', String(FPS_COM_IMAGEM)] : []),
       '-c:v', 'libx264',
       '-preset', preset,
       '-crf', String(crf),
