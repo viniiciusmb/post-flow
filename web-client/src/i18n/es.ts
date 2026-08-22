@@ -631,7 +631,7 @@ export const es: Dicionario = {
   "adm.naoConectado": "No conectado",
   "adm.publicacoesDescricao": "Todas las publicaciones, de todos los clientes, en el período.",
   "adm.nenhumaPostagemBusca": "Ninguna publicación encontrada para esa búsqueda.",
-  "adm.umVideoPorVez": "Los clips de YouTube se procesan un vídeo cada vez.",
+  "adm.umVideoPorVez": "Hasta {n} vídeo(s) a la vez. El límite se ajusta en Métricas → Salud del servidor.",
   "adm.naFila": "En la cola",
   "adm.semCredito": "Sin crédito",
   "adm.esperandoComputador": "Esperando el ordenador del cliente",

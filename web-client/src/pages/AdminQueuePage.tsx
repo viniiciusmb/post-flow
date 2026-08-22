@@ -30,11 +30,31 @@ interface QueueItem {
   updatedAt: string
 }
 
+/** Custo REAL do vídeo: quem reaproveitou download/transcrição de outro
+ *  cliente aparece com esses custos zerados, porque não pagou por eles. */
+interface CustosDoVideo {
+  downloadUsd: number
+  transcricaoUsd: number
+  selecaoUsd: number
+  totalUsd: number
+  downloadBytes: number
+  downloadOrigem: string | null
+  downloadReaproveitado: boolean
+  transcricaoReaproveitada: boolean
+}
+
+interface HistoryItem extends QueueItem {
+  clipsCount: number
+  processingSeconds: number | null
+  custos: CustosDoVideo
+}
+
 interface QueueOverview {
-  processing: QueueItem | null
+  processing: QueueItem[]
   waiting: QueueItem[]
-  history: QueueItem[]
+  history: HistoryItem[]
   stageTimings: StageTimings
+  maxSimultaneos: number
 }
 
 function formatSecondsPerMinute(seconds: number | null) {
@@ -70,8 +90,99 @@ function timeAgo(iso: string) {
   return `há ${hours}h`
 }
 
+// Custo por vídeo é da ordem de centavos de dólar, então 2 casas viraria
+// "$0.00" em quase tudo. 3 casas mantém o número legível sem virar ruído.
+function usd(n: number) {
+  if (n <= 0) return "$0"
+  if (n < 0.001) return "<$0.001"
+  return `$${n.toFixed(3)}`
+}
+
+function duracao(seconds: number | null) {
+  if (seconds === null || seconds < 0) return "—"
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const h = Math.floor(seconds / 3600)
+  const m = Math.round((seconds % 3600) / 60)
+  return h > 0 ? `${h}h ${m}min` : `${m}min`
+}
+
+function mb(bytes: number) {
+  if (!bytes) return null
+  const gigas = bytes / 1024 ** 3
+  return gigas >= 1 ? `${gigas.toFixed(2)} GB` : `${Math.round(bytes / 1024 ** 2)} MB`
+}
+
+// Uma métrica pequena da linha do histórico. `nota` explica um zero que é
+// real (reaproveitado) - sem isso um custo zerado parece dado faltando.
+function CustoItem({ label, valor, nota }: { label: string; valor: string; nota?: string }) {
+  return (
+    <div>
+      <div className="text-sm font-semibold tabular-nums">{valor}</div>
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      {nota && <div className="text-[11px] text-tone-success-ink">{nota}</div>}
+    </div>
+  )
+}
+
 function initials(name: string) {
   return name.slice(0, 2).toUpperCase()
+}
+
+function ProcessingCard({ video }: { video: QueueItem }) {
+  const t = useT()
+  const currentStepIndex = STEPS.findIndex((s) => s.status === video.status)
+
+  return (
+          <div className="rounded-2xl border border-primary bg-card p-5 shadow-[0_0_0_4px_var(--tone-indigo-wash)]">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="flex min-w-50 items-center gap-3">
+                <Avatar className="size-10">
+                  <AvatarFallback>{initials(video.clientName)}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">{video.clientName}</div>
+                  <div className="max-w-45 truncate text-xs text-muted-foreground">{video.title}</div>
+                </div>
+              </div>
+
+              <div className="flex flex-1 items-center gap-1">
+                {STEPS.map((step, i) => (
+                  <div key={step.status} className="flex flex-1 items-center gap-2 last:flex-none">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={
+                          "flex size-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold " +
+                          (i < currentStepIndex
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : i === currentStepIndex
+                              ? "border-primary text-primary"
+                              : "border-border text-muted-foreground")
+                        }
+                      >
+                        {i < currentStepIndex ? <IconCheck className="size-3.5" /> : i + 1}
+                      </div>
+                      <span
+                        className={
+                          "hidden text-xs font-medium whitespace-nowrap sm:inline " +
+                          (i === currentStepIndex ? "text-foreground font-semibold" : "text-muted-foreground")
+                        }
+                      >
+                        {t(step.label)}
+                      </span>
+                    </div>
+                    {i < STEPS.length - 1 && (
+                      <div className={"h-px flex-1 " + (i < currentStepIndex ? "bg-primary" : "bg-border")} />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="text-xs text-muted-foreground whitespace-nowrap">
+                atualizado {timeAgo(video.updatedAt)}
+              </div>
+            </div>
+          </div>
+  )
 }
 
 export function AdminQueuePage() {
@@ -98,69 +209,28 @@ export function AdminQueuePage() {
 
   if (authLoading || !user) return null
 
-  const currentStepIndex = data?.processing ? STEPS.findIndex((s) => s.status === data.processing!.status) : -1
-
   return (
     <DashboardLayout user={user} onLogout={logout} title="Processamento">
-      <p className="-mt-2 text-sm text-muted-foreground">{t("adm.umVideoPorVez")}</p>
+      <p className="-mt-2 text-sm text-muted-foreground">{t("adm.umVideoPorVez", { n: data?.maxSimultaneos ?? 1 })}</p>
 
       {!data ? (
         <Skeleton className="h-28" />
       ) : (
         <>
-          <div className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">{t("adm.processandoAgora")}</div>
-          {data.processing ? (
-            <div className="rounded-2xl border border-primary bg-card p-5 shadow-[0_0_0_4px_var(--tone-indigo-wash)]">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                <div className="flex min-w-50 items-center gap-3">
-                  <Avatar className="size-10">
-                    <AvatarFallback>{initials(data.processing.clientName)}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold">{data.processing.clientName}</div>
-                    <div className="max-w-45 truncate text-xs text-muted-foreground">{data.processing.title}</div>
-                  </div>
-                </div>
-
-                <div className="flex flex-1 items-center gap-1">
-                  {STEPS.map((step, i) => (
-                    <div key={step.status} className="flex flex-1 items-center gap-2 last:flex-none">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={
-                            "flex size-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold " +
-                            (i < currentStepIndex
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : i === currentStepIndex
-                                ? "border-primary text-primary"
-                                : "border-border text-muted-foreground")
-                          }
-                        >
-                          {i < currentStepIndex ? <IconCheck className="size-3.5" /> : i + 1}
-                        </div>
-                        <span
-                          className={
-                            "hidden text-xs font-medium whitespace-nowrap sm:inline " +
-                            (i === currentStepIndex ? "text-foreground font-semibold" : "text-muted-foreground")
-                          }
-                        >
-                          {t(step.label)}
-                        </span>
-                      </div>
-                      {i < STEPS.length - 1 && (
-                        <div className={"h-px flex-1 " + (i < currentStepIndex ? "bg-primary" : "bg-border")} />
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="text-xs text-muted-foreground whitespace-nowrap">
-                  atualizado {timeAgo(data.processing.updatedAt)}
-                </div>
-              </div>
-            </div>
-          ) : (
+          <div className="flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+            {t("adm.processandoAgora")}
+            <span className="rounded-full bg-tone-neutral-wash px-2 py-0.5 text-[11px] font-bold text-tone-neutral-ink normal-case">
+              {data.processing.length} de {data.maxSimultaneos}
+            </span>
+          </div>
+          {data.processing.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">{t("adm.filaLivre")}</div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {data.processing.map((v) => (
+                <ProcessingCard key={v.id} video={v} />
+              ))}
+            </div>
           )}
 
           <div className="flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase">{t("adm.naFila")}<span className="rounded-full bg-tone-neutral-wash px-2 py-0.5 text-[11px] font-bold text-tone-neutral-ink normal-case">
@@ -213,6 +283,11 @@ export function AdminQueuePage() {
           </Card>
 
           <div className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">{t("adm.historicoRecente")}</div>
+          <p className="-mt-2 text-xs text-muted-foreground">
+            Custo real de cada vídeo. Quando outro cliente segue o mesmo canal, só o primeiro paga o download e a
+            transcrição — os seguintes aparecem como "reaproveitado" com custo zero. Download só custa dinheiro quando
+            sai pelo proxy pago; pelo túnel a banda já está paga.
+          </p>
           {data.history.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">{t("adm.nenhumProcessamentoConcluido")}</div>
           ) : (
@@ -235,6 +310,27 @@ export function AdminQueuePage() {
                         {v.errorMessage}
                       </div>
                     )}
+
+                    <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3 lg:grid-cols-6">
+                      <CustoItem label="Tempo" valor={duracao(v.processingSeconds)} />
+                      <CustoItem label="Cortes" valor={String(v.clipsCount)} />
+                      <CustoItem
+                        label="Download"
+                        valor={usd(v.custos.downloadUsd)}
+                        nota={
+                          v.custos.downloadReaproveitado
+                            ? "reaproveitado"
+                            : (mb(v.custos.downloadBytes) ?? undefined)
+                        }
+                      />
+                      <CustoItem
+                        label={t("adm.transcricao")}
+                        valor={usd(v.custos.transcricaoUsd)}
+                        nota={v.custos.transcricaoReaproveitada ? "reaproveitado" : undefined}
+                      />
+                      <CustoItem label="Seleção (IA)" valor={usd(v.custos.selecaoUsd)} />
+                      <CustoItem label="Custo total" valor={usd(v.custos.totalUsd)} />
+                    </div>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">
                     <TonePill tone={v.status === "ready" ? "success" : "danger"}>

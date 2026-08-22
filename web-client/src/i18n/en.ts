@@ -631,7 +631,7 @@ export const en: Dicionario = {
   "adm.naoConectado": "Not connected",
   "adm.publicacoesDescricao": "All posts, from all clients, in the period.",
   "adm.nenhumaPostagemBusca": "No post found for that search.",
-  "adm.umVideoPorVez": "YouTube clips are processed one video at a time.",
+  "adm.umVideoPorVez": "Up to {n} video(s) at a time. The limit is adjustable in Metrics → Server health.",
   "adm.naFila": "In the queue",
   "adm.semCredito": "No credit",
   "adm.esperandoComputador": "Waiting for the client's computer",

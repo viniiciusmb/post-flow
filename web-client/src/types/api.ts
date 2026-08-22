@@ -142,6 +142,8 @@ export interface AdminMetricsResponse {
     history: { sampledAt: string; loadAvg1m: number; cpuCores: number; memUsedMb: number; memTotalMb: number }[]
   }
   tunnels: { connectedClients: number }
+  /** Quantos vídeos o sistema corta ao mesmo tempo, e os limites aceitos. */
+  processamento: { maxSimultaneos: number; minimo: number; maximo: number }
   backup: {
     status: "ok" | "atrasado" | "erro" | "nunca"
     lastAt: string | null

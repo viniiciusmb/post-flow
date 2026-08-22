@@ -637,7 +637,7 @@ export const pt = {
   "adm.naoConectado": "Não conectado",
   "adm.publicacoesDescricao": "Todas as postagens, de todos os clientes, no período.",
   "adm.nenhumaPostagemBusca": "Nenhuma postagem encontrada pra essa busca.",
-  "adm.umVideoPorVez": "Cortes de YouTube são processados um vídeo por vez.",
+  "adm.umVideoPorVez": "Até {n} vídeo(s) ao mesmo tempo. O limite é ajustável em Métricas → Saúde do servidor.",
   "adm.naFila": "Na fila",
   "adm.semCredito": "Sem crédito",
   "adm.esperandoComputador": "Esperando o computador do cliente",

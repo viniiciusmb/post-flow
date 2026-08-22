@@ -6,6 +6,7 @@
 'use strict';
 
 const pool = require('../db/pool');
+const logger = require('../lib/logger');
 
 async function findByYoutubeVideoId(youtubeVideoId) {
   if (!youtubeVideoId) return null;
@@ -111,7 +112,51 @@ async function savingsSince(since, until = new Date()) {
   };
 }
 
+// Impede que DOIS vídeos do mesmo YouTube baixem o mesmo arquivo ao mesmo
+// tempo.
+//
+// Com um vídeo por vez isso era impossível. Passando a processar vários em
+// paralelo, dois clientes que acompanham o mesmo canal podem cair no download
+// no mesmo instante: os dois consultam o cache, os dois não encontram nada, e
+// os dois baixam — pagando a banda duas vezes, que é exatamente o desperdício
+// que o compartilhamento existe para evitar.
+//
+// A trava é por VÍDEO, não global: downloads de vídeos diferentes seguem em
+// paralelo normalmente. Quem chega depois espera, e ao entrar encontra o
+// arquivo já no cache.
+//
+// Conexão DEDICADA, fora do pool: o bloqueio dura o download inteiro (minutos)
+// e prender conexões do pool por tanto tempo secaria o resto do sistema.
+async function comTravaDeDownload(youtubeVideoId, fn) {
+  if (!youtubeVideoId) return fn();
+
+  const { Client } = require('pg');
+  const config = require('../config');
+  const client = new Client({ connectionString: config.databaseUrl });
+
+  try {
+    await client.connect();
+  } catch (err) {
+    // Sem a trava o pior caso é baixar duas vezes - ruim, mas melhor do que
+    // não processar o vídeo.
+    logger.error(`Nao consegui abrir conexao pra trava de download (seguindo sem ela): ${err.message}`);
+    return fn();
+  }
+
+  try {
+    // hashtext transforma o id do vídeo num número, que é o que o advisory
+    // lock aceita. Colisão entre dois ids diferentes só faria um esperar o
+    // outro sem necessidade - não corrompe nada.
+    await client.query('SELECT pg_advisory_lock(hashtext($1))', [youtubeVideoId]);
+    return await fn();
+  } finally {
+    await client.query('SELECT pg_advisory_unlock(hashtext($1))', [youtubeVideoId]).catch(() => {});
+    await client.end().catch(() => {});
+  }
+}
+
 module.exports = {
+  comTravaDeDownload,
   findByYoutubeVideoId,
   saveDownload,
   saveTranscript,

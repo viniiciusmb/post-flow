@@ -197,6 +197,16 @@ async function run(sourceVideoId) {
       // Ja baixado numa execucao anterior (retomando de uma pausa) - pula o
       // download de novo.
     } else {
+      // A partir daqui, tudo que decide "baixar ou reaproveitar" roda sob uma
+      // trava POR VIDEO. Sem ela, dois videos do mesmo YouTube processados ao
+      // mesmo tempo consultariam o cache juntos, nao achariam nada, e
+      // baixariam os dois - pagando a banda duas vezes justamente no caso que
+      // o compartilhamento existe pra evitar. Quem chega depois espera e ja
+      // encontra o arquivo pronto.
+      //
+      // Downloads de videos DIFERENTES seguem em paralelo: a trava e por id
+      // de video, nao global.
+      videoPath = await sharedVideoAssetsRepository.comTravaDeDownload(sourceVideo.youtube_video_id, async () => {
       // Este MESMO video do YouTube ja foi baixado por outro cliente (dois
       // clientes monitorando o mesmo canal geram dois source_videos para o
       // mesmo video) e o arquivo ainda esta em disco? Entao nao ha nada pra
@@ -241,10 +251,10 @@ async function run(sourceVideoId) {
       }
 
       if (reaproveitavel) {
-        videoPath = reaproveitavel.local_video_path;
+        const caminho = reaproveitavel.local_video_path;
         // egress 'reuse' com 0 bytes e a verdade literal: nenhuma banda saiu
         // por este video. E assim que o painel "Banda" mostra a economia.
-        await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath, {
+        await sourceVideosRepository.saveDownload(sourceVideo.id, caminho, {
           bytes: 0,
           egressType: 'reuse',
           tunnelId: null,
@@ -257,7 +267,11 @@ async function run(sourceVideoId) {
         logger.info(
           `Video-fonte ${sourceVideo.id}: download reaproveitado do arquivo ja baixado para ${sourceVideo.youtube_video_id} - nenhuma banda gasta.`
         );
-      } else {
+        return caminho;
+      }
+
+      // Nao ha o que reaproveitar: baixa de verdade.
+      {
         await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
         const downloadResult = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir, { checkCancelled, clientUserId });
 
@@ -270,25 +284,26 @@ async function run(sourceVideoId) {
         // monitore o mesmo canal reaproveite este arquivo em vez de baixar
         // tudo de novo.
         let compartilhou = true;
+        let caminho;
         try {
-          videoPath = guardarComoCompartilhado(downloadResult.filePath, sourceVideo.youtube_video_id);
+          caminho = guardarComoCompartilhado(downloadResult.filePath, sourceVideo.youtube_video_id);
         } catch (err) {
           logger.error(
             `Nao consegui mover o video ${sourceVideo.id} pra pasta compartilhada (seguindo sem compartilhar):`,
             err
           );
-          videoPath = downloadResult.filePath;
+          caminho = downloadResult.filePath;
           compartilhou = false;
         }
 
-        await sourceVideosRepository.saveDownload(sourceVideo.id, videoPath, {
+        await sourceVideosRepository.saveDownload(sourceVideo.id, caminho, {
           bytes: downloadBytes,
           egressType: downloadResult.egressType,
           tunnelId: downloadResult.tunnelId,
         });
         if (compartilhou) {
           await sharedVideoAssetsRepository.saveDownload(sourceVideo.youtube_video_id, {
-            localVideoPath: videoPath,
+            localVideoPath: caminho,
             bytes: downloadBytes,
             egressType: downloadResult.egressType,
             tunnelId: downloadResult.tunnelId,
@@ -297,7 +312,9 @@ async function run(sourceVideoId) {
         // Download terminou com sucesso - confirma a cobranca (ou fatura de
         // excedente) definitiva agora que o caminho real de egress e conhecido.
         await creditsService.confirmAfterDownload(sourceVideo, clientUserId, reserveOutcome, downloadResult);
+        return caminho;
       }
+      });
     }
 
     await checkPaused(sourceVideo.id);

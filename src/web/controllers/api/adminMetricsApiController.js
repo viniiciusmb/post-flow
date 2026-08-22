@@ -3,6 +3,7 @@
 const metricsRepository = require('../../../repositories/metricsRepository');
 const downloadTunnelsRepository = require('../../../repositories/downloadTunnelsRepository');
 const settingsRepository = require('../../../repositories/settingsRepository');
+const videoConcurrencyService = require('../../../services/videoConcurrencyService');
 const { resolveRange } = require('../../../lib/dateRanges');
 
 function daysAgo(n) {
@@ -65,6 +66,7 @@ async function overview(req, res) {
     systemHistory,
     connectedTunnels,
     lastBackupRaw,
+    maxSimultaneos,
   ] = await Promise.all([
     metricsRepository.clientActivity(daysAgo(30)),
     metricsRepository.volumeSince(periodos.volume.since, periodos.volume.until),
@@ -81,6 +83,7 @@ async function overview(req, res) {
     metricsRepository.systemMetricsSince(daysAgo(1)),
     downloadTunnelsRepository.countConnectedClients(),
     settingsRepository.getValue('last_db_backup', null),
+    videoConcurrencyService.obter(),
   ]);
 
   const aproveitamentoRate = volume.clipsGenerated > 0 ? volume.clipsPosted / volume.clipsGenerated : null;
@@ -128,6 +131,15 @@ async function overview(req, res) {
     })),
     tunnels: { connectedClients: connectedTunnels },
     backup: buildBackupStatus(lastBackupRaw),
+    // Quantos videos ao mesmo tempo. Fica na saude do servidor porque e onde
+    // se decide isso: o numero certo depende dos nucleos da VPS, que estao
+    // logo ali do lado.
+    processamento: {
+      maxSimultaneos,
+      minimo: videoConcurrencyService.MINIMO,
+      maximo: videoConcurrencyService.MAXIMO,
+    },
+
     system: {
       latest: systemLatest
         ? {
@@ -151,4 +163,16 @@ async function overview(req, res) {
   });
 }
 
-module.exports = { overview, PAINEIS };
+// Quantos videos processar ao mesmo tempo. O video-worker confere essa
+// configuracao periodicamente e se reajusta sozinho - por isso salvar aqui
+// (no processo web) basta, sem precisar reiniciar nada.
+async function setMaxSimultaneos(req, res) {
+  const salvo = await videoConcurrencyService.definir(req.body.maxSimultaneos);
+  if (salvo === null) {
+    return res.status(400).json({ error: res.locals.t('erros.valorInvalido') });
+  }
+  res.json({ maxSimultaneos: salvo });
+}
+
+module.exports = {
+  setMaxSimultaneos, overview, PAINEIS };

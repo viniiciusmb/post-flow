@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { DateRangeFilter } from "@/components/dashboard/DateRangeFilter"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
@@ -114,6 +115,74 @@ function Section({
       </CardHeader>
       <CardContent className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4">{children}</CardContent>
     </Card>
+  )
+}
+
+// Quantos vídeos cortar ao mesmo tempo. Fica na saúde do servidor porque é a
+// decisão que mais mexe na carga da VPS - o gráfico de CPU logo acima é
+// exatamente o que diz se dá pra subir mais.
+function ConcorrenciaSelect({
+  processamento,
+  onChange,
+}: {
+  processamento: AdminMetricsResponse["processamento"]
+  onChange: (n: number) => void
+}) {
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+  const opcoes = Array.from(
+    { length: processamento.maximo - processamento.minimo + 1 },
+    (_, i) => processamento.minimo + i
+  )
+
+  async function salvar(valor: string) {
+    setSalvando(true)
+    setErro(null)
+    try {
+      const r = await api.post<{ maxSimultaneos: number }>("/api/admin/metrics/max-simultaneos", {
+        maxSimultaneos: Number(valor),
+      })
+      onChange(r.maxSimultaneos)
+    } catch {
+      setErro("Não foi possível salvar.")
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-border p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold">Vídeos processados ao mesmo tempo</div>
+          <div className="text-xs text-muted-foreground">
+            Mais vídeos em paralelo aumentam a vazão total, mas cada um demora mais. Vale a pena até a CPU acima ficar
+            perto de 100%.
+          </div>
+        </div>
+        <Select
+          value={String(processamento.maxSimultaneos)}
+          onValueChange={salvar}
+          disabled={salvando}
+        >
+          <SelectTrigger className="w-24">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {opcoes.map((n) => (
+              <SelectItem key={n} value={String(n)}>
+                {n}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        A mudança vale para os próximos vídeos: quem já está sendo cortado agora termina normalmente, e o novo limite
+        entra em até 30 segundos.
+      </p>
+      {erro && <p className="text-xs text-tone-danger-ink">{erro}</p>}
+    </div>
   )
 }
 
@@ -265,6 +334,13 @@ export function AdminMetricsPage() {
                   </LineChart>
                 </ChartContainer>
               )}
+              <ConcorrenciaSelect
+                processamento={data.processamento}
+                onChange={(maxSimultaneos) =>
+                  setData((atual) => (atual ? { ...atual, processamento: { ...atual.processamento, maxSimultaneos } } : atual))
+                }
+              />
+
               <p className="text-xs text-muted-foreground">
                 Amostrado a cada 5 minutos. Como o servidor é compartilhado (Docker Swarm sem limite de CPU/memória por
                 serviço), os números refletem a VPS inteira, não só o Post Flow.

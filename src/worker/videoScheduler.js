@@ -11,6 +11,7 @@ const driveExportJob = require('./jobs/driveExportJob');
 const tunnelTestJob = require('./jobs/tunnelTestJob');
 const creditWeeklyResetJob = require('./jobs/creditWeeklyResetJob');
 const overageBillingJob = require('./jobs/overageBillingJob');
+const videoConcurrencyService = require('../services/videoConcurrencyService');
 const logger = require('../lib/logger');
 
 const QUEUE_CHANNEL_CHECK = 'youtube-channel-check';
@@ -135,13 +136,70 @@ async function start(boss) {
     await tunnelTestJob.runAll();
   });
 
-  // Sem passar batchSize/teamSize: o pg-boss so busca o proximo job depois
-  // que o handler atual terminar - e assim que garantimos "1 video por vez".
-  await boss.work(QUEUE_VIDEO_PROCESSING, async ([job]) => {
-    logger.info(`Processando video-fonte #${job.data.sourceVideoId}...`);
-    await processVideoJob.run(job.data.sourceVideoId);
-    logger.info(`Processamento do video-fonte #${job.data.sourceVideoId} concluido.`);
-  });
+  // Quantos videos ao mesmo tempo - ver videoConcurrencyService.
+  await aplicarConcorrencia(boss);
+  vigiarMudancaDeConcorrencia(boss);
 }
 
-module.exports = { start };
+// Um trabalhador por video simultaneo. Cada um pega UM job e so busca o
+// proximo quando termina o seu, entao um video longo nao segura os outros.
+//
+// batchSize 1 explicito: com lote, o pg-boss entrega varios jobs pro mesmo
+// handler e so busca mais quando TODOS terminam - o video rapido ficaria preso
+// esperando o lento da mesma leva.
+async function registrarTrabalhadores(boss, quantos) {
+  for (let i = 1; i <= quantos; i += 1) {
+    await boss.work(QUEUE_VIDEO_PROCESSING, { batchSize: 1 }, async ([job]) => {
+      logger.info(`Processando video-fonte #${job.data.sourceVideoId}...`);
+      await processVideoJob.run(job.data.sourceVideoId);
+      logger.info(`Processamento do video-fonte #${job.data.sourceVideoId} concluido.`);
+    });
+  }
+}
+
+let concorrenciaAtual = null;
+
+async function aplicarConcorrencia(boss) {
+  const desejada = await videoConcurrencyService.obter();
+  if (desejada === concorrenciaAtual) return;
+
+  // Para de BUSCAR novos jobs. O que ja esta rodando segue ate o fim - o
+  // pg-boss nao interrompe handler em andamento, e interromper no meio
+  // deixaria video pela metade.
+  if (concorrenciaAtual !== null) await boss.offWork(QUEUE_VIDEO_PROCESSING);
+
+  await registrarTrabalhadores(boss, desejada);
+  logger.info(
+    concorrenciaAtual === null
+      ? `Processamento de video: ${desejada} video(s) ao mesmo tempo.`
+      : `Processamento de video: de ${concorrenciaAtual} para ${desejada} ao mesmo tempo.`
+  );
+  concorrenciaAtual = desejada;
+}
+
+// O painel do admin muda a configuracao no processo WEB; quem processa video e
+// outro processo (video-worker), entao ele nao fica sabendo por chamada
+// direta. Conferir de tempos em tempos e o jeito mais simples que funciona
+// entre containers separados - e 30s e rapido o bastante pra quem esta
+// testando, sem virar consulta a toa.
+const INTERVALO_DE_CHECAGEM_MS = 30_000;
+
+function vigiarMudancaDeConcorrencia(boss) {
+  const timer = setInterval(() => {
+    aplicarConcorrencia(boss).catch((err) =>
+      logger.error('Falha ao aplicar o limite de videos simultaneos (seguindo com o atual):', err.message)
+    );
+  }, INTERVALO_DE_CHECAGEM_MS);
+  // Nao segura o processo aberto no encerramento.
+  timer.unref();
+}
+
+// Exposta para teste: o risco desta funcao e travar a fila em producao, e
+// isso precisa ser verificavel sem subir pg-boss de verdade. `reiniciar` zera
+// a memoria do estado atual, pra cada teste comecar do zero.
+async function aplicarConcorrenciaParaTeste(boss, { reiniciar = false } = {}) {
+  if (reiniciar) concorrenciaAtual = null;
+  return aplicarConcorrencia(boss);
+}
+
+module.exports = { start, aplicarConcorrenciaParaTeste };

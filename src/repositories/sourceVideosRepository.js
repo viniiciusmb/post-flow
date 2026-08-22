@@ -469,18 +469,20 @@ async function countByClientSince(clientUserId, since, until = new Date()) {
 // O video que esta sendo processado agora (se algum) - pro card de destaque
 // da tela "Fila de Processamento" do admin. LEFT JOIN pra cobrir video
 // manual tambem (sem canal).
-async function findCurrentlyProcessing() {
+// Devolve TODOS os videos em andamento, nao so um. Com o maximo de videos
+// simultaneos configuravel, "processando agora" virou uma lista: se o admin
+// escolhe 2 e a tela so mostra 1, parece que a configuracao nao funcionou.
+async function listCurrentlyProcessing() {
   const { rows } = await pool.query(
     `SELECT sv.*, yc.channel_name, u.email AS client_email, u.business_name AS client_business_name
      FROM source_videos sv
      LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
      JOIN users u ON u.id = coalesce(yc.client_user_id, sv.client_user_id)
      WHERE sv.status = ANY($1)
-     ORDER BY sv.updated_at ASC
-     LIMIT 1`,
+     ORDER BY sv.updated_at ASC`,
     [ACTIVE_STATUSES]
   );
-  return rows[0] || null;
+  return rows;
 }
 
 // 'aguardando_creditos' entra aqui tambem (nao so 'detected') - senao esses
@@ -497,9 +499,20 @@ async function listWaiting() {
   return rows;
 }
 
+// Histórico com o custo real de cada vídeo.
+//
+// "Real" importa por causa do reaproveitamento: quando dois clientes seguem o
+// mesmo canal, só o PRIMEIRO paga o download e o Whisper. O segundo aparece
+// com esses custos zerados e marcado como reaproveitado — somar de novo neles
+// inflaria o custo total do sistema e faria a margem parecer pior do que é.
+//
+// Isso já vem naturalmente dos dados: no reaproveitamento o pipeline grava
+// download_bytes = 0 e whisper_cost_usd = 0 no segundo vídeo.
 async function listRecentHistory({ limit = 20 } = {}) {
   const { rows } = await pool.query(
-    `SELECT sv.*, yc.channel_name, u.email AS client_email, u.business_name AS client_business_name
+    `SELECT sv.*, yc.channel_name, u.email AS client_email, u.business_name AS client_business_name,
+            (SELECT count(*)::int FROM clips c WHERE c.source_video_id = sv.id) AS clips_count,
+            EXTRACT(EPOCH FROM (sv.updated_at - sv.processing_started_at)) AS processing_seconds
      FROM source_videos sv
      LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
      JOIN users u ON u.id = coalesce(yc.client_user_id, sv.client_user_id)
@@ -544,7 +557,7 @@ module.exports = {
   listForClient,
   countInProgress,
   countByClientSince,
-  findCurrentlyProcessing,
+  listCurrentlyProcessing,
   listWaiting,
   listRecentHistory,
 };
