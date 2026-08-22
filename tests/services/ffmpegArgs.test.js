@@ -106,8 +106,11 @@ test('COM template, a duração continua limitando a saída (e não a imagem)', 
     assert.strictEqual(args[posT + 1], '40');
     // O template precisa mesmo estar entrando como segunda entrada.
     assert.ok(args.includes(template), 'o template deveria ser a segunda entrada');
-    // args ficam ['-loop','1','-i',template], entao o -loop esta 3 posicoes antes.
-    assert.strictEqual(args[args.indexOf(template) - 3], '-loop', 'imagem parada precisa de -loop 1');
+    // Confere pelo CONTEÚDO e não pela posição: contar posições faz o teste
+    // quebrar sempre que uma opção nova entra na mesma entrada (foi o que
+    // aconteceu quando -framerate passou a ser obrigatório).
+    const antesDaImagem = args.slice(0, args.indexOf(template));
+    assert.ok(antesDaImagem.includes('-loop'), 'imagem parada precisa de -loop 1');
   } finally {
     fs.rmSync(template, { force: true });
   }
@@ -128,4 +131,47 @@ test('template que sumiu do disco não derruba o corte', async () => {
   assert.ok(!args.includes('/caminho/que/nao/existe.png'), 'não pode passar arquivo inexistente pro ffmpeg');
   const posT = args.indexOf('-t');
   assert.ok(posT > args.lastIndexOf('-i'));
+});
+
+// A imagem da faixa PRECISA de taxa de quadros.
+//
+// Sem `-framerate`, a imagem em loop não tem taxa própria e o vstack duplica
+// quadro sem parar tentando casar com o vídeo. Medido em produção: 9216
+// quadros para 0,19 segundo de saída, a 0,0009x da velocidade normal — o corte
+// simplesmente nunca terminava, sem erro nenhum, só um ffmpeg rodando para
+// sempre. Com a taxa definida, 360 quadros para 12s em 36 segundos.
+//
+// Este teste existe porque o sintoma (renderização eterna) é indistinguível de
+// "vídeo grande, demora mesmo".
+test('a imagem da faixa entra com taxa de quadros definida', async () => {
+  const imagem = path.join(os.tmpdir(), `faixa-${Date.now()}.png`);
+  fs.writeFileSync(imagem, 'imagem de mentira');
+  try {
+    const args = await argumentosDe({
+      ...SEM_LEGENDA,
+      crop_style_mode: 'manual',
+      crop_zoom_percent: 100,
+      background_style: 'template',
+      background_template_path: imagem,
+      background_video_height_percent: 65,
+      background_video_offset_percent: 50,
+    });
+
+    const posImagem = args.indexOf(imagem);
+    assert.ok(posImagem > 0, 'a imagem tem que entrar como segunda entrada');
+
+    const antesDaImagem = args.slice(0, posImagem);
+    assert.ok(
+      antesDaImagem.includes('-framerate'),
+      `sem -framerate o corte nunca termina. Argumentos: ${args.join(' ')}`
+    );
+    // Vem antes do -i da imagem: depois dele viraria opção de saída e não
+    // teria efeito nenhum sobre a entrada.
+    assert.ok(
+      antesDaImagem.lastIndexOf('-framerate') < antesDaImagem.lastIndexOf('-i'),
+      'a taxa precisa vir antes do -i da imagem'
+    );
+  } finally {
+    fs.rmSync(imagem, { force: true });
+  }
 });

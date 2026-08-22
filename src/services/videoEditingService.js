@@ -693,9 +693,22 @@ async function renderClip({
     const args = [
       '-ss', String(startSeconds),
       '-i', videoPath,
-      // Segunda entrada: a imagem do template. -loop 1 faz a imagem parada
-      // "durar pra sempre"; quem corta e o -t la embaixo.
-      ...(template ? ['-loop', '1', '-i', template.path] : []),
+      // Segunda entrada: a imagem da faixa (template, capa ou quadro do
+      // video). -loop 1 faz a imagem parada "durar pra sempre"; quem corta e
+      // o -t la embaixo.
+      //
+      // -framerate NAO E OPCIONAL. Sem ele a imagem em loop nao tem taxa de
+      // quadros propria, e o vstack passa a duplicar quadro sem parar pra
+      // tentar casar com o video: medido em producao, 9216 quadros pra 0,19
+      // SEGUNDO de saida (dup=9209), a 0,0009x da velocidade normal. Na
+      // pratica o corte nunca terminava - e sem erro nenhum, so um ffmpeg
+      // rodando pra sempre. Com a taxa definida: 360 quadros pra 12s, 36
+      // segundos de renderizacao.
+      //
+      // 30 fps cobre o caso comum. Origem em 60 fps faz o ffmpeg duplicar a
+      // imagem 2x, o que e barato e continua limitado - o problema era a
+      // AUSENCIA de taxa, nao o valor dela.
+      ...(template ? ['-loop', '1', '-framerate', '30', '-i', template.path] : []),
       ...(filterComplex
         ? ['-filter_complex', filterComplex, '-map', outputLabel, '-map', '0:a']
         : ['-vf', simpleFilter]),
