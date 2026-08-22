@@ -224,6 +224,34 @@ function runFfmpeg(args) {
 // passado, confere a cada tick (mesmo timer do progresso) e mata o ffmpeg na
 // hora se o cliente pediu pausa - sem isso, pausar so tinha efeito depois
 // que o corte inteiro terminasse de renderizar (podia levar minutos).
+// Teto de tempo pra uma renderizacao, e o piso de velocidade abaixo do qual
+// ela e considerada travada.
+//
+// Existem porque a rede de seguranca que ja havia NAO pega este caso. O
+// videoStuckRecoveryJob acorda video "silencioso", e silencio e medido pelo
+// processing_heartbeat_at - que continua batendo normalmente enquanto o job
+// esta vivo esperando um ffmpeg eterno. Foi exatamente assim que um corte
+// ficou horas rodando sem ninguem perceber, ate o fundador reclamar da
+// demora: nada no sistema achava que havia problema.
+//
+// A velocidade e o sinal mais rapido. Um corte normal renderiza perto de
+// 0,5x nesta VPS (3s de video em 5,8s); o corte quebrado rodava a 0,0034x.
+// 0,05x e 10x pior que o normal e 15x melhor que o defeito - larga o
+// suficiente pra nao acusar corte legitimo em VPS ocupada.
+//
+// So vale depois de um tempo de aquecimento: os primeiros segundos incluem
+// abrir arquivo e encher buffer, e a velocidade comeca baixa em todo corte.
+const VELOCIDADE_MINIMA = 0.05;
+const AQUECIMENTO_MS = 90_000;
+
+// Teto absoluto, para o que a velocidade nao pegar. Generoso de proposito: a
+// funcao dele e transformar "eterno" em "erro visivel", nao apertar corte
+// legitimo. 30x a duracao do corte, com piso de 15min e teto de 2h.
+function tetoDeTempoMs(duracaoSegundos) {
+  const porDuracao = (Number(duracaoSegundos) || 0) * 30 * 1000;
+  return Math.min(Math.max(porDuracao, 15 * 60 * 1000), 2 * 60 * 60 * 1000);
+}
+
 function runFfmpegWithProgress(args, totalDurationSeconds, onProgress, checkCancelled) {
   return new Promise((resolve, reject) => {
     const progressFile = path.join(os.tmpdir(), `ffmpeg-progress-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
@@ -244,8 +272,23 @@ function runFfmpegWithProgress(args, totalDurationSeconds, onProgress, checkCanc
 
     let closed = false;
     let cancelling = false;
+    // Sem isto o SIGKILL do teto viraria PausedError, e o corte ficaria
+    // "pausado pelo cliente" - some da fila sem nunca virar erro visivel.
+    let motivoDaMorte = null;
+    const comecouEm = Date.now();
+    const tetoMs = tetoDeTempoMs(totalDurationSeconds);
+
     const poll = setInterval(async () => {
       if (closed) return;
+
+      const rodandoHaMs = Date.now() - comecouEm;
+      if (rodandoHaMs > tetoMs) {
+        motivoDaMorte = new Error(
+          `Renderizacao passou de ${Math.round(tetoMs / 60000)} minutos sem terminar - interrompida.`
+        );
+        killGroup();
+        return;
+      }
       if (checkCancelled && !cancelling) {
         cancelling = true;
         try {
@@ -265,6 +308,17 @@ function runFfmpegWithProgress(args, totalDurationSeconds, onProgress, checkCanc
           const outSeconds = Number(match[1]) / 1_000_000;
           const percent = Math.min(99, Math.max(0, Math.round((outSeconds / totalDurationSeconds) * 100)));
           onProgress(percent);
+        }
+
+        // O proprio ffmpeg publica a velocidade. Ler dela e mais confiavel do
+        // que cronometrar por fora, porque ja desconta pausa de I/O.
+        const vel = [...content.matchAll(/speed=\s*([\d.]+)x/g)].at(-1);
+        if (vel && rodandoHaMs > AQUECIMENTO_MS && Number(vel[1]) < VELOCIDADE_MINIMA) {
+          motivoDaMorte = new Error(
+            `Renderizacao lenta demais (${vel[1]}x, minimo ${VELOCIDADE_MINIMA}x) - interrompida. ` +
+              'Costuma ser taxa de quadros incompativel entre o video e uma imagem da composicao.'
+          );
+          killGroup();
         }
       } catch {
         // arquivo pode nao existir ainda no primeiro instante - ignora
@@ -289,6 +343,7 @@ function runFfmpegWithProgress(args, totalDurationSeconds, onProgress, checkCanc
       closed = true;
       clearInterval(poll);
       fs.rm(progressFile, { force: true }, () => {});
+      if (motivoDaMorte) return reject(motivoDaMorte);
       if (signal === 'SIGKILL') {
         return reject(new PausedError('Renderizacao interrompida pelo cliente.'));
       }
@@ -945,6 +1000,7 @@ module.exports = {
   // da capa e o video (sem essa garantia, aparece faixa branca no corte).
   buildThumbnailBandFilter,
   instanteDoQuadro,
+  tetoDeTempoMs,
   extractAudio,
   renderClip,
   extractThumbnail,
