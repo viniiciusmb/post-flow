@@ -90,6 +90,35 @@ app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(slowRequestLogger.middleware);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+// Videos e imagens de divulgacao, liberados pra serem exibidos a partir de
+// OUTROS sites (o fundador anuncia o Post Flow em interactivelivegames.com).
+//
+// Sem isto o navegador do visitante recusa o arquivo e o video simplesmente
+// nao roda, sem erro visivel na pagina: o Helmet marca todo arquivo do site
+// com Cross-Origin-Resource-Policy: same-origin, que e justamente "so o meu
+// proprio dominio pode carregar isto".
+//
+// Nao da pra liberar so um dominio: o cabecalho aceita 'same-origin',
+// 'same-site' ou 'cross-origin' - nao existe lista de permitidos. A
+// alternativa seria conferir o Referer, que o navegador as vezes nem manda e
+// qualquer um forja. Como este material JA e publico (esta na pagina inicial,
+// que qualquer pessoa abre e de onde qualquer pessoa baixa), restringir daria
+// trabalho sem proteger nada.
+//
+// Vale so pra esta pasta: o resto do site continua fechado.
+app.use(
+  '/video',
+  express.static(path.join(__dirname, 'public/video'), {
+    maxAge: '7d',
+    setHeaders: (res) => {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      // Para o caso de o outro site usar um player que peca o arquivo por
+      // fetch/XHR, ou marcar o <video> com crossorigin.
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    },
+  })
+);
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(
   '/assets',
