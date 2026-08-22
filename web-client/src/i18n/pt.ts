@@ -434,6 +434,7 @@ export const pt = {
   "ce.fundoBranco": "Fundo branco",
   "ce.capaColadaAoVideo": "Vídeo em {n}% da altura, colado na capa. Sem espaço entre os dois.",
   "ce.capaDoVideo": "Capa do vídeo",
+  "ce.frameDoVideo": "Frame do vídeo",
   "ce.ondeFicaACapa": "Onde fica a capa",
   "ce.ondeFicaACapaTexto": "A capa daquele vídeo vira uma faixa colada ao corte. O vídeo preenche o resto da tela.",
   "ce.capaEmCima": "Capa em cima",

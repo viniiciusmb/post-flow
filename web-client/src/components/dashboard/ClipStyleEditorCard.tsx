@@ -699,7 +699,7 @@ export function ClipStyleEditorCard() {
                   quisesse fundo liso tinha que criar uma imagem de 1080x1920
                   preenchida de uma cor só - trabalho por algo que o sistema
                   gera sozinho. */}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                 {(
                   [
                     { valor: "blur", titulo: t("ce.videoDesfocado"), amostra: "desfocado" },
@@ -707,6 +707,7 @@ export function ClipStyleEditorCard() {
                     { valor: "white", titulo: t("ce.branco"), amostra: "branco" },
                     { valor: "template", titulo: t("ce.minhaImagem"), amostra: "imagem" },
                     { valor: "thumbnail", titulo: t("ce.capaDoVideo"), amostra: "capa" },
+                    { valor: "frame", titulo: t("ce.frameDoVideo"), amostra: "capa" },
                   ] as const
                 ).map((op) => {
                   const escolhido = settings.backgroundStyle === op.valor
@@ -768,7 +769,7 @@ export function ClipStyleEditorCard() {
             {/* Seletor de lado da capa. Só aparece com "capa do vídeo"
                 escolhida: aqui as duas peças ficam coladas, então escolher
                 "em cima" já determina que o vídeo fica embaixo, encostado. */}
-            {settings.backgroundStyle === "thumbnail" && (
+            {["thumbnail", "frame"].includes(settings.backgroundStyle) && (
               <Field>
                 <FieldLabel>{t("ce.ondeFicaACapa")}</FieldLabel>
                 <p className="text-xs text-muted-foreground">{t("ce.ondeFicaACapaTexto")}</p>
@@ -854,7 +855,7 @@ export function ClipStyleEditorCard() {
                     min={10}
                     /* No modo capa o teto é 90%: em 100% não sobraria faixa
                        nenhuma e a capa sumiria sem explicação. */
-                    max={settings.backgroundStyle === "thumbnail" ? 90 : 100}
+                    max={["thumbnail", "frame"].includes(settings.backgroundStyle) ? 90 : 100}
                     value={settings.backgroundVideoHeightPercent}
                     onChange={(e) =>
                       setSettings({ ...settings, backgroundVideoHeightPercent: Number(e.target.value) })
@@ -865,7 +866,7 @@ export function ClipStyleEditorCard() {
                   <p className="text-xs text-muted-foreground">
                     {settings.backgroundVideoHeightPercent === 100
                       ? t("ce.telaInteira")
-                      : settings.backgroundStyle === "thumbnail"
+                      : ["thumbnail", "frame"].includes(settings.backgroundStyle)
                         ? t("ce.restoEhACapa", { n: settings.backgroundVideoHeightPercent })
                         : `${settings.backgroundVideoHeightPercent}% da altura. O resto fica sendo o fundo.`}
                   </p>
@@ -907,7 +908,7 @@ export function ClipStyleEditorCard() {
                 templateUrl={urlTemplate}
                 templateHeightPercent={settings.backgroundVideoHeightPercent}
                 templateOffsetPercent={settings.backgroundVideoOffsetPercent}
-                modoCapa={settings.backgroundStyle === "thumbnail"}
+                modoCapa={["thumbnail", "frame"].includes(settings.backgroundStyle)}
                 capaPosition={settings.thumbnailPosition || "top"}
               />
             </Field>

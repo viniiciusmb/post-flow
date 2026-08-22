@@ -346,7 +346,7 @@ export interface ClientVideoSettings {
    * "thumbnail" é diferente dos outros: não é fundo, é uma faixa com a capa
    * daquele vídeo colada ao vídeo (ver thumbnailPosition).
    */
-  backgroundStyle: "blur" | "black" | "white" | "template" | "thumbnail"
+  backgroundStyle: "blur" | "black" | "white" | "template" | "thumbnail" | "frame"
   hasBackgroundTemplate: boolean
   backgroundVideoHeightPercent: number
   backgroundVideoOffsetPercent: number

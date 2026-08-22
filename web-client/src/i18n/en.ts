@@ -428,6 +428,7 @@ export const en: Dicionario = {
   "ce.fundoBranco": "White background",
   "ce.capaColadaAoVideo": "Video at {n}% of the height, flush against the cover. No gap between them.",
   "ce.capaDoVideo": "Video cover",
+  "ce.frameDoVideo": "Video frame",
   "ce.ondeFicaACapa": "Where the cover goes",
   "ce.ondeFicaACapaTexto": "That video's cover becomes a band attached to the clip. The video fills the rest of the screen.",
   "ce.capaEmCima": "Cover on top",

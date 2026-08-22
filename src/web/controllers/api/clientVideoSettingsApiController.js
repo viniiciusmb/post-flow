@@ -205,7 +205,7 @@ async function update(req, res) {
   // se um deles nao mandar o campo, um padrao aqui apagaria em silencio a
   // escolha feita no outro. E exatamente o bug que ja aconteceu com os
   // horarios de postagem.
-  const ESTILOS_DE_FUNDO = ['blur', 'black', 'white', 'template', 'thumbnail'];
+  const ESTILOS_DE_FUNDO = ['blur', 'black', 'white', 'template', 'thumbnail', 'frame'];
   const backgroundStyle = ESTILOS_DE_FUNDO.includes(req.body.backgroundStyle)
     ? req.body.backgroundStyle
     : atual.background_style || 'blur';

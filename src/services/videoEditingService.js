@@ -497,7 +497,7 @@ function buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, fundo })
   if (fundo) {
     // A thumbnail nao e "fundo": e uma faixa colada ao video, com layout
     // proprio (ver buildThumbnailBandFilter).
-    if (fundo.style === 'thumbnail') {
+    if (fundo.style === 'thumbnail' || fundo.style === 'frame') {
       return buildThumbnailBandFilter({
         w,
         h,
@@ -595,6 +595,29 @@ async function renderClip({
   // Video enviado do computador costuma nao ter capa nenhuma, e o download
   // tambem pode falhar - nos dois casos cai no desfocado, que e o padrao de
   // sempre, em vez de derrubar o corte.
+  // Fundo "frame do video": em vez de uma imagem vinda de fora, tira um quadro
+  // do PROPRIO trecho e usa como a faixa. Cada corte fica com uma imagem
+  // diferente, do momento dele - e o que separa isto da capa, que e a mesma
+  // imagem nos N cortes do mesmo video.
+  //
+  // O quadro sai do MEIO do trecho: o primeiro segundo costuma pegar corte de
+  // cena ou alguem de olho fechado.
+  let framePath = null;
+  if (estiloDeFundo === 'frame') {
+    framePath = outputPath.replace(/\.mp4$/, '-frame.jpg');
+    const meio = startSeconds + (endSeconds - startSeconds) / 2;
+    try {
+      await runFfmpeg(['-ss', String(meio), '-i', videoPath, '-frames:v', '1', '-q:v', '2', framePath]);
+    } catch (err) {
+      logger.error(`Nao consegui tirar o quadro do video pro fundo (seguindo com desfocado):`, err.message);
+      framePath = null;
+    }
+    if (!framePath || !fs.existsSync(framePath)) {
+      estiloDeFundo = 'blur';
+      framePath = null;
+    }
+  }
+
   if (estiloDeFundo === 'thumbnail' && (!thumbnailImagePath || !fs.existsSync(thumbnailImagePath))) {
     logger.warn(
       `Capa do video nao disponivel (${thumbnailImagePath || 'sem url'}) - renderizando com fundo desfocado.`
@@ -612,6 +635,8 @@ async function renderClip({
           style: estiloDeFundo,
           heightPercent: alturaDoVideo,
           offsetPercent: Number(settings.background_video_offset_percent ?? 50),
+          // A mesma escolha de lado vale pros dois: a faixa e a mesma peca,
+          // muda so de onde vem a imagem.
           thumbnailPosition: settings.thumbnail_position === 'bottom' ? 'bottom' : 'top',
         }
       : null;
@@ -624,7 +649,9 @@ async function renderClip({
       ? { path: templatePath }
       : fundo && fundo.style === 'thumbnail'
         ? { path: thumbnailImagePath }
-        : null;
+        : fundo && fundo.style === 'frame'
+          ? { path: framePath }
+          : null;
 
   const { w, h } = ASPECT_RATIOS[aspectRatio] || ASPECT_RATIOS['9:16'];
   const { crf, preset } = QUALITY_PRESETS[quality] || QUALITY_PRESETS.high;
@@ -699,6 +726,8 @@ async function renderClip({
     }
   } finally {
     if (assPath) fs.unlinkSync(assPath);
+    // O quadro extraido e descartavel: existe so pra esta renderizacao.
+    if (framePath) fs.rmSync(framePath, { force: true });
   }
 
   return outputPath;

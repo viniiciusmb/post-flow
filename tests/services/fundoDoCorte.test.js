@@ -187,3 +187,31 @@ test('escolher "minha imagem" sem imagem enviada é recusado', async () => {
   assert.equal(r.status, 400);
   assert.match(r.body.error, /Envie a imagem/);
 });
+
+// ---------- fundo "frame do vídeo" ----------
+//
+// Mesma faixa da capa, mas a imagem sai do PRÓPRIO trecho: cada corte fica com
+// um quadro diferente, do momento dele. É o que separa este estilo da capa,
+// que repete a mesma imagem nos N cortes do mesmo vídeo.
+
+test('o estilo "frame do vídeo" é aceito e guardado', async () => {
+  const agente = await agenteLogado();
+  const r = await agente.put('/api/client/video-settings', {
+    ...BASE,
+    backgroundStyle: 'frame',
+    backgroundVideoHeightPercent: 65,
+  });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.backgroundStyle, 'frame');
+});
+
+test('"frame do vídeo" não exige imagem enviada, diferente de "minha imagem"', async () => {
+  // "template" precisa de upload prévio e é recusado sem ele; "frame" nasce do
+  // próprio vídeo, então não há nada para enviar.
+  const agente = await agenteLogado();
+  const comTemplate = await agente.put('/api/client/video-settings', { ...BASE, backgroundStyle: 'template' });
+  assert.equal(comTemplate.status, 400, 'sem imagem enviada, "minha imagem" tem que ser recusada');
+
+  const comFrame = await agente.put('/api/client/video-settings', { ...BASE, backgroundStyle: 'frame' });
+  assert.equal(comFrame.status, 200, 'frame não depende de upload nenhum');
+});

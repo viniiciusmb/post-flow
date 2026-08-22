@@ -428,6 +428,7 @@ export const es: Dicionario = {
   "ce.fundoBranco": "Fondo blanco",
   "ce.capaColadaAoVideo": "Vídeo al {n}% de la altura, pegado a la portada. Sin espacio entre ambos.",
   "ce.capaDoVideo": "Portada del vídeo",
+  "ce.frameDoVideo": "Fotograma del video",
   "ce.ondeFicaACapa": "Dónde va la portada",
   "ce.ondeFicaACapaTexto": "La portada de ese vídeo se convierte en una franja pegada al clip. El vídeo llena el resto de la pantalla.",
   "ce.capaEmCima": "Portada arriba",
