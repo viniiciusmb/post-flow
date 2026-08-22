@@ -94,12 +94,29 @@ export function VideoSettingsCard() {
     })
   }, [])
 
+  // Só os campos que ESTE cartão edita. A mesma tela é gravada por dois
+  // cartões, e mandar o objeto inteiro fazia este aqui reenviar a cópia que
+  // carregou quando a página abriu — apagando o estilo, a fonte, a altura e a
+  // cor que o cliente tinha acabado de escolher no cartão de estilo visual.
+  // O servidor preserva o que não vier no corpo.
+  const MEUS_CAMPOS = [
+    "aspectRatio",
+    "framing",
+    "quality",
+    "clipLength",
+    "clipMode",
+    "maxClips",
+    "descriptionMode",
+    "descriptionTemplate",
+  ] as const
+
   async function save(next: ClientVideoSettingsResponse) {
     setSettings(next)
     setSaving(true)
     setSavedFlash(false)
     try {
-      await api.put<ClientVideoSettingsResponse>("/api/client/video-settings", next)
+      const corpo = Object.fromEntries(MEUS_CAMPOS.map((k) => [k, next[k]]))
+      await api.put<ClientVideoSettingsResponse>("/api/client/video-settings", corpo)
       setSavedFlash(true)
       setTimeout(() => setSavedFlash(false), 2000)
     } finally {

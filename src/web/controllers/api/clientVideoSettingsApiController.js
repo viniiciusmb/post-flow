@@ -155,54 +155,86 @@ async function update(req, res) {
     captionBoxColor,
   } = req.body;
 
-  if (!ASPECT_RATIOS.includes(aspectRatio)) return res.status(400).json({ error: res.locals.t('erros.proporcaoInvalida') });
-  if (!FRAMINGS.includes(framing)) return res.status(400).json({ error: res.locals.t('erros.enquadramentoInvalido') });
-  if (!QUALITIES.includes(quality)) return res.status(400).json({ error: res.locals.t('erros.qualidadeInvalida') });
-  if (!CAPTION_STYLES.includes(captionStyle)) return res.status(400).json({ error: res.locals.t('erros.estiloLegendaInvalido') });
-  if (!TITLE_STYLES.includes(titleStyle)) return res.status(400).json({ error: res.locals.t('erros.estiloTituloInvalido') });
-  if (!CLIP_LENGTHS.includes(clipLength)) return res.status(400).json({ error: res.locals.t('erros.estiloCorteInvalido') });
-  if (!CLIP_MODES.includes(clipMode)) return res.status(400).json({ error: res.locals.t('erros.modoCorteInvalido') });
-  if (!DESCRIPTION_MODES.includes(descriptionMode)) return res.status(400).json({ error: res.locals.t('erros.modoDescricaoInvalido') });
-  if (!CROP_STYLE_MODES.includes(cropStyleMode)) return res.status(400).json({ error: res.locals.t('erros.modoEstiloInvalido') });
-  if (!PART_LABEL_POSITIONS.includes(partLabelPosition)) {
-    return res.status(400).json({ error: res.locals.t('erros.posicaoNumeracaoInvalida') });
-  }
-  const maxClipsNum = Number(maxClips);
-  if (!Number.isInteger(maxClipsNum) || maxClipsNum < 1 || maxClipsNum > 30) {
-    return res.status(400).json({ error: res.locals.t('erros.numeroCortesInvalido') });
-  }
-  const titleSecondsNum = Number(titleSeconds);
-  if (!Number.isInteger(titleSecondsNum) || titleSecondsNum < 1 || titleSecondsNum > 15) {
-    return res.status(400).json({ error: res.locals.t('erros.duracaoTituloInvalida') });
-  }
-  const cropZoomPercentNum = Number(cropZoomPercent);
-  if (!Number.isInteger(cropZoomPercentNum) || cropZoomPercentNum < 0 || cropZoomPercentNum > 100) {
-    return res.status(400).json({ error: res.locals.t('erros.zoomInvalido') });
-  }
-  if (descriptionMode === 'fixed' && !String(descriptionTemplate || '').trim()) {
-    return res.status(400).json({ error: res.locals.t('erros.escrevaDescricao') });
-  }
-
   const alvo = await resolverAlvo(req);
   if (alvo.erro) return res.status(404).json({ error: alvo.erro });
 
-  const backgroundHeight = Number(req.body.backgroundVideoHeightPercent ?? 100);
-  const backgroundOffset = Number(req.body.backgroundVideoOffsetPercent ?? 50);
-  if (!Number.isInteger(backgroundHeight) || backgroundHeight < 10 || backgroundHeight > 100) {
-    return res.status(400).json({ error: res.locals.t('erros.alturaInvalida') });
-  }
-  if (!Number.isInteger(backgroundOffset) || backgroundOffset < 0 || backgroundOffset > 100) {
-    return res.status(400).json({ error: res.locals.t('erros.posicaoVideoInvalida') });
-  }
-
-  // O caminho do template não vem do cliente: é preservado do que já está
-  // gravado, e só muda pelas rotas de upload/remoção. Aceitar caminho de
-  // arquivo vindo do navegador seria deixar o cliente apontar pra qualquer
-  // arquivo do servidor.
+  // O que ja esta gravado precisa ser lido ANTES de validar qualquer coisa:
+  // a regra desta rota e "campo ausente preserva o salvo", e sem o salvo em
+  // maos nao da pra decidir nada.
+  //
+  // O caminho do template nao vem do cliente: e preservado daqui e so muda
+  // pelas rotas de upload/remocao. Aceitar caminho de arquivo vindo do
+  // navegador seria deixar o cliente apontar pra qualquer arquivo do servidor.
   const atual = alvo.channelId
     ? (await clientVideoSettingsRepository.findChannelOverride(req.session.user.id, alvo.channelId)) ||
       (await clientVideoSettingsRepository.findByClientId(req.session.user.id))
     : await clientVideoSettingsRepository.findByClientId(req.session.user.id);
+
+  // ---------------------------------------------------------------------
+  // Campo AUSENTE preserva o que ja estava salvo; campo PRESENTE e invalido
+  // e recusado.
+  //
+  // Esta tela e gravada por DOIS cartoes (qualidade/quantidade e estilo
+  // visual), cada um mandando so o que edita. Exigir o campo inteiro de todo
+  // mundo obrigava cada cartao a reenviar os campos do outro - e o que ele
+  // reenviava era a copia carregada quando a pagina abriu, apagando o que o
+  // cliente tinha acabado de escolher no outro cartao. Foi o bug de
+  // "configuracao que nao salva" relatado em 22/08/2026.
+  // ---------------------------------------------------------------------
+  const invalidos = [];
+
+  function daLista(recebido, salvo, lista, erro, padrao) {
+    if (recebido === undefined || recebido === null) return salvo ?? padrao;
+    if (!lista.includes(recebido)) {
+      invalidos.push(erro);
+      return null;
+    }
+    return recebido;
+  }
+
+  function inteiro(recebido, salvo, min, max, erro, padrao) {
+    if (recebido === undefined || recebido === null) return salvo ?? padrao;
+    const n = Number(recebido);
+    if (!Number.isInteger(n) || n < min || n > max) {
+      invalidos.push(erro);
+      return null;
+    }
+    return n;
+  }
+
+  const proporcao = daLista(aspectRatio, atual.aspect_ratio, ASPECT_RATIOS, 'erros.proporcaoInvalida', '9:16');
+  const enquadramento = daLista(framing, atual.framing, FRAMINGS, 'erros.enquadramentoInvalido', 'crop');
+  const qualidadeFinal = daLista(quality, atual.quality, QUALITIES, 'erros.qualidadeInvalida', 'high');
+  const estiloLegenda = daLista(captionStyle, atual.caption_style, CAPTION_STYLES, 'erros.estiloLegendaInvalido', 'classic');
+  const estiloTitulo = daLista(titleStyle, atual.title_style, TITLE_STYLES, 'erros.estiloTituloInvalido', 'classic');
+  const duracaoCorte = daLista(clipLength, atual.clip_length, CLIP_LENGTHS, 'erros.estiloCorteInvalido', 'balanced');
+  const modoCorte = daLista(clipMode, atual.clip_mode, CLIP_MODES, 'erros.modoCorteInvalido', 'ai_choice');
+  const modoDescricao = daLista(descriptionMode, atual.description_mode, DESCRIPTION_MODES, 'erros.modoDescricaoInvalido', 'auto');
+  const modoEstilo = daLista(cropStyleMode, atual.crop_style_mode, CROP_STYLE_MODES, 'erros.modoEstiloInvalido', 'auto');
+  const posicaoNumeracao = daLista(
+    partLabelPosition, atual.part_label_position, PART_LABEL_POSITIONS, 'erros.posicaoNumeracaoInvalida', 'top_right'
+  );
+
+  const maxClipsNum = inteiro(maxClips, atual.max_clips, 1, 30, 'erros.numeroCortesInvalido', 4);
+  const titleSecondsNum = inteiro(titleSeconds, atual.title_seconds, 1, 15, 'erros.duracaoTituloInvalida', 3);
+  const cropZoomPercentNum = inteiro(cropZoomPercent, atual.crop_zoom_percent, 0, 100, 'erros.zoomInvalido', 100);
+  const backgroundHeight = inteiro(
+    req.body.backgroundVideoHeightPercent, atual.background_video_height_percent, 10, 100, 'erros.alturaInvalida', 100
+  );
+  const backgroundOffset = inteiro(
+    req.body.backgroundVideoOffsetPercent, atual.background_video_offset_percent, 0, 100, 'erros.posicaoVideoInvalida', 50
+  );
+
+  if (invalidos.length) return res.status(400).json({ error: res.locals.t(invalidos[0]) });
+
+  // Descricao fixa sem texto nenhum renderizaria legenda vazia no TikTok.
+  // So checa quando a descricao veio nesta chamada: o cartao de estilo nao
+  // manda descricao, e nao pode ser barrado por causa dela.
+  const descricaoVeio = descriptionTemplate !== undefined;
+  const descricaoFinal = descricaoVeio ? descriptionTemplate : atual.description_template;
+  if (modoDescricao === 'fixed' && !String(descricaoFinal || '').trim()) {
+    return res.status(400).json({ error: res.locals.t('erros.escrevaDescricao') });
+  }
 
   // Campo ausente PRESERVA o que ja estava salvo, em vez de cair num padrao.
   // Esta tela e salva por dois cartoes diferentes (qualidade e estilo visual);
@@ -280,28 +312,31 @@ async function update(req, res) {
     backgroundVideoHeightPercent: backgroundHeight,
     backgroundVideoOffsetPercent: backgroundOffset,
     thumbnailPosition,
-    aspectRatio,
-    framing,
-    quality,
-    captionStyle,
+    aspectRatio: proporcao,
+    framing: enquadramento,
+    quality: qualidadeFinal,
+    captionStyle: estiloLegenda,
     captionFont: fonteLegenda,
     titleBoxColor: corTitulo,
     captionBoxColor: corLegenda,
     titleFont: fonteTitulo,
     captionHeightPercent: captionHeightNum,
     titleHeightPercent: titleHeightNum,
-    clipLength,
-    clipMode,
+    clipLength: duracaoCorte,
+    clipMode: modoCorte,
     maxClips: maxClipsNum,
-    showTitle: Boolean(showTitle),
+    // Booleano ausente tambem preserva: Boolean(undefined) daria false, e o
+    // cartao de qualidade (que nao manda nenhum dos dois) desligaria o titulo
+    // e a numeracao do cliente sem ele pedir.
+    showTitle: showTitle === undefined ? atual.show_title : Boolean(showTitle),
     titleSeconds: titleSecondsNum,
-    descriptionMode,
-    descriptionTemplate: descriptionMode === 'fixed' ? String(descriptionTemplate).trim() : null,
-    cropStyleMode,
+    descriptionMode: modoDescricao,
+    descriptionTemplate: modoDescricao === 'fixed' ? String(descricaoFinal).trim() : null,
+    cropStyleMode: modoEstilo,
     cropZoomPercent: cropZoomPercentNum,
-    showPartLabel: Boolean(showPartLabel),
-    partLabelPosition,
-    titleStyle,
+    showPartLabel: showPartLabel === undefined ? atual.show_part_label : Boolean(showPartLabel),
+    partLabelPosition: posicaoNumeracao,
+    titleStyle: estiloTitulo,
   }, alvo.channelId);
   res.json(toApiWithOptions(saved));
 }
