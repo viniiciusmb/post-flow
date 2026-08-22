@@ -188,3 +188,34 @@ test2('a duração de 3 a 4 minutos é aceita', async () => {
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.clipLength, 'extra_long');
 });
+
+test('a cor da caixa vai no campo de CONTORNO, que é o que o libass pinta', () => {
+  // Bug real, que durou meses sem ninguém achar a causa: com BorderStyle=3 o
+  // libass pinta o retângulo com OutlineColour, e BackColour vira só sombra.
+  // Como a cor estava em BackColour, o modelo "balão roxo" renderizava PRETO -
+  // e o vídeo saía sem erro nenhum, só com a cor errada.
+  const ass = v.buildAssSubtitles(PALAVRAS, 'bubble_purple', 'amarelo_caixa', 'T', 3, null, 'top_right', 12, {});
+  const linhas = Object.fromEntries(
+    ass.split('\n').filter((l) => l.startsWith('Style:')).map((l) => {
+      const c = l.replace('Style: ', '').split(',');
+      return [c[0], { outline: c[5], back: c[6], borderStyle: Number(c[15]) }];
+    })
+  );
+
+  assert.equal(linhas.Default.borderStyle, 3);
+  assert.equal(
+    linhas.Default.outline,
+    v.CAPTION_STYLES.bubble_purple.corCaixa,
+    'a cor escolhida tem que estar no campo que o libass usa para pintar a caixa'
+  );
+  assert.notEqual(linhas.Default.outline, '&H00000000', 'caixa roxa não pode sair preta');
+
+  assert.equal(linhas.Title.outline, v.TITLE_STYLES.amarelo_caixa.corCaixa);
+});
+
+test('modelo SEM caixa mantém o contorno preto, que é o que o dá legibilidade', () => {
+  const ass = v.buildAssSubtitles(PALAVRAS, 'classic', 'classic', 'T', 3, null, 'top_right', 12, {});
+  const c = ass.split('\n').find((l) => l.startsWith('Style: Default')).split(',');
+  assert.equal(Number(c[15]), 1, 'sem caixa o BorderStyle é 1');
+  assert.equal(c[5], '&H00000000', 'o contorno precisa ser preto para o texto branco se destacar');
+});

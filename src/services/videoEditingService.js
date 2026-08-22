@@ -107,15 +107,29 @@ function margemVertical(percentual, padrao) {
 // isso ela e montada num lugar so.
 function linhaDeEstilo({ nome, preset, fonte, alinhamento, margemV }) {
   const borderStyle = preset.caixa ? 3 : 1;
-  const corCaixa = preset.caixa ? preset.corCaixa : PRETO;
+
+  // A COR DA CAIXA VAI EM OutlineColour, nao em BackColour.
+  //
+  // Com BorderStyle=3 o libass pinta o retangulo com a cor de CONTORNO;
+  // BackColour vira so a sombra. Nao e o que o nome dos campos sugere, e o
+  // erro e invisivel em teste de codigo: o video renderiza sem erro nenhum,
+  // so com a caixa na cor errada.
+  //
+  // Foi assim que o modelo "balao roxo" passou a existencia inteira saindo
+  // PRETO - a cor roxa estava em BackColour, que nunca pintou nada. Confere o
+  // relato antigo de "escolhi uma legenda e saiu outra parecida, com cor
+  // errada", que na epoca foi atribuido a outra causa.
+  const corDoContorno = preset.caixa ? preset.corCaixa : PRETO;
+  const corDeFundo = preset.caixa ? '&H80000000' : PRETO;
+
   return [
     `Style: ${nome}`,
     fonte,
     preset.tamanho,
     preset.corLetra,
     '&H000000FF',
-    PRETO,
-    corCaixa,
+    corDoContorno,
+    corDeFundo,
     1, 0, 0, 0,
     100, 100, 0, 0,
     borderStyle,
