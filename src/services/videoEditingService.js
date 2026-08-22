@@ -612,6 +612,27 @@ function aplicarPapelRasgado({ resultado, papelIndice, w, h, alturaPercent, corH
   return { filterComplex: partes.join(';'), outputLabel: '[comPapel]' };
 }
 
+// De que instante do trecho sai o quadro usado como faixa.
+//
+// Sorteado, a pedido do fundador: assim dois cortes do mesmo video nunca
+// ficam com a mesma imagem, e re-renderizar um corte que saiu ruim da outra
+// foto. Custa o mesmo que qualquer outro instante - o ffmpeg salta direto pro
+// ponto pedido, nao percorre o video (300ms medidos na VPS).
+//
+// O sorteio e limitado ao MIOLO do trecho (25% a 75%). As pontas sao onde
+// mora quase todo quadro ruim: corte de cena, fade, alguem entrando ou saindo
+// do enquadramento. Sortear no trecho inteiro traria isso de volta - foi por
+// isso que a versao anterior fixava o meio.
+const MIOLO_INICIO = 0.25;
+const MIOLO_FIM = 0.75;
+
+function instanteDoQuadro(startSeconds, endSeconds, sortear = Math.random) {
+  const duracao = Math.max(0, Number(endSeconds) - Number(startSeconds));
+  const inicio = Number(startSeconds) + duracao * MIOLO_INICIO;
+  const fim = Number(startSeconds) + duracao * MIOLO_FIM;
+  return inicio + sortear() * (fim - inicio);
+}
+
 function buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, fundo }) {
   // Fundo escolhido explicitamente (template, preto, branco ou desfocado). O
   // 'blur' so entra por aqui quando ha altura definida - com o video ocupando
@@ -722,14 +743,18 @@ async function renderClip({
   // diferente, do momento dele - e o que separa isto da capa, que e a mesma
   // imagem nos N cortes do mesmo video.
   //
-  // O quadro sai do MEIO do trecho: o primeiro segundo costuma pegar corte de
-  // cena ou alguem de olho fechado.
+  // O instante e sorteado, pra cada corte ficar com uma imagem diferente em
+  // vez de sempre a mesma pose do meio (ver instanteDoQuadro).
   let framePath = null;
   if (estiloDeFundo === 'frame') {
     framePath = outputPath.replace(/\.mp4$/, '-frame.jpg');
-    const meio = startSeconds + (endSeconds - startSeconds) / 2;
+    const instante = instanteDoQuadro(startSeconds, endSeconds);
     try {
-      await runFfmpeg(['-ss', String(meio), '-i', videoPath, '-frames:v', '1', '-q:v', '2', framePath]);
+      // -ss ANTES do -i e o que torna isto barato: o ffmpeg salta direto pro
+      // ponto pedido em vez de decodificar o video inteiro ate la. Medido na
+      // VPS com um video AV1 de 2 minutos: 300ms assim, contra 7,4 SEGUNDOS
+      // com o -ss depois do -i. Nunca inverta essa ordem.
+      await runFfmpeg(['-ss', String(instante), '-i', videoPath, '-frames:v', '1', '-q:v', '2', framePath]);
     } catch (err) {
       logger.error(`Nao consegui tirar o quadro do video pro fundo (seguindo com desfocado):`, err.message);
       framePath = null;
@@ -919,6 +944,7 @@ module.exports = {
   // Exportado pro teste: e o filtro que garante o encaixe exato entre a faixa
   // da capa e o video (sem essa garantia, aparece faixa branca no corte).
   buildThumbnailBandFilter,
+  instanteDoQuadro,
   extractAudio,
   renderClip,
   extractThumbnail,

@@ -267,3 +267,107 @@ test('corte comum, sem fundo nenhum, mantém a taxa do vídeo original', async (
   assert.strictEqual(args.indexOf('-r'), -1);
   assert.ok(!filtroDe(args).includes('fps='));
 });
+
+// ---------- de onde sai o quadro usado como faixa ----------
+//
+// A pedido do fundador (22/08/2026), o instante é sorteado em vez de fixo no
+// meio: assim dois cortes do mesmo vídeo nunca ficam com a mesma imagem.
+//
+// Vale registrar o que NÃO mudou: sortear não é mais barato que fixar. O que
+// torna a extração barata é o `-ss` vir ANTES do `-i`, fazendo o ffmpeg saltar
+// direto pro ponto pedido. Medido na VPS com um vídeo AV1 de 2 minutos: 300ms
+// assim, contra 7,4 SEGUNDOS com o `-ss` depois do `-i`.
+
+const { instanteDoQuadro } = require('../../src/services/videoEditingService');
+
+test('o quadro sai de dentro do trecho, nunca das pontas', async () => {
+  // As pontas são onde mora quase todo quadro ruim: corte de cena, fade,
+  // alguém entrando ou saindo do enquadramento.
+  for (let i = 0; i < 200; i += 1) {
+    const t = instanteDoQuadro(100, 200);
+    assert.ok(t >= 125 && t <= 175, `sorteou ${t}, fora do miolo de um trecho 100-200`);
+  }
+});
+
+test('cortes diferentes recebem quadros diferentes', async () => {
+  const vistos = new Set();
+  for (let i = 0; i < 50; i += 1) vistos.add(instanteDoQuadro(0, 60).toFixed(3));
+  assert.ok(vistos.size > 40, `sorteio preso: só ${vistos.size} instantes distintos em 50 tentativas`);
+});
+
+test('trecho de duração zero não gera instante inválido', async () => {
+  // Corte degenerado não pode virar `-ss NaN`, que faria o ffmpeg recusar o
+  // comando e derrubar o corte inteiro.
+  const t = instanteDoQuadro(42, 42);
+  assert.ok(Number.isFinite(t) && t === 42);
+});
+
+// Captura TODOS os comandos de ffmpeg de uma renderização, não só o último —
+// o fundo "frame" dispara dois: a extração do quadro e o corte em si.
+function todosOsComandosDe(settings) {
+  const cp = require('child_process');
+  const spawnOriginal = cp.spawn;
+  const comandos = [];
+
+  cp.spawn = (cmd, args) => {
+    comandos.push(args);
+    const { EventEmitter } = require('events');
+    const filho = new EventEmitter();
+    filho.stderr = new EventEmitter();
+    filho.stdout = new EventEmitter();
+    filho.kill = () => {};
+    setImmediate(() => filho.emit('close', 0));
+    return filho;
+  };
+
+  // Recarrega DEPOIS de trocar o spawn: o serviço guarda a referência na
+  // importação, então trocar antes é o que faz o mock valer.
+  delete require.cache[require.resolve('../../src/services/videoEditingService')];
+  const service = require('../../src/services/videoEditingService');
+
+  const saida = path.join(os.tmpdir(), `saida-${Date.now()}.mp4`);
+  return service
+    .renderClip({
+      videoPath: '/tmp/entrada.mp4',
+      startSeconds: 10,
+      endSeconds: 50,
+      words: [],
+      title: 'Título',
+      outputPath: saida,
+      settings,
+      partIndex: 1,
+      partTotal: 1,
+    })
+    .then(
+      () => comandos,
+      () => comandos
+    )
+    .finally(() => {
+      cp.spawn = spawnOriginal;
+      fs.rmSync(saida, { force: true });
+      delete require.cache[require.resolve('../../src/services/videoEditingService')];
+    });
+}
+
+test('a extração salta direto pro ponto: -ss antes do -i', async () => {
+  // Inverter essa ordem não quebra nada visualmente — só faz o ffmpeg
+  // decodificar o vídeo inteiro até o ponto pedido (7,4s em vez de 300ms na
+  // medição real). É o tipo de regressão que passa despercebida sem teste.
+  const comandos = await todosOsComandosDe({
+    ...SEM_LEGENDA,
+    crop_style_mode: 'manual',
+    background_style: 'frame',
+    background_video_height_percent: 66,
+  });
+
+  const extracao = comandos.find((a) => a.includes('-frames:v'));
+  assert.ok(extracao, 'o fundo "frame" deveria extrair um quadro');
+  assert.ok(
+    extracao.indexOf('-ss') < extracao.indexOf('-i'),
+    '-ss depois do -i faz o ffmpeg decodificar o vídeo inteiro até o ponto pedido (7,4s em vez de 300ms)'
+  );
+
+  // E o instante tem que cair no miolo do trecho 10-50.
+  const t = Number(extracao[extracao.indexOf('-ss') + 1]);
+  assert.ok(t >= 20 && t <= 40, `quadro tirado de ${t}s, fora do miolo do trecho`);
+});
