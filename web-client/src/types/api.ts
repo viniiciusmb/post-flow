@@ -312,6 +312,10 @@ export type VideoQuality = "high" | "medium"
 export type VideoCaptionStyle =
   | "classic" | "bold" | "minimal" | "none" | "bubble_purple" | "bubble_dark"
   | "neon_verde" | "vermelho_forte" | "amarelo_caixa" | "branco_caixa" | "contorno_grosso"
+  // Caixa na cor escolhida pelo cliente. "papel_rasgado" só existe para
+  // título: a legenda aparece palavra por palavra, e uma faixa larga atrás
+  // de uma palavra só ficaria desproporcional.
+  | "caixa_colorida" | "papel_rasgado"
 export type VideoClipLength = "short" | "balanced" | "long" | "extra_long"
 export type VideoClipMode = "ai_choice" | "full_video" | "fixed_count"
 export type VideoDescriptionMode = "auto" | "fixed" | "none"
@@ -325,6 +329,9 @@ export interface ClientVideoSettings {
   captionStyle: VideoCaptionStyle
   captionFont: string
   titleFont: string
+  /** Cor da caixa / do papel rasgado, em #RRGGBB. */
+  titleBoxColor: string
+  captionBoxColor: string
   // Altura na tela, em % da altura do vídeo, contada a partir da borda mais
   // próxima: a legenda sobe de baixo, o título desce de cima.
   captionHeightPercent: number

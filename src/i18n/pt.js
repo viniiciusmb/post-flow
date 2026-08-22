@@ -316,6 +316,7 @@ module.exports = {
     estiloCorteInvalido: "Estilo de corte inválido.",
     estiloLegendaInvalido: "Estilo de legenda inválido.",
     fonteInvalida: "Fonte inválida.",
+    corInvalida: "Cor inválida.",
     alturaInvalida: "Altura inválida.",
     estiloTituloInvalido: "Estilo de título inválido.",
     falhaEvento: "Falha ao processar evento.",

@@ -318,6 +318,43 @@ const STYLE_PREVIEW: Record<VideoCaptionStyle, { label: ChaveDeTraducao; render:
       </span>
     ),
   },
+  caixa_colorida: {
+    label: "ce.caixaColorida",
+    render: (text) => (
+      <span
+        style={{
+          fontFamily: "Anton, Arial Black, sans-serif",
+          color: "#fff",
+          fontSize: 14,
+          background: "var(--cor-da-caixa, #D92323)",
+          padding: "3px 8px",
+          borderRadius: 4,
+        }}
+      >
+        {text}
+      </span>
+    ),
+  },
+  papel_rasgado: {
+    label: "ce.papelRasgado",
+    render: (text) => (
+      <span
+        style={{
+          fontFamily: "Anton, Arial Black, sans-serif",
+          color: "#fff",
+          fontSize: 13,
+          background: "var(--cor-da-caixa, #D92323)",
+          padding: "4px 10px",
+          // Borda recortada: é a mesma ideia do papel de verdade, aproximada
+          // em CSS só para a miniatura. O arquivo final usa a imagem PNG.
+          clipPath:
+            "polygon(0% 18%, 6% 4%, 14% 14%, 23% 2%, 33% 12%, 44% 3%, 55% 13%, 66% 2%, 77% 12%, 88% 3%, 96% 13%, 100% 6%, 100% 84%, 93% 97%, 84% 87%, 74% 98%, 63% 88%, 52% 98%, 41% 87%, 30% 97%, 19% 87%, 9% 98%, 0% 88%)",
+        }}
+      >
+        {text}
+      </span>
+    ),
+  },
   none: {
     label: "ce.semLegenda",
     render: () => <span className="text-xs text-white/40">(nenhuma)</span>,
@@ -329,11 +366,13 @@ function StyleGallery({
   value,
   onChange,
   sampleText,
+  corDaCaixa = "#D92323",
 }: {
   options: VideoCaptionStyle[]
   value: VideoCaptionStyle
   onChange: (v: VideoCaptionStyle) => void
   sampleText: string
+  corDaCaixa?: string
 }) {
   const t = useT()
   return (
@@ -351,7 +390,13 @@ function StyleGallery({
               value === style ? "border-primary ring-1 ring-primary" : "border-border hover:bg-accent"
             )}
           >
-            <div className="flex h-16 w-full items-center justify-center rounded-md bg-neutral-900">
+            {/* A cor escolhida entra por variável CSS: assim a miniatura do
+                modelo colorido mostra a cor de verdade, em vez de uma cor de
+                exemplo que não corresponde ao que vai sair. */}
+            <div
+              className="flex h-16 w-full items-center justify-center rounded-md bg-neutral-900"
+              style={{ ["--cor-da-caixa" as string]: corDaCaixa }}
+            >
               {preview.render(sampleText)}
             </div>
             <span className="text-xs font-medium">{t(preview.label)}</span>
@@ -369,6 +414,39 @@ function StyleGallery({
 // Fonte num dropdown, e não numa galeria: o que muda entre elas é o desenho
 // da letra, e isso se lê melhor na mesma palavra escrita em cada uma do que em
 // miniaturas lado a lado. Cada opção aparece escrita na própria fonte.
+// Seletor de cor. Só aparece quando o modelo escolhido usa cor - mostrar um
+// seletor que não muda nada é pior do que não mostrar.
+function CorSelect({
+  label,
+  valor,
+  onChange,
+}: {
+  label: string
+  valor: string
+  onChange: (v: string) => void
+}) {
+  const [rascunho, setRascunho] = useState(valor)
+  useEffect(() => setRascunho(valor), [valor])
+  return (
+    <Field>
+      <FieldLabel>{label}</FieldLabel>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={rascunho}
+          onChange={(e) => setRascunho(e.target.value)}
+          // Salva ao soltar, não a cada tom percorrido: o seletor dispara
+          // enquanto se arrasta, e salvar em cada passo repetiria o problema
+          // das gravações fora de ordem.
+          onBlur={() => onChange(rascunho.toUpperCase())}
+          className="h-9 w-16 cursor-pointer rounded border border-border bg-transparent p-1"
+        />
+        <span className="font-mono text-xs text-muted-foreground">{rascunho.toUpperCase()}</span>
+      </div>
+    </Field>
+  )
+}
+
 function FonteSelect({
   label,
   valor,
@@ -952,12 +1030,20 @@ export function ClipStyleEditorCard() {
                 opcoes={settings.options.fonts}
                 onChange={(v) => save({ ...settings, captionFont: v })}
               />
+              {settings.captionStyle === "caixa_colorida" && (
+                <CorSelect
+                  label={t("ce.corDaCaixa")}
+                  valor={settings.captionBoxColor}
+                  onChange={(v) => save({ ...settings, captionBoxColor: v })}
+                />
+              )}
               <AlturaSlider
                 label={t("ce.alturaDaLegenda")}
                 valor={settings.captionHeightPercent}
                 onChange={(v) => save({ ...settings, captionHeightPercent: v })}
               />
               <StyleGallery
+                corDaCaixa={settings.captionBoxColor}
                 options={settings.options.captionStyles}
                 value={settings.captionStyle}
                 onChange={(v) => save({ ...settings, captionStyle: v })}
@@ -996,12 +1082,20 @@ export function ClipStyleEditorCard() {
                     opcoes={settings.options.fonts}
                     onChange={(v) => save({ ...settings, titleFont: v })}
                   />
+                  {["caixa_colorida", "papel_rasgado"].includes(settings.titleStyle) && (
+                    <CorSelect
+                      label={settings.titleStyle === "papel_rasgado" ? t("ce.corDoPapel") : t("ce.corDaCaixa")}
+                      valor={settings.titleBoxColor}
+                      onChange={(v) => save({ ...settings, titleBoxColor: v })}
+                    />
+                  )}
                   <AlturaSlider
                     label={t("ce.alturaDoTitulo")}
                     valor={settings.titleHeightPercent}
                     onChange={(v) => save({ ...settings, titleHeightPercent: v })}
                   />
                   <StyleGallery
+                    corDaCaixa={settings.titleBoxColor}
                     options={settings.options.titleStyles}
                     value={settings.titleStyle}
                     onChange={(v) => save({ ...settings, titleStyle: v })}

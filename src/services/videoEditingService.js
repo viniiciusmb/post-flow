@@ -58,6 +58,10 @@ const CAPTION_STYLES = {
   amarelo_caixa: { tamanho: 96, corLetra: PRETO, caixa: true, corCaixa: '&H0000D7FF', contorno: 16 },
   branco_caixa: { tamanho: 92, corLetra: PRETO, caixa: true, corCaixa: '&H00FFFFFF', contorno: 16 },
   contorno_grosso: { tamanho: 108, corLetra: BRANCO, caixa: false, contorno: 14 },
+  // Caixa na cor que o cliente escolher. corCaixa vem de fora (ver corDaCaixa
+  // em linhaDeEstilo) - um modelo so cobre qualquer cor, em vez de um modelo
+  // por cor.
+  caixa_colorida: { tamanho: 96, corLetra: BRANCO, caixa: true, corPersonalizada: true, contorno: 16 },
 };
 
 const TITLE_STYLES = {
@@ -71,6 +75,11 @@ const TITLE_STYLES = {
   amarelo_caixa: { tamanho: 72, corLetra: PRETO, caixa: true, corCaixa: '&H0000D7FF', contorno: 14 },
   branco_caixa: { tamanho: 70, corLetra: PRETO, caixa: true, corCaixa: '&H00FFFFFF', contorno: 14 },
   contorno_grosso: { tamanho: 82, corLetra: BRANCO, caixa: false, contorno: 12 },
+  caixa_colorida: { tamanho: 76, corLetra: BRANCO, caixa: true, corPersonalizada: true, contorno: 14 },
+  // Papel rasgado: o texto sai SEM caixa (o fundo e a imagem sobreposta pelo
+  // ffmpeg, nao o formato de legenda). So contorno leve, pra garantir leitura
+  // caso o texto passe da borda do papel.
+  papel_rasgado: { tamanho: 76, corLetra: BRANCO, caixa: false, contorno: 3 },
 };
 
 // Fontes que existem DENTRO do container (ver assets/fonts/LEIA-ME.md e o
@@ -86,6 +95,42 @@ const FONTES = {
   'DejaVu Sans': 'DejaVu Sans',
 };
 const FONTE_PADRAO = 'Anton';
+
+// A imagem do papel rasgado. Vai junto no repositorio (nao e baixada) e e
+// gerada por scripts/gerar-papel-rasgado.js de forma deterministica: rodar de
+// novo produz o mesmo arquivo, entao o visual nao muda sem alguem decidir.
+const CAMINHO_PAPEL_RASGADO = path.join(__dirname, '..', '..', 'assets', 'imagens', 'papel-rasgado.png');
+
+// Largura do papel em relacao a do quadro. Nao e o texto que define o tamanho:
+// medir a largura que o texto VAI ter exigiria renderizar antes, e uma imagem
+// esticada pra caber no texto deformaria o rasgado - o que denuncia na hora
+// que e falso. Faixa de largura fixa e o que o visual de referencia usa.
+const LARGURA_DO_PAPEL = 0.86;
+
+// #RRGGBB -> &HAABBGGRR. O ASS inverte a ordem dos canais e usa 00 como
+// OPACO no primeiro par - errar isso da uma cor plausivel mas trocada (azul
+// virando vermelho), que passa despercebido ate alguem reparar.
+function hexParaAss(hex) {
+  const limpo = String(hex || '').replace('#', '').trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(limpo)) return '&H000000FF';
+  const r = limpo.slice(0, 2);
+  const g = limpo.slice(2, 4);
+  const b = limpo.slice(4, 6);
+  return `&H00${b}${g}${r}`.toUpperCase();
+}
+
+// #RRGGBB -> fatores 0..1 pro colorchannelmixer do ffmpeg. A imagem do papel e
+// BRANCA, entao multiplicar pelos fatores da exatamente a cor pedida, e a
+// transparencia das bordas passa intacta.
+function hexParaFatores(hex) {
+  const limpo = String(hex || '').replace('#', '').trim();
+  const valido = /^[0-9a-fA-F]{6}$/.test(limpo) ? limpo : 'D92323';
+  return {
+    r: parseInt(valido.slice(0, 2), 16) / 255,
+    g: parseInt(valido.slice(2, 4), 16) / 255,
+    b: parseInt(valido.slice(4, 6), 16) / 255,
+  };
+}
 
 function fonteValida(nome) {
   return FONTES[nome] || FONTE_PADRAO;
@@ -105,7 +150,7 @@ function margemVertical(percentual, padrao) {
 // Monta a linha "Style:" do ASS a partir do preset + escolhas do cliente.
 // A ordem dos campos e fixa pelo formato (ver o Format: no cabecalho) - por
 // isso ela e montada num lugar so.
-function linhaDeEstilo({ nome, preset, fonte, alinhamento, margemV }) {
+function linhaDeEstilo({ nome, preset, fonte, alinhamento, margemV, corEscolhida }) {
   const borderStyle = preset.caixa ? 3 : 1;
 
   // A COR DA CAIXA VAI EM OutlineColour, nao em BackColour.
@@ -119,7 +164,11 @@ function linhaDeEstilo({ nome, preset, fonte, alinhamento, margemV }) {
   // PRETO - a cor roxa estava em BackColour, que nunca pintou nada. Confere o
   // relato antigo de "escolhi uma legenda e saiu outra parecida, com cor
   // errada", que na epoca foi atribuido a outra causa.
-  const corDoContorno = preset.caixa ? preset.corCaixa : PRETO;
+  const corDoContorno = preset.caixa
+    ? preset.corPersonalizada
+      ? hexParaAss(corEscolhida)
+      : preset.corCaixa
+    : PRETO;
   const corDeFundo = preset.caixa ? '&H80000000' : PRETO;
 
   return [
@@ -314,7 +363,7 @@ function buildAssSubtitles(
   partLabelPosition,
   clipDuration,
   // Escolhas do cliente que atravessam qualquer estilo: fonte e altura.
-  { captionFont, titleFont, captionHeightPercent, titleHeightPercent } = {}
+  { captionFont, titleFont, captionHeightPercent, titleHeightPercent, captionBoxColor, titleBoxColor } = {}
 ) {
   const partAlignment = PART_LABEL_ALIGNMENT[partLabelPosition] || PART_LABEL_ALIGNMENT.top_right;
 
@@ -330,6 +379,7 @@ function buildAssSubtitles(
     fonte: fonteValida(captionFont),
     alinhamento: 2,
     margemV: margemVertical(captionHeightPercent, 14),
+    corEscolhida: captionBoxColor,
   });
   const estiloTitulo = linhaDeEstilo({
     nome: 'Title',
@@ -337,6 +387,7 @@ function buildAssSubtitles(
     fonte: fonteValida(titleFont),
     alinhamento: 8,
     margemV: margemVertical(titleHeightPercent, 8),
+    corEscolhida: titleBoxColor,
   });
   const header = `[Script Info]
 ScriptType: v4.00+
@@ -488,6 +539,51 @@ function buildBackgroundFilter({ w, h, subtitlesFilter, style, heightPercent, of
   }
 
   return { filterComplex: chain.join(';'), outputLabel: '[outv]' };
+}
+
+// Poe o papel rasgado atras do titulo.
+//
+// Precisa acontecer DEPOIS do enquadramento (pra ficar no quadro final) e
+// ANTES da legenda (pro texto ficar por cima do papel). Como overlay exige
+// duas entradas, qualquer caminho que use `-vf` simples vira filter_complex
+// aqui - por isso a funcao recebe o resultado do buildFilter e o converte.
+function aplicarPapelRasgado({ resultado, papelIndice, w, h, alturaPercent, corHex, segundos, subtitlesFilter }) {
+  const partes = [];
+
+  // Normaliza: os dois formatos que o buildFilter devolve viram uma cadeia
+  // com rotulo de saida.
+  let rotuloBase;
+  if (resultado.filterComplex) {
+    partes.push(resultado.filterComplex);
+    rotuloBase = resultado.outputLabel;
+  } else {
+    partes.push(`[0:v]${resultado.simpleFilter}[base]`);
+    rotuloBase = '[base]';
+  }
+
+  const { r, g, b } = hexParaFatores(corHex);
+  const larguraPapel = Math.round(w * LARGURA_DO_PAPEL);
+
+  // A imagem e BRANCA: multiplicar cada canal pelo fator da cor da exatamente
+  // a cor pedida, e a transparencia das bordas passa intacta (por isso os
+  // fatores de alfa ficam em 1).
+  partes.push(
+    `[${papelIndice}:v]scale=${larguraPapel}:-1,` +
+      `colorchannelmixer=rr=${r.toFixed(4)}:rg=0:rb=0:gr=0:gg=${g.toFixed(4)}:gb=0:br=0:bg=0:bb=${b.toFixed(4)}[papel]`
+  );
+
+  // O papel fica centrado na altura escolhida pro titulo. O deslocamento de
+  // meia altura do papel centraliza a FAIXA nessa linha, em vez de comecar
+  // nela - senao o texto (que e centrado) sairia acima do papel.
+  const topo = Math.round((Math.min(Math.max(Number(alturaPercent) || 8, 0), 80) / 100) * h);
+  partes.push(
+    `${rotuloBase}[papel]overlay=(W-w)/2:${topo}-h/2+${Math.round(h * 0.02)}:` +
+      // So enquanto o titulo esta na tela - o papel some junto com ele.
+      `enable='between(t,0,${Number(segundos).toFixed(2)})'` +
+      `${subtitlesFilter ? `,${subtitlesFilter}` : ''}[comPapel]`
+  );
+
+  return { filterComplex: partes.join(';'), outputLabel: '[comPapel]' };
 }
 
 function buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, fundo }) {
@@ -681,13 +777,45 @@ async function renderClip({
           titleFont: settings.title_font,
           captionHeightPercent: settings.caption_height_percent,
           titleHeightPercent: settings.title_height_percent,
+          captionBoxColor: settings.caption_box_color,
+          titleBoxColor: settings.title_box_color,
         }
       )
     );
     subtitlesFilter = `subtitles=${escapeForFilter(assPath)}`;
   }
 
-  const { simpleFilter, filterComplex, outputLabel } = buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, fundo });
+  // Papel rasgado atras do titulo. So entra quando o estilo pede E o titulo
+  // vai aparecer - papel sem titulo seria uma faixa de cor no meio do video.
+  const usaPapel = titleStyle === 'papel_rasgado' && titleSeconds > 0 && fs.existsSync(CAMINHO_PAPEL_RASGADO);
+
+  let resultadoFiltro = buildFilter({
+    framing,
+    w,
+    h,
+    // Com papel, a legenda e aplicada depois da sobreposicao (pro texto ficar
+    // POR CIMA do papel), entao nao entra aqui.
+    subtitlesFilter: usaPapel ? null : subtitlesFilter,
+    cropZoomPercent,
+    fundo,
+  });
+
+  if (usaPapel) {
+    resultadoFiltro = aplicarPapelRasgado({
+      resultado: resultadoFiltro,
+      // A imagem do papel e a ultima entrada: vem depois do video e, quando
+      // existe faixa de imagem, depois dela tambem.
+      papelIndice: template ? 2 : 1,
+      w,
+      h,
+      alturaPercent: settings.title_height_percent,
+      corHex: settings.title_box_color,
+      segundos: titleSeconds,
+      subtitlesFilter,
+    });
+  }
+
+  const { simpleFilter, filterComplex, outputLabel } = resultadoFiltro;
 
   try {
     const args = [
@@ -709,6 +837,9 @@ async function renderClip({
       // imagem 2x, o que e barato e continua limitado - o problema era a
       // AUSENCIA de taxa, nao o valor dela.
       ...(template ? ['-loop', '1', '-framerate', '30', '-i', template.path] : []),
+      // Papel rasgado: mesma regra da faixa - imagem parada precisa de taxa de
+      // quadros, senao o vstack/overlay duplica quadro sem parar (ver acima).
+      ...(usaPapel ? ['-loop', '1', '-framerate', '30', '-i', CAMINHO_PAPEL_RASGADO] : []),
       ...(filterComplex
         ? ['-filter_complex', filterComplex, '-map', outputLabel, '-map', '0:a']
         : ['-vf', simpleFilter]),
@@ -764,6 +895,9 @@ module.exports = {
   TITLE_STYLES,
   FONTES,
   FONTE_PADRAO,
+  hexParaAss,
+  hexParaFatores,
+  CAMINHO_PAPEL_RASGADO,
   buildAssSubtitles,
   margemVertical,
 };

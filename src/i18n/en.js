@@ -307,6 +307,7 @@ module.exports = {
     estiloCorteInvalido: "Invalid clip style.",
     estiloLegendaInvalido: "Invalid caption style.",
     fonteInvalida: "Invalid font.",
+    corInvalida: "Invalid color.",
     alturaInvalida: "Invalid height.",
     estiloTituloInvalido: "Invalid title style.",
     falhaEvento: "Failed to process event.",

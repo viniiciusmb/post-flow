@@ -219,3 +219,56 @@ test('modelo SEM caixa mantém o contorno preto, que é o que o dá legibilidade
   assert.equal(Number(c[15]), 1, 'sem caixa o BorderStyle é 1');
   assert.equal(c[5], '&H00000000', 'o contorno precisa ser preto para o texto branco se destacar');
 });
+
+// ---------- cor escolhida e papel rasgado ----------
+
+test('a cor escolhida vira a cor da caixa, no campo certo', () => {
+  const ass = v.buildAssSubtitles(PALAVRAS, 'caixa_colorida', 'caixa_colorida', 'T', 3, null, 'top_right', 12, {
+    captionBoxColor: '#FFD700',
+    titleBoxColor: '#0000FF',
+  });
+  const linhas = Object.fromEntries(
+    ass.split('\n').filter((l) => l.startsWith('Style:')).map((l) => {
+      const c = l.replace('Style: ', '').split(',');
+      return [c[0], c[5]];
+    })
+  );
+  // #RRGGBB vira &HAABBGGRR - o ASS inverte a ordem dos canais.
+  assert.equal(linhas.Default, '&H0000D7FF', 'amarelo');
+  assert.equal(linhas.Title, '&H00FF0000', 'azul');
+});
+
+test('hexadecimal inválido não vira uma cor plausível porém errada', () => {
+  // O risco aqui não é quebrar: é sair uma cor que parece proposital.
+  assert.equal(v.hexParaAss('#GGGGGG'), '&H000000FF');
+  assert.equal(v.hexParaAss(''), '&H000000FF');
+  assert.equal(v.hexParaAss(null), '&H000000FF');
+  // E o inverso: cor válida tem que sobreviver ao caminho todo.
+  assert.equal(v.hexParaAss('#D92323'), '&H002323D9');
+});
+
+test('os fatores de cor do papel batem com o hexadecimal', () => {
+  const f = v.hexParaFatores('#FFFFFF');
+  assert.equal(f.r, 1);
+  assert.equal(f.g, 1);
+  assert.equal(f.b, 1);
+  const meio = v.hexParaFatores('#800000');
+  assert.ok(Math.abs(meio.r - 128 / 255) < 0.001);
+  assert.equal(meio.g, 0);
+  // Cor inválida cai num padrão em vez de virar NaN, que apagaria o papel.
+  const padrao = v.hexParaFatores('nao-e-cor');
+  assert.ok(Number.isFinite(padrao.r) && padrao.r > 0);
+});
+
+test('o texto do papel rasgado sai SEM caixa - o fundo é a imagem', () => {
+  const ass = v.buildAssSubtitles(PALAVRAS, 'classic', 'papel_rasgado', 'T', 3, null, 'top_right', 12, {});
+  const c = ass.split('\n').find((l) => l.startsWith('Style: Title')).split(',');
+  assert.equal(Number(c[15]), 1, 'com caixa do ASS o retângulo cobriria o papel');
+});
+
+test('a imagem do papel rasgado existe e é um PNG', () => {
+  const fs = require('fs');
+  assert.ok(fs.existsSync(v.CAMINHO_PAPEL_RASGADO), 'sem a imagem o estilo cai no título sem fundo');
+  const cabecalho = fs.readFileSync(v.CAMINHO_PAPEL_RASGADO).subarray(0, 8);
+  assert.deepEqual([...cabecalho], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+});

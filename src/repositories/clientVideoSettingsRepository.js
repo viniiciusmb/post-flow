@@ -18,6 +18,8 @@ const DEFAULTS = {
   quality: 'high',
   caption_style: 'classic',
   caption_font: 'Anton',
+  title_box_color: '#D92323',
+  caption_box_color: '#D92323',
   title_font: 'Anton',
   caption_height_percent: 14,
   title_height_percent: 8,
@@ -46,6 +48,8 @@ const COLUNAS = [
   'quality',
   'caption_style',
   'caption_font',
+  'title_box_color',
+  'caption_box_color',
   'title_font',
   'caption_height_percent',
   'title_height_percent',
@@ -79,6 +83,8 @@ function doCamelParaColuna(entrada) {
     // O padrao vem de DEFAULTS, uma fonte so - repetir o valor aqui criaria
     // duas verdades que sairiam de sincronia na primeira mudanca.
     caption_font: entrada.captionFont ?? DEFAULTS.caption_font,
+    title_box_color: entrada.titleBoxColor ?? DEFAULTS.title_box_color,
+    caption_box_color: entrada.captionBoxColor ?? DEFAULTS.caption_box_color,
     title_font: entrada.titleFont ?? DEFAULTS.title_font,
     caption_height_percent: entrada.captionHeightPercent ?? DEFAULTS.caption_height_percent,
     title_height_percent: entrada.titleHeightPercent ?? DEFAULTS.title_height_percent,

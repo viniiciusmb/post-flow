@@ -27,6 +27,8 @@ function toApi(settings) {
     quality: settings.quality,
     captionStyle: settings.caption_style,
     captionFont: settings.caption_font,
+    titleBoxColor: settings.title_box_color,
+    captionBoxColor: settings.caption_box_color,
     titleFont: settings.title_font,
     captionHeightPercent: settings.caption_height_percent,
     titleHeightPercent: settings.title_height_percent,
@@ -149,6 +151,8 @@ async function update(req, res) {
     titleFont,
     captionHeightPercent,
     titleHeightPercent,
+    titleBoxColor,
+    captionBoxColor,
   } = req.body;
 
   if (!ASPECT_RATIOS.includes(aspectRatio)) return res.status(400).json({ error: res.locals.t('erros.proporcaoInvalida') });
@@ -250,6 +254,20 @@ async function update(req, res) {
     return res.status(400).json({ error: res.locals.t('erros.alturaInvalida') });
   }
 
+  // Cor da caixa / do papel rasgado. Mesma regra de campo ausente preservar o
+  // salvo; valor presente tem que ser um hexadecimal de 6 digitos, senao a
+  // conversao pro formato do ffmpeg produz uma cor plausivel mas trocada.
+  const HEX = /^#[0-9a-fA-F]{6}$/;
+  function resolverCor(recebida, salva) {
+    if (recebida === undefined || recebida === null) return salva || '#D92323';
+    return HEX.test(String(recebida)) ? String(recebida).toUpperCase() : null;
+  }
+  const corTitulo = resolverCor(titleBoxColor, atual.title_box_color);
+  const corLegenda = resolverCor(captionBoxColor, atual.caption_box_color);
+  if (corTitulo === null || corLegenda === null) {
+    return res.status(400).json({ error: res.locals.t('erros.corInvalida') });
+  }
+
   // De que lado fica a faixa da capa. Campo ausente preserva o salvo, pelo
   // mesmo motivo do estilo de fundo (dois cartoes salvam esta mesma tela).
   const thumbnailPosition = ['top', 'bottom'].includes(req.body.thumbnailPosition)
@@ -267,6 +285,8 @@ async function update(req, res) {
     quality,
     captionStyle,
     captionFont: fonteLegenda,
+    titleBoxColor: corTitulo,
+    captionBoxColor: corLegenda,
     titleFont: fonteTitulo,
     captionHeightPercent: captionHeightNum,
     titleHeightPercent: titleHeightNum,
