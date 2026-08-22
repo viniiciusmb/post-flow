@@ -13,7 +13,8 @@ const QUALITIES = Object.keys(videoEditingService.QUALITY_PRESETS);
 const CAPTION_STYLES = [...Object.keys(videoEditingService.CAPTION_STYLES), 'none'];
 const TITLE_STYLES = Object.keys(videoEditingService.TITLE_STYLES);
 const FRAMINGS = ['crop', 'blur_pad'];
-const CLIP_LENGTHS = ['short', 'balanced', 'long'];
+const CLIP_LENGTHS = ['short', 'balanced', 'long', 'extra_long'];
+const FONTS = Object.keys(videoEditingService.FONTES);
 const CLIP_MODES = ['ai_choice', 'full_video', 'fixed_count'];
 const DESCRIPTION_MODES = ['auto', 'fixed', 'none'];
 const CROP_STYLE_MODES = ['auto', 'manual'];
@@ -25,6 +26,10 @@ function toApi(settings) {
     framing: settings.framing,
     quality: settings.quality,
     captionStyle: settings.caption_style,
+    captionFont: settings.caption_font,
+    titleFont: settings.title_font,
+    captionHeightPercent: settings.caption_height_percent,
+    titleHeightPercent: settings.title_height_percent,
     clipLength: settings.clip_length,
     clipMode: settings.clip_mode,
     maxClips: settings.max_clips,
@@ -52,6 +57,7 @@ const OPTIONS_PAYLOAD = {
   framings: FRAMINGS,
   qualities: QUALITIES,
   captionStyles: CAPTION_STYLES,
+  fonts: FONTS,
   clipLengths: CLIP_LENGTHS,
   clipModes: CLIP_MODES,
   descriptionModes: DESCRIPTION_MODES,
@@ -139,6 +145,10 @@ async function update(req, res) {
     showPartLabel,
     partLabelPosition,
     titleStyle,
+    captionFont,
+    titleFont,
+    captionHeightPercent,
+    titleHeightPercent,
   } = req.body;
 
   if (!ASPECT_RATIOS.includes(aspectRatio)) return res.status(400).json({ error: res.locals.t('erros.proporcaoInvalida') });
@@ -209,6 +219,37 @@ async function update(req, res) {
     return res.status(400).json({ error: res.locals.t('erros.envieImagemAntes') });
   }
 
+  // Fonte e altura seguem a MESMA regra do estilo de fundo: campo ausente
+  // preserva o que ja estava salvo. Esta tela e gravada por dois cartoes
+  // diferentes (qualidade e estilo visual), e recusar por campo ausente fazia
+  // o cartao de qualidade quebrar ao salvar - ele nao manda fonte nenhuma.
+  //
+  // Valor PRESENTE e invalido continua sendo recusado: fonte que nao existe no
+  // servidor faz o libass trocar por outra em silencio, e o video sai com um
+  // visual que ninguem escolheu.
+  function resolverFonte(recebida, salva) {
+    if (recebida === undefined || recebida === null) return salva || 'Anton';
+    return FONTS.includes(recebida) ? recebida : null;
+  }
+  const fonteLegenda = resolverFonte(captionFont, atual.caption_font);
+  const fonteTitulo = resolverFonte(titleFont, atual.title_font);
+  if (fonteLegenda === null || fonteTitulo === null) {
+    return res.status(400).json({ error: res.locals.t('erros.fonteInvalida') });
+  }
+
+  // Altura em % da altura do video. O teto de 80 impede que o texto suba tanto
+  // que saia do quadro pelo outro lado.
+  function resolverAltura(recebida, salva, padrao) {
+    if (recebida === undefined || recebida === null) return salva ?? padrao;
+    const n = Number(recebida);
+    return Number.isInteger(n) && n >= 0 && n <= 80 ? n : null;
+  }
+  const captionHeightNum = resolverAltura(captionHeightPercent, atual.caption_height_percent, 14);
+  const titleHeightNum = resolverAltura(titleHeightPercent, atual.title_height_percent, 8);
+  if (captionHeightNum === null || titleHeightNum === null) {
+    return res.status(400).json({ error: res.locals.t('erros.alturaInvalida') });
+  }
+
   // De que lado fica a faixa da capa. Campo ausente preserva o salvo, pelo
   // mesmo motivo do estilo de fundo (dois cartoes salvam esta mesma tela).
   const thumbnailPosition = ['top', 'bottom'].includes(req.body.thumbnailPosition)
@@ -225,6 +266,10 @@ async function update(req, res) {
     framing,
     quality,
     captionStyle,
+    captionFont: fonteLegenda,
+    titleFont: fonteTitulo,
+    captionHeightPercent: captionHeightNum,
+    titleHeightPercent: titleHeightNum,
     clipLength,
     clipMode,
     maxClips: maxClipsNum,

@@ -136,7 +136,12 @@ export function VideoSettingsCard() {
             <p className="text-xs text-muted-foreground">{t(CLIP_MODE_DESCRIPTIONS[settings.clipMode])}</p>
           </Field>
 
-          {settings.clipMode === "fixed_count" && (
+          {/* A quantidade vale também no modo "melhores partes": ali ela é o
+              TETO de cortes que a IA pode gerar. Antes só aparecia no modo de
+              quantidade fixa, e quem escolhia "melhores partes" não tinha como
+              limitar - um vídeo longo virava 20 e poucos cortes sem aviso.
+              Só "vídeo inteiro" dispensa, porque ali sempre sai 1. */}
+          {settings.clipMode !== "full_video" && (
             <Field>
               <FieldLabel htmlFor="maxClips">{t("vs.quantidadeCortes")}</FieldLabel>
               <Input

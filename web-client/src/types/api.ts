@@ -309,8 +309,10 @@ export interface DriveStatusResponse {
 export type VideoAspectRatio = "9:16" | "1:1" | "16:9" | "4:5"
 export type VideoFraming = "crop" | "blur_pad"
 export type VideoQuality = "high" | "medium"
-export type VideoCaptionStyle = "classic" | "bold" | "minimal" | "none" | "bubble_purple" | "bubble_dark"
-export type VideoClipLength = "short" | "balanced" | "long"
+export type VideoCaptionStyle =
+  | "classic" | "bold" | "minimal" | "none" | "bubble_purple" | "bubble_dark"
+  | "neon_verde" | "vermelho_forte" | "amarelo_caixa" | "branco_caixa" | "contorno_grosso"
+export type VideoClipLength = "short" | "balanced" | "long" | "extra_long"
 export type VideoClipMode = "ai_choice" | "full_video" | "fixed_count"
 export type VideoDescriptionMode = "auto" | "fixed" | "none"
 export type CropStyleMode = "auto" | "manual"
@@ -321,6 +323,12 @@ export interface ClientVideoSettings {
   framing: VideoFraming
   quality: VideoQuality
   captionStyle: VideoCaptionStyle
+  captionFont: string
+  titleFont: string
+  // Altura na tela, em % da altura do vídeo, contada a partir da borda mais
+  // próxima: a legenda sobe de baixo, o título desce de cima.
+  captionHeightPercent: number
+  titleHeightPercent: number
   clipLength: VideoClipLength
   clipMode: VideoClipMode
   maxClips: number
@@ -352,6 +360,7 @@ export interface ClientVideoSettingsResponse extends ClientVideoSettings {
     framings: VideoFraming[]
     qualities: VideoQuality[]
     captionStyles: VideoCaptionStyle[]
+    fonts: string[]
     clipLengths: VideoClipLength[]
     clipModes: VideoClipMode[]
     descriptionModes: VideoDescriptionMode[]

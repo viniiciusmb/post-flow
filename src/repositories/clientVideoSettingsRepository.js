@@ -17,6 +17,10 @@ const DEFAULTS = {
   framing: 'crop',
   quality: 'high',
   caption_style: 'classic',
+  caption_font: 'Anton',
+  title_font: 'Anton',
+  caption_height_percent: 14,
+  title_height_percent: 8,
   clip_length: 'balanced',
   clip_mode: 'ai_choice',
   max_clips: 4,
@@ -41,6 +45,10 @@ const COLUNAS = [
   'framing',
   'quality',
   'caption_style',
+  'caption_font',
+  'title_font',
+  'caption_height_percent',
+  'title_height_percent',
   'clip_length',
   'clip_mode',
   'max_clips',
@@ -66,6 +74,14 @@ function doCamelParaColuna(entrada) {
     framing: entrada.framing,
     quality: entrada.quality,
     caption_style: entrada.captionStyle,
+    // Campos NOT NULL: quem chamar sem eles (um cartao da tela que so salva
+    // qualidade, por exemplo) receberia null e derrubaria a gravacao inteira.
+    // O padrao vem de DEFAULTS, uma fonte so - repetir o valor aqui criaria
+    // duas verdades que sairiam de sincronia na primeira mudanca.
+    caption_font: entrada.captionFont ?? DEFAULTS.caption_font,
+    title_font: entrada.titleFont ?? DEFAULTS.title_font,
+    caption_height_percent: entrada.captionHeightPercent ?? DEFAULTS.caption_height_percent,
+    title_height_percent: entrada.titleHeightPercent ?? DEFAULTS.title_height_percent,
     clip_length: entrada.clipLength,
     clip_mode: entrada.clipMode,
     max_clips: entrada.maxClips,

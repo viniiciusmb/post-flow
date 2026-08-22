@@ -235,6 +235,89 @@ const STYLE_PREVIEW: Record<VideoCaptionStyle, { label: ChaveDeTraducao; render:
       </span>
     ),
   },
+  neon_verde: {
+    label: "ce.neonVerde",
+    render: (text) => (
+      <span
+        style={{
+          fontFamily: "Anton, Arial Black, sans-serif",
+          color: "#00ff7f",
+          fontSize: 15,
+          WebkitTextStroke: "2px #000",
+          paintOrder: "stroke fill",
+        }}
+      >
+        {text}
+      </span>
+    ),
+  },
+  vermelho_forte: {
+    label: "ce.vermelhoForte",
+    render: (text) => (
+      <span
+        style={{
+          fontFamily: "Anton, Arial Black, sans-serif",
+          color: "#fff",
+          fontSize: 14,
+          background: "#d92323",
+          padding: "3px 8px",
+          borderRadius: 4,
+        }}
+      >
+        {text}
+      </span>
+    ),
+  },
+  amarelo_caixa: {
+    label: "ce.amareloCaixa",
+    render: (text) => (
+      <span
+        style={{
+          fontFamily: "Anton, Arial Black, sans-serif",
+          color: "#000",
+          fontSize: 14,
+          background: "#ffd700",
+          padding: "3px 8px",
+          borderRadius: 4,
+        }}
+      >
+        {text}
+      </span>
+    ),
+  },
+  branco_caixa: {
+    label: "ce.brancoCaixa",
+    render: (text) => (
+      <span
+        style={{
+          fontFamily: "Anton, Arial Black, sans-serif",
+          color: "#000",
+          fontSize: 14,
+          background: "#ffffff",
+          padding: "3px 8px",
+          borderRadius: 4,
+        }}
+      >
+        {text}
+      </span>
+    ),
+  },
+  contorno_grosso: {
+    label: "ce.contornoGrosso",
+    render: (text) => (
+      <span
+        style={{
+          fontFamily: "Anton, Arial Black, sans-serif",
+          color: "#fff",
+          fontSize: 15,
+          WebkitTextStroke: "3px #000",
+          paintOrder: "stroke fill",
+        }}
+      >
+        {text}
+      </span>
+    ),
+  },
   none: {
     label: "ce.semLegenda",
     render: () => <span className="text-xs text-white/40">(nenhuma)</span>,
@@ -276,6 +359,145 @@ function StyleGallery({
         )
       })}
     </div>
+  )
+}
+
+// Barra de arrastar para altura. O número que ela controla é a distância até
+// a borda MAIS PRÓXIMA (legenda sobe de baixo, título desce de cima), então
+// arrastar para a direita sempre afasta o texto da sua borda - o mesmo gesto
+// tem o mesmo efeito nos dois.
+// Fonte num dropdown, e não numa galeria: o que muda entre elas é o desenho
+// da letra, e isso se lê melhor na mesma palavra escrita em cada uma do que em
+// miniaturas lado a lado. Cada opção aparece escrita na própria fonte.
+function FonteSelect({
+  label,
+  valor,
+  opcoes,
+  onChange,
+}: {
+  label: string
+  valor: string
+  opcoes: string[]
+  onChange: (v: string) => void
+}) {
+  return (
+    <Field>
+      <FieldLabel>{label}</FieldLabel>
+      <Select value={valor} onValueChange={onChange}>
+        <SelectTrigger className="w-56">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {opcoes.map((f) => (
+            <SelectItem key={f} value={f}>
+              <span style={{ fontFamily: f }}>{f}</span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  )
+}
+
+function AlturaSlider({
+  label,
+  valor,
+  onChange,
+}: {
+  label: string
+  valor: number
+  onChange: (v: number) => void
+}) {
+  const [rascunho, setRascunho] = useState(valor)
+  useEffect(() => setRascunho(valor), [valor])
+  return (
+    <Field>
+      <FieldLabel>
+        {label} <span className="font-normal text-muted-foreground">({rascunho}%)</span>
+      </FieldLabel>
+      <input
+        type="range"
+        min={0}
+        max={80}
+        step={1}
+        value={rascunho}
+        onChange={(e) => setRascunho(Number(e.target.value))}
+        // Salva só ao soltar: salvar a cada pixel arrastado dispararia dezenas
+        // de gravações, e a mais lenta poderia terminar por último e vencer
+        // com um valor antigo - foi exatamente o bug dos horários de postagem.
+        onMouseUp={() => onChange(rascunho)}
+        onTouchEnd={() => onChange(rascunho)}
+        onKeyUp={() => onChange(rascunho)}
+        className="w-full accent-primary"
+      />
+    </Field>
+  )
+}
+
+// Prévia do corte. É uma aproximação em HTML, não o vídeo real: usa as MESMAS
+// fontes que o servidor queima no arquivo (ver globals.css) e as mesmas
+// alturas em porcentagem, então o que aparece aqui é o que sai lá.
+function ClipPreview({
+  settings,
+  urlTemplate,
+}: {
+  settings: ClientVideoSettingsResponse
+  urlTemplate: string | null
+}) {
+  const t = useT()
+  const fundo =
+    settings.backgroundStyle === "black"
+      ? "#000"
+      : settings.backgroundStyle === "white"
+        ? "#fff"
+        : "#1c1c1c"
+
+  const estiloLegenda = STYLE_PREVIEW[settings.captionStyle]
+  const estiloTitulo = STYLE_PREVIEW[settings.titleStyle as VideoCaptionStyle]
+
+  return (
+    <Field>
+      <FieldLabel>{t("ce.previa")}</FieldLabel>
+      <div
+        className="relative mx-auto overflow-hidden rounded-lg border border-border"
+        style={{ width: 234, height: 416, background: fundo }}
+      >
+        {settings.backgroundStyle === "template" && urlTemplate && (
+          <img src={urlTemplate} alt="" className="absolute inset-0 size-full object-cover" />
+        )}
+        {settings.backgroundStyle === "blur" && (
+          <div className="absolute inset-0 bg-gradient-to-b from-neutral-700 to-neutral-900" />
+        )}
+
+        {/* Faixa que representa o vídeo dentro do quadro. */}
+        <div
+          className="absolute inset-x-0 bg-neutral-500/40"
+          style={{
+            height: `${settings.backgroundVideoHeightPercent}%`,
+            top: `${((100 - settings.backgroundVideoHeightPercent) * settings.backgroundVideoOffsetPercent) / 100}%`,
+          }}
+        />
+
+        {settings.showTitle && estiloTitulo && (
+          <div
+            className="absolute inset-x-0 flex justify-center px-3 text-center"
+            style={{ top: `${settings.titleHeightPercent}%`, fontFamily: settings.titleFont }}
+          >
+            <span style={{ fontFamily: settings.titleFont }}>{estiloTitulo.render("SEU TÍTULO")}</span>
+          </div>
+        )}
+
+        {settings.captionStyle !== "none" && estiloLegenda && (
+          <div
+            className="absolute inset-x-0 flex justify-center px-3 text-center"
+            style={{ bottom: `${settings.captionHeightPercent}%`, fontFamily: settings.captionFont }}
+          >
+            <span style={{ fontFamily: settings.captionFont }}>{estiloLegenda.render("legenda")}</span>
+          </div>
+        )}
+      </div>
+      <p className="text-center text-xs text-muted-foreground">{t("ce.previaTexto")}</p>
+    </Field>
   )
 }
 
@@ -451,6 +673,21 @@ export function ClipStyleEditorCard() {
           <ToggleGroupItem value="manual" className="text-xs">{t("ce.modoManual")}</ToggleGroupItem>
         </ToggleGroup>
 
+        {/* Duas colunas: configurações à esquerda, prévia à direita grudada
+            na tela enquanto a pessoa rola. No celular vira uma coluna só e a
+            prévia aparece PRIMEIRO - mexer numa configuração sem ver o efeito
+            obriga a rolar pra cima e pra baixo a cada ajuste.
+
+            A prévia vem antes no HTML (por isso fica em cima no celular) e o
+            `order` a joga pra direita nas telas grandes. */}
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
+          <aside className="lg:order-2">
+            <div className="lg:sticky lg:top-4">
+              <ClipPreview settings={settings} urlTemplate={urlTemplate} />
+            </div>
+          </aside>
+
+          <div className="flex min-w-0 flex-col gap-6 lg:order-1">
         {settings.cropStyleMode === "manual" && (
           <>
             <Field>
@@ -677,6 +914,17 @@ export function ClipStyleEditorCard() {
 
             <Field>
               <FieldLabel>{t("ce.estiloDaLegenda")}</FieldLabel>
+              <FonteSelect
+                label={t("ce.fonte")}
+                valor={settings.captionFont}
+                opcoes={settings.options.fonts}
+                onChange={(v) => save({ ...settings, captionFont: v })}
+              />
+              <AlturaSlider
+                label={t("ce.alturaDaLegenda")}
+                valor={settings.captionHeightPercent}
+                onChange={(v) => save({ ...settings, captionHeightPercent: v })}
+              />
               <StyleGallery
                 options={settings.options.captionStyles}
                 value={settings.captionStyle}
@@ -710,6 +958,17 @@ export function ClipStyleEditorCard() {
                 </Field>
                 <Field>
                   <FieldLabel>{t("ce.estiloDoTitulo")}</FieldLabel>
+                  <FonteSelect
+                    label={t("ce.fonte")}
+                    valor={settings.titleFont}
+                    opcoes={settings.options.fonts}
+                    onChange={(v) => save({ ...settings, titleFont: v })}
+                  />
+                  <AlturaSlider
+                    label={t("ce.alturaDoTitulo")}
+                    valor={settings.titleHeightPercent}
+                    onChange={(v) => save({ ...settings, titleHeightPercent: v })}
+                  />
                   <StyleGallery
                     options={settings.options.titleStyles}
                     value={settings.titleStyle}
@@ -739,6 +998,8 @@ export function ClipStyleEditorCard() {
             )}
           </>
         )}
+          </div>
+        </div>
 
         <p className="text-xs text-muted-foreground">
           {saving ? "Salvando..." : savedFlash ? "Salvo ✓" : t("vs.mudancasValem")}

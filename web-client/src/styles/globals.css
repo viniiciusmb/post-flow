@@ -322,3 +322,37 @@ h1.font-heading,
     scroll-behavior: auto !important;
   }
 }
+
+/* Fontes das legendas, servidas pelo próprio site.
+ *
+ * São os MESMOS arquivos que o servidor usa para queimar a legenda no vídeo
+ * (assets/fonts/, copiados para public/fonts/). É isso que faz a prévia na
+ * tela corresponder ao arquivo final — com uma fonte diferente, a prévia
+ * viraria uma promessa que o vídeo não cumpre.
+ *
+ * Servidas daqui, e não de um CDN de terceiro, pelo mesmo motivo que a landing
+ * deixou de usar o PicoCSS de fora: carregar fonte de outro domínio manda o IP
+ * de quem visita para essa empresa, e isso teria que ser declarado na política
+ * de privacidade.
+ *
+ * font-display: swap para o texto aparecer imediatamente na fonte de sistema e
+ * trocar quando a fonte chegar — a alternativa é a prévia ficar em branco.
+ */
+@font-face {
+  font-family: "Anton";
+  src: url("/fonts/Anton-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Bebas Neue";
+  src: url("/fonts/BebasNeue-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Poppins";
+  src: url("/fonts/Poppins-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}

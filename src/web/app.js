@@ -99,6 +99,22 @@ app.use(
   })
 );
 
+// Fontes das legendas. Sao os MESMOS arquivos que o servidor usa pra queimar a
+// legenda no video - e o que faz a previa na tela corresponder ao arquivo
+// final. Servidas daqui, e nao de um CDN, pelo mesmo motivo que a landing
+// deixou de usar o PicoCSS de fora: fonte de outro dominio manda o IP de quem
+// visita pra aquela empresa, e isso teria que ser declarado na privacidade.
+//
+// Rota propria porque o Vite copia public/ pra dist/ (fora de dist/assets),
+// entao o mount acima nao alcanca.
+app.use(
+  '/fonts',
+  express.static(path.join(__dirname, '../../web-client/dist/fonts'), {
+    maxAge: '1y',
+    immutable: true,
+  })
+);
+
 app.use(
   session({
     store: new pgSession({ pool, tableName: 'session', createTableIfMissing: true }),

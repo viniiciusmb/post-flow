@@ -26,31 +26,107 @@ const QUALITY_PRESETS = {
   medium: { crf: 26, preset: 'fast' },
 };
 
-// Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour,
-//         Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle,
-//         Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-// bubble_dark/bubble_purple usam BorderStyle=3 (caixa opaca atras do texto,
-// em vez de so contorno+sombra) - o campo "Outline" nesse modo vira o
-// espacamento da caixa, e BackColour vira a cor de preenchimento dela (era
-// so usada como cor de sombra nos estilos com BorderStyle=1 acima).
+// Um estilo de legenda/titulo e um punhado de numeros do formato ASS. Em vez
+// de guardar a linha inteira pronta (como era antes), guardamos so o que MUDA
+// entre os estilos - porque a fonte e a altura agora sao escolha do cliente e
+// precisam entrar em qualquer um deles.
+//
+// Campos que importam:
+//   corLetra    cor do texto (&HAABBGGRR - o ASS inverte, e AA=00 e opaco)
+//   corCaixa    fundo atras do texto; so tem efeito com caixa: true
+//   caixa       true = retangulo solido atras do texto (ASS BorderStyle 3),
+//               false = contorno + sombra (BorderStyle 1)
+//   contorno    espessura do contorno; com caixa:true vira o respiro da caixa
+//   tamanho     corpo da fonte, em pixels de um quadro de 1080x1920
+//
+// Se um dia forem guardadas linhas prontas de novo, fonte e altura voltam a
+// ser impossiveis de aplicar sem reescrever texto na mao.
+const PRETO = '&H00000000';
+const BRANCO = '&H00FFFFFF';
+
 const CAPTION_STYLES = {
-  classic: 'Style: Default,Arial Black,96,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,7,0,2,80,80,260,1',
-  bold: 'Style: Default,Arial Black,112,&H0000D7FF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,9,0,2,60,60,300,1',
-  minimal: 'Style: Default,Arial,64,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3,0,2,100,100,140,1',
-  bubble_dark: 'Style: Default,Arial Black,90,&H00FFFFFF,&H000000FF,&H00000000,&H50000000,1,0,0,0,100,100,0,0,3,14,0,2,80,80,260,1',
-  bubble_purple: 'Style: Default,Arial Black,90,&H00FFFFFF,&H000000FF,&H00000000,&H50B26EF2,1,0,0,0,100,100,0,0,3,14,0,2,80,80,260,1',
+  classic: { tamanho: 96, corLetra: BRANCO, caixa: false, contorno: 7 },
+  bold: { tamanho: 112, corLetra: '&H0000D7FF', caixa: false, contorno: 9 },
+  minimal: { tamanho: 64, corLetra: BRANCO, caixa: false, contorno: 3 },
+  bubble_dark: { tamanho: 90, corLetra: BRANCO, caixa: true, corCaixa: '&H50000000', contorno: 14 },
+  bubble_purple: { tamanho: 90, corLetra: BRANCO, caixa: true, corCaixa: '&H50B26EF2', contorno: 14 },
+  // Modelos novos. Cada um tem que ser reconhecivel A DISTANCIA na galeria da
+  // tela - dois estilos que so diferem em 4 pixels de contorno viram uma
+  // escolha sem sentido pra quem esta decidindo.
+  neon_verde: { tamanho: 100, corLetra: '&H0000FF7F', caixa: false, contorno: 8 },
+  vermelho_forte: { tamanho: 104, corLetra: BRANCO, caixa: true, corCaixa: '&H002323D9', contorno: 16 },
+  amarelo_caixa: { tamanho: 96, corLetra: PRETO, caixa: true, corCaixa: '&H0000D7FF', contorno: 16 },
+  branco_caixa: { tamanho: 92, corLetra: PRETO, caixa: true, corCaixa: '&H00FFFFFF', contorno: 16 },
+  contorno_grosso: { tamanho: 108, corLetra: BRANCO, caixa: false, contorno: 14 },
 };
 
-// Mesma ideia do CAPTION_STYLES, mas pro titulo queimado no comeco do video -
-// Alignment=8 (topo-centro) em todos, fonte maior. O "Name" do Style
-// continua "Title" nos 5 (e o mesmo nome referenciado no Dialogue).
 const TITLE_STYLES = {
-  classic: 'Style: Title,Arial Black,72,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,0,8,80,80,120,1',
-  bold: 'Style: Title,Arial Black,80,&H0000D7FF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,7,0,8,60,60,120,1',
-  minimal: 'Style: Title,Arial,56,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3,0,8,100,100,100,1',
-  bubble_dark: 'Style: Title,Arial Black,64,&H00FFFFFF,&H000000FF,&H00000000,&H50000000,1,0,0,0,100,100,0,0,3,12,0,8,80,80,120,1',
-  bubble_purple: 'Style: Title,Arial Black,64,&H00FFFFFF,&H000000FF,&H00000000,&H50B26EF2,1,0,0,0,100,100,0,0,3,12,0,8,80,80,120,1',
+  classic: { tamanho: 72, corLetra: BRANCO, caixa: false, contorno: 6 },
+  bold: { tamanho: 80, corLetra: '&H0000D7FF', caixa: false, contorno: 7 },
+  minimal: { tamanho: 56, corLetra: BRANCO, caixa: false, contorno: 3 },
+  bubble_dark: { tamanho: 64, corLetra: BRANCO, caixa: true, corCaixa: '&H50000000', contorno: 12 },
+  bubble_purple: { tamanho: 64, corLetra: BRANCO, caixa: true, corCaixa: '&H50B26EF2', contorno: 12 },
+  neon_verde: { tamanho: 76, corLetra: '&H0000FF7F', caixa: false, contorno: 7 },
+  vermelho_forte: { tamanho: 72, corLetra: BRANCO, caixa: true, corCaixa: '&H002323D9', contorno: 14 },
+  amarelo_caixa: { tamanho: 72, corLetra: PRETO, caixa: true, corCaixa: '&H0000D7FF', contorno: 14 },
+  branco_caixa: { tamanho: 70, corLetra: PRETO, caixa: true, corCaixa: '&H00FFFFFF', contorno: 14 },
+  contorno_grosso: { tamanho: 82, corLetra: BRANCO, caixa: false, contorno: 12 },
 };
+
+// Fontes que existem DENTRO do container (ver assets/fonts/LEIA-ME.md e o
+// Dockerfile). Pedir uma que nao esta instalada nao da erro: o libass troca
+// por outra em silencio, e o video sai com um visual que ninguem escolheu -
+// foi exatamente o que acontecia quando os estilos pediam "Arial Black" num
+// container que so tinha DejaVu.
+const FONTES = {
+  Anton: 'Anton',
+  'Bebas Neue': 'Bebas Neue',
+  Poppins: 'Poppins',
+  'Liberation Sans': 'Liberation Sans',
+  'DejaVu Sans': 'DejaVu Sans',
+};
+const FONTE_PADRAO = 'Anton';
+
+function fonteValida(nome) {
+  return FONTES[nome] || FONTE_PADRAO;
+}
+
+// Altura vem em % da altura do video, medida a partir da borda mais proxima
+// (legenda sobe de baixo, titulo desce de cima). Vira MarginV, que no ASS e
+// justamente a distancia ate a borda do lado do alinhamento.
+const ALTURA_DO_VIDEO = 1920;
+
+function margemVertical(percentual, padrao) {
+  const p = Number.isFinite(Number(percentual)) ? Number(percentual) : padrao;
+  const limitado = Math.min(Math.max(p, 0), 80);
+  return Math.round((limitado / 100) * ALTURA_DO_VIDEO);
+}
+
+// Monta a linha "Style:" do ASS a partir do preset + escolhas do cliente.
+// A ordem dos campos e fixa pelo formato (ver o Format: no cabecalho) - por
+// isso ela e montada num lugar so.
+function linhaDeEstilo({ nome, preset, fonte, alinhamento, margemV }) {
+  const borderStyle = preset.caixa ? 3 : 1;
+  const corCaixa = preset.caixa ? preset.corCaixa : PRETO;
+  return [
+    `Style: ${nome}`,
+    fonte,
+    preset.tamanho,
+    preset.corLetra,
+    '&H000000FF',
+    PRETO,
+    corCaixa,
+    1, 0, 0, 0,
+    100, 100, 0, 0,
+    borderStyle,
+    preset.contorno,
+    0,
+    alinhamento,
+    80, 80,
+    margemV,
+    1,
+  ].join(',');
+}
 
 // Mapeia a posicao escolhida (numeracao "Parte N") pro campo Alignment do
 // ASS - que ja usa a mesma convencao de teclado numerico (7/8/9 = topo
@@ -214,8 +290,40 @@ function formatAssTimestamp(seconds) {
 // com o titulo do corte, visivel do inicio ate esse instante. partLabel
 // (ex: "Parte 2"), quando informado, fica visivel o corte inteiro na
 // posicao escolhida (ver PART_LABEL_ALIGNMENT).
-function buildAssSubtitles(words, captionStyle, titleStyle, title, titleSeconds, partLabel, partLabelPosition, clipDuration) {
+function buildAssSubtitles(
+  words,
+  captionStyle,
+  titleStyle,
+  title,
+  titleSeconds,
+  partLabel,
+  partLabelPosition,
+  clipDuration,
+  // Escolhas do cliente que atravessam qualquer estilo: fonte e altura.
+  { captionFont, titleFont, captionHeightPercent, titleHeightPercent } = {}
+) {
   const partAlignment = PART_LABEL_ALIGNMENT[partLabelPosition] || PART_LABEL_ALIGNMENT.top_right;
+
+  const presetLegenda = CAPTION_STYLES[captionStyle] || CAPTION_STYLES.classic;
+  const presetTitulo = TITLE_STYLES[titleStyle] || TITLE_STYLES.classic;
+
+  // Alignment 2 = baixo-centro (legenda), 8 = topo-centro (titulo). Com esses
+  // alinhamentos, MarginV e a distancia ate a borda de baixo e de cima
+  // respectivamente - que e exatamente o que a barra de altura controla.
+  const estiloLegenda = linhaDeEstilo({
+    nome: 'Default',
+    preset: presetLegenda,
+    fonte: fonteValida(captionFont),
+    alinhamento: 2,
+    margemV: margemVertical(captionHeightPercent, 14),
+  });
+  const estiloTitulo = linhaDeEstilo({
+    nome: 'Title',
+    preset: presetTitulo,
+    fonte: fonteValida(titleFont),
+    alinhamento: 8,
+    margemV: margemVertical(titleHeightPercent, 8),
+  });
   const header = `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -224,9 +332,9 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-${CAPTION_STYLES[captionStyle] || CAPTION_STYLES.classic}
-${TITLE_STYLES[titleStyle] || TITLE_STYLES.classic}
-Style: Part,Arial Black,56,&H00FFFFFF,&H000000FF,&H00000000,&H50000000,1,0,0,0,100,100,0,0,3,10,0,${partAlignment},50,50,50,1
+${estiloLegenda}
+${estiloTitulo}
+Style: Part,${fonteValida(captionFont)},56,&H00FFFFFF,&H000000FF,&H00000000,&H50000000,1,0,0,0,100,100,0,0,3,10,0,${partAlignment},50,50,50,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -526,7 +634,13 @@ async function renderClip({
         titleSeconds,
         partLabel,
         settings.part_label_position,
-        duration
+        duration,
+        {
+          captionFont: settings.caption_font,
+          titleFont: settings.title_font,
+          captionHeightPercent: settings.caption_height_percent,
+          titleHeightPercent: settings.title_height_percent,
+        }
       )
     );
     subtitlesFilter = `subtitles=${escapeForFilter(assPath)}`;
@@ -592,4 +706,8 @@ module.exports = {
   QUALITY_PRESETS,
   CAPTION_STYLES,
   TITLE_STYLES,
+  FONTES,
+  FONTE_PADRAO,
+  buildAssSubtitles,
+  margemVertical,
 };

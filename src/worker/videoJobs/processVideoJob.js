@@ -33,6 +33,8 @@ const CLIP_LENGTH_PRESETS = {
   short: { minDuration: 15, maxDuration: 40 },
   balanced: { minDuration: 25, maxDuration: 90 },
   long: { minDuration: 60, maxDuration: 180 },
+  // Pedido pra entrevista e podcast, onde 180s corta a resposta no meio.
+  extra_long: { minDuration: 180, maxDuration: 240 },
 };
 
 // Baixa a capa do video pro disco, pro estilo "thumbnail como template".
@@ -387,12 +389,20 @@ async function run(sourceVideoId) {
         // custo de Claude.
         selected = [{ title: sourceVideo.title, description: null, startSeconds: 0, endSeconds: transcript.durationSeconds }];
       } else {
-        // 'ai_choice': sem numero fixo, so um teto de seguranca (duracao do
-        // video / duracao minima de cada corte). 'fixed_count': exatamente
-        // settings.max_clips.
+        // 'fixed_count': exatamente settings.max_clips.
+        //
+        // 'ai_choice': a IA decide QUANTOS trechos bons existem, mas nunca
+        // passa do que o cliente pediu. Antes o numero dele era ignorado neste
+        // modo e o teto era so a conta "duracao / duracao minima do corte" -
+        // um video de uma hora virava 20 e poucos cortes sem ninguem ter
+        // pedido, gastando IA e enchendo a fila de publicacao.
+        const tetoPelaDuracao = Math.max(
+          1,
+          Math.min(30, Math.floor(transcript.durationSeconds / clipLengthPreset.minDuration))
+        );
         const maxClips =
           settings.clip_mode === 'ai_choice'
-            ? Math.max(1, Math.min(30, Math.floor(transcript.durationSeconds / clipLengthPreset.minDuration)))
+            ? Math.min(settings.max_clips, tetoPelaDuracao)
             : settings.max_clips;
 
         const selection = await claudeClipSelectionService.selectClips(transcript.words, {

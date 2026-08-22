@@ -315,6 +315,8 @@ module.exports = {
     escrevaEmail: "Escreva o e-mail da sua conta.",
     estiloCorteInvalido: "Estilo de corte inválido.",
     estiloLegendaInvalido: "Estilo de legenda inválido.",
+    fonteInvalida: "Fonte inválida.",
+    alturaInvalida: "Altura inválida.",
     estiloTituloInvalido: "Estilo de título inválido.",
     falhaEvento: "Falha ao processar evento.",
     formatoImagem: "Envie uma imagem PNG, JPG ou WEBP.",
