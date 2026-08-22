@@ -434,9 +434,13 @@ function AlturaSlider({
   )
 }
 
-// Prévia do corte. É uma aproximação em HTML, não o vídeo real: usa as MESMAS
+// Prévia do corte. Aproximação em HTML, não o vídeo real — mas usa as MESMAS
 // fontes que o servidor queima no arquivo (ver globals.css) e as mesmas
 // alturas em porcentagem, então o que aparece aqui é o que sai lá.
+//
+// Precisa cobrir TODOS os fundos. Quando cobria só parte deles, escolher "capa
+// do vídeo" não mudava nada na prévia e ela virava uma promessa falsa - pior
+// do que não existir, porque a pessoa confia no que vê.
 function ClipPreview({
   settings,
   urlTemplate,
@@ -445,43 +449,62 @@ function ClipPreview({
   urlTemplate: string | null
 }) {
   const t = useT()
-  const fundo =
-    settings.backgroundStyle === "black"
-      ? "#000"
-      : settings.backgroundStyle === "white"
-        ? "#fff"
-        : "#1c1c1c"
+
+  // Três estilos colam uma FAIXA de imagem ao vídeo, e o vídeo ocupa o resto.
+  // Os outros preenchem o quadro inteiro com o vídeo.
+  const temFaixa = ["thumbnail", "frame", "template"].includes(settings.backgroundStyle)
+  const alturaVideo = temFaixa ? settings.backgroundVideoHeightPercent : 100
+  const faixaEmCima = (settings.thumbnailPosition || "top") === "top"
+
+  const corDoQuadro =
+    settings.backgroundStyle === "black" ? "#000" : settings.backgroundStyle === "white" ? "#fff" : "#111"
 
   const estiloLegenda = STYLE_PREVIEW[settings.captionStyle]
   const estiloTitulo = STYLE_PREVIEW[settings.titleStyle as VideoCaptionStyle]
 
+  // A faixa de imagem: a arte enviada tem imagem de verdade; capa e frame são
+  // representados, porque só existem na hora de cortar.
+  function Faixa({ altura }: { altura: number }) {
+    if (settings.backgroundStyle === "template" && urlTemplate) {
+      return <img src={urlTemplate} alt="" className="w-full object-cover" style={{ height: `${altura}%` }} />
+    }
+    return (
+      <div
+        className="flex w-full items-center justify-center bg-gradient-to-br from-amber-300 to-rose-300 text-[10px] font-medium text-neutral-800"
+        style={{ height: `${altura}%` }}
+      >
+        {settings.backgroundStyle === "frame" ? t("ce.frameDoVideo") : t("ce.capaDoVideo")}
+      </div>
+    )
+  }
+
   return (
     <Field>
       <FieldLabel>{t("ce.previa")}</FieldLabel>
+      {/* Largura por porcentagem com teto: em telas grandes fica com 234px,
+          no celular encolhe junto com a coluna em vez de furar a tela. */}
       <div
-        className="relative mx-auto overflow-hidden rounded-lg border border-border"
-        style={{ width: 234, height: 416, background: fundo }}
+        className="relative mx-auto w-full max-w-[234px] overflow-hidden rounded-lg border border-border"
+        style={{ aspectRatio: "9 / 16", background: corDoQuadro }}
       >
-        {settings.backgroundStyle === "template" && urlTemplate && (
-          <img src={urlTemplate} alt="" className="absolute inset-0 size-full object-cover" />
-        )}
-        {settings.backgroundStyle === "blur" && (
-          <div className="absolute inset-0 bg-gradient-to-b from-neutral-700 to-neutral-900" />
-        )}
+        {/* Camada do conteúdo: faixa + vídeo, ou só vídeo. */}
+        <div className="absolute inset-0 flex flex-col">
+          {temFaixa && faixaEmCima && <Faixa altura={100 - alturaVideo} />}
+          <div
+            className="flex w-full items-center justify-center bg-neutral-700/70 text-[10px] text-white/50"
+            style={{ height: `${alturaVideo}%` }}
+          >
+            {t("ce.seuVideo")}
+          </div>
+          {temFaixa && !faixaEmCima && <Faixa altura={100 - alturaVideo} />}
+        </div>
 
-        {/* Faixa que representa o vídeo dentro do quadro. */}
-        <div
-          className="absolute inset-x-0 bg-neutral-500/40"
-          style={{
-            height: `${settings.backgroundVideoHeightPercent}%`,
-            top: `${((100 - settings.backgroundVideoHeightPercent) * settings.backgroundVideoOffsetPercent) / 100}%`,
-          }}
-        />
-
+        {/* Título e legenda ficam POR CIMA de tudo, posicionados em relação ao
+            quadro inteiro - é assim que o servidor desenha. */}
         {settings.showTitle && estiloTitulo && (
           <div
-            className="absolute inset-x-0 flex justify-center px-3 text-center"
-            style={{ top: `${settings.titleHeightPercent}%`, fontFamily: settings.titleFont }}
+            className="absolute inset-x-0 flex justify-center px-2 text-center"
+            style={{ top: `${settings.titleHeightPercent}%` }}
           >
             <span style={{ fontFamily: settings.titleFont }}>{estiloTitulo.render("SEU TÍTULO")}</span>
           </div>
@@ -489,8 +512,8 @@ function ClipPreview({
 
         {settings.captionStyle !== "none" && estiloLegenda && (
           <div
-            className="absolute inset-x-0 flex justify-center px-3 text-center"
-            style={{ bottom: `${settings.captionHeightPercent}%`, fontFamily: settings.captionFont }}
+            className="absolute inset-x-0 flex justify-center px-2 text-center"
+            style={{ bottom: `${settings.captionHeightPercent}%` }}
           >
             <span style={{ fontFamily: settings.captionFont }}>{estiloLegenda.render("legenda")}</span>
           </div>
@@ -899,19 +922,27 @@ export function ClipStyleEditorCard() {
                 )}
             </div>
 
-            <Field>
-              <FieldLabel>{t("ce.enquadramentoArraste")}</FieldLabel>
-              <CropZoomEditor
-                value={zoomDraft}
-                onChange={setZoomDraft}
-                onCommit={(v) => save({ ...settings, cropZoomPercent: v })}
-                templateUrl={urlTemplate}
-                templateHeightPercent={settings.backgroundVideoHeightPercent}
-                templateOffsetPercent={settings.backgroundVideoOffsetPercent}
-                modoCapa={["thumbnail", "frame"].includes(settings.backgroundStyle)}
-                capaPosition={settings.thumbnailPosition || "top"}
-              />
-            </Field>
+            {/* O enquadramento por arraste só entra quando o vídeo ocupa o
+                quadro INTEIRO. Com uma faixa de imagem colada (capa, frame ou
+                arte enviada), quem decide o recorte são as barras de altura e
+                posição acima - o servidor ignora o zoom nesse caminho.
+                Mostrar as alças ali era pedir um gesto que não mudava nada no
+                corte, e ainda repetia a prévia que agora fica fixa ao lado. */}
+            {settings.backgroundVideoHeightPercent >= 100 && (
+              <Field>
+                <FieldLabel>{t("ce.enquadramentoArraste")}</FieldLabel>
+                <CropZoomEditor
+                  value={zoomDraft}
+                  onChange={setZoomDraft}
+                  onCommit={(v) => save({ ...settings, cropZoomPercent: v })}
+                  templateUrl={urlTemplate}
+                  templateHeightPercent={settings.backgroundVideoHeightPercent}
+                  templateOffsetPercent={settings.backgroundVideoOffsetPercent}
+                  modoCapa={["thumbnail", "frame"].includes(settings.backgroundStyle)}
+                  capaPosition={settings.thumbnailPosition || "top"}
+                />
+              </Field>
+            )}
 
             <Field>
               <FieldLabel>{t("ce.estiloDaLegenda")}</FieldLabel>
