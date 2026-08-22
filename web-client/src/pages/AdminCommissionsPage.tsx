@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { IconCoins, IconUsers, IconUserCheck, IconWallet, IconGift } from "@tabler/icons-react"
+import { IconCoins, IconCopy, IconUsers, IconUserCheck, IconWallet, IconGift } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { StatCard } from "@/components/dashboard/StatCard"
@@ -249,17 +249,55 @@ function WithdrawalsTab() {
   )
 }
 
+// Regra do servidor (CODE_PATTERN): 3 a 32 caracteres, letras, números,
+// hífen e underline. Conferir aqui também evita o vaivém de digitar, clicar e
+// só então descobrir que o código não servia.
+const CODIGO_VALIDO = /^[a-zA-Z0-9_-]{3,32}$/
+
+// Botão de copiar reaproveitado pela prévia e por cada linha da tabela.
+function CopiarUrl({ url, rotulo }: { url: string; rotulo?: string }) {
+  const t = useT()
+  const [copiado, setCopiado] = useState(false)
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 2000)
+    } catch {
+      // Sem permissão de área de transferência (acontece em http). O endereço
+      // continua visível na tela pra seleção manual, então não vira erro.
+    }
+  }
+
+  return (
+    <Button variant="outline" size="sm" className="h-7 shrink-0 gap-1 text-xs" onClick={copiar}>
+      <IconCopy className="size-3" />
+      {copiado ? t("com.linkCopiado") : rotulo || t("com.copiarLink")}
+    </Button>
+  )
+}
+
 function LinksTab() {
   const t = useT()
   const [links, setLinks] = useState<AdminAffiliateLink[] | null>(null)
+  const [base, setBase] = useState("")
   const [code, setCode] = useState("")
   const [label, setLabel] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Prévia do endereço que vai ser gerado. A base vem do servidor (mesma
+  // constante que monta a URL de verdade), pra não haver duas verdades sobre
+  // qual é o domínio do site.
+  const codigoLimpo = code.trim()
+  const previa = codigoLimpo ? `${base}/?ref=${codigoLimpo}` : ""
+  const codigoServe = CODIGO_VALIDO.test(codigoLimpo)
+
   async function load() {
     const res = await api.get<AdminAffiliateLinksResponse>("/api/admin/commissions/links")
     setLinks(res.links)
+    setBase(res.baseUrl)
   }
 
   useEffect(() => {
@@ -282,7 +320,7 @@ function LinksTab() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-4">
       <Card>
         <CardHeader>
           <CardDescription>{t("com.meusLinksDescricao")}</CardDescription>
@@ -299,7 +337,20 @@ function LinksTab() {
               <Input id="linkLabel" placeholder={t("com.rotuloDoLinkPlaceholder")} value={label} onChange={(e) => setLabel(e.target.value)} />
             </Field>
           </div>
-          <Button size="sm" className="w-fit" disabled={busy || !code} onClick={createLink}>
+          {codigoLimpo && !codigoServe && (
+            <p className="text-xs text-muted-foreground">
+              O código aceita de 3 a 32 caracteres, entre letras, números, hífen e underline.
+            </p>
+          )}
+
+          {previa && codigoServe && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
+              <span className="shrink-0 text-xs text-muted-foreground">Vai gerar:</span>
+              <code className="min-w-0 flex-1 font-mono text-xs break-all">{previa}</code>
+            </div>
+          )}
+
+          <Button size="sm" className="w-fit" disabled={busy || !codigoServe} onClick={createLink}>
             {busy ? t("com.criandoLink") : t("com.criarLink")}
           </Button>
         </CardContent>
@@ -314,7 +365,7 @@ function LinksTab() {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead>{t("com.rotuloDoLink")}</TableHead>
-              <TableHead>{t("com.codigoDoLink")}</TableHead>
+              <TableHead>Link completo</TableHead>
               <TableHead>{t("com.indicacoes")}</TableHead>
               <TableHead>{t("com.assinaturasAtivas")}</TableHead>
             </TableRow>
@@ -323,7 +374,12 @@ function LinksTab() {
             {links.map((l) => (
               <TableRow key={l.id}>
                 <TableCell className="font-medium">{l.label || "—"}</TableCell>
-                <TableCell className="font-mono text-xs">{l.code}</TableCell>
+                <TableCell>
+                  <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+                    <code className="max-w-[60vw] truncate font-mono text-xs sm:max-w-[22rem]">{l.url}</code>
+                    <CopiarUrl url={l.url} />
+                  </div>
+                </TableCell>
                 <TableCell>{l.referralCount}</TableCell>
                 <TableCell>{l.activeCount}</TableCell>
               </TableRow>
@@ -435,7 +491,10 @@ export function AdminCommissionsPage() {
       <PageHeader title={t("com.adminTitulo")} description={t("com.adminDescricao")} />
 
       <Tabs defaultValue="overview">
-        <TabsList>
+        {/* As 5 abas nao cabem na largura de um celular. Sem esta faixa
+            rolavel, elas empurram a PAGINA inteira e tudo passa a rolar de
+            lado - inclusive o conteudo, que caberia bem. */}
+        <TabsList className="max-w-full overflow-x-auto">
           <TabsTrigger value="overview">{t("com.abaVisaoGeral")}</TabsTrigger>
           <TabsTrigger value="affiliates">{t("com.abaAfiliados")}</TabsTrigger>
           <TabsTrigger value="withdrawals">{t("com.abaSaques")}</TabsTrigger>

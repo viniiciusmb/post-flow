@@ -756,6 +756,9 @@ export interface AffiliateSettings {
 export interface AdminAffiliateLink {
   id: number
   code: string
+  /** Endereço completo, pronto pra colar. Vem montado do servidor: o domínio
+   *  é configuração, não o endereço de onde a tela por acaso foi aberta. */
+  url: string
   label: string | null
   referralCount: number
   activeCount: number
@@ -763,5 +766,7 @@ export interface AdminAffiliateLink {
 }
 
 export interface AdminAffiliateLinksResponse {
+  /** Endereço do site, para montar a prévia antes de o link existir. */
+  baseUrl: string
   links: AdminAffiliateLink[]
 }

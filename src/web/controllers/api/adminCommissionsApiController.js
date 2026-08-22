@@ -10,6 +10,7 @@ const affiliateWithdrawalsRepository = require('../../../repositories/affiliateW
 const commissionEntriesRepository = require('../../../repositories/commissionEntriesRepository');
 const referralsRepository = require('../../../repositories/referralsRepository');
 const affiliateService = require('../../../services/affiliateService');
+const { CONTACT } = require('../../../config/constants');
 const { resolveRange } = require('../../../lib/dateRanges');
 
 const CODE_PATTERN = /^[a-zA-Z0-9_-]{3,32}$/;
@@ -145,13 +146,29 @@ async function rejectWithdrawal(req, res) {
   res.json({ withdrawal: { id: resolved.id, status: resolved.status } });
 }
 
+// O link pronto pra colar, montado no servidor.
+//
+// Fica aqui, e nao no navegador, pelo mesmo motivo do link do cliente: o
+// endereco do site e uma configuracao (CONTACT.siteUrl), nao o dominio de
+// onde a tela por acaso foi aberta. Montar no front pelo window.location
+// geraria link com o dominio errado sempre que o painel fosse acessado por
+// outro endereco.
+function urlDoLink(code) {
+  return `${CONTACT.siteUrl}/?ref=${code}`;
+}
+
 async function listLinks(req, res) {
   const adminId = req.session.user.id;
   const links = await affiliateLinksRepository.listCustomWithStats(adminId);
   res.json({
+    // Vai junto mesmo sem nenhum link criado: e com ela que a tela mostra a
+    // previa do endereco enquanto o admin digita o codigo - justamente o
+    // momento em que ainda nao existe link nenhum pra tirar a base.
+    baseUrl: CONTACT.siteUrl,
     links: links.map((l) => ({
       id: l.id,
       code: l.code,
+      url: urlDoLink(l.code),
       label: l.label,
       referralCount: l.referral_count,
       activeCount: l.active_count,
@@ -177,7 +194,7 @@ async function createLink(req, res) {
     code,
     label: typeof label === 'string' ? label.trim().slice(0, 100) : null,
   });
-  res.json({ link: { id: link.id, code: link.code, label: link.label } });
+  res.json({ link: { id: link.id, code: link.code, url: urlDoLink(link.code), label: link.label } });
 }
 
 module.exports = {
