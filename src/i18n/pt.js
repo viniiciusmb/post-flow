@@ -303,6 +303,8 @@ module.exports = {
     corteSemCanal: "Esse corte não veio de um canal do YouTube, então não tem pasta de destino.",
     credenciaisInvalidas: "E-mail ou senha inválidos.",
     driveInvalido: "A conexão com o Google Drive não está mais válida. Reconecte em Configurações.",
+    modoPartesInvalido: "Modo de divisão em partes inválido.",
+    quantidadePartesInvalida: "Quantidade de partes inválida (1 a 30).",
     duracaoParteInvalida: "Duração de cada parte inválida (1 a 10 minutos).",
     duracaoTituloInvalida: "Duração do título inválida (1 a 15s).",
     emailInvalido: "Informe um e-mail válido.",

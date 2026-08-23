@@ -41,20 +41,38 @@ const CLIP_LENGTH_PRESETS = {
 // todo (o que a opcao fazia antes e ninguem queria), o video vira N fatias
 // sequenciais que cobrem 100% dele, numeradas Parte 1, Parte 2...
 //
-// A duracao escolhida pelo cliente e uma MEDIA, nao um talho fixo. Fatiar de
-// N em N segundos deixaria uma ultima parte com o resto - um video de 10min
-// com partes de 3min terminaria numa "Parte 4" de 1 minuto, que parece corte
-// com defeito. Aqui a gente escolhe quantas partes ficam mais perto do pedido
-// e divide a duracao igualmente entre elas.
-function fatiarEmPartes(duracaoSegundos, minutosPorParte, titulo) {
+// Duas formas de dizer como dividir, e o cliente escolhe qual das duas fixar:
+//
+//   'duration'  ele diz a duracao media de cada parte, o sistema descobre
+//               quantas cabem (24min com partes de 3min -> 8 partes)
+//   'count'     ele diz quantas partes quer, o sistema descobre a duracao
+//               (24min em 10 partes -> 2min24 cada)
+//
+// Nos dois casos a duracao e dividida IGUALMENTE entre as partes. Fatiar de N
+// em N segundos deixaria uma ultima parte com o resto - um video de 10min com
+// partes de 3min terminaria numa "Parte 4" de 1 minuto, que parece corte com
+// defeito. Por isso a duracao pedida e uma MEDIA, nao um talho fixo.
+//
+// Teto de 30 partes nos dois modos: um video de 5 horas nao pode virar uma
+// fila gigante por causa de um clique.
+const MAX_PARTES = 30;
+
+function fatiarEmPartes(duracaoSegundos, opcoes, titulo) {
   const duracao = Number(duracaoSegundos) || 0;
   if (duracao <= 0) return [];
 
-  const alvo = Math.max(60, Math.round(Number(minutosPorParte) * 60));
-  // Math.round e nao ceil/floor: com alvo de 3min, um video de 4min30 vira
-  // 2 partes de 2min15 (mais perto do pedido) em vez de 1 de 4min30.
-  // Teto de 30 pra um video de 5 horas nao virar uma fila gigante sozinho.
-  const partes = Math.min(30, Math.max(1, Math.round(duracao / alvo)));
+  const { modo = 'duration', minutos = 3, quantidade = 8 } = opcoes || {};
+
+  let partes;
+  if (modo === 'count') {
+    partes = Math.min(MAX_PARTES, Math.max(1, Math.round(Number(quantidade) || 1)));
+  } else {
+    const alvo = Math.max(60, Math.round(Number(minutos) * 60));
+    // Math.round e nao ceil/floor: com alvo de 3min, um video de 4min30 vira
+    // 2 partes de 2min15 (mais perto do pedido) em vez de 1 de 4min30.
+    partes = Math.min(MAX_PARTES, Math.max(1, Math.round(duracao / alvo)));
+  }
+
   const passo = duracao / partes;
 
   return Array.from({ length: partes }, (_, i) => ({
@@ -435,7 +453,11 @@ async function run(sourceVideoId) {
         // trecho, sem custo de Claude.
         selected = fatiarEmPartes(
           Number(transcript.durationSeconds) || Number(sourceVideo.duration_seconds) || 0,
-          Number(settings.full_parts_minutes) || 3,
+          {
+            modo: settings.full_parts_mode || 'duration',
+            minutos: Number(settings.full_parts_minutes) || 3,
+            quantidade: Number(settings.full_parts_count) || 8,
+          },
           sourceVideo.title
         );
       } else {

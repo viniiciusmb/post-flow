@@ -625,6 +625,10 @@ const CLIP_MODE_DESCRIPTIONS: Record<string, ChaveDeTraducao> = {
   full_parts: "vs.videoEmPartesTexto",
   fixed_count: "vs.quantidadeFixaTexto",
 }
+const FULL_PARTS_MODE_LABELS: Record<string, ChaveDeTraducao> = {
+  duration: "vs.pelaDuracao",
+  count: "vs.pelaQuantidade",
+}
 const DESCRIPTION_MODE_LABELS: Record<string, ChaveDeTraducao> = {
   auto: "vs.iaEscreve",
   fixed: "vs.sempreAMesma",
@@ -823,34 +827,83 @@ export function ClipStyleEditorCard() {
           </Field>
 
           {settings.clipMode === "full_parts" ? (
-            /* No modo de partes nao ha "quantos cortes": quantos saem depende
-               da duracao do video. O que o cliente escolhe e o tamanho medio
-               de cada parte. */
-            <Field>
-              <FieldLabel htmlFor="fullPartsMinutes">{t("vs.duracaoDeCadaParte")}</FieldLabel>
-              <Input
-                id="fullPartsMinutes"
-                type="number"
-                min={settings.options.fullPartsMinMinutes}
-                max={settings.options.fullPartsMaxMinutes}
-                className="max-w-28"
-                value={settings.fullPartsMinutes}
-                onChange={(e) => setSettings({ ...settings, fullPartsMinutes: Number(e.target.value) })}
-                /* Salva ao SAIR do campo, nao a cada tecla: digitar "10"
-                   passa por "1", e um save por tecla mandaria duas
-                   requisicoes que podem chegar fora de ordem (foi exatamente
-                   o bug dos horarios de postagem). */
-                onBlur={() => {
-                  const n = Math.round(Number(settings.fullPartsMinutes))
-                  const limitado = Math.min(
-                    settings.options.fullPartsMaxMinutes,
-                    Math.max(settings.options.fullPartsMinMinutes, Number.isFinite(n) ? n : 3)
-                  )
-                  save({ ...settings, fullPartsMinutes: limitado })
-                }}
-              />
-              <p className="text-xs text-muted-foreground">{t("vs.duracaoDeCadaParteTexto")}</p>
-            </Field>
+            /* No modo de partes o vídeo inteiro sempre é coberto — o que muda
+               é o que o cliente FIXA: ou o tamanho de cada parte (e o número
+               sai da conta), ou o número de partes (e o tamanho sai da conta).
+               Uma decide a outra, então mostrar os dois campos ao mesmo tempo
+               deixaria um deles mentindo. */
+            <>
+              <Field>
+                <FieldLabel>{t("vs.comoDividir")}</FieldLabel>
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  value={settings.fullPartsMode}
+                  onValueChange={(next) => next && save({ ...settings, fullPartsMode: next as never })}
+                  className="flex-wrap"
+                >
+                  {settings.options.fullPartsModes.map((m) => (
+                    <ToggleGroupItem key={m} value={m} className="text-xs">
+                      {FULL_PARTS_MODE_LABELS[m] ? t(FULL_PARTS_MODE_LABELS[m]) : m}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </Field>
+
+              {settings.fullPartsMode === "count" ? (
+                <Field>
+                  <FieldLabel htmlFor="fullPartsCount">{t("vs.quantasPartes")}</FieldLabel>
+                  <Input
+                    id="fullPartsCount"
+                    type="number"
+                    min={settings.options.fullPartsMinCount}
+                    max={settings.options.fullPartsMaxCount}
+                    className="max-w-28"
+                    value={settings.fullPartsCount}
+                    onChange={(e) => setSettings({ ...settings, fullPartsCount: Number(e.target.value) })}
+                    onBlur={() => {
+                      const n = Math.round(Number(settings.fullPartsCount))
+                      save({
+                        ...settings,
+                        fullPartsCount: Math.min(
+                          settings.options.fullPartsMaxCount,
+                          Math.max(settings.options.fullPartsMinCount, Number.isFinite(n) ? n : 8)
+                        ),
+                      })
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">{t("vs.quantasPartesTexto")}</p>
+                </Field>
+              ) : (
+                <Field>
+                  <FieldLabel htmlFor="fullPartsMinutes">{t("vs.duracaoDeCadaParte")}</FieldLabel>
+                  <Input
+                    id="fullPartsMinutes"
+                    type="number"
+                    min={settings.options.fullPartsMinMinutes}
+                    max={settings.options.fullPartsMaxMinutes}
+                    className="max-w-28"
+                    value={settings.fullPartsMinutes}
+                    onChange={(e) => setSettings({ ...settings, fullPartsMinutes: Number(e.target.value) })}
+                    /* Salva ao SAIR do campo, nao a cada tecla: digitar "10"
+                       passa por "1", e um save por tecla mandaria duas
+                       requisicoes que podem chegar fora de ordem (foi
+                       exatamente o bug dos horarios de postagem). */
+                    onBlur={() => {
+                      const n = Math.round(Number(settings.fullPartsMinutes))
+                      save({
+                        ...settings,
+                        fullPartsMinutes: Math.min(
+                          settings.options.fullPartsMaxMinutes,
+                          Math.max(settings.options.fullPartsMinMinutes, Number.isFinite(n) ? n : 3)
+                        ),
+                      })
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">{t("vs.duracaoDeCadaParteTexto")}</p>
+                </Field>
+              )}
+            </>
           ) : (
             <>
               {/* A quantidade vale tambem no modo "melhores partes": ali ela e

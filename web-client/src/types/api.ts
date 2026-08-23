@@ -318,6 +318,7 @@ export type VideoCaptionStyle =
 export type VideoClipLength = "short" | "balanced" | "long" | "extra_long"
 /** "full_parts" = fatiar o vídeo inteiro em partes sequenciais (Parte 1, Parte 2...). */
 export type VideoClipMode = "ai_choice" | "full_parts" | "fixed_count"
+export type FullPartsMode = "duration" | "count"
 export type VideoDescriptionMode = "auto" | "fixed" | "none"
 export type CropStyleMode = "auto" | "manual"
 export type PartLabelPosition = "top_left" | "top_center" | "top_right" | "bottom_left" | "bottom_center" | "bottom_right"
@@ -335,8 +336,16 @@ export interface ClientVideoSettings {
   titleHeightPercent: number
   clipLength: VideoClipLength
   clipMode: VideoClipMode
-  /** Duração média de cada parte, em minutos. Só usada no modo "full_parts". */
+  /**
+   * Como dividir o vídeo no modo "full_parts": "duration" = o cliente fixa a
+   * duração média de cada parte, "count" = o cliente fixa quantas partes quer.
+   * Uma decide a outra.
+   */
+  fullPartsMode: FullPartsMode
+  /** Duração média de cada parte, em minutos. Só usada quando fullPartsMode é "duration". */
   fullPartsMinutes: number
+  /** Quantas partes gerar. Só usada quando fullPartsMode é "count". */
+  fullPartsCount: number
   maxClips: number
   showTitle: boolean
   titleSeconds: number
@@ -370,8 +379,11 @@ export interface ClientVideoSettingsResponse extends ClientVideoSettings {
     cropStyleModes: CropStyleMode[]
     partLabelPositions: PartLabelPosition[]
     titleStyles: VideoCaptionStyle[]
+    fullPartsModes: FullPartsMode[]
     fullPartsMinMinutes: number
     fullPartsMaxMinutes: number
+    fullPartsMinCount: number
+    fullPartsMaxCount: number
   }
   /** null = a configuração de todos os canais. */
   channelId: number | null

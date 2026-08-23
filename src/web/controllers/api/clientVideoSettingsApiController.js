@@ -19,6 +19,12 @@ const CLIP_MODES = ['ai_choice', 'full_parts', 'fixed_count'];
 // nao e estetico: e o limite de duracao de video do TikTok.
 const FULL_PARTS_MIN_MINUTES = 1;
 const FULL_PARTS_MAX_MINUTES = 10;
+// Duas formas de dividir o video inteiro: pela duracao media de cada parte
+// ('duration', o comportamento original) ou pelo numero de partes ('count').
+// Uma decide a outra - o cliente escolhe qual das duas ele quer fixar.
+const FULL_PARTS_MODES = ['duration', 'count'];
+const FULL_PARTS_MIN_COUNT = 1;
+const FULL_PARTS_MAX_COUNT = 30;
 const DESCRIPTION_MODES = ['auto', 'fixed', 'none'];
 const CROP_STYLE_MODES = ['auto', 'manual'];
 const PART_LABEL_POSITIONS = ['top_left', 'top_center', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right'];
@@ -34,7 +40,9 @@ function toApi(settings) {
     titleHeightPercent: settings.title_height_percent,
     clipLength: settings.clip_length,
     clipMode: settings.clip_mode,
+    fullPartsMode: settings.full_parts_mode || 'duration',
     fullPartsMinutes: settings.full_parts_minutes ?? 3,
+    fullPartsCount: settings.full_parts_count ?? 8,
     maxClips: settings.max_clips,
     showTitle: settings.show_title,
     titleSeconds: settings.title_seconds,
@@ -64,8 +72,11 @@ const OPTIONS_PAYLOAD = {
   cropStyleModes: CROP_STYLE_MODES,
   partLabelPositions: PART_LABEL_POSITIONS,
   titleStyles: TITLE_STYLES,
+  fullPartsModes: FULL_PARTS_MODES,
   fullPartsMinMinutes: FULL_PARTS_MIN_MINUTES,
   fullPartsMaxMinutes: FULL_PARTS_MAX_MINUTES,
+  fullPartsMinCount: FULL_PARTS_MIN_COUNT,
+  fullPartsMaxCount: FULL_PARTS_MAX_COUNT,
 };
 
 // toApi() nunca inclui "options" (sao constantes fixas, nao vem do banco) -
@@ -134,7 +145,9 @@ async function update(req, res) {
     captionStyle,
     clipLength,
     clipMode,
+    fullPartsMode,
     fullPartsMinutes,
+    fullPartsCount,
     maxClips,
     showTitle,
     titleSeconds,
@@ -214,6 +227,13 @@ async function update(req, res) {
   const minutosPorParte = inteiro(
     fullPartsMinutes, atual.full_parts_minutes,
     FULL_PARTS_MIN_MINUTES, FULL_PARTS_MAX_MINUTES, 'erros.duracaoParteInvalida', 3
+  );
+  const modoDasPartes = daLista(
+    fullPartsMode, atual.full_parts_mode, FULL_PARTS_MODES, 'erros.modoPartesInvalido', 'duration'
+  );
+  const quantidadeDePartes = inteiro(
+    fullPartsCount, atual.full_parts_count,
+    FULL_PARTS_MIN_COUNT, FULL_PARTS_MAX_COUNT, 'erros.quantidadePartesInvalida', 8
   );
   const titleSecondsNum = inteiro(titleSeconds, atual.title_seconds, 1, 15, 'erros.duracaoTituloInvalida', 3);
   const cropZoomPercentNum = inteiro(cropZoomPercent, atual.crop_zoom_percent, 0, 100, 'erros.zoomInvalido', 100);
@@ -320,7 +340,9 @@ async function update(req, res) {
     titleHeightPercent: titleHeightNum,
     clipLength: duracaoCorte,
     clipMode: modoCorte,
+    fullPartsMode: modoDasPartes,
     fullPartsMinutes: minutosPorParte,
+    fullPartsCount: quantidadeDePartes,
     maxClips: maxClipsNum,
     // Booleano ausente tambem preserva: Boolean(undefined) daria false, e o
     // cartao de qualidade (que nao manda nenhum dos dois) desligaria o titulo

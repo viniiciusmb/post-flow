@@ -294,6 +294,8 @@ module.exports = {
     corteSemCanal: "That clip did not come from a YouTube channel, so it has no destination folder.",
     credenciaisInvalidas: "Invalid email or password.",
     driveInvalido: "The Google Drive connection is no longer valid. Reconnect it in Settings.",
+    modoPartesInvalido: "Invalid part-splitting mode.",
+    quantidadePartesInvalida: "Invalid number of parts (1 to 30).",
     duracaoParteInvalida: "Invalid length for each part (1 to 10 minutes).",
     duracaoTituloInvalida: "Invalid title duration (1 to 15s).",
     emailInvalido: "Enter a valid email.",
