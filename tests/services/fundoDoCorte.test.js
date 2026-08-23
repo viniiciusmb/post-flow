@@ -134,9 +134,6 @@ async function agenteLogado() {
 }
 
 const BASE = {
-  aspectRatio: '9:16',
-  framing: 'crop',
-  quality: 'high',
   captionStyle: 'classic',
   clipLength: 'balanced',
   clipMode: 'ai_choice',
@@ -162,7 +159,7 @@ test('salvar sem mandar o fundo PRESERVA o que já estava escolhido', async () =
   assert.equal(escolheu.body.backgroundStyle, 'black');
 
   // Agora o outro cartão salva, sem mandar o campo do fundo.
-  const outroCartao = await agente.put('/api/client/video-settings', { ...BASE, quality: 'medium' });
+  const outroCartao = await agente.put('/api/client/video-settings', { ...BASE, maxClips: 5 });
   assert.equal(outroCartao.status, 200);
   assert.equal(
     outroCartao.body.backgroundStyle,

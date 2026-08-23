@@ -132,9 +132,6 @@ async function agenteLogado() {
 }
 
 const BASE = {
-  aspectRatio: '9:16',
-  framing: 'crop',
-  quality: 'medium',
   captionStyle: 'classic',
   titleStyle: 'classic',
   clipLength: 'balanced',
@@ -164,7 +161,7 @@ test2('salvar SEM mandar fonte preserva a que estava escolhida', async () => {
   assert.equal(comFonte.body.captionFont, 'Bebas Neue');
 
   // Agora o outro cartão salva, sem saber de fonte nenhuma.
-  const semFonte = await agente.put('/api/client/video-settings', { ...BASE, quality: 'high' });
+  const semFonte = await agente.put('/api/client/video-settings', { ...BASE, maxClips: 5 });
   assert.equal(semFonte.status, 200, `o cartão de qualidade tem que conseguir salvar: ${semFonte.text}`);
   assert.equal(semFonte.body.captionFont, 'Bebas Neue', 'a fonte escolhida não pode ser perdida');
   assert.equal(semFonte.body.captionHeightPercent, 30, 'a altura escolhida não pode ser perdida');

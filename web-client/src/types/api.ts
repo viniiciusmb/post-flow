@@ -308,9 +308,6 @@ export interface DriveStatusResponse {
   folder: { id: string; name: string | null; lastPolledAt?: string | null; tiktokAccountIds: number[] } | null
 }
 
-export type VideoAspectRatio = "9:16" | "1:1" | "16:9" | "4:5"
-export type VideoFraming = "crop" | "blur_pad"
-export type VideoQuality = "high" | "medium"
 export type VideoCaptionStyle =
   | "classic" | "bold" | "minimal" | "none" | "bubble_purple" | "bubble_dark"
   | "neon_verde" | "vermelho_forte" | "amarelo_caixa" | "branco_caixa" | "contorno_grosso"
@@ -319,15 +316,13 @@ export type VideoCaptionStyle =
   // de uma palavra só ficaria desproporcional.
   | "caixa_colorida" | "papel_rasgado"
 export type VideoClipLength = "short" | "balanced" | "long" | "extra_long"
-export type VideoClipMode = "ai_choice" | "full_video" | "fixed_count"
+/** "full_parts" = fatiar o vídeo inteiro em partes sequenciais (Parte 1, Parte 2...). */
+export type VideoClipMode = "ai_choice" | "full_parts" | "fixed_count"
 export type VideoDescriptionMode = "auto" | "fixed" | "none"
 export type CropStyleMode = "auto" | "manual"
 export type PartLabelPosition = "top_left" | "top_center" | "top_right" | "bottom_left" | "bottom_center" | "bottom_right"
 
 export interface ClientVideoSettings {
-  aspectRatio: VideoAspectRatio
-  framing: VideoFraming
-  quality: VideoQuality
   captionStyle: VideoCaptionStyle
   captionFont: string
   titleFont: string
@@ -340,6 +335,8 @@ export interface ClientVideoSettings {
   titleHeightPercent: number
   clipLength: VideoClipLength
   clipMode: VideoClipMode
+  /** Duração média de cada parte, em minutos. Só usada no modo "full_parts". */
+  fullPartsMinutes: number
   maxClips: number
   showTitle: boolean
   titleSeconds: number
@@ -365,9 +362,6 @@ export interface ClientVideoSettings {
 
 export interface ClientVideoSettingsResponse extends ClientVideoSettings {
   options: {
-    aspectRatios: VideoAspectRatio[]
-    framings: VideoFraming[]
-    qualities: VideoQuality[]
     captionStyles: VideoCaptionStyle[]
     fonts: string[]
     clipLengths: VideoClipLength[]
@@ -376,6 +370,8 @@ export interface ClientVideoSettingsResponse extends ClientVideoSettings {
     cropStyleModes: CropStyleMode[]
     partLabelPositions: PartLabelPosition[]
     titleStyles: VideoCaptionStyle[]
+    fullPartsMinMinutes: number
+    fullPartsMaxMinutes: number
   }
   /** null = a configuração de todos os canais. */
   channelId: number | null

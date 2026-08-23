@@ -1,30 +1,30 @@
-// Preferencias de edicao de video do cliente: proporcao (9:16 por padrao),
-// enquadramento, qualidade, estilo de legenda, "estilo do corte" (duracao),
-// modo de corte (IA decide / video inteiro / quantidade fixa), titulo
-// queimado no video e descricao (auto/fixa).
+// Preferencias de edicao de video do cliente: estilo de legenda, "estilo do
+// corte" (duracao), modo de corte (IA decide / video inteiro em partes /
+// quantidade fixa), titulo queimado no video e descricao (auto/fixa).
+//
+// Proporcao, enquadramento e qualidade sairam na migration 070 - o corte e
+// sempre 9:16 e quem decide o enquadramento e o estilo do corte.
 'use strict';
 
 const clientVideoSettingsRepository = require('../../../repositories/clientVideoSettingsRepository');
 const videoEditingService = require('../../../services/videoEditingService');
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 
-const ASPECT_RATIOS = Object.keys(videoEditingService.ASPECT_RATIOS);
-const QUALITIES = Object.keys(videoEditingService.QUALITY_PRESETS);
 const CAPTION_STYLES = [...Object.keys(videoEditingService.CAPTION_STYLES), 'none'];
 const TITLE_STYLES = Object.keys(videoEditingService.TITLE_STYLES);
-const FRAMINGS = ['crop', 'blur_pad'];
 const CLIP_LENGTHS = ['short', 'balanced', 'long', 'extra_long'];
 const FONTS = Object.keys(videoEditingService.FONTES);
-const CLIP_MODES = ['ai_choice', 'full_video', 'fixed_count'];
+const CLIP_MODES = ['ai_choice', 'full_parts', 'fixed_count'];
+// Duracao media de cada parte, em minutos, no modo 'full_parts'. O teto de 10
+// nao e estetico: e o limite de duracao de video do TikTok.
+const FULL_PARTS_MIN_MINUTES = 1;
+const FULL_PARTS_MAX_MINUTES = 10;
 const DESCRIPTION_MODES = ['auto', 'fixed', 'none'];
 const CROP_STYLE_MODES = ['auto', 'manual'];
 const PART_LABEL_POSITIONS = ['top_left', 'top_center', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right'];
 
 function toApi(settings) {
   return {
-    aspectRatio: settings.aspect_ratio,
-    framing: settings.framing,
-    quality: settings.quality,
     captionStyle: settings.caption_style,
     captionFont: settings.caption_font,
     titleBoxColor: settings.title_box_color,
@@ -34,6 +34,7 @@ function toApi(settings) {
     titleHeightPercent: settings.title_height_percent,
     clipLength: settings.clip_length,
     clipMode: settings.clip_mode,
+    fullPartsMinutes: settings.full_parts_minutes ?? 3,
     maxClips: settings.max_clips,
     showTitle: settings.show_title,
     titleSeconds: settings.title_seconds,
@@ -55,9 +56,6 @@ function toApi(settings) {
 }
 
 const OPTIONS_PAYLOAD = {
-  aspectRatios: ASPECT_RATIOS,
-  framings: FRAMINGS,
-  qualities: QUALITIES,
   captionStyles: CAPTION_STYLES,
   fonts: FONTS,
   clipLengths: CLIP_LENGTHS,
@@ -66,6 +64,8 @@ const OPTIONS_PAYLOAD = {
   cropStyleModes: CROP_STYLE_MODES,
   partLabelPositions: PART_LABEL_POSITIONS,
   titleStyles: TITLE_STYLES,
+  fullPartsMinMinutes: FULL_PARTS_MIN_MINUTES,
+  fullPartsMaxMinutes: FULL_PARTS_MAX_MINUTES,
 };
 
 // toApi() nunca inclui "options" (sao constantes fixas, nao vem do banco) -
@@ -131,12 +131,10 @@ async function get(req, res) {
 
 async function update(req, res) {
   const {
-    aspectRatio,
-    framing,
-    quality,
     captionStyle,
     clipLength,
     clipMode,
+    fullPartsMinutes,
     maxClips,
     showTitle,
     titleSeconds,
@@ -202,9 +200,6 @@ async function update(req, res) {
     return n;
   }
 
-  const proporcao = daLista(aspectRatio, atual.aspect_ratio, ASPECT_RATIOS, 'erros.proporcaoInvalida', '9:16');
-  const enquadramento = daLista(framing, atual.framing, FRAMINGS, 'erros.enquadramentoInvalido', 'crop');
-  const qualidadeFinal = daLista(quality, atual.quality, QUALITIES, 'erros.qualidadeInvalida', 'high');
   const estiloLegenda = daLista(captionStyle, atual.caption_style, CAPTION_STYLES, 'erros.estiloLegendaInvalido', 'classic');
   const estiloTitulo = daLista(titleStyle, atual.title_style, TITLE_STYLES, 'erros.estiloTituloInvalido', 'classic');
   const duracaoCorte = daLista(clipLength, atual.clip_length, CLIP_LENGTHS, 'erros.estiloCorteInvalido', 'balanced');
@@ -216,6 +211,10 @@ async function update(req, res) {
   );
 
   const maxClipsNum = inteiro(maxClips, atual.max_clips, 1, 30, 'erros.numeroCortesInvalido', 4);
+  const minutosPorParte = inteiro(
+    fullPartsMinutes, atual.full_parts_minutes,
+    FULL_PARTS_MIN_MINUTES, FULL_PARTS_MAX_MINUTES, 'erros.duracaoParteInvalida', 3
+  );
   const titleSecondsNum = inteiro(titleSeconds, atual.title_seconds, 1, 15, 'erros.duracaoTituloInvalida', 3);
   const cropZoomPercentNum = inteiro(cropZoomPercent, atual.crop_zoom_percent, 0, 100, 'erros.zoomInvalido', 100);
   const backgroundHeight = inteiro(
@@ -312,9 +311,6 @@ async function update(req, res) {
     backgroundVideoHeightPercent: backgroundHeight,
     backgroundVideoOffsetPercent: backgroundOffset,
     thumbnailPosition,
-    aspectRatio: proporcao,
-    framing: enquadramento,
-    quality: qualidadeFinal,
     captionStyle: estiloLegenda,
     captionFont: fonteLegenda,
     titleBoxColor: corTitulo,
@@ -324,6 +320,7 @@ async function update(req, res) {
     titleHeightPercent: titleHeightNum,
     clipLength: duracaoCorte,
     clipMode: modoCorte,
+    fullPartsMinutes: minutosPorParte,
     maxClips: maxClipsNum,
     // Booleano ausente tambem preserva: Boolean(undefined) daria false, e o
     // cartao de qualidade (que nao manda nenhum dos dois) desligaria o titulo
@@ -334,7 +331,16 @@ async function update(req, res) {
     descriptionTemplate: modoDescricao === 'fixed' ? String(descricaoFinal).trim() : null,
     cropStyleMode: modoEstilo,
     cropZoomPercent: cropZoomPercentNum,
-    showPartLabel: showPartLabel === undefined ? atual.show_part_label : Boolean(showPartLabel),
+    // No modo de partes a numeracao nao e opcional: sem "Parte 1 / Parte 2"
+    // as fatias chegam no TikTok sem ordem nenhuma e quem assiste nao sabe
+    // por onde comecar. Forcado no SERVIDOR, nao so na tela - a tela marca e
+    // desabilita o campo, mas um PUT direto passaria por cima.
+    showPartLabel:
+      modoCorte === 'full_parts'
+        ? true
+        : showPartLabel === undefined
+          ? atual.show_part_label
+          : Boolean(showPartLabel),
     partLabelPosition: posicaoNumeracao,
     titleStyle: estiloTitulo,
   }, alvo.channelId);

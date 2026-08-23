@@ -21,9 +21,6 @@ const { pool, createClient, createYoutubeChannel, closePool } = require('../help
 test.after(() => closePool());
 
 const BASE = {
-  aspectRatio: '9:16',
-  framing: 'crop',
-  quality: 'high',
   captionStyle: 'classic',
   clipLength: 'balanced',
   clipMode: 'ai_choice',

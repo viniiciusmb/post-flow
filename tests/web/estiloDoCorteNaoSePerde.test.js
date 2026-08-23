@@ -105,9 +105,6 @@ test('o cartão de qualidade não desfaz o estilo salvo depois que ele abriu', a
   // 3. Cartão de qualidade salva só o que ele edita — com a cópia VELHA, que
   //    ainda traz a quantidade anterior. Os campos de estilo não vão junto.
   const salvou = await agente.put('/api/client/video-settings', {
-    aspectRatio: copiaDeQuandoAPaginaAbriu.aspectRatio,
-    framing: copiaDeQuandoAPaginaAbriu.framing,
-    quality: copiaDeQuandoAPaginaAbriu.quality,
     clipLength: copiaDeQuandoAPaginaAbriu.clipLength,
     clipMode: copiaDeQuandoAPaginaAbriu.clipMode,
     maxClips: 6,

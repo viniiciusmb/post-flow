@@ -37,6 +37,35 @@ const CLIP_LENGTH_PRESETS = {
   extra_long: { minDuration: 180, maxDuration: 240 },
 };
 
+// Modo "cortar o video inteiro em partes": em vez de um corte so com o video
+// todo (o que a opcao fazia antes e ninguem queria), o video vira N fatias
+// sequenciais que cobrem 100% dele, numeradas Parte 1, Parte 2...
+//
+// A duracao escolhida pelo cliente e uma MEDIA, nao um talho fixo. Fatiar de
+// N em N segundos deixaria uma ultima parte com o resto - um video de 10min
+// com partes de 3min terminaria numa "Parte 4" de 1 minuto, que parece corte
+// com defeito. Aqui a gente escolhe quantas partes ficam mais perto do pedido
+// e divide a duracao igualmente entre elas.
+function fatiarEmPartes(duracaoSegundos, minutosPorParte, titulo) {
+  const duracao = Number(duracaoSegundos) || 0;
+  if (duracao <= 0) return [];
+
+  const alvo = Math.max(60, Math.round(Number(minutosPorParte) * 60));
+  // Math.round e nao ceil/floor: com alvo de 3min, um video de 4min30 vira
+  // 2 partes de 2min15 (mais perto do pedido) em vez de 1 de 4min30.
+  // Teto de 30 pra um video de 5 horas nao virar uma fila gigante sozinho.
+  const partes = Math.min(30, Math.max(1, Math.round(duracao / alvo)));
+  const passo = duracao / partes;
+
+  return Array.from({ length: partes }, (_, i) => ({
+    title: titulo,
+    description: null,
+    startSeconds: i * passo,
+    // A ultima parte termina na duracao exata, sem sobra de arredondamento.
+    endSeconds: i === partes - 1 ? duracao : (i + 1) * passo,
+  }));
+}
+
 // Baixa a capa do video pro disco, pro estilo "thumbnail como template".
 //
 // Nunca derruba o corte: sem capa (video enviado do computador costuma nao
@@ -401,10 +430,14 @@ async function run(sourceVideoId) {
       const clipLengthPreset = CLIP_LENGTH_PRESETS[settings.clip_length] || CLIP_LENGTH_PRESETS.balanced;
 
       let selected;
-      if (settings.clip_mode === 'full_video') {
-        // Video inteiro vira um unico corte - sem IA escolhendo trecho, sem
-        // custo de Claude.
-        selected = [{ title: sourceVideo.title, description: null, startSeconds: 0, endSeconds: transcript.durationSeconds }];
+      if (settings.clip_mode === 'full_parts') {
+        // Video inteiro fatiado em partes sequenciais - sem IA escolhendo
+        // trecho, sem custo de Claude.
+        selected = fatiarEmPartes(
+          Number(transcript.durationSeconds) || Number(sourceVideo.duration_seconds) || 0,
+          Number(settings.full_parts_minutes) || 3,
+          sourceVideo.title
+        );
       } else {
         // 'fixed_count': exatamente settings.max_clips.
         //
@@ -441,7 +474,12 @@ async function run(sourceVideoId) {
 
       if (selected.length === 0) {
         await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', {
-          errorMessage: 'A IA nao encontrou nenhum trecho adequado nesse video.',
+          errorMessage:
+            settings.clip_mode === 'full_parts'
+              // Sem IA envolvida, "a IA nao achou trecho" seria mentira: o
+              // unico jeito de nao sair nenhuma parte e a duracao vir zerada.
+              ? 'Nao foi possivel descobrir a duracao desse video pra dividir em partes.'
+              : 'A IA nao encontrou nenhum trecho adequado nesse video.',
         });
         return;
       }
@@ -470,7 +508,12 @@ async function run(sourceVideoId) {
 
       if (selected.length === 0) {
         await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', {
-          errorMessage: 'A IA nao encontrou nenhum trecho adequado nesse video.',
+          errorMessage:
+            settings.clip_mode === 'full_parts'
+              // Sem IA envolvida, "a IA nao achou trecho" seria mentira: o
+              // unico jeito de nao sair nenhuma parte e a duracao vir zerada.
+              ? 'Nao foi possivel descobrir a duracao desse video pra dividir em partes.'
+              : 'A IA nao encontrou nenhum trecho adequado nesse video.',
         });
         return;
       }
@@ -687,4 +730,6 @@ async function run(sourceVideoId) {
   }
 }
 
-module.exports = { run };
+// fatiarEmPartes sai daqui so pros testes: e a unica peca do job que da pra
+// exercitar sem baixar video, transcrever e chamar ffmpeg.
+module.exports = { run, fatiarEmPartes };

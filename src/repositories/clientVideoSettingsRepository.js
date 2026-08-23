@@ -1,5 +1,8 @@
-// Preferencias de edicao de video (proporcao, qualidade, legenda, estilo/modo
-// de corte, titulo, descricao, template de fundo).
+// Preferencias de edicao de video (legenda, estilo/modo de corte, titulo,
+// descricao, template de fundo).
+//
+// Proporcao, enquadramento e qualidade sairam na migration 070: o corte e
+// sempre 9:16 e o enquadramento quem decide e o "estilo do corte".
 //
 // Duas camadas na MESMA tabela:
 //   youtube_channel_id IS NULL  -> configuracao padrao do cliente
@@ -13,9 +16,6 @@
 const pool = require('../db/pool');
 
 const DEFAULTS = {
-  aspect_ratio: '9:16',
-  framing: 'crop',
-  quality: 'high',
   caption_style: 'classic',
   caption_font: 'Anton',
   title_box_color: '#D92323',
@@ -25,6 +25,7 @@ const DEFAULTS = {
   title_height_percent: 8,
   clip_length: 'balanced',
   clip_mode: 'ai_choice',
+  full_parts_minutes: 3,
   max_clips: 4,
   show_title: true,
   title_seconds: 3,
@@ -43,9 +44,6 @@ const DEFAULTS = {
 };
 
 const COLUNAS = [
-  'aspect_ratio',
-  'framing',
-  'quality',
   'caption_style',
   'caption_font',
   'title_box_color',
@@ -55,6 +53,7 @@ const COLUNAS = [
   'title_height_percent',
   'clip_length',
   'clip_mode',
+  'full_parts_minutes',
   'max_clips',
   'show_title',
   'title_seconds',
@@ -74,9 +73,6 @@ const COLUNAS = [
 
 function doCamelParaColuna(entrada) {
   return {
-    aspect_ratio: entrada.aspectRatio,
-    framing: entrada.framing,
-    quality: entrada.quality,
     caption_style: entrada.captionStyle,
     // Campos NOT NULL: quem chamar sem eles (um cartao da tela que so salva
     // qualidade, por exemplo) receberia null e derrubaria a gravacao inteira.
@@ -90,6 +86,7 @@ function doCamelParaColuna(entrada) {
     title_height_percent: entrada.titleHeightPercent ?? DEFAULTS.title_height_percent,
     clip_length: entrada.clipLength,
     clip_mode: entrada.clipMode,
+    full_parts_minutes: entrada.fullPartsMinutes ?? DEFAULTS.full_parts_minutes,
     max_clips: entrada.maxClips,
     show_title: entrada.showTitle,
     title_seconds: entrada.titleSeconds,

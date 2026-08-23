@@ -14,17 +14,14 @@ const logger = require('../lib/logger');
 const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
 const FFPROBE_PATH = process.env.FFPROBE_PATH || 'ffprobe';
 
-const ASPECT_RATIOS = {
-  '9:16': { w: 1080, h: 1920 },
-  '1:1': { w: 1080, h: 1080 },
-  '16:9': { w: 1920, h: 1080 },
-  '4:5': { w: 1080, h: 1350 },
-};
+// Um formato de saida so. O produto publica em TikTok e Reels, e os dois
+// querem 9:16 em 1080x1920 - as outras proporcoes que existiam aqui geravam
+// arquivo que nenhum destino do sistema aceita (migration 070).
+const SAIDA = { w: 1080, h: 1920 };
 
-const QUALITY_PRESETS = {
-  high: { crf: 20, preset: 'medium' },
-  medium: { crf: 26, preset: 'fast' },
-};
+// Um preset de render so, pelo mesmo motivo: a escolha "alta/media" saiu da
+// tela (migration 070). CRF 20 com preset 'medium' era o padrao de sempre.
+const RENDER = { crf: 20, preset: 'medium' };
 
 // Um estilo de legenda/titulo e um punhado de numeros do formato ASS. Em vez
 // de guardar a linha inteira pronta (como era antes), guardamos so o que MUDA
@@ -485,15 +482,13 @@ function escapeForFilter(filePath) {
   return path.resolve(filePath).replace(/\\/g, '\\\\').replace(/:/g, '\\:');
 }
 
-// framing 'crop': corte central pra preencher o quadro (comportamento
-// original, sem faixas). framing 'blur_pad': mostra o video inteiro (sem
-// cortar nada) com fundo desfocado preenchendo o resto do quadro.
+// Sem cropZoomPercent (modo automatico), o corte e o recorte central que
+// preenche o quadro - o comportamento padrao de sempre.
 // cropZoomPercent (0-100), quando informado, ativa o enquadramento continuo
-// do modo manual e ignora "framing" por completo: 100 = recorte apertado
-// (identico ao framing='crop'), 0 = video original inteiro visivel
-// (identico ao framing='blur_pad'), valores no meio interpolam a largura do
-// recorte entre os dois extremos - sempre com o fundo desfocado preenchendo
-// a sobra (que e zero quando zoom=100).
+// do modo manual: 100 = recorte apertado (igual ao automatico), 0 = video
+// original inteiro visivel, valores no meio interpolam a largura do recorte
+// entre os dois extremos - sempre com o fundo desfocado preenchendo a sobra
+// (que e zero quando zoom=100).
 // Composicao do corte sobre um FUNDO. O fundo pode ser a imagem que o cliente
 // enviou, uma cor lisa, ou o proprio video desfocado - o resto do arranjo e
 // identico nos quatro casos, e por isso eles compartilham esta funcao.
@@ -688,7 +683,7 @@ function instanteDoQuadro(startSeconds, endSeconds, sortear = Math.random) {
   return inicio + sortear() * (fim - inicio);
 }
 
-function buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, fundo }) {
+function buildFilter({ w, h, subtitlesFilter, cropZoomPercent, fundo }) {
   // Fundo escolhido explicitamente (template, preto, branco ou desfocado). O
   // 'blur' so entra por aqui quando ha altura definida - com o video ocupando
   // o quadro inteiro, o caminho antigo (com zoom continuo) continua valendo.
@@ -726,16 +721,6 @@ function buildFilter({ framing, w, h, subtitlesFilter, cropZoomPercent, fundo })
     return { filterComplex: chain.join(';'), outputLabel: '[outv]' };
   }
 
-  if (framing === 'blur_pad') {
-    const chain = [
-      `[0:v]split=2[bg][fg]`,
-      `[bg]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=18:4[bgblur]`,
-      `[fg]scale=${w}:${h}:force_original_aspect_ratio=decrease[fgscaled]`,
-      `[bgblur][fgscaled]overlay=(W-w)/2:(H-h)/2,setsar=1${subtitlesFilter ? `,${subtitlesFilter}` : ''}[outv]`,
-    ];
-    return { filterComplex: chain.join(';'), outputLabel: '[outv]' };
-  }
-
   const simple = `crop=ih*${w}/${h}:ih,scale=${w}:${h},setsar=1${subtitlesFilter ? `,${subtitlesFilter}` : ''}`;
   return { simpleFilter: simple };
 }
@@ -761,15 +746,12 @@ async function renderClip({
   // o estilo escolhido e 'thumbnail'.
   thumbnailImagePath = null,
 }) {
-  const aspectRatio = settings.aspect_ratio || '9:16';
-  const framing = settings.framing || 'crop';
-  const quality = settings.quality || 'high';
   const captionStyle = settings.caption_style || 'classic';
   const titleStyle = settings.title_style || 'classic';
   const showTitle = settings.show_title !== false;
   const titleSeconds = showTitle ? Number(settings.title_seconds || 3) : 0;
-  // So no modo manual o zoom continuo entra em jogo - no automatico o
-  // comportamento continua exatamente o de sempre (framing crop/blur_pad).
+  // So no modo manual o zoom continuo entra em jogo - no automatico o corte
+  // continua sendo o recorte central de sempre.
   const cropZoomPercent = settings.crop_style_mode === 'manual' ? Number(settings.crop_zoom_percent ?? 100) : null;
   const partLabel = settings.show_part_label && partTotal > 1 ? `Parte ${partIndex}` : null;
   // Template de fundo: so vale se o arquivo ainda existir em disco. Se o
@@ -855,8 +837,8 @@ async function renderClip({
           ? { path: framePath }
           : null;
 
-  const { w, h } = ASPECT_RATIOS[aspectRatio] || ASPECT_RATIOS['9:16'];
-  const { crf, preset } = QUALITY_PRESETS[quality] || QUALITY_PRESETS.high;
+  const { w, h } = SAIDA;
+  const { crf, preset } = RENDER;
 
   const duration = endSeconds - startSeconds;
   const relativeWords = words
@@ -896,7 +878,6 @@ async function renderClip({
   const usaPapel = titleStyle === 'papel_rasgado' && titleSeconds > 0 && fs.existsSync(CAMINHO_PAPEL_RASGADO);
 
   let resultadoFiltro = buildFilter({
-    framing,
     w,
     h,
     // Com papel, a legenda e aplicada depois da sobreposicao (pro texto ficar
@@ -1005,8 +986,8 @@ module.exports = {
   renderClip,
   extractThumbnail,
   probeDuration,
-  ASPECT_RATIOS,
-  QUALITY_PRESETS,
+  SAIDA,
+  RENDER,
   CAPTION_STYLES,
   TITLE_STYLES,
   FONTES,

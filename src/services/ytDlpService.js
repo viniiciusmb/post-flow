@@ -339,11 +339,13 @@ async function getVideoMetadata(url) {
   };
 }
 
-// Baixa video+audio pro disco (mp4, ate 720p) e devolve o caminho do arquivo.
-// 720p (nao 1080p) de proposito: o corte final e um recorte vertical bem
-// mais estreito que a largura do video original, entao 1080p de origem nao
-// da nitidez extra perceptivel no resultado - so custa ~2.5x mais banda
-// (importa de verdade com proxy residencial, que e cobrado por GB).
+// Baixa video+audio pro disco (mp4, ate 480p) e devolve o caminho do arquivo.
+//
+// 480p e uma decisao de CUSTO, tomada pelo fundador em 23/08/2026: o corte
+// final e um recorte vertical bem mais estreito que a largura do original,
+// e a banda e paga por GB quando sai pelo proxy residencial. Era 720p antes.
+// Trocar de volta e mudar os dois numeros da linha abaixo - nada mais no
+// pipeline depende dessa resolucao.
 async function downloadVideo(videoId, outputDir, { checkCancelled, clientUserId } = {}) {
   fs.mkdirSync(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, '%(id)s.%(ext)s');
@@ -352,7 +354,7 @@ async function downloadVideo(videoId, outputDir, { checkCancelled, clientUserId 
 
   const { usedCandidate } = await run(
     [
-      '-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]',
+      '-f', 'bestvideo[height<=480]+bestaudio/best[height<=480]',
       '--merge-output-format', 'mp4',
       '--no-warnings',
       '-o', outputTemplate,

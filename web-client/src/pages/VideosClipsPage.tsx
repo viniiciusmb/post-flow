@@ -25,7 +25,6 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TonePill } from "@/components/ui/tone-pill"
-import { VideoSettingsCard } from "@/components/dashboard/VideoSettingsCard"
 import { ClipStyleEditorCard } from "@/components/dashboard/ClipStyleEditorCard"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError, csrfToken } from "@/lib/api"
@@ -762,7 +761,10 @@ export function VideosClipsPage() {
   const [channels, setChannels] = useState<YoutubeChannel[]>([])
   const [tiktokAccounts, setTiktokAccounts] = useState<TikTokAccountSummary[]>([])
   const [avgProcessingSeconds, setAvgProcessingSeconds] = useState(480)
-  const [showSettings, setShowSettings] = useState(false)
+  // Um painel so pra toda a configuracao de corte. Eram dois ("qualidade" e
+  // "estilo visual") ate 23/08/2026, e os dois gravavam a MESMA linha do
+  // banco - separar as decisoes obrigava a abrir os dois pra montar uma
+  // configuracao unica.
   const [showStyleEditor, setShowStyleEditor] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [, setTick] = useState(0)
@@ -857,22 +859,12 @@ export function VideosClipsPage() {
           <IconUpload className="size-4" />
           {showUpload ? t("cortes.ocultarEnvioArquivo") : t("cortes.enviarVideoPorArquivo")}
         </Button>
-        <Button variant="outline" size="sm" onClick={() => setShowSettings((v) => !v)} className="gap-2">
-          <IconAdjustmentsHorizontal className="size-4" />
-          <span className="truncate">
-            <span className="sm:hidden">{showSettings ? t("cortes.ocultarConfiguracoes") : t("cortes.configurarCortes")}</span>
-            <span className="hidden sm:inline">
-              {showSettings ? t("cortes.ocultarConfigCorte") : t("cortes.configurarQualidade")}
-            </span>
-          </span>
-        </Button>
         <Button variant="outline" size="sm" onClick={() => setShowStyleEditor((v) => !v)} className="gap-2">
           <IconAdjustmentsHorizontal className="size-4" />
-          {showStyleEditor ? t("cortes.ocultarEstiloVisual") : t("cortes.estiloVisual")}
+          {showStyleEditor ? t("cortes.ocultarConfigCorte") : t("cortes.configurarCortes")}
         </Button>
       </div>
       {showUpload && <UploadVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} />}
-      {showSettings && <VideoSettingsCard />}
       {showStyleEditor && <ClipStyleEditorCard />}
 
       {selectedIds.size > 0 && (

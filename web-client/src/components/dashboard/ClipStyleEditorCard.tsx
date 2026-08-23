@@ -602,6 +602,35 @@ function ClipPreview({
   )
 }
 
+// Rotulos do bloco "como funcionam os cortes". Vieram do VideoSettingsCard,
+// que era um cartao separado ate 23/08/2026 - decidir a QUANTIDADE de cortes
+// num cartao e o ESTILO deles noutro obrigava a abrir dois paineis pra montar
+// uma configuracao so.
+//
+// Guardam a CHAVE de traducao, nao o texto: sao montados quando o modulo
+// carrega, antes de existir idioma escolhido.
+const CLIP_LENGTH_LABELS: Record<string, ChaveDeTraducao> = {
+  short: "vs.curtos",
+  balanced: "vs.equilibrados",
+  long: "vs.longos",
+  extra_long: "vs.duracaoExtraLonga",
+}
+const CLIP_MODE_LABELS: Record<string, ChaveDeTraducao> = {
+  ai_choice: "vs.melhoresPartes",
+  full_parts: "vs.videoEmPartes",
+  fixed_count: "vs.escolherQuantidade",
+}
+const CLIP_MODE_DESCRIPTIONS: Record<string, ChaveDeTraducao> = {
+  ai_choice: "vs.iaDecide",
+  full_parts: "vs.videoEmPartesTexto",
+  fixed_count: "vs.quantidadeFixaTexto",
+}
+const DESCRIPTION_MODE_LABELS: Record<string, ChaveDeTraducao> = {
+  auto: "vs.iaEscreve",
+  fixed: "vs.sempreAMesma",
+  none: "vs.semDescricao",
+}
+
 const POSITIONS: PartLabelPosition[] = ["top_left", "top_center", "top_right", "bottom_left", "bottom_center", "bottom_right"]
 const POSITION_STYLE: Record<PartLabelPosition, React.CSSProperties> = {
   top_left: { top: 8, left: 8 },
@@ -637,6 +666,9 @@ export function ClipStyleEditorCard() {
   const t = useT()
   const [settings, setSettings] = useState<ClientVideoSettingsResponse | null>(null)
   const [zoomDraft, setZoomDraft] = useState(100)
+  // Rascunho local do texto fixo: salvar a cada tecla dispararia uma
+  // requisicao por letra digitada.
+  const [descriptionDraft, setDescriptionDraft] = useState("")
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
   // "all" = a configuração que vale pra todos os canais. Um id = o estilo
@@ -654,6 +686,7 @@ export function ClipStyleEditorCard() {
     api.get<ClientVideoSettingsResponse>(`/api/client/video-settings${queryAlvo}`).then((data) => {
       setSettings(data)
       setZoomDraft(data.cropZoomPercent)
+      setDescriptionDraft(data.descriptionTemplate ?? "")
       setVersaoTemplate((v) => v + 1)
     })
   }, [queryAlvo])
@@ -725,10 +758,7 @@ export function ClipStyleEditorCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <IconAdjustmentsHorizontal className="size-4 text-muted-foreground" />{t("ce.titulo")}</CardTitle>
-        <CardDescription>
-          Automático usa nosso padrão (recorte central 9:16, legenda clássica, título clássico, sem numeração). Manual
-          te dá controle total sobre enquadramento, legenda, título e numeração de parte.
-        </CardDescription>
+        <CardDescription>{t("ce.descricao")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         {/* Onde este estilo se aplica. Fica no topo porque muda o significado
@@ -764,15 +794,154 @@ export function ClipStyleEditorCard() {
           </p>
         </Field>
 
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          value={settings.cropStyleMode}
-          onValueChange={(next) => next && save({ ...settings, cropStyleMode: next as "auto" | "manual" })}
-        >
-          <ToggleGroupItem value="auto" className="text-xs">{t("ce.modoAutomatico")}</ToggleGroupItem>
-          <ToggleGroupItem value="manual" className="text-xs">{t("ce.modoManual")}</ToggleGroupItem>
-        </ToggleGroup>
+        {/* ----------------------------------------------------------------
+            COMO FUNCIONAM OS CORTES
+
+            Era um cartao separado ("qualidade e estilo dos cortes"). Decidir
+            quantos cortes sair num painel e como eles aparecem noutro obrigava
+            a abrir os dois pra montar uma configuracao so - e os dois gravavam
+            a MESMA linha do banco, cada um mandando metade dos campos, o que
+            ja causou o bug de "configuracao que nao salva".
+            ---------------------------------------------------------------- */}
+        <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/20 p-4">
+          <Field>
+            <FieldLabel>{t("vs.comoEscolher")}</FieldLabel>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              value={settings.clipMode}
+              onValueChange={(next) => next && save({ ...settings, clipMode: next as never })}
+              className="flex-wrap"
+            >
+              {settings.options.clipModes.map((m) => (
+                <ToggleGroupItem key={m} value={m} className="text-xs">
+                  {CLIP_MODE_LABELS[m] ? t(CLIP_MODE_LABELS[m]) : m}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            <p className="text-xs text-muted-foreground">{t(CLIP_MODE_DESCRIPTIONS[settings.clipMode])}</p>
+          </Field>
+
+          {settings.clipMode === "full_parts" ? (
+            /* No modo de partes nao ha "quantos cortes": quantos saem depende
+               da duracao do video. O que o cliente escolhe e o tamanho medio
+               de cada parte. */
+            <Field>
+              <FieldLabel htmlFor="fullPartsMinutes">{t("vs.duracaoDeCadaParte")}</FieldLabel>
+              <Input
+                id="fullPartsMinutes"
+                type="number"
+                min={settings.options.fullPartsMinMinutes}
+                max={settings.options.fullPartsMaxMinutes}
+                className="max-w-28"
+                value={settings.fullPartsMinutes}
+                onChange={(e) => setSettings({ ...settings, fullPartsMinutes: Number(e.target.value) })}
+                /* Salva ao SAIR do campo, nao a cada tecla: digitar "10"
+                   passa por "1", e um save por tecla mandaria duas
+                   requisicoes que podem chegar fora de ordem (foi exatamente
+                   o bug dos horarios de postagem). */
+                onBlur={() => {
+                  const n = Math.round(Number(settings.fullPartsMinutes))
+                  const limitado = Math.min(
+                    settings.options.fullPartsMaxMinutes,
+                    Math.max(settings.options.fullPartsMinMinutes, Number.isFinite(n) ? n : 3)
+                  )
+                  save({ ...settings, fullPartsMinutes: limitado })
+                }}
+              />
+              <p className="text-xs text-muted-foreground">{t("vs.duracaoDeCadaParteTexto")}</p>
+            </Field>
+          ) : (
+            <>
+              {/* A quantidade vale tambem no modo "melhores partes": ali ela e
+                  o TETO de cortes que a IA pode gerar. */}
+              <Field>
+                <FieldLabel htmlFor="maxClips">{t("vs.quantidadeCortes")}</FieldLabel>
+                <Input
+                  id="maxClips"
+                  type="number"
+                  min={1}
+                  max={30}
+                  className="max-w-28"
+                  value={settings.maxClips}
+                  onChange={(e) => setSettings({ ...settings, maxClips: Number(e.target.value) })}
+                  onBlur={() => {
+                    const n = Math.round(Number(settings.maxClips))
+                    save({ ...settings, maxClips: Math.min(30, Math.max(1, Number.isFinite(n) ? n : 4)) })
+                  }}
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel>{t("vs.duracaoCadaCorte")}</FieldLabel>
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  value={settings.clipLength}
+                  onValueChange={(next) => next && save({ ...settings, clipLength: next as never })}
+                  className="flex-wrap"
+                >
+                  {settings.options.clipLengths.map((o) => (
+                    <ToggleGroupItem key={o} value={o} className="text-xs">
+                      {CLIP_LENGTH_LABELS[o] ? t(CLIP_LENGTH_LABELS[o]) : o}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </Field>
+            </>
+          )}
+
+          <Field>
+            <FieldLabel>{t("vs.descricaoDoCorte")}</FieldLabel>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              value={settings.descriptionMode}
+              onValueChange={(next) => next && save({ ...settings, descriptionMode: next as never })}
+              className="flex-wrap"
+            >
+              {settings.options.descriptionModes.map((m) => (
+                <ToggleGroupItem key={m} value={m} className="text-xs">
+                  {DESCRIPTION_MODE_LABELS[m] ? t(DESCRIPTION_MODE_LABELS[m]) : m}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </Field>
+          {settings.descriptionMode === "fixed" && (
+            <Field>
+              <FieldLabel htmlFor="descriptionTemplate">{t("vs.textoFixo")}</FieldLabel>
+              <div className="flex gap-2">
+                <Input
+                  id="descriptionTemplate"
+                  value={descriptionDraft}
+                  onChange={(e) => setDescriptionDraft(e.target.value)}
+                  placeholder={t("vs.exemploDescricao")}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={() => save({ ...settings, descriptionTemplate: descriptionDraft })}
+                >
+                  {t("comum.salvar")}
+                </Button>
+              </div>
+            </Field>
+          )}
+        </div>
+
+        <Field>
+          <FieldLabel>{t("ce.estiloVisualDoCorte")}</FieldLabel>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={settings.cropStyleMode}
+            onValueChange={(next) => next && save({ ...settings, cropStyleMode: next as "auto" | "manual" })}
+          >
+            <ToggleGroupItem value="auto" className="text-xs">{t("ce.modoAutomatico")}</ToggleGroupItem>
+            <ToggleGroupItem value="manual" className="text-xs">{t("ce.modoManual")}</ToggleGroupItem>
+          </ToggleGroup>
+        </Field>
 
         {/* Duas colunas: configurações à esquerda, prévia à direita grudada
             na tela enquanto a pessoa rola. No celular vira uma coluna só e a
@@ -1009,6 +1178,10 @@ export function ClipStyleEditorCard() {
             {settings.backgroundVideoHeightPercent >= 100 && (
               <Field>
                 <FieldLabel>{t("ce.enquadramentoArraste")}</FieldLabel>
+                {/* A moldura tem largura fixa (o vídeo original precisa caber
+                    esticado ao lado dela) e não cabe num celular: sem esta
+                    caixa, a PÁGINA INTEIRA rolava de lado. Rola só o editor. */}
+                <div className="-mx-1 overflow-x-auto px-1">
                 <CropZoomEditor
                   value={zoomDraft}
                   onChange={setZoomDraft}
@@ -1019,6 +1192,7 @@ export function ClipStyleEditorCard() {
                   modoCapa={["thumbnail", "frame"].includes(settings.backgroundStyle)}
                   capaPosition={settings.thumbnailPosition || "top"}
                 />
+                </div>
               </Field>
             )}
 
@@ -1069,7 +1243,7 @@ export function ClipStyleEditorCard() {
                     type="number"
                     min={1}
                     max={15}
-                    className="w-24"
+                    className="max-w-28"
                     value={settings.titleSeconds}
                     onChange={(e) => save({ ...settings, titleSeconds: Number(e.target.value) })}
                   />
@@ -1105,15 +1279,23 @@ export function ClipStyleEditorCard() {
               </>
             )}
 
+            {/* No modo de partes a numeracao nao e escolha: sem "Parte 1 /
+                Parte 2" as fatias chegam no TikTok sem ordem nenhuma. O
+                servidor forca o mesmo (um PUT direto nao burla), aqui a
+                caixa so fica marcada e travada, com o motivo do lado. */}
             <Field orientation="horizontal">
               <Checkbox
                 id="showPartLabel"
-                checked={settings.showPartLabel}
+                checked={settings.clipMode === "full_parts" ? true : settings.showPartLabel}
+                disabled={settings.clipMode === "full_parts"}
                 onCheckedChange={(checked) => save({ ...settings, showPartLabel: checked === true })}
               />
               <FieldLabel htmlFor="showPartLabel" className="font-normal">{t("ce.numerarCortes")}</FieldLabel>
             </Field>
-            {settings.showPartLabel && (
+            {settings.clipMode === "full_parts" && (
+              <p className="-mt-3 text-xs text-muted-foreground">{t("ce.numeracaoObrigatoria")}</p>
+            )}
+            {(settings.showPartLabel || settings.clipMode === "full_parts") && (
               <Field>
                 <FieldLabel>{t("ce.ondeMostrarNumeracao")}</FieldLabel>
                 <PartLabelPositionPicker
