@@ -6,23 +6,37 @@ const { projectQueueTimes } = require('../lib/postingSchedule');
 
 // Calcula UMA VEZ o horario previsto pra postagem que esta entrando na fila
 // agora, encaixando depois de tudo que ja saiu hoje + tudo que ja esta
-// esperando (mesma logica de projecao usada na tela, mas so pro proximo
-// slot livre). Fica gravado em postings.scheduled_for e nunca mais muda
+// esperando. Fica gravado em postings.scheduled_for e nunca mais muda
 // sozinho - ver reflowScheduledFor() pro unico jeito de recalcular todo
 // mundo de proposito (botao "Corrigir horarios").
+//
+// Projeta a fila INTEIRA (os pendentes + este novo) e fica com o ultimo
+// horario, em vez de pedir "1 slot comecando no indice N". A diferenca
+// parece cosmetica e nao e: projectQueueTimes PULA os slots que ja passaram,
+// e um slot pulado nao consome indice. Entao, num fim de tarde em que todos
+// os horarios do dia ja venceram, "1 slot a partir do indice 0", "a partir
+// do 1" e "a partir do 5" devolvem todos o MESMO primeiro horario futuro -
+// e cada corte que ficava pronto era agendado pro mesmo minuto.
+//
+// Foi exatamente isso que aconteceu em 23/08/2026: 6 cortes de um cliente
+// terminaram entre 20h24 e 21h02, todos os horarios do dia ja tinham
+// passado, e os 6 foram agendados pra 00:00. Pedindo a fila inteira de uma
+// vez, cada um cai num slot distinto - a mesma conta que reflowScheduledFor
+// (o botao "Corrigir horarios") ja fazia certo, o que explica por que
+// clicar nele consertava.
 async function computeNextScheduledFor(tiktokAccountId) {
   const settings = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(tiktokAccountId);
   const postedToday = await countTodayForAccount(tiktokAccountId, settings.timezone);
   const pendingCount = await countPendingForAccount(tiktokAccountId);
-  const [scheduledFor] = projectQueueTimes({
+  const horarios = projectQueueTimes({
     mode: settings.mode,
     manualTimes: settings.manual_times,
     videosPerDay: settings.videos_per_day,
     timezone: settings.timezone,
-    postedToday: Number(postedToday) + pendingCount,
-    count: 1,
+    postedToday: Number(postedToday),
+    count: pendingCount + 1,
   });
-  return scheduledFor;
+  return horarios[horarios.length - 1];
 }
 
 // Usa ON CONFLICT DO NOTHING: a restricao UNIQUE(video_id, tiktok_account_id)

@@ -20,9 +20,34 @@ const DIRECT_POST_INIT_URL = 'https://open.tiktokapis.com/v2/post/publish/video/
 // momento, e oferecer uma opcao que ele desativou faz a publicacao falhar.
 const CREATOR_INFO_URL = 'https://open.tiktokapis.com/v2/post/publish/creator_info/query/';
 const PUBLISH_STATUS_URL = 'https://open.tiktokapis.com/v2/post/publish/status/fetch/';
-// Teto de tamanho de chunk da Content Posting API - qualquer corte nosso (15
-// a 180s, vertical) fica bem abaixo disso, entao na pratica e sempre 1 chunk so.
+// Teto de tamanho de pedaco da Content Posting API.
+//
+// ATENCAO: passar disso NAO e caso raro. O comentario aqui dizia que "qualquer
+// corte nosso fica bem abaixo, entao na pratica e sempre 1 pedaco so" - deixou
+// de ser verdade quando o modo "cortar o video inteiro em partes" comecou a
+// gerar cortes de 3 minutos (~110 MB). Foi o que quebrou 6 postagens de um
+// cliente em 23/08/2026.
 const MAX_CHUNK_SIZE_BYTES = 64 * 1024 * 1024;
+
+// Como o arquivo e dividido pro upload. A regra da TikTok NAO e a intuitiva:
+//
+//   total_chunk_count = floor(video_size / chunk_size)
+//
+// O resto da divisao nao vira um pedaco a mais - ele e ANEXADO ao ultimo
+// pedaco (que por isso pode ser maior que chunk_size, ate 128 MB). Usar
+// Math.ceil, como estava aqui, manda um pedaco a mais do que a conta dela
+// fecha e a API recusa com "The total chunk count is invalid" - sem dizer
+// qual dos numeros esta errado.
+//
+// Arquivo que cabe num pedaco so e caso a parte: ali a TikTok quer
+// chunk_size igual ao tamanho do arquivo, nao o teto de 64 MB.
+function calcularPedacos(videoSizeBytes) {
+  if (videoSizeBytes <= MAX_CHUNK_SIZE_BYTES) {
+    return { chunkSize: videoSizeBytes, totalChunkCount: 1 };
+  }
+  const chunkSize = MAX_CHUNK_SIZE_BYTES;
+  return { chunkSize, totalChunkCount: Math.floor(videoSizeBytes / chunkSize) };
+}
 // Status que a TikTok pode devolver enquanto ainda esta processando -
 // qualquer coisa fora dessas duas listas conta como "ainda processando".
 const PUBLISH_DONE_STATUSES = ['PUBLISH_COMPLETE', 'SEND_TO_USER_INBOX'];
@@ -157,8 +182,7 @@ async function queryCreatorInfo(accessToken) {
 // criador na nossa tela (ver migration 048): a TikTok reprova app que
 // pre-seleciona privacidade ou que liga comentario/duet/juncao sozinho.
 async function initDirectPost(accessToken, videoSizeBytes, postInfo) {
-  const chunkSize = Math.min(videoSizeBytes, MAX_CHUNK_SIZE_BYTES);
-  const totalChunkCount = Math.max(1, Math.ceil(videoSizeBytes / chunkSize));
+  const { chunkSize, totalChunkCount } = calcularPedacos(videoSizeBytes);
 
   const response = await fetch(DIRECT_POST_INIT_URL, {
     method: 'POST',
@@ -199,8 +223,7 @@ async function initDirectPost(accessToken, videoSizeBytes, postInfo) {
 // pra "Direct Post" - ver migrations/006_create_postings.sql). A TikTok
 // devolve uma URL pra onde mandamos os bytes do video em seguida.
 async function initInboxVideo(accessToken, videoSizeBytes) {
-  const chunkSize = Math.min(videoSizeBytes, MAX_CHUNK_SIZE_BYTES);
-  const totalChunkCount = Math.max(1, Math.ceil(videoSizeBytes / chunkSize));
+  const { chunkSize, totalChunkCount } = calcularPedacos(videoSizeBytes);
 
   const response = await fetch(PUBLISH_INIT_URL, {
     method: 'POST',
@@ -223,13 +246,19 @@ async function initInboxVideo(accessToken, videoSizeBytes) {
 }
 
 // Envia os bytes do arquivo pra upload_url devolvida pelo init, em pedacos
-// (na pratica quase sempre 1 pedaco so, ver MAX_CHUNK_SIZE_BYTES acima).
+// (ver calcularPedacos - corte de 3 minutos passa de 64 MB e vai em varios).
 async function uploadVideoFile(uploadUrl, filePath, videoSizeBytes, chunkSize, totalChunkCount) {
   const fd = fs.openSync(filePath, 'r');
   try {
     for (let i = 0; i < totalChunkCount; i++) {
+      const ultimo = i === totalChunkCount - 1;
       const start = i * chunkSize;
-      const end = Math.min(start + chunkSize, videoSizeBytes) - 1;
+      // O ULTIMO pedaco leva todo o resto do arquivo, nao apenas chunkSize
+      // bytes: como total_chunk_count e arredondado pra baixo, os bytes que
+      // sobram da divisao pertencem a ele. Parar em start+chunkSize deixaria
+      // o fim do video pra tras e a TikTok ficaria esperando bytes que nunca
+      // chegam.
+      const end = (ultimo ? videoSizeBytes : Math.min(start + chunkSize, videoSizeBytes)) - 1;
       const length = end - start + 1;
       const buffer = Buffer.alloc(length);
       fs.readSync(fd, buffer, 0, length, start);
@@ -313,6 +342,7 @@ async function revokeAccess(accessToken) {
 }
 
 module.exports = {
+  calcularPedacos,
   queryCreatorInfo,
   revokeAccess,
   initDirectPost,
