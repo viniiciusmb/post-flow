@@ -29,43 +29,79 @@ test.after(async () => {
 const MB = 1024 * 1024;
 
 // --- 1. A conta de pedaços do upload ---
+//
+// Três regras da TikTok, e cada uma já recusou uma publicação nossa de
+// verdade. As duas primeiras foram descobertas na marra, uma depois da outra:
+// corrigir a contagem revelou a do tamanho.
 
-test('a quantidade de pedaços é arredondada pra BAIXO, como a TikTok exige', () => {
-  // O caso real: 121,4 MB. ceil daria 2 pedaços de 64 MB, e a conta da TikTok
-  // (floor) fecha em 1 — foi o "total chunk count is invalid".
-  const { chunkSize, totalChunkCount } = calcularPedacos(127315531);
-  assert.equal(totalChunkCount, Math.floor(127315531 / chunkSize));
-  assert.equal(totalChunkCount, 1);
+const MAX_CHUNK = 64 * MB;
+
+// As regras, escritas uma vez e conferidas em todo tamanho testado.
+function conferirRegras(tamanho) {
+  const { chunkSize, totalChunkCount } = calcularPedacos(tamanho);
+  const ultimo = tamanho - (totalChunkCount - 1) * chunkSize;
+  return {
+    chunkSize,
+    totalChunkCount,
+    ultimo,
+    // 1. A contagem é arredondada pra BAIXO ("The total chunk count is invalid").
+    contagemArredondadaPraBaixo: totalChunkCount === Math.floor(tamanho / chunkSize),
+    // 2. Um pedaço só exige chunk_size igual ao arquivo ("The chunk size is invalid").
+    umPedacoSoEhOArquivoInteiro: totalChunkCount > 1 || chunkSize === tamanho,
+    // 3. Pedaço entre 5 MB e 64 MB (quando há mais de um).
+    tamanhoDoPedacoNoLimite: totalChunkCount === 1 || (chunkSize >= 5 * MB && chunkSize <= MAX_CHUNK),
+    // O último pedaço leva o resto, e a TikTok aceita até 128 MB nele.
+    ultimoPedacoCabe: ultimo > 0 && ultimo <= 128 * MB,
+  };
+}
+
+const TAMANHOS = [
+  1, 3 * MB, 5 * MB, 20 * MB, MAX_CHUNK, MAX_CHUNK + 1,
+  99.5 * MB, 127315531 /* o arquivo real que foi recusado */, 128 * MB,
+  200 * MB, 500 * MB, 4000 * MB,
+].map(Math.round);
+
+test('todo tamanho de arquivo respeita as três regras da TikTok', () => {
+  for (const tamanho of TAMANHOS) {
+    const r = conferirRegras(tamanho);
+    assert.ok(r.contagemArredondadaPraBaixo, `${tamanho}: contagem não é floor(tamanho/pedaço)`);
+    assert.ok(r.umPedacoSoEhOArquivoInteiro, `${tamanho}: mandou 1 pedaço de ${r.chunkSize} pra um arquivo de ${tamanho}`);
+    assert.ok(r.tamanhoDoPedacoNoLimite, `${tamanho}: pedaço de ${r.chunkSize} fora de 5–64 MB`);
+    assert.ok(r.ultimoPedacoCabe, `${tamanho}: último pedaço de ${r.ultimo} bytes`);
+  }
 });
 
-test('arquivo que cabe num pedaço manda chunk_size igual ao tamanho dele', () => {
-  // Não o teto de 64 MB: a TikTok quer o tamanho real quando é um pedaço só.
-  for (const tamanho of [3 * MB, 20 * MB, 64 * MB]) {
+test('arquivo acima de 64 MB NUNCA vai num pedaço só', () => {
+  // A regra 2 exigiria chunk_size = tamanho do arquivo, e a regra 3 proíbe
+  // pedaço acima de 64 MB - as duas juntas tornam o pedaço único impossível.
+  // Foi exatamente o erro "The chunk size is invalid" na produção.
+  for (const tamanho of [MAX_CHUNK + 1, 99.5 * MB, 127315531, 200 * MB].map(Math.round)) {
+    assert.ok(calcularPedacos(tamanho).totalChunkCount >= 2, `${tamanho} bytes foi num pedaço só`);
+  }
+});
+
+test('arquivo que cabe em 64 MB vai inteiro num pedaço só', () => {
+  for (const tamanho of [3 * MB, 20 * MB, MAX_CHUNK].map(Math.round)) {
     const r = calcularPedacos(tamanho);
-    assert.equal(r.totalChunkCount, 1, `${tamanho} bytes devia ser 1 pedaço`);
-    assert.equal(r.chunkSize, tamanho);
+    assert.equal(r.totalChunkCount, 1);
+    assert.equal(r.chunkSize, tamanho, 'chunk_size tem que ser o tamanho do arquivo, não o teto de 64 MB');
   }
 });
 
-test('nunca manda pedaço nenhum, nem pedaço maior que o teto', () => {
-  for (const tamanho of [1, 5 * MB, 64 * MB, 65 * MB, 200 * MB, 3000 * MB]) {
+test('os pedaços cobrem o arquivo inteiro, sem sobra nem falta', () => {
+  // Se o upload parasse antes do fim, a TikTok ficaria esperando bytes que
+  // nunca chegam - e a postagem trava sem erro nenhum.
+  for (const tamanho of TAMANHOS) {
     const { chunkSize, totalChunkCount } = calcularPedacos(tamanho);
-    assert.ok(totalChunkCount >= 1, `${tamanho} gerou ${totalChunkCount} pedaços`);
-    assert.ok(chunkSize <= 64 * MB, `${tamanho} pediu pedaço de ${chunkSize} bytes`);
-  }
-});
-
-test('o último pedaço leva o resto e o arquivo inteiro é coberto', () => {
-  // A regra que faz o floor funcionar: o resto da divisão não vira um pedaço
-  // extra, ele é anexado ao último. Se o upload parasse em chunkSize, o fim do
-  // vídeo nunca subiria e a TikTok ficaria esperando pra sempre.
-  for (const tamanho of [127315531, 65 * MB, 200 * MB, 129 * MB]) {
-    const { chunkSize, totalChunkCount } = calcularPedacos(tamanho);
-    const inicioDoUltimo = (totalChunkCount - 1) * chunkSize;
-    const ultimoPedaco = tamanho - inicioDoUltimo;
-    assert.ok(ultimoPedaco > 0, `${tamanho}: último pedaço ficou vazio`);
-    // A TikTok aceita último pedaço maior que chunk_size, mas não acima de 128 MB.
-    assert.ok(ultimoPedaco <= 128 * MB, `${tamanho}: último pedaço de ${ultimoPedaco} bytes passa de 128 MB`);
+    let enviado = 0;
+    for (let i = 0; i < totalChunkCount; i++) {
+      const ultimo = i === totalChunkCount - 1;
+      const inicio = i * chunkSize;
+      const fim = ultimo ? tamanho : Math.min(inicio + chunkSize, tamanho);
+      assert.equal(inicio, enviado, `${tamanho}: pedaço ${i + 1} não começa onde o anterior terminou`);
+      enviado = fim;
+    }
+    assert.equal(enviado, tamanho, `${tamanho}: o upload terminaria em ${enviado}`);
   }
 });
 

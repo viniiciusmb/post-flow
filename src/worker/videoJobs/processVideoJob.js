@@ -84,6 +84,48 @@ function fatiarEmPartes(duracaoSegundos, opcoes, titulo) {
   }));
 }
 
+// Pede pro Claude um titulo e uma legenda pra CADA parte, no idioma falado no
+// video.
+//
+// Sem isso, todas as partes herdavam o titulo do video do YouTube: identico em
+// todas (o "Parte N" era a unica diferenca) e no idioma em que o canal
+// titulou. Em 23/08/2026 um video falado em portugues gerou 8 cortes com o
+// mesmo titulo em ingles queimado na tela.
+//
+// Nunca derruba o video: titulo e acabamento, e o corte em si continua bom sem
+// ele. Falhou a chamada, veio menos item do que parte, ou veio titulo vazio ->
+// aquela parte fica com o titulo do video, que e o comportamento antigo.
+async function titularAsPartes(partes, transcript, sourceVideo) {
+  try {
+    const resultado = await claudeClipSelectionService.titleParts(transcript.words, partes, {
+      language: transcript.language,
+    });
+    await sourceVideosRepository.saveClaudeUsage(sourceVideo.id, {
+      inputTokens: resultado.inputTokens,
+      outputTokens: resultado.outputTokens,
+      costUsd: resultado.costUsd,
+    });
+
+    // A IA devolve "index" comecando em 1, mas nao da pra confiar na ordem
+    // nem na quantidade - por isso indexamos em vez de casar por posicao.
+    const porIndice = new Map(resultado.parts.map((p) => [Number(p.index), p]));
+    return partes.map((parte, i) => {
+      const doClaude = porIndice.get(i + 1);
+      const titulo = String(doClaude?.title || '').trim();
+      return {
+        ...parte,
+        title: titulo || parte.title,
+        description: String(doClaude?.description || '').trim() || null,
+      };
+    });
+  } catch (err) {
+    logger.warn(
+      `Video-fonte ${sourceVideo.id}: nao consegui titular as partes com a IA (${err.message}) - usando o titulo do video em todas.`
+    );
+    return partes;
+  }
+}
+
 // Baixa a capa do video pro disco, pro estilo "thumbnail como template".
 //
 // Nunca derruba o corte: sem capa (video enviado do computador costuma nao
@@ -449,8 +491,9 @@ async function run(sourceVideoId) {
 
       let selected;
       if (settings.clip_mode === 'full_parts') {
-        // Video inteiro fatiado em partes sequenciais - sem IA escolhendo
-        // trecho, sem custo de Claude.
+        // Video inteiro fatiado em partes sequenciais. A IA nao escolhe
+        // TRECHO aqui (as fronteiras saem da conta de duracao), mas escreve o
+        // titulo e a legenda de cada parte.
         selected = fatiarEmPartes(
           Number(transcript.durationSeconds) || Number(sourceVideo.duration_seconds) || 0,
           {
@@ -460,6 +503,7 @@ async function run(sourceVideoId) {
           },
           sourceVideo.title
         );
+        selected = await titularAsPartes(selected, transcript, sourceVideo);
       } else {
         // 'fixed_count': exatamente settings.max_clips.
         //
@@ -752,6 +796,6 @@ async function run(sourceVideoId) {
   }
 }
 
-// fatiarEmPartes sai daqui so pros testes: e a unica peca do job que da pra
-// exercitar sem baixar video, transcrever e chamar ffmpeg.
-module.exports = { run, fatiarEmPartes };
+// fatiarEmPartes e titularAsPartes saem daqui so pros testes: sao as pecas do
+// job que dao pra exercitar sem baixar video, transcrever e chamar ffmpeg.
+module.exports = { run, fatiarEmPartes, titularAsPartes };

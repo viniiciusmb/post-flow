@@ -155,4 +155,96 @@ ${instrucaoDeIdioma(language)}`;
   };
 }
 
-module.exports = { selectClips, formatTranscriptForPrompt };
+// Titulos pras partes do modo "cortar o video inteiro em partes".
+//
+// Ali a IA nao escolhe TRECHO (as fronteiras vem da conta de duracao), mas
+// continua sendo ela quem escreve o titulo: sem isso, as 8 partes saiam todas
+// com o titulo do video do YouTube - identico em todas e no idioma em que o
+// canal titulou, que nem sempre e o idioma falado. Foi o que aconteceu em
+// 23/08/2026: 8 cortes de um video falado em portugues sairam com o mesmo
+// titulo em ingles queimado na tela.
+const TITLE_PARTS_TOOL = {
+  name: 'title_parts',
+  description: 'Registra um titulo e uma legenda para cada parte do video.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      parts: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            index: { type: 'number', description: 'Numero da parte, comecando em 1.' },
+            title: { type: 'string', description: 'Titulo curto e chamativo pra ESTA parte, estilo TikTok, NO MESMO IDIOMA falado no video.' },
+            description: { type: 'string', description: 'Legenda curta pra postagem (1-2 frases) com 2-4 hashtags, NO MESMO IDIOMA falado no video.' },
+          },
+          required: ['index', 'title', 'description'],
+        },
+      },
+    },
+    required: ['parts'],
+  },
+};
+
+async function titleParts(transcriptWords, partes, { language = null } = {}) {
+  const transcript = formatTranscriptForPrompt(transcriptWords);
+  if (!transcript) throw new Error('Transcrição vazia. Não há o que analisar.');
+
+  const listaDePartes = partes
+    .map((p, i) => `Parte ${i + 1}: de ${formatTimestamp(p.startSeconds)} ate ${formatTimestamp(p.endSeconds)}`)
+    .join('\n');
+
+  const prompt = `Aqui esta a transcricao de um video, com marcacoes de tempo a cada poucos segundos:
+
+${transcript}
+
+Esse video foi dividido em ${partes.length} partes seguidas, que juntas cobrem o video inteiro:
+
+${listaDePartes}
+
+Escreva um titulo curto e chamativo e uma legenda pronta pra postar (com hashtags) para CADA uma dessas ${partes.length} partes, olhando o que e falado dentro do intervalo de tempo daquela parte especifica.
+
+Regras:
+- Cada parte precisa de um titulo DIFERENTE das outras, sobre o que acontece nela. Nunca repita o mesmo titulo em duas partes.
+- Nao escreva "Parte 1", "Parte 2" nem numero nenhum no titulo: a numeracao ja e colocada separadamente pelo sistema.
+- Titulo curto, no maximo 60 caracteres.
+- Devolva exatamente ${partes.length} itens, com index de 1 a ${partes.length}.
+
+${instrucaoDeIdioma(language)}`;
+
+  const response = await fetch(MESSAGES_URL, {
+    method: 'POST',
+    headers: {
+      'x-api-key': config.anthropic.apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 4096,
+      tools: [TITLE_PARTS_TOOL],
+      tool_choice: { type: 'tool', name: 'title_parts' },
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(`Falha ao titular as partes (Claude): ${data.error?.message || response.statusText}`);
+  }
+  const toolUse = data.content.find((block) => block.type === 'tool_use');
+  if (!toolUse || !Array.isArray(toolUse.input.parts)) {
+    throw new Error('Claude não retornou títulos válidos para as partes.');
+  }
+
+  const inputTokens = data.usage?.input_tokens || 0;
+  const outputTokens = data.usage?.output_tokens || 0;
+  return {
+    parts: toolUse.input.parts,
+    inputTokens,
+    outputTokens,
+    costUsd: claudeCostUsd(inputTokens, outputTokens),
+  };
+}
+
+module.exports = { selectClips, titleParts, formatTranscriptForPrompt };

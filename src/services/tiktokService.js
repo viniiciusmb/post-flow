@@ -29,23 +29,37 @@ const PUBLISH_STATUS_URL = 'https://open.tiktokapis.com/v2/post/publish/status/f
 // cliente em 23/08/2026.
 const MAX_CHUNK_SIZE_BYTES = 64 * 1024 * 1024;
 
-// Como o arquivo e dividido pro upload. A regra da TikTok NAO e a intuitiva:
+// Como o arquivo e dividido pro upload. Sao TRES regras da TikTok, e cada
+// uma delas ja recusou uma publicacao nossa em producao (23/08/2026):
 //
-//   total_chunk_count = floor(video_size / chunk_size)
+//   1. total_chunk_count = floor(video_size / chunk_size). O resto da divisao
+//      NAO vira um pedaco a mais - ele e anexado ao ultimo pedaco, que por
+//      isso pode passar de chunk_size (ate 128 MB). Usar Math.ceil manda um
+//      pedaco a mais e a API recusa: "The total chunk count is invalid".
 //
-// O resto da divisao nao vira um pedaco a mais - ele e ANEXADO ao ultimo
-// pedaco (que por isso pode ser maior que chunk_size, ate 128 MB). Usar
-// Math.ceil, como estava aqui, manda um pedaco a mais do que a conta dela
-// fecha e a API recusa com "The total chunk count is invalid" - sem dizer
-// qual dos numeros esta errado.
+//   2. Um pedaco so exige chunk_size IGUAL ao tamanho do arquivo. Mandar
+//      chunk_size=64 MB com total_chunk_count=1 pra um arquivo de 121 MB
+//      passa na regra 1 (floor(121/64) = 1) mas e recusado com "The chunk
+//      size is invalid" - foi o segundo erro, depois de corrigir o primeiro.
 //
-// Arquivo que cabe num pedaco so e caso a parte: ali a TikTok quer
-// chunk_size igual ao tamanho do arquivo, nao o teto de 64 MB.
+//   3. chunk_size vai de 5 MB a 64 MB.
+//
+// Juntando as tres: arquivo acima de 64 MB NUNCA pode ir num pedaco so (a
+// regra 2 exigiria chunk_size maior que o teto da regra 3), entao ele vai em
+// dois ou mais - e por isso limitamos o pedaco a metade do arquivo.
+const MIN_CHUNK_SIZE_BYTES = 5 * 1024 * 1024;
+
 function calcularPedacos(videoSizeBytes) {
   if (videoSizeBytes <= MAX_CHUNK_SIZE_BYTES) {
     return { chunkSize: videoSizeBytes, totalChunkCount: 1 };
   }
-  const chunkSize = MAX_CHUNK_SIZE_BYTES;
+  // Metade do arquivo garante pelo menos 2 pedacos; o teto de 64 MB continua
+  // valendo pros arquivos grandes. Acima de 64 MB, metade ja passa de 32 MB,
+  // entao o minimo de 5 MB nunca fica em risco por essa conta.
+  const chunkSize = Math.max(
+    MIN_CHUNK_SIZE_BYTES,
+    Math.min(MAX_CHUNK_SIZE_BYTES, Math.floor(videoSizeBytes / 2))
+  );
   return { chunkSize, totalChunkCount: Math.floor(videoSizeBytes / chunkSize) };
 }
 // Status que a TikTok pode devolver enquanto ainda esta processando -
