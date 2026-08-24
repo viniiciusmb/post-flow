@@ -6,7 +6,8 @@ export interface SessionUser {
   role: UserRole
 }
 
-export type DateRangeKey = "today" | "yesterday" | "last7days" | "this_month" | "last_month"
+/** "all" = desde sempre; "custom" = intervalo escolhido à mão (manda since/until). */
+export type DateRangeKey = "today" | "yesterday" | "last7days" | "this_month" | "last_month" | "all" | "custom"
 
 export interface RangeInfo {
   key: DateRangeKey
@@ -85,6 +86,13 @@ export interface AdminClient {
   tiktokConnected: boolean
   tiktokDisplayName: string | null
   origin: ClientOrigin | null
+  tiktokAccountCount: number
+  /** Plano da assinatura ativa, ou "Free" quando não há nenhuma. */
+  plano: { chave: string; nome: string; status: string }
+  /** Custo que este cliente gerou no período: Whisper + IA + banda de proxy pago. */
+  custoUsd: number
+  /** Cortes publicados no TikTok para este cliente no período. */
+  clipsPosted: number
 }
 
 export interface AdminClientsResponse {
@@ -789,3 +797,6 @@ export interface OnboardingStatus {
   contasTiktok: number
   canais: number
 }
+
+/** Ordenação da lista de clientes do admin. */
+export type OrdemDeCliente = "recentes" | "antigos" | "maior_custo"

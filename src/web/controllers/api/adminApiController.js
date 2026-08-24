@@ -9,6 +9,7 @@ const referralsRepository = require('../../../repositories/referralsRepository')
 const { ROLES } = require('../../../config/constants');
 const tiktokCapacityService = require('../../../services/tiktokCapacityService');
 const { resolveRange } = require('../../../lib/dateRanges');
+const settingsRepository = require('../../../repositories/settingsRepository');
 
 async function dashboard(req, res) {
   const { range, since, until } = resolveRange(req.query.range);
@@ -75,9 +76,20 @@ async function postings(req, res) {
   });
 }
 
+const ORDENS_DE_CLIENTE = ['recentes', 'antigos', 'maior_custo'];
+
 async function clients(req, res) {
+  const { range, since, until } = resolveRange(req.query.range, {
+    since: req.query.since,
+    until: req.query.until,
+  });
+  const ordem = ORDENS_DE_CLIENTE.includes(req.query.ordem) ? req.query.ordem : 'recentes';
+  // Mesmo preco de banda usado no painel de processamento: uma fonte so, senao
+  // duas telas mostram custos diferentes pro mesmo download.
+  const precoPorGb = Number(await settingsRepository.getValue('custo_banda_por_gb_usd', 0)) || 0;
+
   const [rows, origins] = await Promise.all([
-    usersRepository.listClientsWithStats(),
+    usersRepository.listClientsWithStats({ since, until, precoPorGb, ordem }),
     referralsRepository.originByUser(),
   ]);
   // Por usuario: nome/e-mail de quem indicou, ou a UTM de campanha, ou nulo
@@ -85,6 +97,8 @@ async function clients(req, res) {
   const originByUserId = new Map(origins.map((o) => [o.referred_user_id, o]));
 
   res.json({
+    range: { key: range, since, until },
+    ordem,
     clients: rows.map((c) => {
       const origin = originByUserId.get(c.id);
       return {
@@ -96,6 +110,16 @@ async function clients(req, res) {
         channelCount: c.channel_count,
         tiktokConnected: Boolean(c.tiktok_display_name),
         tiktokDisplayName: c.tiktok_display_name,
+        tiktokAccountCount: c.tiktok_account_count,
+        // Sem assinatura ativa o cliente aparece como "Free" - e o que ele de
+        // fato tem, e deixar em branco faria parecer dado faltando.
+        plano: {
+          chave: c.subscription_status === 'ativo' && c.plan_key ? c.plan_key : 'free',
+          nome: c.subscription_status === 'ativo' && c.plan_name ? c.plan_name : 'Free',
+          status: c.subscription_status || 'sem_plano',
+        },
+        custoUsd: Number(c.custo_usd || 0),
+        clipsPosted: c.clips_posted,
         origin: origin
           ? {
               referrerName: origin.referrer_email

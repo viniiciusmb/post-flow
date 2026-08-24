@@ -245,6 +245,16 @@ Duas lições: (1) `tsc` NÃO pega ordem de hooks — build passando não signif
 - Padrão `'duration'` de propósito: é o comportamento que já existia, e quem já configurou não pode ver o resultado mudar sozinho.
 - 417 testes (eram 407). Validado por mutação: fazer o modo `'count'` cair no caminho da duração quebra 3 testes.
 
+**Tela "Clientes" do admin: plano, custo e cortes postados (2026-08-24).** Antes só listava nome, canais e origem — não dava pra saber quanto cada cliente custa nem em que plano ele está.
+
+- **Plano na coluna Status**, com **"Free"** quando não há assinatura ativa (em branco pareceria dado faltando). Inadimplente ganha etiqueta própria.
+- **Custo gerado no período** = Whisper + IA + banda, seguindo a MESMA regra do painel de processamento: só vira dinheiro o que saiu por **proxy pago**. Túnel e reaproveitamento não custam por GB — a banda já está paga na conta de internet, e cobrar aqui inventaria custo que não existe. Preço do GB vem de `settings.custo_banda_por_gb_usd`, uma fonte só.
+- **Cada número por período sai de uma SUBCONSULTA**, nunca de mais um JOIN somado: juntar vídeos e postagens na mesma consulta multiplica as linhas uma pela outra (fan-out) e o custo apareceria inflado pelo número de postagens. Travado por teste com 3 vídeos × 4 postagens.
+- **Bug pré-existente corrigido de passagem**: a consulta antiga fazia `LEFT JOIN tiktok_accounts` com `GROUP BY u.id, ta.display_name` — cliente com 3 contas do TikTok aparecia **3 vezes** na lista. Agora o nome vem de subconsulta com `LIMIT 1`. Travado por teste.
+- **Filtros**: período (hoje/ontem/7 dias/este mês/mês passado/**máximo**/**personalizado**) e ordenação (mais recentes/mais antigos/**maior custo**). `resolveRange` ganhou as chaves `all` e `custom`; custom com data inválida ou intervalo invertido cai no padrão em vez de derromper a tela. `DateRangeFilter` ganhou prop `extras` — "máximo" e "personalizado" só aparecem onde fazem sentido (relatório de custo), não em todo dashboard.
+- **Colunas reordenadas**: plano, custo e postados logo depois do nome. Numa tabela larga a última coluna fica fora da tela até alguém rolar de lado, e era justamente onde o Status estava.
+- 473 testes (eram 464). Duas mutações validadas: reintroduzir o JOIN duplicador e fazer túnel custar dinheiro derrubam testes diferentes.
+
 **Tour guiado por cima da tela real (2026-08-24).** O menu Tutorial era documentação; o fundador queria outra coisa: caixas que apontam os controles DE VERDADE, com "Próximo", "como se fosse alguém guiando". 11 passos que atravessam 4 telas.
 
 - **Atravessa páginas.** Cada tela do painel é uma entrada separada do Vite (MPA, sem react-router), então avançar de Cortes para Canais é navegação de verdade. O passo atual vive no `localStorage` e o `GuidedTour` é montado no **`DashboardLayout`** — se estivesse numa página só, sumiria no primeiro "Próximo" e nunca retomaria.

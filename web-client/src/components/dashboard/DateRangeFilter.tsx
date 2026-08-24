@@ -12,14 +12,29 @@ const OPTIONS: { key: DateRangeKey; label: ChaveDeTraducao }[] = [
   { key: "last_month", label: "periodo.mesPassado" },
 ]
 
+// Opções que só algumas telas querem. "Máximo" e "Personalizado" fazem
+// sentido num relatório de custo por cliente, e não num painel de "como foi
+// meu dia" - por isso entram por escolha de quem usa o componente, em vez de
+// aparecerem em todos os dashboards de uma vez.
+const EXTRAS: Record<string, ChaveDeTraducao> = {
+  all: "periodo.maximo",
+  custom: "periodo.personalizado",
+}
+
 export function DateRangeFilter({
   value,
   onChange,
+  extras = [],
 }: {
   value: DateRangeKey
   onChange: (range: DateRangeKey) => void
+  extras?: DateRangeKey[]
 }) {
   const t = useT()
+  const opcoes = [
+    ...OPTIONS,
+    ...extras.filter((k) => EXTRAS[k]).map((k) => ({ key: k, label: EXTRAS[k] })),
+  ]
   return (
     // No celular os 5 botões não cabem numa linha. Deixar quebrar linha ficava
     // feio de um jeito específico: este controle junta as bordas dos vizinhos
@@ -35,7 +50,7 @@ export function DateRangeFilter({
         onValueChange={(next) => next && onChange(next as DateRangeKey)}
         className="w-max flex-nowrap"
       >
-        {OPTIONS.map((o) => (
+        {opcoes.map((o) => (
           <ToggleGroupItem key={o.key} value={o.key} className="shrink-0 text-xs">
             {t(o.label)}
           </ToggleGroupItem>

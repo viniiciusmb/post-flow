@@ -88,17 +88,67 @@ async function touchLastActive(id) {
 
 // Lista clientes com contagem de canais e status da conta TikTok - usada na
 // tela admin "Clientes".
-async function listClientsWithStats() {
+// Lista da tela "Clientes" do admin, com plano, custo gerado e cortes
+// postados no periodo escolhido.
+//
+// Cada numero por periodo sai de uma SUBCONSULTA, e nao de mais um LEFT JOIN
+// somado: juntar videos e postagens na mesma consulta multiplicaria as linhas
+// uma pela outra e o custo apareceria inflado pelo numero de postagens (e
+// vice-versa). Classico erro de "fan-out" em relatorio.
+//
+// A conta de banda repete a regra que ja vale no painel de processamento: so
+// vira dinheiro o que saiu por PROXY PAGO. Tunel (do cliente ou do fundador) e
+// reaproveitamento nao custam nada por GB - a banda ja esta paga na conta de
+// internet, e cobrar aqui inventaria um custo que nao existe.
+const ORDENS = {
+  recentes: 'u.created_at DESC',
+  antigos: 'u.created_at ASC',
+  maior_custo: 'custo_usd DESC, u.created_at DESC',
+};
+
+async function listClientsWithStats({ since, until, precoPorGb = 0, ordem = 'recentes' } = {}) {
+  const orderBy = ORDENS[ordem] || ORDENS.recentes;
+  // Sem periodo (chamada antiga), pega tudo - assim quem ja usava esta funcao
+  // continua vendo o total, e nao um zero silencioso.
+  const de = since || new Date('2020-01-01T00:00:00.000Z');
+  const ate = until || new Date();
+
   const { rows } = await pool.query(
     `SELECT u.*,
-            count(DISTINCT yc.id)::int AS channel_count,
-            ta.display_name AS tiktok_display_name
+            (SELECT count(*)::int FROM youtube_channels yc WHERE yc.client_user_id = u.id) AS channel_count,
+            -- Nome da PRIMEIRA conta ativa. Antes isto era um LEFT JOIN com
+            -- GROUP BY no display_name, o que repetia o cliente uma vez por
+            -- conta do TikTok - quem tinha 3 contas aparecia 3 vezes na lista.
+            (SELECT ta.display_name FROM tiktok_accounts ta
+              WHERE ta.client_user_id = u.id AND ta.is_active = true
+              ORDER BY ta.id LIMIT 1) AS tiktok_display_name,
+            (SELECT count(*)::int FROM tiktok_accounts ta
+              WHERE ta.client_user_id = u.id AND ta.is_active = true) AS tiktok_account_count,
+            sp.key AS plan_key,
+            sp.name AS plan_name,
+            cs.status AS subscription_status,
+            (SELECT coalesce(sum(
+                      coalesce(sv.whisper_cost_usd, 0)
+                      + coalesce(sv.claude_cost_usd, 0)
+                      + CASE WHEN sv.download_egress_type = 'proxy'
+                             THEN (coalesce(sv.download_bytes, 0) / 1073741824.0) * $3
+                             ELSE 0 END
+                    ), 0)
+               FROM source_videos sv
+              WHERE sv.owner_client_user_id = u.id
+                AND sv.created_at >= $1 AND sv.created_at <= $2) AS custo_usd,
+            (SELECT count(*)::int
+               FROM postings p
+               JOIN tiktok_accounts ta2 ON ta2.id = p.tiktok_account_id
+              WHERE ta2.client_user_id = u.id
+                AND p.status = 'posted'
+                AND p.posted_at >= $1 AND p.posted_at <= $2) AS clips_posted
      FROM users u
-     LEFT JOIN youtube_channels yc ON yc.client_user_id = u.id
-     LEFT JOIN tiktok_accounts ta ON ta.client_user_id = u.id AND ta.is_active = true
+     LEFT JOIN client_subscriptions cs ON cs.client_user_id = u.id
+     LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
      WHERE u.role = 'client'
-     GROUP BY u.id, ta.display_name
-     ORDER BY u.created_at DESC`
+     ORDER BY ${orderBy}`,
+    [de, ate, precoPorGb]
   );
   return rows;
 }

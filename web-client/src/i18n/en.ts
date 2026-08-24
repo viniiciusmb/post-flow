@@ -992,4 +992,12 @@ export const en: Dicionario = {
   "tour.terminar": "Finish",
   "tour.sair": "Exit tour",
   "tour.passoDe": "Step {atual} of {total}",
+  "periodo.maximo": "All time",
+  "periodo.personalizado": "Custom",
+  "comum.ate": "to",
+  "adm.custoNoPeriodo": "Cost period",
+  "adm.custoGerado": "Cost generated",
+  "adm.ordemRecentes": "Newest first",
+  "adm.ordemAntigos": "Oldest first",
+  "adm.ordemMaiorCusto": "Highest cost",
 }

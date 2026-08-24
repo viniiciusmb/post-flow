@@ -998,4 +998,12 @@ export const pt = {
   "tour.terminar": "Terminar",
   "tour.sair": "Sair do tour",
   "tour.passoDe": "Passo {atual} de {total}",
+  "periodo.maximo": "Máximo",
+  "periodo.personalizado": "Personalizado",
+  "comum.ate": "até",
+  "adm.custoNoPeriodo": "Período do custo",
+  "adm.custoGerado": "Custo gerado",
+  "adm.ordemRecentes": "Mais recentes",
+  "adm.ordemAntigos": "Mais antigos",
+  "adm.ordemMaiorCusto": "Maior custo",
 } as const
