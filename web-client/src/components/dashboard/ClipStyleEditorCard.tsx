@@ -807,7 +807,7 @@ export function ClipStyleEditorCard() {
             a MESMA linha do banco, cada um mandando metade dos campos, o que
             ja causou o bug de "configuracao que nao salva".
             ---------------------------------------------------------------- */}
-        <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/20 p-4">
+        <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/20 p-4" data-tour="como-funcionam-cortes">
           <Field>
             <FieldLabel>{t("vs.comoEscolher")}</FieldLabel>
             <ToggleGroup
@@ -983,7 +983,7 @@ export function ClipStyleEditorCard() {
           )}
         </div>
 
-        <Field>
+        <Field data-tour="estilo-visual">
           <FieldLabel>{t("ce.estiloVisualDoCorte")}</FieldLabel>
           <ToggleGroup
             type="single"

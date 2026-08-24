@@ -992,4 +992,10 @@ export const pt = {
   "canais.conectarAgora": "Conectar conta do TikTok",
   "canais.soQueroDrive": "Só quero salvar no Drive",
   "guia.previa": "Prévia",
+  "tour.fazerTour": "Fazer o tour guiado",
+  "tour.proximo": "Próximo",
+  "tour.anterior": "Voltar",
+  "tour.terminar": "Terminar",
+  "tour.sair": "Sair do tour",
+  "tour.passoDe": "Passo {atual} de {total}",
 } as const

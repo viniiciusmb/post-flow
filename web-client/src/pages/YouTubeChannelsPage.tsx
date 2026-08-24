@@ -499,12 +499,13 @@ export function YouTubeChannelsPage() {
                 <div className="flex gap-2">
                   <Input
                     id="channelUrl"
+                    data-tour="canal-endereco"
                     placeholder="https://www.youtube.com/@seucanal"
                     value={channelUrl}
                     onChange={(e) => setChannelUrl(e.target.value)}
                     required
                   />
-                  <Button type="submit" disabled={submitting}>
+                  <Button type="submit" disabled={submitting} data-tour="canal-adicionar">
                     {submitting ? t("canais.adicionando") : t("canais.adicionar")}
                   </Button>
                 </div>

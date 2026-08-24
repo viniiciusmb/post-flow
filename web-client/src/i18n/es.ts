@@ -986,4 +986,10 @@ export const es: Dicionario = {
   "canais.conectarAgora": "Conectar cuenta de TikTok",
   "canais.soQueroDrive": "Solo quiero guardar en Drive",
   "guia.previa": "Vista previa",
+  "tour.fazerTour": "Hacer el tour guiado",
+  "tour.proximo": "Siguiente",
+  "tour.anterior": "Atrás",
+  "tour.terminar": "Terminar",
+  "tour.sair": "Salir del tour",
+  "tour.passoDe": "Paso {atual} de {total}",
 }

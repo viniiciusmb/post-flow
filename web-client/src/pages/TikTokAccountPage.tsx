@@ -1446,7 +1446,7 @@ export function TikTokAccountPage() {
             </p>
           )}
         </div>
-        <Button asChild size="sm" className="shrink-0">
+        <Button asChild size="sm" className="shrink-0" data-tour="conectar-tiktok">
           <a href="/auth/tiktok/connect?from=/client/tiktok-account">
             <IconPlus className="size-4" />
             {t("pub.conectarPalavra")} {accounts && accounts.length > 0 ? t("pub.outraConta") : t("pub.contaTikTokMinusculo")}

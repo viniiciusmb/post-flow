@@ -986,4 +986,10 @@ export const en: Dicionario = {
   "canais.conectarAgora": "Connect TikTok account",
   "canais.soQueroDrive": "I only want to save to Drive",
   "guia.previa": "Preview",
+  "tour.fazerTour": "Take the guided tour",
+  "tour.proximo": "Next",
+  "tour.anterior": "Back",
+  "tour.terminar": "Finish",
+  "tour.sair": "Exit tour",
+  "tour.passoDe": "Step {atual} of {total}",
 }

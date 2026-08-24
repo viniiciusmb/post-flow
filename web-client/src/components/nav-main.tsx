@@ -19,7 +19,7 @@ function NavGroup({ label, items }: { label?: string; items: NavItem[] }) {
   const currentPath = window.location.pathname
 
   return (
-    <SidebarGroup>
+    <SidebarGroup data-tour="menu-lateral">
       {label && (
         <SidebarGroupLabel className="text-[0.6875rem] font-semibold uppercase tracking-[0.07em] text-muted-foreground/70">
           {label}

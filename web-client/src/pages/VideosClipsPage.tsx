@@ -859,7 +859,7 @@ export function VideosClipsPage() {
           <IconUpload className="size-4" />
           {showUpload ? t("cortes.ocultarEnvioArquivo") : t("cortes.enviarVideoPorArquivo")}
         </Button>
-        <Button variant="outline" size="sm" onClick={() => setShowStyleEditor((v) => !v)} className="gap-2">
+        <Button variant="outline" size="sm" onClick={() => setShowStyleEditor((v) => !v)} className="gap-2" data-tour="abrir-config-cortes">
           <IconAdjustmentsHorizontal className="size-4" />
           {showStyleEditor ? t("cortes.ocultarConfigCorte") : t("cortes.configurarCortes")}
         </Button>

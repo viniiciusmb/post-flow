@@ -3,6 +3,9 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader, SectionLabel } from "@/components/dashboard/PageHeader"
 import { TikTokConnectionCard } from "@/components/dashboard/TikTokConnectionCard"
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist"
+import { iniciarTour } from "@/components/tour/GuidedTour"
+import { Button } from "@/components/ui/button"
+import { IconRoute } from "@tabler/icons-react"
 import { PostingsTable, type PostingRow } from "@/components/dashboard/PostingsTable"
 import { StatRow, Stat } from "@/components/dashboard/StatRow"
 import { UsageCard } from "@/components/dashboard/UsageCard"
@@ -50,10 +53,16 @@ export function ClientDashboardPage() {
     })) ?? []
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title={t("inicio.titulo")}>
+    <DashboardLayout user={user} onLogout={logout} title={t("inicio.titulo")} autoIniciarTour>
       <PageHeader
         title={t("inicio.titulo")}
         description={t("inicio.descricao")}
+        action={
+          <Button variant="outline" size="sm" onClick={() => iniciarTour(true)} className="gap-1.5">
+            <IconRoute className="size-4" />
+            {t("tour.fazerTour")}
+          </Button>
+        }
       />
       {flash.tiktokConnected && (
         <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">

@@ -15,6 +15,7 @@ import {
   IconAlertTriangle,
   IconMapPin,
   IconBook,
+  IconRoute,
 } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
@@ -24,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/hooks/useAuth"
 import { api } from "@/lib/api"
 import { useI18n, useT } from "@/i18n"
+import { iniciarTour } from "@/components/tour/GuidedTour"
 import { TUTORIAL, type Bloco, type Passo, type TelaKey } from "@/content/tutorial"
 import type { OnboardingStatus } from "@/types/api"
 import {
@@ -181,7 +183,16 @@ export function TutorialPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title={t("menu.tutorial")}>
-      <PageHeader title={t("tut.titulo")} description={conteudo.intro} />
+      <PageHeader
+        title={t("tut.titulo")}
+        description={conteudo.intro}
+        action={
+          <Button onClick={() => iniciarTour(true)} className="gap-1.5">
+            <IconRoute className="size-4" />
+            {t("tour.fazerTour")}
+          </Button>
+        }
+      />
 
       {/* Índice + progresso. Numa página longa, sem um índice a pessoa não
           sabe quanto falta nem consegue voltar a um trecho específico. */}

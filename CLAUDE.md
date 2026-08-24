@@ -245,6 +245,16 @@ Duas lições: (1) `tsc` NÃO pega ordem de hooks — build passando não signif
 - Padrão `'duration'` de propósito: é o comportamento que já existia, e quem já configurou não pode ver o resultado mudar sozinho.
 - 417 testes (eram 407). Validado por mutação: fazer o modo `'count'` cair no caminho da duração quebra 3 testes.
 
+**Tour guiado por cima da tela real (2026-08-24).** O menu Tutorial era documentação; o fundador queria outra coisa: caixas que apontam os controles DE VERDADE, com "Próximo", "como se fosse alguém guiando". 11 passos que atravessam 4 telas.
+
+- **Atravessa páginas.** Cada tela do painel é uma entrada separada do Vite (MPA, sem react-router), então avançar de Cortes para Canais é navegação de verdade. O passo atual vive no `localStorage` e o `GuidedTour` é montado no **`DashboardLayout`** — se estivesse numa página só, sumiria no primeiro "Próximo" e nunca retomaria.
+- **Alvos por `data-tour="..."`**, nunca por classe do Tailwind: classe de estilo muda no primeiro ajuste visual e o tour passaria a apontar pro nada **sem quebrar nada visível** — a caixa só apareceria centralizada. É a falha mais silenciosa de um tour, e `tests/web/tourGuiado.test.js` a pega (validado por mutação: renomear um marcador na tela derruba o teste).
+- **Passo com `abrir:`** clica num botão antes de medir (usado pra abrir o painel de configuração de corte), e só clica se o conteúdo ainda não estiver na tela — senão fecharia o painel já aberto.
+- **Alvo ausente não trava o tour**: cai numa caixa centralizada. É o que acontece com o menu lateral no celular (fica escondido atrás do botão de sanduíche) e com controles que só existem depois de configurar algo.
+- Escurecimento com `box-shadow: 0 0 0 9999px` em volta do alvo — o controle real continua nítido, sem duplicar nada na tela. Feito à mão em vez de biblioteca de tour: o recurso é medir um elemento e posicionar uma caixa; a dependência traria tema próprio pra brigar com o nosso.
+- Abre sozinho **uma vez** na primeira visita (`postflow-tour-visto`); depois só pelos botões "Fazer o tour guiado" (tela inicial, checklist e página Tutorial). Setas do teclado e Esc funcionam.
+- Percorrido de ponta a ponta com Playwright em 1280px e 390px: 11 passos, 4 telas, 8 com destaque no elemento, zero erro de JS, sem rolagem horizontal. 464 testes (eram 458).
+
 **Tutorial, checklist de primeiros passos e pop-up do TikTok (2026-08-24).** Não havia nada guiando quem entra pela primeira vez: o painel abria com números zerados e nenhuma indicação do que fazer.
 
 - **`/client/tutorial`** (menu "Tutorial", entrada nova no Vite + `serveSpaPage`): 4 seções na ordem em que a configuração precisa acontecer — conectar TikTok → estilo do corte → canal do YouTube → acompanhar. Cada controle da tela é explicado por número, ao lado da ilustração dele.

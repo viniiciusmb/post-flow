@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { GuidedTour } from "@/components/tour/GuidedTour"
 import type { SessionUser } from "@/types/api"
 
 export function DashboardLayout({
@@ -9,11 +10,14 @@ export function DashboardLayout({
   onLogout,
   title,
   children,
+  autoIniciarTour = false,
 }: {
   user: SessionUser
   onLogout: () => void
   title: string
   children: ReactNode
+  /** Só a tela inicial liga isto: o tour abre sozinho na primeira visita. */
+  autoIniciarTour?: boolean
 }) {
   return (
     <SidebarProvider
@@ -36,6 +40,9 @@ export function DashboardLayout({
           </div>
         </div>
       </SidebarInset>
+      {/* Montado no layout, e não em cada página: o tour atravessa telas, e
+          precisa existir na tela de destino pra retomar depois da navegação. */}
+      <GuidedTour autoIniciar={autoIniciarTour} />
     </SidebarProvider>
   )
 }

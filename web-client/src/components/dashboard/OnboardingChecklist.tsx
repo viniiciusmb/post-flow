@@ -14,6 +14,7 @@ import { IconBrandTiktok, IconCheck, IconScissors, IconBrandYoutube, IconArrowRi
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
+import { iniciarTour } from "@/components/tour/GuidedTour"
 import { useT, type ChaveDeTraducao } from "@/i18n"
 import type { OnboardingStatus } from "@/types/api"
 
@@ -95,7 +96,7 @@ export function OnboardingChecklist() {
   const proximo = PASSOS.find((p) => !dados[p.chave])
 
   return (
-    <Card className="border-primary/30 bg-primary/[0.03]">
+    <Card className="border-primary/30 bg-primary/[0.03]" data-tour="checklist">
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           <div className="min-w-0">
@@ -153,8 +154,16 @@ export function OnboardingChecklist() {
           })}
         </ol>
 
-        <p className="text-xs text-muted-foreground">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           {t("guia.duvida")}{" "}
+          <button
+            type="button"
+            onClick={() => iniciarTour(true)}
+            className="font-medium text-primary underline underline-offset-2"
+          >
+            {t("tour.fazerTour")}
+          </button>
+          <span aria-hidden>·</span>
           <a href="/client/tutorial" className="font-medium text-primary underline underline-offset-2">
             {t("guia.verTutorial")}
           </a>
