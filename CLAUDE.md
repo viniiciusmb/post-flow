@@ -253,7 +253,7 @@ Duas lições: (1) `tsc` NÃO pega ordem de hooks — build passando não signif
 - **Alvo ausente não trava o tour**: cai numa caixa centralizada. É o que acontece com o menu lateral no celular (fica escondido atrás do botão de sanduíche) e com controles que só existem depois de configurar algo.
 - Escurecimento com `box-shadow: 0 0 0 9999px` em volta do alvo — o controle real continua nítido, sem duplicar nada na tela. Feito à mão em vez de biblioteca de tour: o recurso é medir um elemento e posicionar uma caixa; a dependência traria tema próprio pra brigar com o nosso.
 - Abre sozinho **uma vez** na primeira visita (`postflow-tour-visto`); depois só pelos botões "Fazer o tour guiado" (tela inicial, checklist e página Tutorial). Setas do teclado e Esc funcionam.
-- Percorrido de ponta a ponta com Playwright em 1280px e 390px: 11 passos, 4 telas, 8 com destaque no elemento, zero erro de JS, sem rolagem horizontal. 464 testes (eram 458).
+- **15 passos, 6 telas** (inclui "Plano e uso" — crédito, cartão de excedente, pacote avulso, troca de plano — e "Sua conexão", que explica por que instalar o programa e como ele libera a cota bônus). Percorrido de ponta a ponta com Playwright em 1280px, 390px e 320px: zero erro de JS, sem rolagem horizontal. 464 testes (eram 458).
 
 **Tutorial, checklist de primeiros passos e pop-up do TikTok (2026-08-24).** Não havia nada guiando quem entra pela primeira vez: o painel abria com números zerados e nenhuma indicação do que fazer.
 

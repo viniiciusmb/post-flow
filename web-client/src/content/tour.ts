@@ -156,12 +156,64 @@ export const PASSOS_DO_TOUR: PassoDoTour[] = [
     },
   },
   {
+    pagina: "/client/billing",
+    alvo: '[data-tour="creditos"]',
+    titulo: {
+      pt: "Seu crédito de processamento",
+      en: "Your processing credit",
+      es: "Tu crédito de procesamiento",
+    },
+    texto: {
+      pt: "Cortar vídeo custa: baixar, transcrever e renderizar. Seu plano dá uma cota semanal em minutos de vídeo, e é ela que roda quando o download sai pela nossa internet. Do lado, a cota BÔNUS — extra, liberada quando o programa do seu computador está conectado.",
+      en: "Cutting video costs money: downloading, transcribing and rendering. Your plan gives a weekly quota in minutes of video, and that's what runs when the download goes through our internet. Beside it, the BONUS quota — extra, unlocked when the program on your computer is connected.",
+      es: "Cortar vídeo cuesta: descargar, transcribir y renderizar. Tu plan da una cuota semanal en minutos de vídeo, y es la que corre cuando la descarga sale por nuestra internet. Al lado, la cuota BONO — extra, liberada cuando el programa de tu ordenador está conectado.",
+    },
+  },
+  {
+    pagina: "/client/billing",
+    alvo: '[data-tour="nao-ficar-sem-credito"]',
+    titulo: {
+      pt: "Não parar no meio do mês",
+      en: "Not stopping mid-month",
+      es: "No parar a mitad de mes",
+    },
+    texto: {
+      pt: "Duas saídas quando a cota acaba. Com um cartão cadastrado, o processamento continua e você paga só o que passou do plano. Ou compre um pacote avulso, que não expira. Sem nenhum dos dois, os vídeos ficam esperando em vez de serem cortados.",
+      en: "Two ways out when the quota runs out. With a card on file, processing continues and you only pay for what went over the plan. Or buy a one-off package, which never expires. With neither, videos wait instead of being cut.",
+      es: "Dos salidas cuando se acaba la cuota. Con una tarjeta registrada, el procesamiento continúa y pagas solo lo que pasó del plan. O compra un paquete suelto, que no caduca. Sin ninguno de los dos, los vídeos esperan en vez de ser cortados.",
+    },
+  },
+  {
+    pagina: "/client/billing",
+    alvo: '[data-tour="planos"]',
+    titulo: { pt: "Trocar de plano", en: "Changing plan", es: "Cambiar de plan" },
+    texto: {
+      pt: "Aqui você compara os planos e troca quando quiser. O plano define a cota semanal, quantos canais e contas do TikTok você pode ter, e a prioridade na fila quando há vários vídeos processando ao mesmo tempo.",
+      en: "Here you compare plans and switch whenever you like. The plan sets your weekly quota, how many channels and TikTok accounts you can have, and your priority in the queue when several videos are processing at once.",
+      es: "Aquí comparas los planes y cambias cuando quieras. El plan define la cuota semanal, cuántos canales y cuentas de TikTok puedes tener, y la prioridad en la cola cuando hay varios vídeos procesándose a la vez.",
+    },
+  },
+  {
+    pagina: "/client/tunnel",
+    alvo: '[data-tour="conexao-explicacao"]',
+    titulo: {
+      pt: "Sua conexão (opcional, mas vale a pena)",
+      en: "Your connection (optional, but worth it)",
+      es: "Tu conexión (opcional, pero vale la pena)",
+    },
+    texto: {
+      pt: "O YouTube limita downloads vindos de servidores. Instalando um programinha no seu computador, os downloads dos SEUS vídeos passam a sair pela sua internet: falham bem menos e liberam a cota bônus, que é mais barata. É só baixar, abrir e colar o código de pareamento aqui.",
+      en: "YouTube throttles downloads coming from servers. By installing a small program on your computer, YOUR downloads start going out through your own internet: they fail far less and unlock the bonus quota, which is cheaper. Just download it, open it and paste the pairing code here.",
+      es: "YouTube limita las descargas que vienen de servidores. Instalando un programita en tu ordenador, las descargas de TUS vídeos pasan a salir por tu internet: fallan mucho menos y liberan la cuota bono, que es más barata. Solo descárgalo, ábrelo y pega aquí el código de emparejamiento.",
+    },
+  },
+  {
     pagina: "/client",
     titulo: { pt: "É isso!", en: "That's it!", es: "¡Eso es todo!" },
     texto: {
-      pt: "Feitos os três passos, o sistema toca sozinho: vídeo novo no canal vira cortes e sai no TikTok nos seus horários. Se quiser rever qualquer detalhe, o menu “Tutorial” tem tudo explicado com imagens — e você pode repetir este tour por lá quando quiser.",
-      en: "With those three done, the system runs itself: a new video on the channel becomes clips and goes out on TikTok at your times. To revisit any detail, the “Tutorial” menu explains everything with pictures — and you can replay this tour from there any time.",
-      es: "Con los tres pasos hechos, el sistema funciona solo: un vídeo nuevo en el canal se vuelve clips y sale en TikTok en tus horarios. Para repasar cualquier detalle, el menú “Tutorial” lo explica todo con imágenes — y puedes repetir este tour desde allí cuando quieras.",
+      pt: "Feitos os três passos, o sistema toca sozinho: vídeo novo no canal vira cortes e sai no TikTok nos seus horários. “Plano e uso” mostra quanto crédito resta, e “Sua conexão” é o jeito de gastar menos. Se quiser rever qualquer detalhe, o menu “Tutorial” tem tudo explicado com imagens — e você pode repetir este tour por lá quando quiser.",
+      en: "With those three done, the system runs itself: a new video on the channel becomes clips and goes out on TikTok at your times. “Plan and usage” shows how much credit is left, and “Your connection” is how you spend less. To revisit any detail, the “Tutorial” menu explains everything with pictures — and you can replay this tour from there any time.",
+      es: "Con los tres pasos hechos, el sistema funciona solo: un vídeo nuevo en el canal se vuelve clips y sale en TikTok en tus horarios. “Plan y uso” muestra cuánto crédito queda, y “Tu conexión” es la forma de gastar menos. Para repasar cualquier detalle, el menú “Tutorial” lo explica todo con imágenes — y puedes repetir este tour desde allí cuando quieras.",
     },
   },
 ]

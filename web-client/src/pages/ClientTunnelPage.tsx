@@ -308,7 +308,7 @@ export function ClientTunnelPage() {
         title={t("tunel.titulo")}
         description={t("tunel.descricao")}
       />
-      <Card>
+      <Card data-tour="conexao-explicacao">
         <CardHeader>
           <CardTitle className="text-base">{t("tunel.oQueE")}</CardTitle>
         </CardHeader>

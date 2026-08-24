@@ -429,7 +429,7 @@ export function ClientBillingPage() {
             <TonePill tone="danger">{t("plano.ultimaCobrancaFalhou")}</TonePill>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2" data-tour="creditos">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">{t("plano.creditosNormais")}</CardTitle>
@@ -460,7 +460,7 @@ export function ClientBillingPage() {
           {/* As duas formas de nao ficar sem credito no meio do mes ficam
               ACIMA dos planos: quem chega nesta tela quase sempre chega porque
               o credito esta acabando agora, nao pra comparar plano. */}
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2" data-tour="nao-ficar-sem-credito">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -670,7 +670,7 @@ export function ClientBillingPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">{t("plano.seuPlano")}</CardTitle>
+              <CardTitle className="text-base" data-tour="planos">{t("plano.seuPlano")}</CardTitle>
               <CardDescription>
                 {data.subscription.planName
                   ? `Plano atual: ${data.subscription.planName}`
