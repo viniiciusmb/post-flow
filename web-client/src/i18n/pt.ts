@@ -991,4 +991,5 @@ export const pt = {
   "canais.precisaTiktokDetalhe": "Sem uma conta conectada, o canal até baixa e corta os vídeos, mas os cortes ficam parados sem ter onde ser publicados. Leva menos de um minuto: você autoriza dentro do próprio TikTok.",
   "canais.conectarAgora": "Conectar conta do TikTok",
   "canais.soQueroDrive": "Só quero salvar no Drive",
+  "guia.previa": "Prévia",
 } as const

@@ -47,9 +47,36 @@ const PASSOS: {
   },
 ]
 
+/**
+ * Modo prévia, pela barra de endereço:
+ *
+ *   ?guia=1     mostra o checklist mesmo com tudo pronto (status real)
+ *   ?guia=novo  mostra como quem acabou de criar a conta enxerga
+ *
+ * Existe porque quem já configurou tudo nunca mais vê o checklist - que é o
+ * certo, mas impede de conferir como ele ficou sem desfazer a própria
+ * configuração. Não muda nada no banco: sai da tela quando o endereço sai.
+ */
+function lerPrevia(): "nao" | "real" | "novo" {
+  const guia = new URLSearchParams(window.location.search).get("guia")
+  if (guia === "novo") return "novo"
+  if (guia === "1") return "real"
+  return "nao"
+}
+
+const ZERADO: OnboardingStatus = {
+  tiktokConectado: false,
+  estiloConfigurado: false,
+  canalMonitorado: false,
+  concluido: false,
+  contasTiktok: 0,
+  canais: 0,
+}
+
 export function OnboardingChecklist() {
   const t = useT()
   const [status, setStatus] = useState<OnboardingStatus | null>(null)
+  const [previa] = useState(lerPrevia)
 
   useEffect(() => {
     // Falha em silêncio de propósito: se esta chamada não responder, a tela
@@ -58,10 +85,14 @@ export function OnboardingChecklist() {
     api.get<OnboardingStatus>("/api/client/onboarding").then(setStatus).catch(() => {})
   }, [])
 
-  if (!status || status.concluido) return null
+  const dados = previa === "novo" ? ZERADO : status
+  if (!dados) return null
+  // Terminou o checklist? Ele some - a menos que a pessoa tenha pedido a
+  // prévia de propósito pelo endereço.
+  if (dados.concluido && previa === "nao") return null
 
-  const feitos = PASSOS.filter((p) => status[p.chave]).length
-  const proximo = PASSOS.find((p) => !status[p.chave])
+  const feitos = PASSOS.filter((p) => dados[p.chave]).length
+  const proximo = PASSOS.find((p) => !dados[p.chave])
 
   return (
     <Card className="border-primary/30 bg-primary/[0.03]">
@@ -71,14 +102,23 @@ export function OnboardingChecklist() {
             <h2 className="font-heading text-base font-semibold">{t("guia.titulo")}</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">{t("guia.subtitulo")}</p>
           </div>
-          <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-            {t("guia.progresso", { feitos, total: PASSOS.length })}
+          <span className="flex shrink-0 flex-wrap items-center gap-2">
+            {/* Sem este selo, quem já configurou tudo abriria a prévia e
+                acharia que a configuração dele foi desfeita. */}
+            {previa !== "nao" && (
+              <span className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {t("guia.previa")}
+              </span>
+            )}
+            <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+              {t("guia.progresso", { feitos, total: PASSOS.length })}
+            </span>
           </span>
         </div>
 
         <ol className="flex flex-col gap-2">
           {PASSOS.map((passo, i) => {
-            const feito = status[passo.chave]
+            const feito = dados[passo.chave]
             const ehProximo = proximo?.chave === passo.chave
             const Icone = passo.icone
             return (

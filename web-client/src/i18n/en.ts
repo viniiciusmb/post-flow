@@ -985,4 +985,5 @@ export const en: Dicionario = {
   "canais.precisaTiktokDetalhe": "Without a connected account, the channel still downloads and cuts the videos, but the clips sit there with nowhere to be published. It takes under a minute: you authorize inside TikTok itself.",
   "canais.conectarAgora": "Connect TikTok account",
   "canais.soQueroDrive": "I only want to save to Drive",
+  "guia.previa": "Preview",
 }

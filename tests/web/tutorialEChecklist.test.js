@@ -125,3 +125,24 @@ test('a página do Tutorial abre pra quem está logado', async () => {
   assert.equal(status, 200);
   assert.match(text, /<div id="root">/, 'a página não veio montada');
 });
+
+// A prévia do checklist (?guia=1 e ?guia=novo) é decidida no navegador, a
+// partir da barra de endereço - o servidor não participa. O que precisa ficar
+// travado aqui é que ela NÃO alterou o que o endpoint responde: se a prévia
+// tivesse virado um parâmetro de API, um cliente conseguiria pedir o estado de
+// "recém-criado" e o checklist voltaria pra tela de quem já terminou.
+test('a prévia não muda a resposta do servidor', async () => {
+  const { cliente, agente } = await clienteLogado();
+  await conectarTiktok(cliente.id);
+  await salvarEstilo(cliente.id);
+  await adicionarCanal(cliente.id);
+
+  const normal = await agente.get('/api/client/onboarding');
+  assert.equal(normal.body.concluido, true);
+
+  for (const query of ['?guia=1', '?guia=novo', '?guia=qualquer']) {
+    const r = await agente.get(`/api/client/onboarding${query}`);
+    assert.equal(r.body.concluido, true, `${query} mudou o que o servidor respondeu`);
+    assert.equal(r.body.tiktokConectado, true, `${query} zerou um passo já feito`);
+  }
+});

@@ -985,4 +985,5 @@ export const es: Dicionario = {
   "canais.precisaTiktokDetalhe": "Sin una cuenta conectada, el canal descarga y corta los vídeos igual, pero los clips se quedan parados sin dónde publicarse. Lleva menos de un minuto: autorizas dentro del propio TikTok.",
   "canais.conectarAgora": "Conectar cuenta de TikTok",
   "canais.soQueroDrive": "Solo quiero guardar en Drive",
+  "guia.previa": "Vista previa",
 }
