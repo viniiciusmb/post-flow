@@ -4,6 +4,7 @@
 
 const fs = require('fs');
 const config = require('../config');
+const logger = require('../lib/logger');
 
 const AUTHORIZE_URL = 'https://www.tiktok.com/v2/auth/authorize/';
 const TOKEN_URL = 'https://open.tiktokapis.com/v2/oauth/token/';
@@ -28,6 +29,84 @@ const PUBLISH_STATUS_URL = 'https://open.tiktokapis.com/v2/post/publish/status/f
 // gerar cortes de 3 minutos (~110 MB). Foi o que quebrou 6 postagens de um
 // cliente em 23/08/2026.
 const MAX_CHUNK_SIZE_BYTES = 64 * 1024 * 1024;
+
+// Toda conversa com a TikTok passa por aqui.
+//
+// Duas protecoes que faltavam, e cuja ausencia perdeu uma publicacao real em
+// 24/08/2026 ("fetch failed" no meio do envio, corte jogado direto pra aba de
+// erros):
+//
+//   TIMEOUT - fetch sem AbortSignal espera pra sempre. Uma conexao pendurada
+//             segurava o job inteiro ate o Node desistir sozinho.
+//   RETENTATIVA - uma piscada de rede nao pode custar a publicacao. Repete so
+//             o que e seguro repetir (ver abaixo) e so quando o erro e de
+//             rede/sobrecarga; erro de parametro falha na hora, porque repetir
+//             daria exatamente o mesmo resultado.
+//
+// SEGURANCA DE REPETIR: o PUT de um pedaco carrega Content-Range, entao
+// reenviar o mesmo intervalo e inofensivo - a TikTok sobrescreve a mesma
+// faixa. As consultas (creator info, status) sao leitura. O init reserva um
+// publish_id novo a cada chamada: repetir pode deixar uma reserva orfa, que
+// expira sozinha sem publicar nada, e isso e bem melhor que perder o corte.
+const TIMEOUT_PADRAO_MS = 60 * 1000;
+const TIMEOUT_UPLOAD_MS = 10 * 60 * 1000;
+const TENTATIVAS_DE_REDE = 3;
+const ESPERA_ENTRE_TENTATIVAS_MS = [2000, 8000];
+
+function esperar(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Erro que vale repetir NESTE nivel: falha de transporte ou servidor
+// sobrecarregado. Recusa por parametro invalido nao entra.
+function falhaDeRede(erro) {
+  const texto = String(erro?.message || '').toLowerCase();
+  return (
+    texto.includes('fetch failed') ||
+    texto.includes('econnreset') ||
+    texto.includes('econnrefused') ||
+    texto.includes('etimedout') ||
+    texto.includes('enotfound') ||
+    texto.includes('eai_again') ||
+    texto.includes('socket hang up') ||
+    texto.includes('network') ||
+    texto.includes('aborted') ||
+    texto.includes('timeout')
+  );
+}
+
+function statusMerecendoNovaTentativa(status) {
+  return status === 429 || status >= 500;
+}
+
+async function fetchTiktok(url, opcoes = {}, { timeoutMs = TIMEOUT_PADRAO_MS, oQueE = 'a TikTok' } = {}) {
+  let ultimoErro;
+  for (let tentativa = 1; tentativa <= TENTATIVAS_DE_REDE; tentativa++) {
+    const controlador = new AbortController();
+    const alarme = setTimeout(() => controlador.abort(), timeoutMs);
+    try {
+      const resposta = await fetch(url, { ...opcoes, signal: controlador.signal });
+      // 429/5xx: o problema e do outro lado e costuma passar. Erro de
+      // parametro (4xx) sai daqui pro chamador tratar, sem repetir.
+      if (statusMerecendoNovaTentativa(resposta.status) && tentativa < TENTATIVAS_DE_REDE) {
+        ultimoErro = new Error(`http_${resposta.status} ao falar com ${oQueE}`);
+        logger.warn(`TikTok devolveu HTTP ${resposta.status} (${oQueE}) - tentativa ${tentativa}/${TENTATIVAS_DE_REDE}.`);
+        await esperar(ESPERA_ENTRE_TENTATIVAS_MS[tentativa - 1] || 8000);
+        continue;
+      }
+      return resposta;
+    } catch (err) {
+      // AbortError do timeout chega aqui como "This operation was aborted".
+      ultimoErro = err;
+      if (!falhaDeRede(err) || tentativa === TENTATIVAS_DE_REDE) throw err;
+      logger.warn(`Falha de rede falando com ${oQueE} (${err.message}) - tentativa ${tentativa}/${TENTATIVAS_DE_REDE}.`);
+      await esperar(ESPERA_ENTRE_TENTATIVAS_MS[tentativa - 1] || 8000);
+    } finally {
+      clearTimeout(alarme);
+    }
+  }
+  throw ultimoErro;
+}
 
 // Como o arquivo e dividido pro upload. Sao TRES regras da TikTok, e cada
 // uma delas ja recusou uma publicacao nossa em producao (23/08/2026):
@@ -171,7 +250,7 @@ async function getUserStats(accessToken) {
 // de privacidade ele pode escolher, se comentario/duet/juncao estao
 // desativados na conta dele, e a duracao maxima de video que ele pode postar.
 async function queryCreatorInfo(accessToken) {
-  const response = await fetch(CREATOR_INFO_URL, {
+  const response = await fetchTiktok(CREATOR_INFO_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' },
   });
@@ -198,7 +277,7 @@ async function queryCreatorInfo(accessToken) {
 async function initDirectPost(accessToken, videoSizeBytes, postInfo) {
   const { chunkSize, totalChunkCount } = calcularPedacos(videoSizeBytes);
 
-  const response = await fetch(DIRECT_POST_INIT_URL, {
+  const response = await fetchTiktok(DIRECT_POST_INIT_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' },
     body: JSON.stringify({
@@ -239,7 +318,7 @@ async function initDirectPost(accessToken, videoSizeBytes, postInfo) {
 async function initInboxVideo(accessToken, videoSizeBytes) {
   const { chunkSize, totalChunkCount } = calcularPedacos(videoSizeBytes);
 
-  const response = await fetch(PUBLISH_INIT_URL, {
+  const response = await fetchTiktok(PUBLISH_INIT_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' },
     body: JSON.stringify({
@@ -277,15 +356,19 @@ async function uploadVideoFile(uploadUrl, filePath, videoSizeBytes, chunkSize, t
       const buffer = Buffer.alloc(length);
       fs.readSync(fd, buffer, 0, length, start);
 
-      const response = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'video/mp4',
-          'Content-Range': `bytes ${start}-${end}/${videoSizeBytes}`,
-          'Content-Length': String(length),
+      const response = await fetchTiktok(
+        uploadUrl,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'video/mp4',
+            'Content-Range': `bytes ${start}-${end}/${videoSizeBytes}`,
+            'Content-Length': String(length),
+          },
+          body: buffer,
         },
-        body: buffer,
-      });
+        { timeoutMs: TIMEOUT_UPLOAD_MS, oQueE: `envio do pedaco ${i + 1}/${totalChunkCount}` }
+      );
       if (!response.ok && response.status !== 201) {
         const text = await response.text().catch(() => '');
         throw new Error(
@@ -302,7 +385,7 @@ async function uploadVideoFile(uploadUrl, filePath, videoSizeBytes, chunkSize, t
 // { done, failed, raw } - "raw" fica disponivel pra log quando algo sair
 // diferente do esperado (a API pode ter mudado desde a ultima checagem).
 async function fetchPublishStatus(accessToken, publishId) {
-  const response = await fetch(PUBLISH_STATUS_URL, {
+  const response = await fetchTiktok(PUBLISH_STATUS_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' },
     body: JSON.stringify({ publish_id: publishId }),

@@ -182,6 +182,20 @@ async function findNextPendingForAccounts(accountIds) {
 
 // Postagem pendente mais antiga (na ordem da fila) de uma conta - e o que
 // o job de publicacao pega quando ha espaco na cota do dia.
+// O proximo corte a publicar - ou null, se ainda nao e hora.
+//
+// FILA ESTRITA: olha SO o primeiro da fila. Se ele ainda nao venceu, ninguem
+// passa na frente, mesmo que o horario de outro ja tenha chegado.
+//
+// Isso importa por causa da nova tentativa: uma falha de rede na Parte 2 adia
+// ela alguns minutos, e sem fila estrita a Parte 3 (cujo horario chegou no
+// meio da espera) seria publicada antes - o espectador veria a parte 3 de uma
+// historia antes da parte 2. Numa serie "Parte 1, Parte 2..." a ordem e o
+// produto.
+//
+// O preco e que um corte problematico segura a fila enquanto tenta de novo.
+// E limitado de proposito: depois de MAX_TENTATIVAS ele vira erro, sai de
+// 'pending' e a fila anda (ver src/lib/erroDePostagem.js).
 async function findOldestDuePendingForAccount(tiktokAccountId) {
   const { rows } = await pool.query(
     `SELECT p.*, c.local_clip_path, c.title AS clip_title, v.file_size_bytes,
@@ -191,17 +205,18 @@ async function findOldestDuePendingForAccount(tiktokAccountId) {
      FROM postings p
      ${CLIP_FILE_JOIN}
      WHERE p.tiktok_account_id = $1 AND p.status = 'pending'
-       -- So o que JA chegou a hora. Sem isto, scheduled_for era enfeite de
-       -- tela: o job publicava o mais antigo assim que tivesse "folga" no
-       -- dia, e um corte marcado pras 00:00 saia as 23:40.
-       -- scheduled_for nulo (postagem anterior a migration 032) conta como
-       -- vencido, senao ficaria parado pra sempre.
-       AND (p.scheduled_for IS NULL OR p.scheduled_for <= now())
      ORDER BY ${PENDING_ORDER}
      LIMIT 1`,
     [tiktokAccountId]
   );
-  return rows[0] || null;
+  const primeiro = rows[0];
+  if (!primeiro) return null;
+  // So o que JA chegou a hora. Sem isto, scheduled_for era enfeite de tela: o
+  // job publicava assim que tivesse "folga" no dia, e um corte marcado pras
+  // 00:00 saia as 23:40. scheduled_for nulo (linha anterior a migration 032)
+  // conta como vencido, senao ficaria parado pra sempre.
+  if (primeiro.scheduled_for && new Date(primeiro.scheduled_for) > new Date()) return null;
+  return primeiro;
 }
 
 // Usado pelo botao "Postar agora": mesmos dados de findOldestDuePendingForAccount,
@@ -243,6 +258,42 @@ async function countPendingForAccount(tiktokAccountId) {
     [tiktokAccountId]
   );
   return rows[0].count;
+}
+
+// Devolve a postagem pra fila pra tentar de novo daqui a alguns minutos, em
+// vez de aposenta-la na aba de erros. Usado quando a falha foi passageira
+// (rede, sobrecarga da TikTok) - ver src/lib/erroDePostagem.js.
+//
+// O horario da nova tentativa fica no proprio scheduled_for: o job so publica
+// o que ja venceu, entao adiar e simplesmente marcar mais pra frente. Nao ha
+// fila paralela nem coluna nova pra isso.
+//
+// queued_at volta a NULL de proposito: uma tentativa que falhou nao pode
+// contar como "postei hoje" e consumir a cota diaria do cliente.
+async function agendarNovaTentativa(id, minutos) {
+  const { rows } = await pool.query(
+    `UPDATE postings
+        SET status = 'pending',
+            attempts = attempts + 1,
+            error_message = NULL,
+            queued_at = NULL,
+            scheduled_for = now() + ($2 || ' minutes')::interval,
+            updated_at = now()
+      WHERE id = $1
+      RETURNING *`,
+    [id, String(minutos)]
+  );
+  return rows[0] || null;
+}
+
+// Desiste de vez: vai pra aba de erros, onde o cliente ve e pode reenviar.
+async function marcarErroDefinitivo(id) {
+  const { rows } = await pool.query(
+    `UPDATE postings SET status = 'error', attempts = attempts + 1, error_message = NULL, updated_at = now()
+      WHERE id = $1 RETURNING *`,
+    [id]
+  );
+  return rows[0] || null;
 }
 
 // Recalcula scheduled_for de TODA a fila pendente dessa conta, do zero, na
@@ -523,6 +574,8 @@ module.exports = {
   findPublishableByIdOwnedByClient,
   countTodayForAccount,
   countPendingForAccount,
+  agendarNovaTentativa,
+  marcarErroDefinitivo,
   reflowScheduledFor,
   setQueueOrder,
   saveDirectPostOptionsOwnedByClient,

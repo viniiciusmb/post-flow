@@ -11,6 +11,7 @@ const tiktokAccountsRepository = require('../../repositories/tiktokAccountsRepos
 const tiktokService = require('../../services/tiktokService');
 const errorReportService = require('../../services/errorReportService');
 const publishOptions = require('../../lib/publishOptions');
+const erroDePostagem = require('../../lib/erroDePostagem');
 const logger = require('../../lib/logger');
 
 async function run() {
@@ -57,12 +58,51 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// O que fazer quando uma publicacao falha.
+//
+// Antes, QUALQUER falha mandava a postagem direto pra aba de erros, de onde
+// ela so voltava se alguem clicasse. Um "fetch failed" - uma piscada de rede -
+// aposentava um corte pra sempre. Agora falha passageira volta pra fila com
+// espera crescente, e so vira erro visivel quando nao adianta mais tentar (ou
+// quando ja tentamos vezes demais).
+//
+// O erro vai pro painel do admin nos DOIS casos: uma tentativa que falhou e
+// informacao util mesmo quando a seguinte da certo. O que muda e o destino do
+// corte, nao o registro do problema.
+async function tratarFalha(account, posting, err) {
+  const tentativasJaFeitas = Number(posting.attempts || 0);
+  const podeTentarDeNovo = erroDePostagem.deveTentarDeNovo(err, tentativasJaFeitas);
+
+  if (podeTentarDeNovo) {
+    const minutos = erroDePostagem.esperaEmMinutos(tentativasJaFeitas);
+    await postingsRepository.agendarNovaTentativa(posting.id, minutos);
+    logger.warn(
+      `Postagem ${posting.id} falhou (${err.message}) - nova tentativa em ${minutos} min ` +
+        `(${tentativasJaFeitas + 1}/${erroDePostagem.MAX_TENTATIVAS}).`
+    );
+  } else {
+    await postingsRepository.marcarErroDefinitivo(posting.id);
+    logger.error(
+      `Postagem ${posting.id} desistiu depois de ${tentativasJaFeitas + 1} tentativa(s) ` +
+        `(${erroDePostagem.classificar(err)}): ${err.message}`
+    );
+  }
+
+  await errorReportService.report({
+    operation: errorReportService.OPERACOES.TIKTOK_POSTING,
+    entityType: 'posting',
+    entityId: posting.id,
+    clientUserId: account.client_user_id || null,
+    error: err,
+  });
+}
+
 async function publish(account, posting) {
+  // Ver o "PONTO SEM VOLTA" mais abaixo.
+  let jaEntregueAoTiktok = false;
   if (!posting.local_clip_path || !fs.existsSync(posting.local_clip_path)) {
-    await postingsRepository.updateStatus(posting.id, {
-      status: 'error',
-      errorMessage: null,
-    });
+    // Repetir nao traz o arquivo de volta - vai direto pra aba de erros.
+    await tratarFalha(account, posting, new Error('Arquivo do corte nao esta mais em disco.'));
     return;
   }
 
@@ -100,7 +140,8 @@ async function publish(account, posting) {
     const limiteSegundos = account.max_video_post_duration_sec;
     const duracaoCorte = posting.clip_end_seconds - posting.clip_start_seconds;
     if (modoDireto && limiteSegundos && duracaoCorte > limiteSegundos) {
-      await postingsRepository.updateStatus(posting.id, { status: 'error', errorMessage: null });
+      // O corte nao vai encolher sozinho: nao adianta tentar de novo.
+      await postingsRepository.marcarErroDefinitivo(posting.id);
       await errorReportService.report({
         operation: errorReportService.OPERACOES.TIKTOK_POSTING,
         entityType: 'posting',
@@ -126,6 +167,11 @@ async function publish(account, posting) {
       : await tiktokService.initInboxVideo(accessToken, videoSizeBytes);
     await tiktokService.uploadVideoFile(uploadUrl, posting.local_clip_path, videoSizeBytes, chunkSize, totalChunkCount);
     await postingsRepository.updateStatus(posting.id, { status: 'processing', tiktokPublishId: publishId });
+    // PONTO SEM VOLTA. Os bytes ja estao com a TikTok e ela pode publicar a
+    // qualquer momento. A partir daqui, qualquer falha nossa e falha de
+    // ACOMPANHAMENTO, nao de envio - reenviar o arquivo publicaria o mesmo
+    // corte duas vezes no perfil do cliente.
+    jaEntregueAoTiktok = true;
     logger.info(`Corte "${posting.clip_title}" enviado pro TikTok (conta ${account.id}), aguardando confirmacao.`);
 
     // Tenta confirmar rapido (a TikTok as vezes processa em segundos); se nao
@@ -141,7 +187,9 @@ async function publish(account, posting) {
         return;
       }
       if (result.failed) {
-        await postingsRepository.updateStatus(posting.id, { status: 'error', errorMessage: null });
+        // A TikTok recebeu o video e recusou: reenviar o mesmo arquivo daria o
+        // mesmo veredito.
+        await postingsRepository.marcarErroDefinitivo(posting.id);
         await errorReportService.report({
           operation: errorReportService.OPERACOES.TIKTOK_POSTING,
           entityType: 'posting',
@@ -153,16 +201,26 @@ async function publish(account, posting) {
       }
     }
   } catch (err) {
-    logger.error(`Falha ao publicar posting ${posting.id} no TikTok:`, err);
+    if (jaEntregueAoTiktok) {
+      // Nao reenviar: o video ja esta la. Fica em 'processing' e o
+      // checkStaleProcessing do proximo ciclo pergunta pra TikTok como ficou -
+      // e ai sim marca como postado ou como erro, sem arriscar publicar duas
+      // vezes o mesmo corte.
+      logger.warn(
+        `Postagem ${posting.id}: o video ja tinha sido entregue a TikTok quando deu "${err.message}". ` +
+          'Mantendo em processamento pra confirmar o resultado, sem reenviar.'
+      );
+      await errorReportService.report({
+        operation: errorReportService.OPERACOES.TIKTOK_POSTING,
+        entityType: 'posting',
+        entityId: posting.id,
+        clientUserId: account.client_user_id || null,
+        error: err,
+      });
+      return;
+    }
     // Sem mensagem tecnica na tela do cliente - ela vive no painel de erros.
-    await postingsRepository.updateStatus(posting.id, { status: 'error', errorMessage: null });
-    await errorReportService.report({
-      operation: errorReportService.OPERACOES.TIKTOK_POSTING,
-      entityType: 'posting',
-      entityId: posting.id,
-      clientUserId: account.client_user_id || null,
-      error: err,
-    });
+    await tratarFalha(account, posting, err);
   }
 }
 
@@ -181,7 +239,8 @@ async function checkStaleProcessing() {
           tiktokPostId: (result.postIds || [])[0] || null,
         });
       } else if (result.failed) {
-        await postingsRepository.updateStatus(posting.id, { status: 'error', errorMessage: null });
+        // A TikTok processou e recusou: reenviar daria o mesmo veredito.
+        await postingsRepository.marcarErroDefinitivo(posting.id);
         await errorReportService.report({
           operation: errorReportService.OPERACOES.TIKTOK_POSTING,
           entityType: 'posting',
