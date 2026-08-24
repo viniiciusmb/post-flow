@@ -778,3 +778,14 @@ export interface AdminAffiliateLinksResponse {
   baseUrl: string
   links: AdminAffiliateLink[]
 }
+
+/** Em que ponto da configuração inicial o cliente está (GET /api/client/onboarding). */
+export interface OnboardingStatus {
+  tiktokConectado: boolean
+  estiloConfigurado: boolean
+  canalMonitorado: boolean
+  /** true quando os três passos terminaram — o checklist some da tela inicial. */
+  concluido: boolean
+  contasTiktok: number
+  canais: number
+}

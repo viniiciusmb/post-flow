@@ -18,5 +18,6 @@ router.get('/settings', serveSpaPage('client-settings'));
 router.get('/tunnel', serveSpaPage('tunnel'));
 router.get('/billing', serveSpaPage('client-billing'));
 router.get('/commissions', serveSpaPage('client-commissions'));
+router.get('/tutorial', serveSpaPage('tutorial'));
 
 module.exports = router;

@@ -363,6 +363,11 @@ export function YouTubeChannelsPage() {
   const [latestVideoPrompt, setLatestVideoPrompt] = useState<{ channelId: number; video: LatestChannelVideo } | null>(null)
   const [processingLatest, setProcessingLatest] = useState(false)
   const [latestVideoError, setLatestVideoError] = useState<string | null>(null)
+  // Pedir um canal sem ter onde publicar produz um canal que baixa, corta e
+  // depois trava - o corte fica pronto e nao tem conta pra receber. Melhor
+  // parar aqui e explicar do que deixar a pessoa descobrir sozinha dois dias
+  // depois, com o disco ja cheio de corte parado.
+  const [precisaDoTiktok, setPrecisaDoTiktok] = useState(false)
 
   async function load() {
     const [channelsData, videosData, tiktokData, driveData] = await Promise.all([
@@ -381,8 +386,20 @@ export function YouTubeChannelsPage() {
     if (user) load()
   }, [user])
 
-  async function handleSubmit(event: FormEvent) {
+  function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    setError(null)
+    setSuccess(null)
+    if (tiktokAccounts.length === 0) {
+      setPrecisaDoTiktok(true)
+      return
+    }
+    void adicionarCanal()
+  }
+
+  // Separado do handleSubmit porque o diálogo "só quero o Drive" precisa
+  // chegar aqui direto, sem passar de novo pela checagem que o abriu.
+  async function adicionarCanal() {
     setError(null)
     setSuccess(null)
     setSubmitting(true)
@@ -584,6 +601,42 @@ export function YouTubeChannelsPage() {
             </Button>
             <Button onClick={acceptLatestVideo} disabled={processingLatest}>
               {processingLatest ? "Enviando..." : latestVideoError ? t("canais.tentarDeNovo") : t("canais.simProcessar")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Conecte o TikTok primeiro.
+
+          Nao e um bloqueio absoluto: da pra usar o Post Flow so pra receber os
+          cortes numa pasta do Drive, sem publicar em lugar nenhum. Por isso a
+          saida secundaria existe - mas discreta, porque nao e o caminho que a
+          maioria quer. */}
+      <Dialog open={precisaDoTiktok} onOpenChange={setPrecisaDoTiktok}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("canais.precisaTiktokTitulo")}</DialogTitle>
+            <DialogDescription>{t("canais.precisaTiktokTexto")}</DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 rounded-lg border border-border p-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
+              <IconBrandTiktok className="size-5" />
+            </span>
+            <p className="min-w-0 text-sm text-muted-foreground">{t("canais.precisaTiktokDetalhe")}</p>
+          </div>
+          <DialogFooter className="sm:justify-between">
+            <Button
+              variant="ghost"
+              className="text-muted-foreground"
+              onClick={() => {
+                setPrecisaDoTiktok(false)
+                void adicionarCanal()
+              }}
+            >
+              {t("canais.soQueroDrive")}
+            </Button>
+            <Button asChild>
+              <a href="/client/tiktok-account">{t("canais.conectarAgora")}</a>
             </Button>
           </DialogFooter>
         </DialogContent>

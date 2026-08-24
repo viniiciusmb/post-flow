@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader, SectionLabel } from "@/components/dashboard/PageHeader"
 import { TikTokConnectionCard } from "@/components/dashboard/TikTokConnectionCard"
+import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist"
 import { PostingsTable, type PostingRow } from "@/components/dashboard/PostingsTable"
 import { StatRow, Stat } from "@/components/dashboard/StatRow"
 import { UsageCard } from "@/components/dashboard/UsageCard"
@@ -78,6 +79,11 @@ export function ClientDashboardPage() {
           {t("inicio.erroDrive")}: {flash.driveError}
         </p>
       )}
+
+      {/* Antes dos números: quem ainda não configurou não tem número nenhum
+          pra ver, e o que ele precisa é do caminho, não do painel vazio.
+          Some sozinho quando os três passos terminam. */}
+      <OnboardingChecklist />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="text-xs font-semibold uppercase tracking-[0.07em] text-muted-foreground">{t("inicio.periodo")}</span>

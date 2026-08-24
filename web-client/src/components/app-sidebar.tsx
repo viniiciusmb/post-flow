@@ -13,6 +13,7 @@ import {
   IconReceipt2,
   IconAlertTriangle,
   IconGift,
+  IconBook,
 } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
@@ -65,6 +66,7 @@ const ADMIN_GROUPS: Grupo[] = [
       { title: "menu.cortes", url: "/client/videos-clips", icon: IconScissors },
       { title: "menu.publicacao", url: "/client/tiktok-account", icon: IconBrandTiktok },
       { title: "menu.configuracoes", url: "/client/settings", icon: IconSettings },
+      { title: "menu.tutorial", url: "/client/tutorial", icon: IconBook },
     ],
   },
 ]
@@ -80,6 +82,9 @@ const CLIENT_GROUPS: Grupo[] = [
       { title: "menu.planoEUso", url: "/client/billing", icon: IconReceipt2 },
       { title: "menu.comissoes", url: "/client/commissions", icon: IconGift },
       { title: "menu.configuracoes", url: "/client/settings", icon: IconSettings },
+      // Por último de propósito: quem já sabe usar não tropeça nele todo dia,
+      // e quem está perdido encontra pelo nome sem precisar de destaque.
+      { title: "menu.tutorial", url: "/client/tutorial", icon: IconBook },
     ],
   },
 ]
