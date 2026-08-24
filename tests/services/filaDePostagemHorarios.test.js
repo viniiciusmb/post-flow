@@ -111,7 +111,7 @@ test('os pedaços cobrem o arquivo inteiro, sem sobra nem falta', () => {
 // projeção pula slots). Como o teste roda a qualquer hora, procuramos um fuso
 // onde agora é quase meia-noite — assim 08:00/12:00/16:00/20:00 estão todos no
 // passado, de propósito.
-function fusoOndeJaEhQuaseMeiaNoite() {
+function fusoComHoraLocal(alvo) {
   const zonas = ['UTC'];
   for (let x = -14; x <= 12; x++) if (x !== 0) zonas.push(`Etc/GMT${x > 0 ? '+' : ''}${x}`);
   for (const zona of zonas) {
@@ -120,15 +120,19 @@ function fusoOndeJaEhQuaseMeiaNoite() {
         .formatToParts(new Date())
         .find((p) => p.type === 'hour').value
     );
-    if (hora === 23) return zona;
+    if (hora === alvo) return zona;
   }
-  throw new Error('nenhum fuso com hora local 23 - impossível, a faixa cobre 27 horas');
+  throw new Error(`nenhum fuso com hora local ${alvo} - impossível, a faixa cobre 27 horas`);
 }
+
+// Fim da noite: todos os horários do dia já venceram. É o cenário em que os
+// dois defeitos de agendamento apareceram.
+const fusoOndeJaEhQuaseMeiaNoite = () => fusoComHoraLocal(23);
 
 let seq = 0;
 const unico = () => `${Date.now()}${seq++}`;
 
-async function contaComHorarios(horarios) {
+async function contaComHorarios(horarios, fuso = fusoOndeJaEhQuaseMeiaNoite()) {
   const cliente = await createClient();
   const { rows: [conta] } = await pool.query(
     `INSERT INTO tiktok_accounts (client_user_id, tiktok_open_id, display_name, is_active,
@@ -144,7 +148,7 @@ async function contaComHorarios(horarios) {
      VALUES ($1, 'manual', $2, $3, $4)
      ON CONFLICT (tiktok_account_id) DO UPDATE
        SET mode = 'manual', manual_times = $2, videos_per_day = $3, timezone = $4`,
-    [conta.id, horarios, horarios.length, fusoOndeJaEhQuaseMeiaNoite()]
+    [conta.id, horarios, horarios.length, fuso]
   );
   return { cliente, conta };
 }
@@ -232,4 +236,132 @@ test('nenhum corte é agendado pro passado', async () => {
     const posting = await postingsRepository.createIfNotExists({ videoId: video.id, tiktokAccountId: conta.id });
     assert.ok(new Date(posting.scheduled_for) > new Date(), `corte ${i + 1} foi agendado pro passado`);
   }
+});
+
+// --- 3. O job só publica quando chega a hora ---
+//
+// A causa raiz dos dois defeitos acima: o job NUNCA lia scheduled_for. Ele
+// perguntava "quantos horários do dia já passaram?" e publicava o mais antigo
+// se houvesse folga. Às 23h53, com os horários 08/12/16/20/00, os cinco já
+// tinham "passado" (00:00 é o começo do dia) — então um corte marcado para as
+// 00:00 saiu às 23:40, e outro 10 minutos depois. O horário na tela era
+// enfeite.
+
+const postingsRepo = postingsRepository;
+
+test('corte com hora ainda por vir NÃO é escolhido pra publicar', async () => {
+  const { cliente, conta } = await contaComHorarios(['08:00', '12:00', '16:00', '20:00']);
+  const video = await corteRegistrado(cliente.id);
+  const posting = await postingsRepo.createIfNotExists({ videoId: video.id, tiktokAccountId: conta.id });
+
+  assert.ok(new Date(posting.scheduled_for) > new Date(), 'o teste só vale com hora futura');
+  const escolhido = await postingsRepo.findOldestDuePendingForAccount(conta.id);
+  assert.equal(escolhido, null, 'o job pegaria um corte antes da hora marcada');
+});
+
+test('corte com a hora vencida É escolhido', async () => {
+  const { cliente, conta } = await contaComHorarios(['08:00', '12:00', '16:00', '20:00']);
+  const video = await corteRegistrado(cliente.id);
+  const posting = await postingsRepo.createIfNotExists({ videoId: video.id, tiktokAccountId: conta.id });
+  await pool.query("UPDATE postings SET scheduled_for = now() - interval '1 minute' WHERE id = $1", [posting.id]);
+
+  const escolhido = await postingsRepo.findOldestDuePendingForAccount(conta.id);
+  assert.ok(escolhido, 'corte cuja hora já passou tinha que ser publicado');
+  assert.equal(String(escolhido.id), String(posting.id));
+});
+
+test('postagem antiga sem hora marcada não fica presa pra sempre', async () => {
+  // scheduled_for é nulo em linhas anteriores à migration 032.
+  const { cliente, conta } = await contaComHorarios(['08:00', '12:00', '16:00', '20:00']);
+  const video = await corteRegistrado(cliente.id);
+  const posting = await postingsRepo.createIfNotExists({ videoId: video.id, tiktokAccountId: conta.id });
+  await pool.query('UPDATE postings SET scheduled_for = NULL WHERE id = $1', [posting.id]);
+
+  const escolhido = await postingsRepo.findOldestDuePendingForAccount(conta.id);
+  assert.ok(escolhido, 'postagem sem hora marcada ficaria parada pra sempre');
+});
+
+test('meia-noite não é tratada como "já passou" no mesmo dia', async () => {
+  // O caso exato do relato: 00:00 na lista de horários, agora são 23h53.
+  // A conta antiga do job dizia "os 5 horários já passaram, pode postar" e o
+  // corte das 00:00 saía 7 minutos ANTES da meia-noite.
+  const { cliente, conta } = await contaComHorarios(['08:00', '12:00', '16:00', '20:00', '00:00']);
+  const video = await corteRegistrado(cliente.id);
+  const posting = await postingsRepo.createIfNotExists({ videoId: video.id, tiktokAccountId: conta.id });
+
+  const quando = new Date(posting.scheduled_for);
+  assert.ok(quando > new Date(), 'a meia-noite marcada tem que ser a de amanhã, não a que já passou');
+  assert.equal(await postingsRepo.findOldestDuePendingForAccount(conta.id), null, 'publicou antes da meia-noite');
+});
+
+test('duas postagens NA FILA nunca dividem o mesmo horário', async () => {
+  // Foi assim que dois cortes ficaram marcados pras 08:00: entre a criação de
+  // um e a do outro, uma postagem saiu — e a conta por índice descontava esse
+  // "já saiu" duas vezes, entregando o mesmo horário de novo.
+  //
+  // O que precisa valer é sobre quem AINDA está na fila. Um horário liberado
+  // por alguém que já publicou pode ser reaproveitado: aquele corte já saiu,
+  // ninguém vai postar duas vezes no mesmo minuto.
+  const { cliente, conta } = await contaComHorarios(['08:00', '12:00', '16:00', '20:00']);
+  const fuso = await fusoDaConta(conta.id);
+
+  for (let i = 0; i < 4; i++) {
+    const video = await corteRegistrado(cliente.id);
+    const posting = await postingsRepo.createIfNotExists({ videoId: video.id, tiktokAccountId: conta.id });
+
+    // No meio do caminho, uma postagem sai (a hora dela chegou e o job
+    // publicou) - o que muda as contagens que a versão antiga usava.
+    if (i === 1) {
+      await pool.query(
+        "UPDATE postings SET status='posted', scheduled_for = now() - interval '1 hour', queued_at=now(), posted_at=now() WHERE id=$1",
+        [posting.id]
+      );
+    }
+
+    const { rows } = await pool.query(
+      "SELECT scheduled_for FROM postings WHERE tiktok_account_id=$1 AND status='pending'",
+      [conta.id]
+    );
+    const slots = rows.map((r) => slotDe(r.scheduled_for, fuso));
+    assert.equal(
+      new Set(slots).size,
+      slots.length,
+      `depois de criar o corte ${i + 1}, a fila tem horário repetido: ${slots.sort().join(', ')}`
+    );
+  }
+});
+
+test('horário liberado no meio da fila é reaproveitado, sem colidir com quem ficou', async () => {
+  // Uma postagem que dá erro (ou é cancelada) devolve o horário dela. O corte
+  // seguinte deve ocupar esse buraco — e nunca o horário de quem continua na
+  // fila. Escolher "o último dos N próximos" acertaria por acidente enquanto a
+  // fila fosse contígua, e entregaria horário repetido no primeiro buraco.
+  const { cliente, conta } = await contaComHorarios(['08:00', '12:00', '16:00', '20:00']);
+  const fuso = await fusoDaConta(conta.id);
+
+  const primeiro = await postingsRepo.createIfNotExists({
+    videoId: (await corteRegistrado(cliente.id)).id, tiktokAccountId: conta.id,
+  });
+  const segundo = await postingsRepo.createIfNotExists({
+    videoId: (await corteRegistrado(cliente.id)).id, tiktokAccountId: conta.id,
+  });
+  const slotDoSegundo = slotDe(segundo.scheduled_for, fuso);
+
+  // O primeiro sai da fila com erro, liberando o horário dele.
+  await pool.query("UPDATE postings SET status='error' WHERE id=$1", [primeiro.id]);
+
+  const terceiro = await postingsRepo.createIfNotExists({
+    videoId: (await corteRegistrado(cliente.id)).id, tiktokAccountId: conta.id,
+  });
+
+  assert.notEqual(
+    slotDe(terceiro.scheduled_for, fuso),
+    slotDoSegundo,
+    'o corte novo foi marcado pro mesmo horário de um que já estava na fila'
+  );
+  assert.equal(
+    slotDe(terceiro.scheduled_for, fuso),
+    slotDe(primeiro.scheduled_for, fuso),
+    'o horário liberado ficou vago em vez de ser reaproveitado'
+  );
 });

@@ -4,39 +4,55 @@ const pool = require('../db/pool');
 const postingScheduleSettingsRepository = require('./postingScheduleSettingsRepository');
 const { projectQueueTimes } = require('../lib/postingSchedule');
 
-// Calcula UMA VEZ o horario previsto pra postagem que esta entrando na fila
-// agora, encaixando depois de tudo que ja saiu hoje + tudo que ja esta
-// esperando. Fica gravado em postings.scheduled_for e nunca mais muda
-// sozinho - ver reflowScheduledFor() pro unico jeito de recalcular todo
-// mundo de proposito (botao "Corrigir horarios").
+// Horario em que esta postagem vai sair. Nao e estimativa: desde 24/08/2026 o
+// job de publicacao so publica quando scheduled_for chega (ver
+// tiktokPostingJob), entao o que a tela mostra e o que acontece.
 //
-// Projeta a fila INTEIRA (os pendentes + este novo) e fica com o ultimo
-// horario, em vez de pedir "1 slot comecando no indice N". A diferenca
-// parece cosmetica e nao e: projectQueueTimes PULA os slots que ja passaram,
-// e um slot pulado nao consome indice. Entao, num fim de tarde em que todos
-// os horarios do dia ja venceram, "1 slot a partir do indice 0", "a partir
-// do 1" e "a partir do 5" devolvem todos o MESMO primeiro horario futuro -
-// e cada corte que ficava pronto era agendado pro mesmo minuto.
+// A conta e simples de proposito: pega os horarios configurados que ainda vao
+// acontecer, em ordem, e devolve o primeiro que nenhuma outra postagem
+// pendente ja reservou.
 //
-// Foi exatamente isso que aconteceu em 23/08/2026: 6 cortes de um cliente
-// terminaram entre 20h24 e 21h02, todos os horarios do dia ja tinham
-// passado, e os 6 foram agendados pra 00:00. Pedindo a fila inteira de uma
-// vez, cada um cai num slot distinto - a mesma conta que reflowScheduledFor
-// (o botao "Corrigir horarios") ja fazia certo, o que explica por que
-// clicar nele consertava.
+// As duas versoes anteriores tentavam achar o slot por ARITMETICA DE INDICE
+// ("pula os N que ja sairam hoje") e as duas erraram, porque a projecao pula
+// slots vencidos sem consumir indice - entao o mesmo horario era entregue pra
+// varias postagens. Perguntar "esse horario ja esta ocupado?" nao tem esse
+// problema: nao depende de quantos sairam, nem de que horas sao, nem de nada
+// ter acontecido na ordem prevista.
 async function computeNextScheduledFor(tiktokAccountId) {
   const settings = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(tiktokAccountId);
-  const postedToday = await countTodayForAccount(tiktokAccountId, settings.timezone);
-  const pendingCount = await countPendingForAccount(tiktokAccountId);
-  const horarios = projectQueueTimes({
+  const ocupados = await listPendingScheduledFor(tiktokAccountId);
+
+  // Um slot a mais que o numero de reservados garante que sempre sobra um
+  // livre, mesmo que todos os anteriores estejam tomados.
+  const candidatos = projectQueueTimes({
     mode: settings.mode,
     manualTimes: settings.manual_times,
     videosPerDay: settings.videos_per_day,
     timezone: settings.timezone,
-    postedToday: Number(postedToday),
-    count: pendingCount + 1,
+    // Sempre do inicio: quem ja saiu esta no passado e a projecao ja ignora
+    // horario passado. Descontar de novo pelo indice era a fonte do bug.
+    postedToday: 0,
+    count: ocupados.length + 1,
   });
-  return horarios[horarios.length - 1];
+
+  const livre = candidatos.find((c) => !ocupados.some((o) => mesmoHorario(o, c)));
+  return livre || candidatos[candidatos.length - 1];
+}
+
+// Dois horarios sao "o mesmo slot" quando caem no mesmo minuto. Comparar o
+// carimbo exato nao serve: o calculo preserva os segundos do instante em que
+// rodou, entao duas reservas pro mesmo 08:00 diferem em milissegundos.
+function mesmoHorario(a, b) {
+  return Math.abs(new Date(a).getTime() - new Date(b).getTime()) < 60000;
+}
+
+async function listPendingScheduledFor(tiktokAccountId) {
+  const { rows } = await pool.query(
+    `SELECT scheduled_for FROM postings
+      WHERE tiktok_account_id = $1 AND status = 'pending' AND scheduled_for IS NOT NULL`,
+    [tiktokAccountId]
+  );
+  return rows.map((r) => r.scheduled_for);
 }
 
 // Usa ON CONFLICT DO NOTHING: a restricao UNIQUE(video_id, tiktok_account_id)
@@ -166,7 +182,7 @@ async function findNextPendingForAccounts(accountIds) {
 
 // Postagem pendente mais antiga (na ordem da fila) de uma conta - e o que
 // o job de publicacao pega quando ha espaco na cota do dia.
-async function findOldestPendingForAccount(tiktokAccountId) {
+async function findOldestDuePendingForAccount(tiktokAccountId) {
   const { rows } = await pool.query(
     `SELECT p.*, c.local_clip_path, c.title AS clip_title, v.file_size_bytes,
             -- Usados pra conferir o limite de duracao da conta ANTES de subir o
@@ -175,6 +191,12 @@ async function findOldestPendingForAccount(tiktokAccountId) {
      FROM postings p
      ${CLIP_FILE_JOIN}
      WHERE p.tiktok_account_id = $1 AND p.status = 'pending'
+       -- So o que JA chegou a hora. Sem isto, scheduled_for era enfeite de
+       -- tela: o job publicava o mais antigo assim que tivesse "folga" no
+       -- dia, e um corte marcado pras 00:00 saia as 23:40.
+       -- scheduled_for nulo (postagem anterior a migration 032) conta como
+       -- vencido, senao ficaria parado pra sempre.
+       AND (p.scheduled_for IS NULL OR p.scheduled_for <= now())
      ORDER BY ${PENDING_ORDER}
      LIMIT 1`,
     [tiktokAccountId]
@@ -182,7 +204,7 @@ async function findOldestPendingForAccount(tiktokAccountId) {
   return rows[0] || null;
 }
 
-// Usado pelo botao "Postar agora": mesmos dados de findOldestPendingForAccount,
+// Usado pelo botao "Postar agora": mesmos dados de findOldestDuePendingForAccount,
 // mas buscando um corte especifico (e conferindo que pertence mesmo a esse
 // cliente e ainda esta pendente - nao deixa postar de novo algo ja postado/
 // cancelado clicando duas vezes rapido).
@@ -213,21 +235,6 @@ async function countTodayForAccount(tiktokAccountId, timezone) {
   return rows[0].count;
 }
 
-// Ultima vez que essa conta mandou uma postagem pra fora (usado pelo modo
-// automatico pra espacar - null se a conta nunca postou nada ainda).
-// So conta postagens que realmente saíram (status='posted') - antes contava
-// qualquer tentativa (inclusive as que falharam), fazendo uma conta com
-// erro persistente (ex: permissão do TikTok recusada) esperar o mesmo
-// espaçamento de "já postei recentemente" mesmo nunca tendo postado nada,
-// travando o retry automático em horas em vez de minutos.
-async function mostRecentPostedAt(tiktokAccountId) {
-  const { rows } = await pool.query(
-    "SELECT max(posted_at) AS last_posted_at FROM postings WHERE tiktok_account_id = $1 AND status = 'posted'",
-    [tiktokAccountId]
-  );
-  return rows[0].last_posted_at;
-}
-
 // Quantos itens estao esperando na fila agora (independente de cliente) -
 // usado pra encaixar o proximo slot livre ao criar uma postagem nova.
 async function countPendingForAccount(tiktokAccountId) {
@@ -245,17 +252,19 @@ async function countPendingForAccount(tiktokAccountId) {
 // senao volta o bug de um "Nao postar" empurrar todo mundo pra frente.
 async function reflowScheduledFor(tiktokAccountId) {
   const settings = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(tiktokAccountId);
-  const postedToday = await countTodayForAccount(tiktokAccountId, settings.timezone);
   const { rows: pending } = await pool.query(
     `SELECT p.id FROM postings p WHERE p.tiktok_account_id = $1 AND p.status = 'pending' ORDER BY ${PENDING_ORDER}`,
     [tiktokAccountId]
   );
+  // Os proximos N horarios futuros, na ordem da fila. Nao desconta o que ja
+  // saiu hoje: o que ja saiu esta no passado, e horario passado ja nao entra
+  // na projecao - descontar de novo empurrava a fila um slot a mais.
   const scheduledTimes = projectQueueTimes({
     mode: settings.mode,
     manualTimes: settings.manual_times,
     videosPerDay: settings.videos_per_day,
     timezone: settings.timezone,
-    postedToday: Number(postedToday),
+    postedToday: 0,
     count: pending.length,
   });
   for (let i = 0; i < pending.length; i++) {
@@ -509,12 +518,11 @@ module.exports = {
   listForClient,
   listAllWithDetails,
   updateStatus,
-  findOldestPendingForAccount,
+  findOldestDuePendingForAccount,
   findNextPendingForAccounts,
   findPublishableByIdOwnedByClient,
   countTodayForAccount,
   countPendingForAccount,
-  mostRecentPostedAt,
   reflowScheduledFor,
   setQueueOrder,
   saveDirectPostOptionsOwnedByClient,

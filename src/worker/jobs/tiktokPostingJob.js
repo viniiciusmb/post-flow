@@ -13,9 +13,6 @@ const errorReportService = require('../../services/errorReportService');
 const publishOptions = require('../../lib/publishOptions');
 const logger = require('../../lib/logger');
 
-const AUTO_WINDOW_START_HOUR = 8;
-const AUTO_WINDOW_END_HOUR = 22;
-
 async function run() {
   await checkStaleProcessing();
 
@@ -30,24 +27,20 @@ async function run() {
   }
 }
 
-function nowInTimezone(timezone) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    hour: 'numeric',
-    minute: 'numeric',
-    hourCycle: 'h23',
-  }).formatToParts(new Date());
-  return {
-    hour: Number(parts.find((p) => p.type === 'hour').value),
-    minute: Number(parts.find((p) => p.type === 'minute').value),
-  };
-}
-
-function toMinutesOfDay(hhmm) {
-  const [h, m] = String(hhmm).split(':').map(Number);
-  return h * 60 + (m || 0);
-}
-
+// Publica no maximo UM corte por ciclo, e so o que ja chegou a hora marcada.
+//
+// Antes disto o job era "reativo": ele nao olhava scheduled_for nenhum, so
+// perguntava "quantos horarios do dia ja passaram?" e "quantos ja postei?" -
+// se sobrasse folga, publicava o mais antigo NA HORA. Com os horarios
+// 08/12/16/20/00, as 23h53 os cinco ja tinham "passado" (00:00 e o comeco do
+// dia), a folga era 5, e o corte marcado pras 00:00 saiu as 23:40 - seguido
+// de outro 10 minutos depois, no ciclo seguinte. O horario na tela era
+// enfeite.
+//
+// Agora quem manda e scheduled_for, calculado uma vez quando a postagem entra
+// na fila (ver computeNextScheduledFor). O teto de videos_per_day continua
+// como rede de seguranca, mas na pratica ele ja esta embutido na propria
+// projecao dos horarios.
 async function maybePublishNext(account) {
   const settings = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(account.id);
   if (settings.paused) return;
@@ -55,26 +48,7 @@ async function maybePublishNext(account) {
   const postedToday = await postingsRepository.countTodayForAccount(account.id, settings.timezone);
   if (postedToday >= settings.videos_per_day) return;
 
-  const { hour, minute } = nowInTimezone(settings.timezone);
-  const nowMinutes = hour * 60 + minute;
-
-  if (settings.mode === 'manual') {
-    const allowedSoFar = settings.manual_times.filter((t) => toMinutesOfDay(t) <= nowMinutes).length;
-    if (postedToday >= allowedSoFar) return;
-  } else {
-    if (hour < AUTO_WINDOW_START_HOUR || hour >= AUTO_WINDOW_END_HOUR) return;
-    const lastPostedAt = await postingsRepository.mostRecentPostedAt(account.id);
-    if (lastPostedAt) {
-      const minGapMinutes = Math.max(
-        20,
-        Math.floor(((AUTO_WINDOW_END_HOUR - AUTO_WINDOW_START_HOUR) * 60) / settings.videos_per_day)
-      );
-      const elapsedMinutes = (Date.now() - new Date(lastPostedAt).getTime()) / 60000;
-      if (elapsedMinutes < minGapMinutes) return;
-    }
-  }
-
-  const posting = await postingsRepository.findOldestPendingForAccount(account.id);
+  const posting = await postingsRepository.findOldestDuePendingForAccount(account.id);
   if (!posting) return;
   await publish(account, posting);
 }

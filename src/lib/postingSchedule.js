@@ -1,9 +1,11 @@
-// Projeta uma estimativa de quando cada item da fila de postagem vai sair,
-// com base na configuracao de agendamento da conta (ver posting_schedule_settings)
-// e em quantos ja saem hoje - espelha a mesma logica reativa do
-// tiktokPostingJob.js, mas simulando pra frente em vez de agir a cada ciclo.
-// E so uma estimativa pra mostrar na tela ("postara aproximadamente em..."),
-// nao uma garantia - o job de verdade e reativo e pode variar um pouco.
+// Gera os horarios em que a fila de postagem vai sair, a partir da
+// configuracao de agendamento da conta (ver posting_schedule_settings).
+//
+// NAO e mais uma estimativa de tela. Desde 24/08/2026 o horario calculado aqui
+// e gravado em postings.scheduled_for e o job de publicacao so publica quando
+// ele chega (ver tiktokPostingJob) - o que a tela mostra e o que acontece.
+// Antes o job era reativo e ignorava esse valor, entao um corte marcado pras
+// 00:00 podia sair as 23:40.
 'use strict';
 
 const AUTO_WINDOW_START_HOUR = 8;
@@ -25,7 +27,7 @@ function nowInTimezone(timezone) {
 // Data/hora real (aproximada) que corresponde a "HH:MM" nesse fuso horario,
 // "dayOffset" dias a partir de hoje - calculada por diferenca de minutos a
 // partir do agora nesse fuso (nao trata troca de horario de verao no meio
-// da janela, aceitavel pra uma estimativa de UI).
+// da janela - o desvio de uma hora duas vezes por ano e aceitavel aqui).
 function projectedTimestamp(hhmm, dayOffset, timezone) {
   const { hour: nowHour, minute: nowMinute } = nowInTimezone(timezone);
   const nowTotalMin = nowHour * 60 + nowMinute;
