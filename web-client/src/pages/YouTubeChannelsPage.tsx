@@ -92,6 +92,9 @@ function ChannelCard({
   const t = useT()
   const recent = videos.slice(0, 6)
   const [savingActive, setSavingActive] = useState(false)
+  const [savingQueueGate, setSavingQueueGate] = useState(false)
+  // Espelho local pra caixa reagir no clique, sem esperar a volta do servidor.
+  const [queueGate, setQueueGate] = useState(channel.processOnlyWhenQueueClear)
   const [savingTiktokAccount, setSavingTiktokAccount] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [exportFolderLink, setExportFolderLink] = useState("")
@@ -111,6 +114,20 @@ function ChannelCard({
       setError(err instanceof ApiError ? err.message : t("canais.naoFoiPossivelSalvar"))
     } finally {
       setSavingActive(false)
+    }
+  }
+
+  async function handleToggleQueueGate(marcado: boolean) {
+    setError(null)
+    setQueueGate(marcado)
+    setSavingQueueGate(true)
+    try {
+      await api.post(`/api/client/youtube-channels/${channel.id}/queue-gate`, { ativo: marcado })
+    } catch (err) {
+      setQueueGate(!marcado) // desfaz na tela se o servidor recusou
+      setError(err instanceof ApiError ? err.message : t("canais.naoFoiPossivelSalvar"))
+    } finally {
+      setSavingQueueGate(false)
     }
   }
 
@@ -219,6 +236,25 @@ function ChannelCard({
               {savingActive ? t("comum.salvando") : channel.isActive ? t("canais.pausar") : t("canais.retomar")}
             </Button>
           </div>
+
+          {/* Freio de engarrafamento, logo abaixo do liga/desliga porque é a
+              mesma decisão: QUANDO pegar vídeo novo. Sem ele, um canal que
+              publica todo dia gera cortes mais rápido do que a fila publica, a
+              fila só cresce, e o corte que finalmente sai já está velho. */}
+          <label className="-mt-1 flex cursor-pointer items-start gap-2.5 rounded-lg border border-border bg-muted/30 p-3">
+            <Checkbox
+              checked={queueGate}
+              disabled={savingQueueGate}
+              onCheckedChange={(v) => handleToggleQueueGate(v === true)}
+              className="mt-0.5"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">{t("canais.esperarFilaBaixar")}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {t("canais.esperarFilaBaixarTexto")}
+              </span>
+            </span>
+          </label>
 
           <div className="flex flex-col gap-2 border-t border-border pt-3">
             <div className="flex items-center gap-2 text-sm font-medium">

@@ -41,6 +41,7 @@ async function list(req, res) {
         checkFailCount: c.check_fail_count,
         exportFolder: exportFolder ? { id: exportFolder.drive_folder_id, name: exportFolder.folder_name } : null,
         driveExportMode: c.drive_export_mode,
+        processOnlyWhenQueueClear: c.process_only_when_queue_clear,
         tiktokAccountId: c.tiktok_account_id,
         tiktokAccountName: tiktokAccount ? tiktokAccount.display_name || tiktokAccount.tiktok_open_id : null,
       };
@@ -120,6 +121,7 @@ async function create(req, res) {
       checkFailCount: channel.check_fail_count ?? 0,
       exportFolder: null,
       driveExportMode: channel.drive_export_mode,
+      processOnlyWhenQueueClear: channel.process_only_when_queue_clear,
       tiktokAccountId: channel.tiktok_account_id,
       tiktokAccountName: tiktokAccounts.length === 1 ? tiktokAccounts[0].display_name || tiktokAccounts[0].tiktok_open_id : null,
     },
@@ -201,6 +203,18 @@ async function setActive(req, res) {
   res.json({ channel: { id: channel.id, isActive: channel.is_active } });
 }
 
+// Freio de engarrafamento: so pega video novo quando a fila de postagem
+// daquele canal esta quase vazia (ver channelCheckJob).
+async function setQueueGate(req, res) {
+  const channel = await youtubeChannelsRepository.setProcessOnlyWhenQueueClear(
+    Number(req.params.id),
+    req.session.user.id,
+    req.body.ativo === true
+  );
+  if (!channel) return res.status(404).json({ error: res.locals.t('erros.canalNaoEncontrado') });
+  res.json({ channel: { id: channel.id, processOnlyWhenQueueClear: channel.process_only_when_queue_clear } });
+}
+
 async function remove(req, res) {
   await youtubeChannelsRepository.remove(Number(req.params.id), req.session.user.id);
   res.status(204).end();
@@ -258,6 +272,7 @@ module.exports = {
   list,
   create,
   setActive,
+  setQueueGate,
   remove,
   setExportFolder,
   setDriveExportMode,

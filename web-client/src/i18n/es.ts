@@ -1000,4 +1000,6 @@ export const es: Dicionario = {
   "adm.ordemRecentes": "Más recientes",
   "adm.ordemAntigos": "Más antiguos",
   "adm.ordemMaiorCusto": "Mayor coste",
+  "canais.esperarFilaBaixar": "Solo tomar vídeo nuevo cuando la cola esté casi vacía",
+  "canais.esperarFilaBaixarTexto": "Recomendado. Con esto activado, el canal solo busca el vídeo más reciente cuando queda como máximo 1 clip esperando publicación — evita acumular una cola enorme y publicar clips de temas viejos.",
 }

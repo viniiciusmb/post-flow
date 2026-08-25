@@ -418,6 +418,8 @@ export interface YoutubeChannel {
   checkFailCount: number
   exportFolder: { id: string; name: string | null } | null
   driveExportMode: DriveExportMode
+  /** Só pega vídeo novo quando a fila de postagem deste canal está quase vazia. */
+  processOnlyWhenQueueClear: boolean
   tiktokAccountId: number | null
   tiktokAccountName: string | null
 }

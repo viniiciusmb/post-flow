@@ -120,7 +120,18 @@ async function markCheckFailed(id, mensagemDeErro) {
   );
 }
 
+// Liga/desliga o freio de engarrafamento deste canal.
+async function setProcessOnlyWhenQueueClear(id, clientUserId, valor) {
+  const { rows } = await pool.query(
+    `UPDATE youtube_channels SET process_only_when_queue_clear = $3
+      WHERE id = $1 AND client_user_id = $2 RETURNING *`,
+    [id, clientUserId, Boolean(valor)]
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
+  setProcessOnlyWhenQueueClear,
   listActive,
   markCheckFailed,
   listByClientId,

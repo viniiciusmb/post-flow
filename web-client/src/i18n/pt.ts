@@ -1006,4 +1006,6 @@ export const pt = {
   "adm.ordemRecentes": "Mais recentes",
   "adm.ordemAntigos": "Mais antigos",
   "adm.ordemMaiorCusto": "Maior custo",
+  "canais.esperarFilaBaixar": "Só pegar vídeo novo quando a fila estiver quase vazia",
+  "canais.esperarFilaBaixarTexto": "Recomendado. Com isto ligado, o canal só busca o vídeo mais recente quando restar no máximo 1 corte esperando publicação — evita acumular uma fila enorme e postar corte de assunto velho.",
 } as const

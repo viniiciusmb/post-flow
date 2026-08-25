@@ -6,10 +6,29 @@ const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRep
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
 const ytDlpService = require('../../services/ytDlpService');
 const queuePriorityService = require('../../services/queuePriorityService');
+const postingsRepository = require('../../repositories/postingsRepository');
 const errorReportService = require('../../services/errorReportService');
 const logger = require('../../lib/logger');
 
 const QUEUE_VIDEO_PROCESSING = 'video-processing';
+
+// Com "so processar quando a fila estiver quase vazia" ligado, o canal so pega
+// video novo quando restam no maximo ESTE tanto de cortes esperando publicacao.
+//
+// Sem esse freio, um canal que publica todo dia gera cortes mais rapido do que
+// a fila consegue postar: a fila cresce sem parar e, quando um corte finalmente
+// sai, o assunto dele ja e velho. O freio troca "cortar tudo" por "cortar o que
+// vai sair logo".
+const CORTES_NA_FILA_PRA_LIBERAR = 1;
+
+// A fila que importa e a da conta do TikTok onde ESTE canal publica. Canal sem
+// conta vinculada nao tem fila pra engarrafar (os cortes vao pro Drive ou ficam
+// prontos esperando), entao nada segura ele.
+async function filaEstaLivre(channel) {
+  if (!channel.tiktok_account_id) return true;
+  const pendentes = await postingsRepository.countPendingForAccount(channel.tiktok_account_id);
+  return pendentes <= CORTES_NA_FILA_PRA_LIBERAR;
+}
 
 async function run(boss) {
   const channels = await youtubeChannelsRepository.listActive();
@@ -26,6 +45,21 @@ async function run(boss) {
         // a tentativa: sem isso a tela mostra a data da ultima checagem que deu
         // certo e parece que o agendamento parou.
         await youtubeChannelsRepository.markCheckFailed(channel.id, 'O canal nao devolveu nenhum video na listagem.');
+        continue;
+      }
+
+      // Freio de engarrafamento. Vem ANTES de cadastrar qualquer video: o
+      // marco d'agua (last_video_id) fica onde esta, entao o video continua
+      // "novo" e sera pego numa checagem futura, quando a fila tiver baixado.
+      // De quebra, isso faz o sistema pegar sempre o video MAIS RECENTE do
+      // momento em que a fila liberar, em vez de desengavetar o antigo.
+      if (channel.process_only_when_queue_clear && !(await filaEstaLivre(channel))) {
+        // lastVideoId nulo preserva o marco d'agua e so registra a checagem -
+        // sem isso a tela diria que o canal parou de ser conferido.
+        await youtubeChannelsRepository.updatePollState(channel.id, { lastVideoId: null });
+        logger.info(
+          `Canal "${channel.channel_name}": fila de postagem cheia, nao vou pegar video novo agora.`
+        );
         continue;
       }
 

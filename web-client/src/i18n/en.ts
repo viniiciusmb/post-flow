@@ -1000,4 +1000,6 @@ export const en: Dicionario = {
   "adm.ordemRecentes": "Newest first",
   "adm.ordemAntigos": "Oldest first",
   "adm.ordemMaiorCusto": "Highest cost",
+  "canais.esperarFilaBaixar": "Only pick up a new video when the queue is nearly empty",
+  "canais.esperarFilaBaixarTexto": "Recommended. With this on, the channel only fetches the most recent video when at most 1 clip is still waiting to be published — it stops a huge queue building up and posting clips about old news.",
 }

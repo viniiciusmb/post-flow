@@ -214,15 +214,21 @@ async function resumeAwaitingTunnel(id) {
   return rows[0] || null;
 }
 
-// Erros que parecem transitorios (proxy/rede) e ainda nao esgotaram as
-// tentativas automaticas, parados ha tempo suficiente pra nao brigar com um
-// retry manual que o cliente acabou de disparar.
+// Erros julgados passageiros na hora em que aconteceram, que ainda nao
+// esgotaram as tentativas automaticas e estao parados ha tempo suficiente pra
+// nao brigar com um retry manual que o cliente acabou de disparar.
+//
+// ATENCAO: antes esta consulta casava uma regex contra error_message. Essa
+// coluna passou a ser sempre NULL (a mensagem tecnica vive em system_errors),
+// entao o filtro nunca casava e o retry automatico ficou desligado sem aviso -
+// 3 de 3 videos em erro na producao, nenhum reprocessado. Nao voltar a
+// classificar por texto lido do banco: ver src/lib/erroDeProcessamento.js.
 async function findTransientErrorsForAutoRetry() {
   const { rows } = await pool.query(
     `SELECT * FROM source_videos
      WHERE status = 'error' AND auto_retry_count < 3
-       AND updated_at < now() - interval '10 minutes'
-       AND error_message ~* 'proxy|tunnel|timeout|econnreset|network|407|502|503'`
+       AND error_transient = true
+       AND updated_at < now() - interval '10 minutes'`
   );
   return rows;
 }
@@ -239,16 +245,20 @@ async function findStuckDetected() {
 // billingBlockReason so faz sentido junto de 'aguardando_creditos'. Qualquer
 // outro status limpa o motivo: sem isso, um video que voltou a processar
 // continuaria carregando "cartao recusado" e a tela mostraria o aviso antigo.
-async function updateStatus(id, status, { errorMessage = null, billingBlockReason = null } = {}) {
+async function updateStatus(id, status, { errorMessage = null, billingBlockReason = null, errorTransient = null } = {}) {
   const { rows } = await pool.query(
     `UPDATE source_videos
         SET status = $2,
             error_message = $3,
             billing_block_reason = CASE WHEN $2 = 'aguardando_creditos' THEN $4::text ELSE NULL END,
+            -- O veredito "isso foi passageiro?" e decidido no momento da falha
+            -- e guardado aqui. Qualquer status que nao seja erro limpa a marca,
+            -- senao um video que voltou a rodar continuaria elegivel a retry.
+            error_transient = CASE WHEN $2 = 'error' THEN $5::boolean ELSE NULL END,
             updated_at = now()
       WHERE id = $1
       RETURNING *`,
-    [id, status, errorMessage, billingBlockReason]
+    [id, status, errorMessage, billingBlockReason, errorTransient]
   );
   return rows[0] || null;
 }

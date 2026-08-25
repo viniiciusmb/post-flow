@@ -10,6 +10,7 @@ const config = require('../../config');
 const errorReportService = require('../../services/errorReportService');
 const downloadTunnelsRepository = require('../../repositories/downloadTunnelsRepository');
 const logger = require('../../lib/logger');
+const erroDeProcessamento = require('../../lib/erroDeProcessamento');
 const { PausedError, AwaitingCreditsError, ChargeFailedError, WaitingForTunnelError } = require('../../lib/errors');
 const creditsService = require('../../services/creditsService');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
@@ -780,7 +781,12 @@ async function run(sourceVideoId) {
     // A mensagem tecnica nao vai mais pra tela do cliente - ela vive no painel
     // de erros do admin. O cliente ve so que o video falhou e pode tentar de
     // novo; a causa e assunto de quem conserta.
-    await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', { errorMessage: null });
+    // O veredito e tomado AQUI, com o erro em maos - nunca depois, lendo de
+    // volta uma mensagem que a tela do cliente nao guarda mais.
+    await sourceVideosRepository.updateStatus(sourceVideo.id, 'error', {
+      errorMessage: null,
+      errorTransient: erroDeProcessamento.ehPassageiro(err),
+    });
     await errorReportService.report({
       operation: errorReportService.OPERACOES.VIDEO_PROCESSING,
       entityType: 'source_video',

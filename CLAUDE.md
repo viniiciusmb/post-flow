@@ -245,6 +245,19 @@ Duas lições: (1) `tsc` NÃO pega ordem de hooks — build passando não signif
 - Padrão `'duration'` de propósito: é o comportamento que já existia, e quem já configurou não pode ver o resultado mudar sozinho.
 - 417 testes (eram 407). Validado por mutação: fazer o modo `'count'` cair no caminho da duração quebra 3 testes.
 
+**O retry automático de vídeo estava DESLIGADO em silêncio (2026-08-25, migration `072`).** Relato do fundador: vídeo novo do canal monitorado não entrou em processamento. Ele **entrou** — e falhou no download com `"The page needs to be reloaded"` (bloqueio momentâneo do YouTube, classicamente passageiro). Devia ter sido reprocessado sozinho e não foi.
+
+- **Causa**: `findTransientErrorsForAutoRetry` decidia "isso parece passageiro?" casando regex contra `source_videos.error_message` — coluna que virou **sempre NULL** quando a mensagem técnica saiu da tela do cliente e passou a viver em `system_errors`. Em produção: **3 de 3 vídeos em erro com mensagem nula, nenhum reprocessado**. O CLAUDE.md já registrava a suspeita duas vezes ("o retry automático hoje quase nunca dispara, vale revisitar") — na prática ele nunca disparava.
+- **Correção**: `src/lib/erroDeProcessamento.js` classifica **no momento da falha, com o objeto de erro em mãos**, e o veredito é gravado em `source_videos.error_transient`. Mesmo padrão já usado na postagem. A busca do retry passou a filtrar por essa coluna. **Lição, agora pela terceira vez neste projeto: nunca reconstituir a natureza de um erro lendo texto de volta do banco.**
+- Diferença deliberada em relação à postagem: aqui **erro desconhecido conta como PERMANENTE**. Reprocessar um vídeo refaz download, Whisper e render — repetir um erro real 3 vezes gasta API a cada volta. Na postagem, repetir custa quase nada. Quando a dúvida custa caro, a escolha segura é parar e mostrar.
+
+**Freio de engarrafamento por canal (mesma migration).** `youtube_channels.process_only_when_queue_clear`, **ligado por padrão**: o canal só pega vídeo novo quando restam no máximo 1 corte pendente na fila daquela conta do TikTok. Sem isso, um canal que publica todo dia gera cortes mais rápido do que a fila publica, e o corte que finalmente sai já é de assunto velho.
+
+- O freio age **antes** de cadastrar qualquer vídeo e **não avança `last_video_id`** — o vídeo continua "novo" e é pego numa checagem futura. Se o marco avançasse, o freio viraria perda de conteúdo em vez de adiamento (travado por teste, validado por mutação).
+- De quebra, isso faz o sistema pegar sempre o vídeo **mais recente do momento em que a fila liberar**, em vez de desengavetar o antigo — que é exatamente o que o fundador pediu.
+- Canal sem conta do TikTok vinculada nunca é segurado: não há fila pra engarrafar.
+- 489 testes (eram 473). Três mutações validadas: voltar a classificar por mensagem, e o freio avançando o marco d'água.
+
 **Tela "Clientes" do admin: plano, custo e cortes postados (2026-08-24).** Antes só listava nome, canais e origem — não dava pra saber quanto cada cliente custa nem em que plano ele está.
 
 - **Plano na coluna Status**, com **"Free"** quando não há assinatura ativa (em branco pareceria dado faltando). Inadimplente ganha etiqueta própria.
