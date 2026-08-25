@@ -147,13 +147,23 @@ export function TelaCartaoDoCanal() {
           <Marca n={2} />
         </div>
 
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-2">
+          <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-sm bg-primary text-primary-foreground">
+            <IconCheck className="size-2.5" />
+          </span>
+          <span className="min-w-0 text-[10px] leading-snug">
+            Só pegar vídeo novo quando a fila estiver quase vazia
+          </span>
+          <Marca n={3} />
+        </div>
+
         <div className="space-y-1.5 rounded-lg border border-border p-2">
           <p className="text-[10px] font-semibold text-muted-foreground">Postar no TikTok em</p>
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px]">
               <IconBrandTiktok className="size-3" /> @suaconta
             </span>
-            <Marca n={3} />
+            <Marca n={4} />
           </div>
         </div>
 
@@ -162,13 +172,13 @@ export function TelaCartaoDoCanal() {
           <div className="flex flex-wrap items-center gap-2">
             <Campo valor="Cortes / Canal de exemplo" largura="w-40" />
             <Botao>Enviar sozinho</Botao>
-            <Marca n={4} />
+            <Marca n={5} />
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2 border-t border-border pt-2">
           <Botao tom="perigo">Remover canal</Botao>
-          <Marca n={5} />
+          <Marca n={6} />
         </div>
       </div>
     </Tela>

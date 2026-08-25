@@ -241,7 +241,10 @@ function ChannelCard({
               mesma decisão: QUANDO pegar vídeo novo. Sem ele, um canal que
               publica todo dia gera cortes mais rápido do que a fila publica, a
               fila só cresce, e o corte que finalmente sai já está velho. */}
-          <label className="-mt-1 flex cursor-pointer items-start gap-2.5 rounded-lg border border-border bg-muted/30 p-3">
+          <label
+            data-tour="freio-de-fila"
+            className="-mt-1 flex cursor-pointer items-start gap-2.5 rounded-lg border border-border bg-muted/30 p-3"
+          >
             <Checkbox
               checked={queueGate}
               disabled={savingQueueGate}

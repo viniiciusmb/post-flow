@@ -331,15 +331,20 @@ const pt: Conteudo = {
             {
               n: 3,
               texto:
-                "Em qual conta do TikTok os cortes deste canal são publicados. Se você tem várias contas, cada canal aponta para uma.",
+                "O freio contra fila entupida, ligado por padrão. Com ele, o canal só busca um vídeo novo quando restar no máximo 1 corte esperando publicação. Sem ele, um canal que publica todo dia gera cortes mais rápido do que a fila consegue postar, a fila só cresce, e o corte que finalmente sai já é de assunto velho.",
             },
             {
               n: 4,
               texto:
-                "Opcional: uma pasta no seu Google Drive para receber os cortes prontos. “Enviar sozinho” manda cada corte assim que fica pronto; no modo manual, você escolhe um a um.",
+                "Em qual conta do TikTok os cortes deste canal são publicados. Se você tem várias contas, cada canal aponta para uma.",
             },
             {
               n: 5,
+              texto:
+                "Opcional: uma pasta no seu Google Drive para receber os cortes prontos. “Enviar sozinho” manda cada corte assim que fica pronto; no modo manual, você escolhe um a um.",
+            },
+            {
+              n: 6,
               texto:
                 "Remove o canal do monitoramento. Os cortes já gerados continuam onde estão.",
             },
@@ -350,6 +355,12 @@ const pt: Conteudo = {
           titulo: "Só vídeos novos",
           texto:
             "Ativar um canal não baixa o catálogo antigo dele. Vale do momento da ativação em diante — o sistema oferece processar o vídeo mais recente na hora do cadastro, se você quiser começar por ele.",
+        },
+        {
+          tipo: "aviso",
+          titulo: "Como o freio de fila funciona na prática",
+          texto:
+            "Enquanto a fila estiver cheia, o canal simplesmente não busca nada — nenhum vídeo fica acumulado esperando. Assim que a fila baixa para 1 ou 0, a próxima checagem (a cada 20 minutos) pega o vídeo mais recente do canal NAQUELE momento. É de propósito: o objetivo é publicar assunto fresco, não desengavetar o que ficou para trás.",
         },
       ],
     },
@@ -684,14 +695,19 @@ const en: Conteudo = {
             {
               n: 3,
               texto:
-                "Which TikTok account this channel's clips get published to. If you have several accounts, each channel points to one.",
+                "The anti-pile-up brake, on by default. With it, the channel only fetches a new video when at most 1 clip is still waiting to be published. Without it, a channel that publishes daily produces clips faster than the queue can post them, the queue only grows, and the clip that finally goes out is already old news.",
             },
             {
               n: 4,
               texto:
+                "Which TikTok account this channel's clips get published to. If you have several accounts, each channel points to one.",
+            },
+            {
+              n: 5,
+              texto:
                 "Optional: a folder in your Google Drive to receive finished clips. “Send automatically” uploads each clip as soon as it's ready; in manual mode you pick them one by one.",
             },
-            { n: 5, texto: "Removes the channel from monitoring. Clips already generated stay where they are." },
+            { n: 6, texto: "Removes the channel from monitoring. Clips already generated stay where they are." },
           ],
         },
         {
@@ -699,6 +715,12 @@ const en: Conteudo = {
           titulo: "New videos only",
           texto:
             "Activating a channel does not download its back catalogue. It applies from activation onwards — the system offers to process the most recent video right when you add it, if you want to start with that one.",
+        },
+        {
+          tipo: "aviso",
+          titulo: "How the queue brake actually works",
+          texto:
+            "While the queue is full the channel simply fetches nothing — no videos pile up waiting. As soon as the queue drops to 1 or 0, the next check (every 20 minutes) picks up the channel's most recent video AT THAT MOMENT. That's deliberate: the goal is to publish fresh material, not to dig out what was left behind.",
         },
       ],
     },
@@ -1008,14 +1030,19 @@ const es: Conteudo = {
             {
               n: 3,
               texto:
-                "En qué cuenta de TikTok se publican los clips de este canal. Si tienes varias cuentas, cada canal apunta a una.",
+                "El freno contra la cola atascada, activado por defecto. Con él, el canal solo busca un vídeo nuevo cuando queda como máximo 1 clip esperando publicación. Sin él, un canal que publica a diario genera clips más rápido de lo que la cola logra publicar, la cola solo crece, y el clip que por fin sale ya es de tema viejo.",
             },
             {
               n: 4,
               texto:
+                "En qué cuenta de TikTok se publican los clips de este canal. Si tienes varias cuentas, cada canal apunta a una.",
+            },
+            {
+              n: 5,
+              texto:
                 "Opcional: una carpeta en tu Google Drive para recibir los clips listos. “Enviar solo” sube cada clip en cuanto está listo; en modo manual los eliges uno a uno.",
             },
-            { n: 5, texto: "Quita el canal del monitoreo. Los clips ya generados se quedan donde están." },
+            { n: 6, texto: "Quita el canal del monitoreo. Los clips ya generados se quedan donde están." },
           ],
         },
         {
@@ -1023,6 +1050,12 @@ const es: Conteudo = {
           titulo: "Solo vídeos nuevos",
           texto:
             "Activar un canal no descarga su catálogo antiguo. Vale desde el momento de la activación en adelante — el sistema ofrece procesar el vídeo más reciente al darlo de alta, si quieres empezar por ese.",
+        },
+        {
+          tipo: "aviso",
+          titulo: "Cómo funciona el freno de cola en la práctica",
+          texto:
+            "Mientras la cola esté llena el canal simplemente no busca nada — ningún vídeo se acumula esperando. En cuanto la cola baja a 1 o 0, la siguiente comprobación (cada 20 minutos) toma el vídeo más reciente del canal EN ESE MOMENTO. Es a propósito: el objetivo es publicar tema fresco, no desenterrar lo que quedó atrás.",
         },
       ],
     },

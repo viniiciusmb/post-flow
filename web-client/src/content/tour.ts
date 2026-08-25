@@ -156,6 +156,20 @@ export const PASSOS_DO_TOUR: PassoDoTour[] = [
     },
   },
   {
+    pagina: "/client/youtube-channels",
+    alvo: '[data-tour="freio-de-fila"]',
+    titulo: {
+      pt: "O freio contra fila entupida",
+      en: "The anti-pile-up brake",
+      es: "El freno contra la cola atascada",
+    },
+    texto: {
+      pt: "Já vem ligado. Com ele, o canal só busca um vídeo novo quando restar no máximo 1 corte esperando publicação. Sem ele, um canal que publica todo dia gera cortes mais rápido do que a fila posta — a fila só cresce e o corte que sai já é de assunto velho. Enquanto segura, nada fica acumulado: quando a fila baixa, ele pega o vídeo mais recente daquele momento.",
+      en: "On by default. With it, the channel only fetches a new video when at most 1 clip is still waiting to be published. Without it, a daily channel produces clips faster than the queue posts them — the queue only grows and the clip that goes out is already old news. While it holds, nothing piles up: when the queue drops, it picks the most recent video at that moment.",
+      es: "Ya viene activado. Con él, el canal solo busca un vídeo nuevo cuando queda como máximo 1 clip esperando publicación. Sin él, un canal que publica a diario genera clips más rápido de lo que la cola publica — la cola solo crece y el clip que sale ya es de tema viejo. Mientras frena, nada se acumula: cuando la cola baja, toma el vídeo más reciente de ese momento.",
+    },
+  },
+  {
     pagina: "/client/billing",
     alvo: '[data-tour="creditos"]',
     titulo: {
