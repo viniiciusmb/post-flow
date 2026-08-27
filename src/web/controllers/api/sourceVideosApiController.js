@@ -10,6 +10,7 @@ const driveFoldersRepository = require('../../../repositories/driveFoldersReposi
 const driveConnectionsRepository = require('../../../repositories/driveConnectionsRepository');
 const googleService = require('../../../services/googleService');
 const ytDlpService = require('../../../services/ytDlpService');
+const { podeBaixarAgora, motivoDaEspera } = require('../../../lib/disponibilidadeDoVideo');
 const videoEditingService = require('../../../services/videoEditingService');
 const queueService = require('../../../services/queueService');
 const queuePriorityService = require('../../../services/queuePriorityService');
@@ -179,6 +180,16 @@ async function createManual(req, res) {
   } catch (err) {
     logger.error(`Falha ao adicionar video manual (${videoId}) pro cliente ${req.session.user.id}:`, err);
     return res.status(502).json({ error: `Nao foi possivel ler os dados desse video: ${err.message}` });
+  }
+
+  // Estreia marcada, live acontecendo agora ou gravacao ainda sendo processada
+  // pelo YouTube: a pagina existe, o arquivo nao. Recusar aqui, com data e
+  // motivo, e melhor do que aceitar e o video virar "erro" minutos depois sem
+  // o cliente entender por que.
+  if (!podeBaixarAgora(metadata.liveStatus)) {
+    return res.status(409).json({
+      error: `${res.locals.t('erros.videoAindaNaoDisponivel')} (${motivoDaEspera(metadata.liveStatus, metadata.releaseAt)}).`,
+    });
   }
 
   const sourceVideo = await sourceVideosRepository.createManual({

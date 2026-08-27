@@ -361,6 +361,7 @@ module.exports = {
     valorInvalido: "Invalid value.",
     cartaoNaoEncontrado: "Card not found.",
     nenhumCartaoCadastrado: "No card saved yet.",
+    videoAindaNaoDisponivel: "That video is not available for download yet.",
     videoJaAdicionado: "That video has already been added.",
     videoJaProcessado: "You have already processed that video.",
     videoNaoComErro: "That video is not in error or cancelled right now.",

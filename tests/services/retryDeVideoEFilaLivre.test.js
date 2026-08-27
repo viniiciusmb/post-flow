@@ -54,11 +54,16 @@ test('erro que não muda sozinho NÃO fica reprocessando', () => {
     'You have no credits remaining',
     'ERROR: [youtube] abc: Private video',
     'ERROR: [youtube] abc: Video unavailable',
-    'ERROR: [youtube] abc: This live event will begin in 3 hours',
     'insufficient_quota',
   ]) {
     assert.equal(erroDeProcessamento.ehPassageiro(new Error(m)), false, `"${m}" não devia ser repetido`);
   }
+
+  // "This live event will begin in 3 hours" ficava AQUI até 27/08/2026, e era
+  // o contrário da verdade: esse vídeo vai existir daqui a pouco - só não
+  // existe agora. Tratar como definitivo custou um vídeo perdido em produção
+  // (ver tests/services/estreiaDoYoutube.test.js).
+  assert.equal(erroDeProcessamento.ehPassageiro(new Error('This live event will begin in 3 hours')), true);
 });
 
 test('erro desconhecido não vira reprocessamento infinito', () => {

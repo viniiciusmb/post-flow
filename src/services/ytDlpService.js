@@ -27,6 +27,7 @@ const path = require('path');
 const os = require('os');
 const config = require('../config');
 const { PausedError } = require('../lib/errors');
+const { podeBaixarAgora } = require('../lib/disponibilidadeDoVideo');
 const downloadTunnelsRepository = require('../repositories/downloadTunnelsRepository');
 const settingsRepository = require('../repositories/settingsRepository');
 
@@ -219,7 +220,10 @@ function runOnce(args, { timeoutMs = 5 * 60 * 1000, proxyUrl = null, playerClien
 // tunel (a internet de casa do dono do sistema). Com o computador dele
 // desligado, a checagem falhava - e ficava 3 dias sem detectar video novo, sem
 // nenhum aviso, mesmo com o YouTube respondendo normalmente pra VPS.
-async function run(args, { clientUserId, allowDirect = false, ...opts } = {}) {
+// validarSaida: confere se a saida de UM candidato serve. Lancar ali faz o
+// loop tentar o proximo candidato, igualzinho a uma falha de verdade - e o
+// que permite tratar "respondeu 0, mas veio vazio" como tentativa perdida.
+async function run(args, { clientUserId, allowDirect = false, validarSaida, ...opts } = {}) {
   const candidates = await getCandidates(clientUserId);
   if (allowDirect) candidates.push({ type: 'direct', tunnelId: null, url: null });
   const candidatesToTry = candidates.length ? candidates : [{ type: 'direct', tunnelId: null, url: null }];
@@ -230,6 +234,7 @@ async function run(args, { clientUserId, allowDirect = false, ...opts } = {}) {
     for (const candidate of candidatesToTry) {
       try {
         const stdout = await runOnce(args, { ...opts, proxyUrl: candidate.url, playerClient });
+        if (validarSaida) validarSaida(stdout);
         return { stdout, usedCandidate: candidate };
       } catch (err) {
         // Pausa pedida pelo cliente nao e um erro transitorio de bloqueio -
@@ -303,6 +308,10 @@ async function listChannelVideos(channelUrl, { limit = 15 } = {}) {
       thumbnailUrl: entry.thumbnails?.at(-1)?.url || null,
       publishedAt: parseUploadDate(entry.upload_date),
       durationSeconds: entry.duration || null,
+      // "is_upcoming" numa estreia/live marcada, "is_live" numa transmissao
+      // acontecendo agora. Video normal nem traz o campo (fica null) - ver
+      // src/lib/disponibilidadeDoVideo.js.
+      liveStatus: entry.live_status || null,
     }));
 }
 
@@ -323,9 +332,41 @@ function extractVideoId(url) {
 // consulta de UM video devolve o titulo original e o idioma declarado. E uma
 // chamada a mais por video NOVO (nao por checagem), o que e barato.
 async function getVideoMetadata(url) {
-  const { stdout } = await run(['--dump-json', '--no-warnings', '--no-playlist', '--skip-download', url], {
-    allowDirect: true,
-  });
+  const { stdout } = await run(
+    [
+      '--dump-json',
+      '--no-warnings',
+      '--no-playlist',
+      '--skip-download',
+      // Sem isso, uma ESTREIA marcada nao devolve metadado nenhum: o yt-dlp
+      // aborta a leitura inteira com "Premieres in 58 minutes" / "This live
+      // event will begin in 7 hours", porque ainda nao existe formato pra
+      // baixar. Com a flag, ele devolve o JSON normalmente e o campo
+      // live_status conta o que esta acontecendo - que e exatamente o que
+      // precisamos saber pra ADIAR o video em vez de tentar baixar e falhar.
+      '--ignore-no-formats-error',
+      url,
+    ],
+    {
+      allowDirect: true,
+      // A flag acima tem um efeito colateral perigoso: ela tambem engole
+      // "Sign in to confirm you're not a bot" (o yt-dlp sai com codigo 0 e
+      // devolve um JSON sem nenhum formato). Sem esta checagem, um bloqueio do
+      // YouTube passaria por metadado valido - e, pior, o rodizio de
+      // proxy/tunel do run() nem chegaria a tentar a saida seguinte, porque pra
+      // ele a primeira tinha dado certo.
+      //
+      // Video SEM formato so e resposta legitima quando o proprio yt-dlp
+      // explica o porque em live_status (estreia marcada, live em andamento).
+      validarSaida: (saida) => {
+        const bruto = JSON.parse(saida.trim().split('\n')[0]);
+        const temFormatos = Array.isArray(bruto.formats) && bruto.formats.length > 0;
+        if (!temFormatos && podeBaixarAgora(bruto.live_status)) {
+          throw new Error('yt-dlp devolveu metadados sem nenhum formato (provavel bloqueio do YouTube).');
+        }
+      },
+    }
+  );
   const entry = JSON.parse(stdout.trim().split('\n')[0]);
   return {
     videoId: entry.id,
@@ -336,6 +377,15 @@ async function getVideoMetadata(url) {
     // Idioma declarado do video ('pt-BR', 'en'...). Serve de palpite inicial
     // ate o Whisper detectar o idioma falado de verdade.
     language: entry.language || null,
+    // Ver src/lib/disponibilidadeDoVideo.js.
+    liveStatus: entry.live_status || null,
+    // Quando a estreia vai ao ar (segundos desde 1970, do proprio YouTube).
+    releaseAt: entry.release_timestamp ? new Date(entry.release_timestamp * 1000) : null,
+    // A flag acima faz o yt-dlp devolver JSON tambem quando NAO ha nada pra
+    // baixar (formats: []). Na estreia isso e o que queremos; em qualquer
+    // outro caso e um video que vai falhar no download, e quem chama precisa
+    // poder recusar na hora em vez de descobrir depois.
+    temFormatos: Array.isArray(entry.formats) && entry.formats.length > 0,
   };
 }
 

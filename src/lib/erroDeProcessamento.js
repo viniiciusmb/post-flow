@@ -21,7 +21,6 @@ const SINAIS_PERMANENTES = [
   'private video',
   'video unavailable',
   'members-only',
-  'this live event will begin',
   'is not available in your country',
   'removed by the uploader',
   'age-restricted',
@@ -33,6 +32,17 @@ const SINAIS_PERMANENTES = [
 // Rede, bloqueio momentaneo do YouTube, sobrecarga. Tentar de novo daqui a
 // pouco costuma resolver sozinho.
 const SINAIS_PASSAGEIROS = [
+  // Estreia marcada / transmissao ao vivo que ainda nao virou arquivo. Ate
+  // 27/08/2026 "this live event will begin" estava na lista de PERMANENTES,
+  // o que era exatamente o contrario da verdade: esse video vai existir daqui
+  // a pouco - so nao existe AGORA. Um video da conta risestyle foi perdido
+  // assim. O caminho principal e nem chegar aqui (channelCheckJob adia a
+  // estreia sem cadastrar), isto e a rede de seguranca pro caso de o yt-dlp
+  // nao ter avisado na checagem.
+  'premieres in',
+  'this live event will begin',
+  'this live stream recording is not available',
+  'live event will begin',
   'the page needs to be reloaded',
   'sign in to confirm',
   'unable to download',

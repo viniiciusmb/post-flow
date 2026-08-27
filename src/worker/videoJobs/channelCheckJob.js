@@ -8,6 +8,7 @@ const ytDlpService = require('../../services/ytDlpService');
 const queuePriorityService = require('../../services/queuePriorityService');
 const postingsRepository = require('../../repositories/postingsRepository');
 const errorReportService = require('../../services/errorReportService');
+const { podeBaixarAgora, motivoDaEspera } = require('../../lib/disponibilidadeDoVideo');
 const logger = require('../../lib/logger');
 
 const QUEUE_VIDEO_PROCESSING = 'video-processing';
@@ -82,7 +83,30 @@ async function run(boss) {
       // cronologica (e pro video mais recente, no fim do loop, virar o
       // novo marco d'agua).
       const priority = await queuePriorityService.resolveQueuePriorityForClient(channel.client_user_id);
+      // Estreias/lives que ficaram pra depois. O marco d'agua NAO pode passar
+      // por cima delas - ver logo abaixo do loop.
+      const adiados = new Set();
       for (const video of [...newVideos].reverse()) {
+        // Ja conhecido: nao gasta consulta nenhuma com ele. Sem essa checagem,
+        // um marco d'agua segurado por uma estreia (ver adiados) faria o
+        // sistema reconsultar os mesmos videos a cada 20 minutos, pra sempre.
+        const jaConhecido = await sourceVideosRepository.findByYoutubeVideoIdForOwner(
+          video.videoId,
+          channel.client_user_id
+        );
+        if (jaConhecido) continue;
+
+        // A listagem ja costuma dizer que e estreia/live. Quando diz, nem
+        // precisamos consultar o video (que, nesse caso, e a consulta mais
+        // cara: o yt-dlp tenta achar formato e nao acha).
+        if (!podeBaixarAgora(video.liveStatus)) {
+          adiados.add(video.videoId);
+          logger.info(
+            `Canal "${channel.channel_name}": adiando "${video.title}" - ${motivoDaEspera(video.liveStatus, null)}.`
+          );
+          continue;
+        }
+
         // A listagem do canal devolve o titulo TRADUZIDO pelo YouTube: um video
         // chamado "ABRIMOS UM RESTAURANTE" chegava aqui como "WE OPENED A
         // RESTAURANT". Consultar o video em si devolve o titulo original.
@@ -96,6 +120,17 @@ async function run(boss) {
             logger.warn(`Nao consegui o titulo original do video ${video.videoId}: ${err.message}`);
             return null;
           });
+
+        // Segunda checagem, agora com a resposta autoritativa do proprio video.
+        // A listagem do canal pode nao ter marcado a estreia (o campo vem de um
+        // selo visual da pagina); a consulta individual sempre traz.
+        if (original && !podeBaixarAgora(original.liveStatus)) {
+          adiados.add(video.videoId);
+          logger.info(
+            `Canal "${channel.channel_name}": adiando "${original.title}" - ${motivoDaEspera(original.liveStatus, original.releaseAt)}.`
+          );
+          continue;
+        }
 
         const created = await sourceVideosRepository.createIfNotExists({
           youtubeChannelId: channel.id,
@@ -118,7 +153,23 @@ async function run(boss) {
         await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: created.id }, { priority });
       }
 
-      await youtubeChannelsRepository.updatePollState(channel.id, { lastVideoId: videos[0].videoId });
+      // O marco d'agua so pode avancar ate o video mais recente que NAO ficou
+      // pra depois. Passar por cima de uma estreia adiada seria perde-la pra
+      // sempre: quando ela finalmente for ao ar, ja estara "abaixo" do marco e
+      // ninguem mais vai olhar pra ela. Foi exatamente assim que um video da
+      // conta risestyle sumiu em 27/08/2026.
+      //
+      // videos[] vem do mais novo pro mais velho, entao o primeiro que nao foi
+      // adiado e o marco certo. Se TODOS foram adiados, lastVideoId nulo
+      // preserva o marco atual (e ainda registra que a checagem aconteceu).
+      //
+      // A segunda condicao cobre a PRIMEIRA checagem do canal, que nao passa
+      // pelo loop acima (ela so estabelece o marco, sem enfileirar nada do
+      // historico): sem ela, um canal cadastrado enquanto uma estreia esta
+      // marcada nasceria com o marco em cima da estreia - e o primeiro video
+      // que esse cliente veria seria o SEGUNDO do canal.
+      const marco = videos.find((v) => !adiados.has(v.videoId) && podeBaixarAgora(v.liveStatus));
+      await youtubeChannelsRepository.updatePollState(channel.id, { lastVideoId: marco ? marco.videoId : null });
       // Voltou a funcionar: fecha o erro sozinho, pra lista do painel nao
       // encher de problema que ja passou.
       await errorReportService.clear(errorReportService.OPERACOES.CHANNEL_CHECK, 'youtube_channel', channel.id);

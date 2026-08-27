@@ -370,6 +370,7 @@ module.exports = {
     valorInvalido: "Valor inválido.",
     cartaoNaoEncontrado: "Cartão não encontrado.",
     nenhumCartaoCadastrado: "Nenhum cartão cadastrado ainda.",
+    videoAindaNaoDisponivel: "Esse vídeo ainda não está disponível para download.",
     videoJaAdicionado: "Esse vídeo já foi adicionado antes.",
     videoJaProcessado: "Você já processou esse vídeo antes.",
     videoNaoComErro: "Esse vídeo não está com erro nem cancelado no momento.",

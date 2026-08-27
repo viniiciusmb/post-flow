@@ -223,12 +223,20 @@ async function resumeAwaitingTunnel(id) {
 // entao o filtro nunca casava e o retry automatico ficou desligado sem aviso -
 // 3 de 3 videos em erro na producao, nenhum reprocessado. Nao voltar a
 // classificar por texto lido do banco: ver src/lib/erroDeProcessamento.js.
+// A espera CRESCE a cada tentativa: 10 min, 40 min, 160 min.
+//
+// Antes eram 10 minutos fixos, entao as 3 tentativas se esgotavam em meia
+// hora. Isso nao resolve nenhum dos dois motivos reais de erro passageiro
+// aqui: bloqueio do YouTube costuma durar mais que 30 minutos, e uma ESTREIA
+// que so vai ao ar daqui a uma hora nunca chegaria a ser pega (foi o caso da
+// conta risestyle em 27/08/2026). Espalhando por ~3h30 as 3 tentativas
+// passam a cobrir os dois casos, sem custar tentativa nenhuma a mais.
 async function findTransientErrorsForAutoRetry() {
   const { rows } = await pool.query(
     `SELECT * FROM source_videos
      WHERE status = 'error' AND auto_retry_count < 3
        AND error_transient = true
-       AND updated_at < now() - interval '10 minutes'`
+       AND updated_at < now() - (interval '10 minutes' * power(4, auto_retry_count))`
   );
   return rows;
 }
