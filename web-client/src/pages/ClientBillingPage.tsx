@@ -379,6 +379,10 @@ export function ClientBillingPage() {
     return runAction("overage-setup", () => api.post("/api/client/billing/overage-card/setup"))
   }
 
+  function enableOverageCard() {
+    return runAction("overage-enable", () => api.post("/api/client/billing/overage-card/enable"))
+  }
+
   function disableOverageCard() {
     return runAction("overage-disable", () => api.post("/api/client/billing/overage-card/disable"))
   }
@@ -413,6 +417,15 @@ export function ClientBillingPage() {
   function promoVale(plan: { firstMonthPriceCents?: number | null }) {
     return Boolean(plan.firstMonthPriceCents) && Boolean(data?.subscription.promoDisponivel)
   }
+
+  // Qual cartão mostrar. O do Asaas é o atual; os da Stripe só existem para
+  // quem cadastrou antes da tokenização ser liberada.
+  const cartaoSalvo = data?.asaasCard?.last4
+    ? { brand: (data.asaasCard.brand ?? "").toLowerCase(), last4: data.asaasCard.last4 }
+    : payments && payments.cards.length > 0
+      ? { brand: payments.cards[0].brand, last4: payments.cards[0].last4 }
+      : null
+  const temCartaoSalvo = cartaoSalvo !== null
 
   // Os limites da barra só chegam com a resposta da API, então o estado começa
   // em null e cai no mínimo até lá - assim nenhum valor "chutado" aparece na
@@ -633,6 +646,37 @@ export function ClientBillingPage() {
                         >{t("plano.cadastrarOutroCartao")}</Button>
                       </div>
                     </>
+                  ) : temCartaoSalvo ? (
+                    /* Cartão salvo, cobrança automática DESLIGADA. É o estado
+                       normal de quem acabou de pagar: guardar o cartão não
+                       autoriza cobrá-lo sozinho, e essa autorização precisa de
+                       um clique dedicado — é a única cobrança do sistema que
+                       acontece sem ninguém clicar em nada. */
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <TonePill tone="neutral">Cartão salvo · cobrança automática desligada</TonePill>
+                        {cartaoSalvo && (
+                          <span className="text-sm text-muted-foreground">
+                            <CartaoLinha card={cartaoSalvo} />
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Enquanto estiver desligada, os vídeos param quando a cota da semana acabar. Ligando,
+                        eles continuam saindo e você paga só o que passou do plano.
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button disabled={busyKey === "overage-enable"} onClick={enableOverageCard}>
+                          {busyKey === "overage-enable" ? "Ativando..." : "Ativar cobrança automática"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busyKey === "overage-setup"}
+                          onClick={setupOverageCard}
+                        >{t("plano.cadastrarOutroCartao")}</Button>
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex flex-wrap items-center gap-2">
                       <Button disabled={busyKey === "overage-setup"} onClick={setupOverageCard}>{t("plano.cadastrarCartao")}</Button>

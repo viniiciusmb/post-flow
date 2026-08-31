@@ -159,7 +159,12 @@ async function setStripeSubscription(clientUserId, stripeSubscriptionId) {
 // conta do Asaas; vazado, não dá para usá-lo em lugar nenhum além de cobrar
 // nesta mesma conta. Bandeira/últimos 4/validade existem só para a tela poder
 // dizer qual cartão está salvo.
-async function setAsaasCard(clientUserId, { customerId, token, brand, last4, exp, enableOverage = true }) {
+// enableOverage NAO tem padrao ligado de proposito: quem chama tem que dizer
+// explicitamente que quer autorizar cobranca automatica. Um padrao "true" aqui
+// faria qualquer caminho novo que salvasse cartao autorizar cobranca sem
+// perceber - e essa e a unica cobranca do sistema que acontece sem ninguem
+// clicar em nada.
+async function setAsaasCard(clientUserId, { customerId, token, brand, last4, exp, enableOverage = false }) {
   const { rows } = await pool.query(
     `UPDATE client_subscriptions
         SET asaas_customer_id = COALESCE($2, asaas_customer_id),

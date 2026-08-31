@@ -208,3 +208,95 @@ test('erro de preenchimento vira 400 com o motivo, não 500 genérico', async ()
     assert.match(r.body.error, /CPF ou CNPJ inválido/);
   });
 });
+
+test('pagar no cartão salva o cartão mas NÃO autoriza cobrança automática', async () => {
+  await comAsaasFalso(respostasPadrao(), async () => {
+    const { cliente, agent } = await agenteLogado();
+    const plano = await subscriptionPlansRepository.findByKey('starter');
+    await clientSubscriptionsRepository.setPlan(cliente.id, plano.id);
+
+    const r = await agent.post('/api/client/checkout/pagar', {
+      tipo: 'plano',
+      metodo: 'cartao',
+      planKey: 'starter',
+      titular: {
+        nome: 'Marcelo Henrique Almeida',
+        documento: '52998224725',
+        cep: '89223005',
+        numeroEndereco: '277',
+      },
+      cartao: {
+        number: '5162306219378829',
+        expiryMonth: '05',
+        expiryYear: '2030',
+        ccv: '318',
+        holderName: 'MARCELO H ALMEIDA',
+      },
+    });
+    assert.equal(r.status, 200, r.text);
+
+    const sub = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+    assert.ok(sub.asaas_card_token, 'o cartão que pagou fica salvo pra não precisar redigitar');
+    assert.equal(
+      sub.overage_card_enabled,
+      false,
+      'pagar uma compra não pode virar autorização de cobranças futuras'
+    );
+  });
+});
+
+test('a cobrança automática só liga com um pedido explícito, e exige cartão salvo', async () => {
+  await comAsaasFalso(respostasPadrao(), async () => {
+    const { cliente, agent } = await agenteLogado();
+
+    // Sem cartão nenhum: ligar deixaria a assinatura marcada como "cobra
+    // automático" sem nada pra cobrar - falharia longe da tela, no meio de um
+    // processamento.
+    const semCartao = await agent.post('/api/client/billing/overage-card/enable');
+    assert.equal(semCartao.status, 400);
+    assert.equal((await clientSubscriptionsRepository.getOrCreate(cliente.id)).overage_card_enabled, false);
+
+    await clientSubscriptionsRepository.setAsaasCard(cliente.id, {
+      customerId: 'cus_do_teste',
+      token: 'tok_falso',
+      brand: 'VISA',
+      last4: '4242',
+      exp: '05/2030',
+    });
+    // Salvar por si só não liga nada.
+    assert.equal((await clientSubscriptionsRepository.getOrCreate(cliente.id)).overage_card_enabled, false);
+
+    const comCartao = await agent.post('/api/client/billing/overage-card/enable');
+    assert.equal(comCartao.status, 200);
+    assert.equal(comCartao.body.overageCardEnabled, true);
+
+    // E dá para desligar de volta sem perder o cartão.
+    const desligado = await agent.post('/api/client/billing/overage-card/disable');
+    assert.equal(desligado.body.overageCardEnabled, false);
+    const sub = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+    assert.ok(sub.asaas_card_token, 'desligar a cobrança não pode apagar o cartão salvo');
+  });
+});
+
+test('"não salvar" apaga o cartão e desliga a cobrança junto', async () => {
+  await comAsaasFalso(respostasPadrao(), async () => {
+    const { cliente, agent } = await agenteLogado();
+    await clientSubscriptionsRepository.setAsaasCard(cliente.id, {
+      customerId: 'cus_do_teste',
+      token: 'tok_falso',
+      brand: 'VISA',
+      last4: '4242',
+      exp: '05/2030',
+      enableOverage: true,
+    });
+
+    const r = await agent.delete('/api/client/checkout/cartao');
+    assert.equal(r.status, 200);
+
+    const sub = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+    assert.equal(sub.asaas_card_token, null);
+    // Deixar "cobra automático" ligado sem cartão é o estado que só falha longe
+    // da tela: as duas coisas têm que cair juntas.
+    assert.equal(sub.overage_card_enabled, false);
+  });
+});

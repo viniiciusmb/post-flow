@@ -112,9 +112,12 @@ test('o cartão vira token e o número não fica guardado em lugar nenhum', asyn
     }
     assert.equal(linha.asaas_card_token, 'tok_falso');
     assert.equal(linha.asaas_card_last4, '8829');
-    // Cadastrar cartão já liga a cobrança automática de excedente: é para isso
-    // que ele serve, e deixar desligado faria o vídeo travar com cartão salvo.
-    assert.equal(rows[0].overage_card_enabled, true);
+    // SALVAR NÃO É AUTORIZAR. Guardar o cartão para não redigitar é uma coisa;
+    // deixá-lo ser cobrado sozinho quando a cota acabar é outra, e é a única
+    // cobrança do sistema que acontece sem ninguém clicar em nada. Ligar junto
+    // transformaria "paguei uma vez" em "autorizei cobranças futuras" sem o
+    // cliente ter dito isso - que é o caminho curto para uma contestação.
+    assert.equal(linha.overage_card_enabled, false);
   });
 });
 

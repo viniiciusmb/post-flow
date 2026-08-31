@@ -24,6 +24,9 @@ router.get('/pix-authorization', asyncHandler(controller.pixAuthorizationStatus)
 // O que a pessoa acabou de pagar - a tela usa pra confirmar o recebimento.
 router.get('/ultimo-pagamento', asyncHandler(controller.ultimoPagamento));
 router.post('/overage-card/setup', asyncHandler(controller.setupOverageCard));
+// Ligar e desligar sao acoes SEPARADAS de salvar o cartao: guardar o cartao
+// nao autoriza cobranca automatica.
+router.post('/overage-card/enable', asyncHandler(controller.enableOverageCard));
 router.post('/overage-card/disable', asyncHandler(controller.disableOverageCard));
 // Cartoes salvos + extrato. Separado do /overview porque fala com a Stripe:
 // se ela cair, a tela de plano continua abrindo sem este pedaco.

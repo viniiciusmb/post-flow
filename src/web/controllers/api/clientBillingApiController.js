@@ -513,9 +513,32 @@ async function setDefaultCard(req, res) {
   res.json({ paymentMethodId });
 }
 
-// Desliga a cobranca automatica de excedente (nao mexe no cartao salvo na
-// Stripe, so para de usar - o cliente pode ligar de novo depois sem
-// recadastrar o cartao).
+// Liga a cobranca automatica de excedente NO CARTAO JA SALVO.
+//
+// E um endpoint proprio, e nao um efeito colateral de salvar o cartao, porque
+// sao duas decisoes diferentes: guardar o cartao pra nao redigitar na proxima
+// compra e AUTORIZAR que ele seja cobrado sozinho quando a cota acabar. Juntar
+// as duas transformaria "paguei uma vez" em "autorizei cobrancas futuras" sem
+// o cliente ter dito isso.
+//
+// Exige cartao salvo: ligar sem cartao deixaria a assinatura marcada como
+// "cobra automatico" sem nada pra cobrar - um estado que so falharia longe da
+// tela, no meio de um processamento.
+async function enableOverageCard(req, res) {
+  const clientUserId = req.session.user.id;
+  const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
+
+  const temCartao = Boolean(subscription.asaas_card_token) || Boolean(subscription.stripe_default_payment_method_id);
+  if (!temCartao) {
+    return res.status(400).json({ error: res.locals.t('erros.nenhumCartaoCadastrado') });
+  }
+
+  const updated = await clientSubscriptionsRepository.setOverageCard(clientUserId, { enabled: true });
+  res.json({ overageCardEnabled: updated.overage_card_enabled });
+}
+
+// Desliga a cobranca automatica de excedente (nao mexe no cartao salvo, so
+// para de usar - o cliente pode ligar de novo depois sem recadastrar).
 async function disableOverageCard(req, res) {
   const updated = await clientSubscriptionsRepository.setOverageCard(req.session.user.id, { enabled: false });
   if (!updated) return res.status(404).json({ error: res.locals.t('erros.assinaturaNaoEncontrada') });
@@ -543,6 +566,7 @@ module.exports = {
   subscribe,
   buyPackage,
   setupOverageCard,
+  enableOverageCard,
   disableOverageCard,
   payments,
   setDefaultCard,

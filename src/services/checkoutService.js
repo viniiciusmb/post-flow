@@ -222,13 +222,19 @@ async function salvarCartao({ clientUserId, dadosDoTitular, cartao, remoteIp, em
     remoteIp,
   });
 
+  // SALVAR NÃO É AUTORIZAR. O cartão fica guardado para as próximas compras,
+  // mas a cobrança automática de excedente (a única que tira dinheiro sem
+  // ninguém clicar em nada) continua DESLIGADA até o cliente ligar de
+  // propósito. Ligar junto seria transformar "paguei uma vez" em "autorizei
+  // cobranças futuras" sem ele ter dito isso — e é exatamente esse tipo de
+  // suposição que vira contestação no cartão.
   await clientSubscriptionsRepository.setAsaasCard(clientUserId, {
     customerId,
     token: tokenizado.creditCardToken,
     brand: tokenizado.creditCardBrand || null,
     last4: tokenizado.creditCardNumber || null,
     exp: `${card.expiryMonth}/${card.expiryYear}`,
-    enableOverage: true,
+    enableOverage: false,
   });
 
   return {

@@ -20,6 +20,15 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api, ApiError } from "@/lib/api"
 import { EMAIL_SUPORTE } from "@/lib/contato"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import {
+  Bandeira,
+  FileiraDeBandeiras,
+  detectarBandeira,
+  passaNoLuhn,
+  NOME_DA_BANDEIRA,
+  bandeiraDoAsaas,
+} from "@/components/checkout/BandeirasDeCartao"
 import type { CheckoutContexto, CheckoutItem, CheckoutPagamento } from "@/types/api"
 
 /*
@@ -95,18 +104,6 @@ function mascaraTelefone(v: string) {
   const d = soDigitos(v).slice(0, 11)
   if (d.length <= 10) return d.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d{1,4})$/, "$1-$2")
   return d.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d{1,4})$/, "$1-$2")
-}
-
-// Só para desenhar a bandeira enquanto a pessoa digita. Quem decide de verdade
-// qual é a bandeira é o Asaas; errar aqui não muda nada além do rótulo.
-function bandeiraProvavel(numero: string) {
-  const d = soDigitos(numero)
-  if (/^4/.test(d)) return "Visa"
-  if (/^(5[1-5]|2[2-7])/.test(d)) return "Mastercard"
-  if (/^3[47]/.test(d)) return "Amex"
-  if (/^(4011|4312|4389|4514|4576|5041|5066|5090|6277|6362|6363|650|651|655)/.test(d)) return "Elo"
-  if (/^(38|60)/.test(d)) return "Hipercard"
-  return null
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +210,12 @@ export function CheckoutPage() {
   const [usarOutroCartao, setUsarOutroCartao] = useState(false)
   const [concluido, setConcluido] = useState<CheckoutPagamento | null>(null)
   const [pix, setPix] = useState<{ paymentId: string; copiaECola: string; qr: string } | null>(null)
+  // Oferta que aparece DEPOIS do pagamento aprovado. Dois passos, cada um com
+  // uma decisão só: guardar o cartão, e — separadamente — autorizar que ele
+  // seja cobrado sozinho quando a cota acabar. Juntar as duas transformaria
+  // "paguei uma vez" em "autorizei cobranças futuras" sem ninguém dizer isso.
+  const [oferta, setOferta] = useState<"salvar" | "excedente" | null>(null)
+  const [ofertaOcupada, setOfertaOcupada] = useState(false)
   const [copiado, setCopiado] = useState(false)
 
   // O que está sendo comprado vem da barra de endereço. Uma tela só para as
@@ -325,6 +328,10 @@ export function CheckoutPage() {
       if (item.tipo === "cartao") {
         await api.post("/api/client/checkout/cartao", corpoDoCartao())
         setConcluido({ pago: true, tipo: "cartao" })
+        await carregar()
+        // Quem entrou aqui já decidiu guardar o cartão; a única pergunta que
+        // falta é se ele pode ser cobrado sozinho quando a cota acabar.
+        setOferta("excedente")
         return
       }
 
@@ -344,15 +351,49 @@ export function CheckoutPage() {
         return
       }
       setConcluido(r)
-      if (!r.pago) {
-        // Cartão em análise: dizer "pronto" agora seria mentir para quem
-        // acabou de pagar.
-        setErro(null)
+
+      // Pagou no cartão e ele foi aprovado: é o único momento em que existe um
+      // cartão recém-usado para oferecer guardar. Em pagamento pendente não se
+      // oferece nada — não há o que comemorar ainda.
+      if (metodo === "cartao" && r.pago) {
+        await carregar()
+        setOferta("salvar")
       }
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : "Não consegui concluir o pagamento agora.")
     } finally {
       setEnviando(false)
+    }
+  }
+
+  async function manterCartaoSalvo() {
+    // O cartão já está guardado (foi ele que pagou). "Salvar" aqui é confirmar
+    // que ele fica — o que muda é só passar para a pergunta seguinte.
+    setOferta("excedente")
+  }
+
+  async function descartarCartao() {
+    setOfertaOcupada(true)
+    try {
+      await api.delete("/api/client/checkout/cartao")
+    } catch {
+      // Se falhar, o cartão continua salvo e o cliente pode remover em "Plano
+      // e uso". Não vale segurar a tela de sucesso por causa disso.
+    } finally {
+      setOfertaOcupada(false)
+      setOferta(null)
+    }
+  }
+
+  async function ativarExcedente() {
+    setOfertaOcupada(true)
+    try {
+      await api.post("/api/client/billing/overage-card/enable")
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : "Não consegui ativar agora.")
+    } finally {
+      setOfertaOcupada(false)
+      setOferta(null)
     }
   }
 
@@ -362,7 +403,8 @@ export function CheckoutPage() {
       ? nome.trim().length >= 3 && soDigitos(documento).length >= 11
       : temCartaoSalvo
         ? true
-        : soDigitos(numero).length >= 13 &&
+        : passaNoLuhn(numero) &&
+          soDigitos(numero).length >= 13 &&
           validade.length === 5 &&
           cvv.length >= 3 &&
           nomeNoCartao.trim().length >= 3 &&
@@ -505,6 +547,14 @@ export function CheckoutPage() {
                       )}
                     </Button>
 
+                    {/* A fileira de bandeiras já está lá em cima, colada no
+                        campo do número, onde ela serve pra alguma coisa.
+                        Repeti-la aqui era só enfeite duplicado. */}
+                    <span className="flex items-center justify-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+                      <IconLock className="size-3.5" />
+                      Pagamento processado por Asaas
+                    </span>
+
                     <p className="text-center text-[11.5px] leading-relaxed text-muted-foreground">
                       Ao continuar você concorda com os{" "}
                       <a href="/termos" target="_blank" className="underline underline-offset-2">
@@ -523,6 +573,112 @@ export function CheckoutPage() {
           </>
         )}
       </main>
+
+      {/* Oferta de guardar o cartão, depois do pagamento aprovado.
+          Regra do fluxo: SALVAR NÃO É AUTORIZAR. São dois passos porque são
+          duas decisões — e a segunda (deixar o cartão ser cobrado sozinho)
+          nunca acontece por padrão, só com um clique dedicado. */}
+      <Dialog open={oferta !== null} onOpenChange={(aberto) => !aberto && setOferta(null)}>
+        <DialogContent className="sm:max-w-md">
+          {oferta === "salvar" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 pr-6">
+                  <IconCircleCheck className="size-5 text-emerald-500" />
+                  Pagamento aprovado
+                </DialogTitle>
+                <DialogDescription>
+                  Quer deixar este cartão salvo para as próximas compras?
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="flex flex-col gap-4">
+                {ctx?.card && (
+                  <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-3">
+                    {(() => {
+                      const marca = bandeiraDoAsaas(ctx.card.brand)
+                      return marca ? (
+                        <Bandeira id={marca} />
+                      ) : (
+                        <IconCreditCard className="size-4 shrink-0 text-muted-foreground" />
+                      )
+                    })()}
+                    <span className="text-sm">
+                      {(() => {
+                        const marca = bandeiraDoAsaas(ctx.card.brand)
+                        return marca ? NOME_DA_BANDEIRA[marca] : "Cartão"
+                      })()}{" "}
+                      <span className="tabular-nums">•••• {ctx.card.last4}</span>
+                    </span>
+                  </div>
+                )}
+
+                <p className="text-[13px] leading-relaxed text-muted-foreground">
+                  Salvando, você não precisa digitar o número de novo quando comprar créditos ou trocar de
+                  plano. <strong className="text-foreground">Nada é cobrado por deixá-lo salvo</strong> — só
+                  quando você autorizar uma compra.
+                </p>
+
+                <div className="flex flex-col gap-2">
+                  <Button onClick={manterCartaoSalvo} disabled={ofertaOcupada}>
+                    Salvar cartão
+                  </Button>
+                  <Button variant="ghost" onClick={descartarCartao} disabled={ofertaOcupada}>
+                    {ofertaOcupada ? "..." : "Não salvar"}
+                  </Button>
+                </div>
+
+                <p className="text-center text-[11.5px] leading-relaxed text-muted-foreground">
+                  Guardamos só uma referência ao cartão no Asaas — o número não fica com a gente. Se você
+                  assinou um plano, a mensalidade continua sendo cobrada normalmente de qualquer forma.
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle className="pr-6">Quer usar este cartão quando a cota acabar?</DialogTitle>
+                <DialogDescription>
+                  Isto é opcional e está <strong>desligado</strong>. Só liga se você clicar.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="flex flex-col gap-4">
+                <p className="text-[13px] leading-relaxed text-muted-foreground">
+                  Quando os minutos da semana acabam, os vídeos param de ser processados até a virada. Com
+                  isto ligado, eles continuam saindo e você paga só o que passou do plano
+                  {ctx && (
+                    <>
+                      {" "}
+                      — <strong className="text-foreground">{formatCents(ctx.overage.rateCentsNormal)} por
+                      minuto</strong> de vídeo, ou {formatCents(ctx.overage.rateCentsBonus)} usando a sua
+                      própria internet
+                    </>
+                  )}
+                  .
+                </p>
+
+                <div className="rounded-lg border border-border bg-muted/40 p-3">
+                  <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+                    A cobrança acontece <strong className="text-foreground">antes</strong> de cada vídeo, no
+                    valor exato dos minutos que passaram — nunca um valor fechado. Dá para desligar quando
+                    quiser em "Plano e uso".
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <Button onClick={ativarExcedente} disabled={ofertaOcupada}>
+                    {ofertaOcupada ? "Ativando..." : "Ativar cobrança automática"}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setOferta(null)} disabled={ofertaOcupada}>
+                    Agora não
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <footer className="border-t border-border bg-background py-5">
         <p className="mx-auto max-w-[1080px] px-4 text-center text-[11.5px] text-muted-foreground sm:px-6">
@@ -628,28 +784,58 @@ function FormularioDeCartao({
   nomeNoCartao: string
   setNomeNoCartao: (v: string) => void
 }) {
-  const bandeira = bandeiraProvavel(numero)
+  const bandeira = detectarBandeira(numero)
+  const digitos = soDigitos(numero)
+  // Só reclama quando o número já tem tamanho de cartão: avisar "inválido"
+  // no meio da digitação é errado e ainda parece que o cartão foi recusado.
+  const numeroCompleto = digitos.length >= 13
+  const numeroInvalido = numeroCompleto && !passaNoLuhn(digitos)
+
   return (
     <div className="flex flex-col gap-3.5">
-      <span className="text-[13px] font-medium">Dados do cartão</span>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className="text-[13px] font-medium">Dados do cartão</span>
+          <span className="text-[12px] text-muted-foreground">
+            {bandeira ? NOME_DA_BANDEIRA[bandeira] : "Aceitamos"}
+          </span>
+        </div>
+        {/* Uma peça só faz dois trabalhos: antes de digitar, mostra o que é
+            aceito; depois, apaga as outras e confirma qual foi reconhecida. */}
+        <FileiraDeBandeiras detectada={bandeira} />
+      </div>
 
       <Campo label="Número do cartão">
-        <div className="relative">
+        {/* A bandeira reconhecida fica exposta aqui pra poder ser conferida de
+            fora (teste de tela). Sem isso, a única forma de verificar seria ler
+            o desenho, e a fileira de bandeiras aceitas desenha todas elas o
+            tempo todo - o que dá falso positivo em qualquer checagem. */}
+        <div className="relative" data-bandeira={bandeira ?? "nenhuma"}>
           <Input
             value={numero}
             onChange={(e) => setNumero(mascaraCartao(e.target.value))}
             inputMode="numeric"
             autoComplete="cc-number"
             placeholder="0000 0000 0000 0000"
-            className="pr-20 tabular-nums"
+            aria-invalid={numeroInvalido}
+            className={`pr-16 tabular-nums ${numeroInvalido ? "border-destructive focus-visible:ring-destructive/30" : ""}`}
           />
+          {/* A bandeira aparece DENTRO do campo, do lado do número, no momento
+              em que é reconhecida. É a confirmação que quem está com o cartão
+              na mão procura: "ele aceita o meu". */}
           {bandeira && (
-            <span className="absolute top-1/2 right-3 -translate-y-1/2 text-[11.5px] font-medium text-muted-foreground">
-              {bandeira}
+            <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2">
+              <Bandeira id={bandeira} />
             </span>
           )}
         </div>
       </Campo>
+
+      {numeroInvalido && (
+        <p className="-mt-2 text-[12px] text-destructive">
+          Confira o número do cartão — parece faltar ou sobrar um dígito.
+        </p>
+      )}
 
       <div className="grid gap-3.5 sm:grid-cols-2">
         <Campo label="Validade">

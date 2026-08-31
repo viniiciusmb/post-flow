@@ -73,6 +73,10 @@ async function cobrarExcedente(planKey, duracaoMin) {
     remoteIp: '1.2.3.4',
     email: cliente.email,
   });
+  // Salvar o cartao NAO autoriza cobranca automatica - o cliente precisa ligar
+  // de proposito. Aqui isso e feito na mao porque e o que a tela faz quando ele
+  // clica em "Ativar cobranca automatica".
+  await clientSubscriptionsRepository.setOverageCard(cliente.id, { enabled: true });
   const video = await createSourceVideo(cliente.id, { durationSeconds: duracaoMin * 60 });
   const r = await creditsService.reserveBeforeDownload(video, cliente.id);
   return { cliente, plano, video, r };
@@ -132,6 +136,7 @@ test('cobrança não aprovada NÃO deixa o vídeo processar, e devolve o crédit
       remoteIp: '1.2.3.4',
       email: cliente.email,
     });
+    await clientSubscriptionsRepository.setOverageCard(cliente.id, { enabled: true });
     const video = await createSourceVideo(cliente.id, { durationSeconds: 20 * 60 });
 
     const r = await creditsService.reserveBeforeDownload(video, cliente.id);
@@ -139,5 +144,35 @@ test('cobrança não aprovada NÃO deixa o vídeo processar, e devolve o crédit
 
     const { rows } = await pool.query('SELECT * FROM client_credits WHERE client_user_id = $1', [cliente.id]);
     assert.equal(rows[0].used_normal, 0, 'os minutos consumidos têm que voltar: nada foi processado');
+  });
+});
+
+test('cartao salvo SEM autorizacao nao cobra nada: o video espera em vez de gastar', async () => {
+  // A regra que separa "guardei meu cartao" de "autorizei cobrancas": ter
+  // cartao salvo nao pode, sozinho, fazer o sistema tirar dinheiro de ninguem.
+  await comAsaasFalso(respostasPadrao(), async (chamadas) => {
+    const cliente = await createClient();
+    const plano = await subscriptionPlansRepository.findByKey('pro');
+    await clientSubscriptionsRepository.setPlan(cliente.id, plano.id);
+    await giveCredits(cliente.id, { quotaNormal: 0, quotaBonus: 0 });
+    await checkoutService.salvarCartao({
+      clientUserId: cliente.id,
+      dadosDoTitular: TITULAR,
+      cartao: CARTAO,
+      remoteIp: '1.2.3.4',
+      email: cliente.email,
+    });
+    chamadas.length = 0;
+
+    const video = await createSourceVideo(cliente.id, { durationSeconds: 20 * 60 });
+    const r = await creditsService.reserveBeforeDownload(video, cliente.id);
+
+    assert.equal(r.outcome, 'blocked', 'sem autorizacao explicita, o video espera');
+    assert.equal(
+      chamadas.filter((c) => c.metodo === 'POST' && c.caminho === '/payments').length,
+      0,
+      'nao pode existir nenhuma cobranca'
+    );
+    assert.equal(await overageChargesRepository.findBySourceVideoId(video.id), null);
   });
 });

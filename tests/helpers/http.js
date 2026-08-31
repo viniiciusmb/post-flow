@@ -102,8 +102,16 @@ function createAgent(url) {
       return { status: response.status };
     },
     async login(email, password) {
-      // GET primeiro pra receber o cookie de CSRF, igual abrir a pagina.
-      await request('GET', '/login');
+      // GET primeiro pra receber o cookie de CSRF, igual abrir a pagina - mas
+      // na LANDING, nao no /login.
+      //
+      // Motivo: /login esta na lista do limitador de forca bruta (20 pedidos
+      // por IP a cada 15 min), e o GET conta junto com o POST. Cada login
+      // gastava DOIS do orcamento, entao um arquivo com 11 testes estourava o
+      // limite e falhava com 429 - uma falha que parece bug do sistema e e do
+      // teste. O middleware de CSRF e global, entao qualquer GET serve pra
+      // pegar o cookie.
+      await request('GET', '/');
       const r = await request('POST', '/api/auth/login', { email, password });
       if (r.status !== 200) throw new Error(`login falhou (${r.status}): ${r.text}`);
       return r;
