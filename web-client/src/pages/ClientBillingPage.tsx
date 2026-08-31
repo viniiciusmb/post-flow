@@ -1,7 +1,7 @@
 import { Rico } from "@/components/dashboard/Rico"
 import { useT, type ChaveDeTraducao } from "@/i18n"
 import { useEffect, useState } from "react"
-import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter, IconClock, IconBrandYoutube, IconBrandTiktok, IconReceipt } from "@tabler/icons-react"
+import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter, IconClock, IconBrandYoutube, IconBrandTiktok, IconReceipt, IconPlus } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -124,6 +124,14 @@ function plural(qtd: number | null, umSo: string, varios: string, semLimite: str
   return `${qtd} ${qtd === 1 ? umSo : varios}`
 }
 
+// A promoção de primeiro mês só pode ser anunciada se o plano tiver preço
+// promocional E o cliente ainda não tiver usado a dele. Fora daqui, mostrar o
+// desconto seria prometer um preço que não vai acontecer.
+function descontoPercentual(plan: { priceCents: number; firstMonthPriceCents?: number | null }) {
+  if (!plan.firstMonthPriceCents) return 0
+  return Math.round((1 - plan.firstMonthPriceCents / plan.priceCents) * 100)
+}
+
 // Minutos do vídeo usado no exemplo de preço. Um número redondo e realista:
 // o cliente consegue comparar de cabeça com o vídeo dele.
 const VIDEO_EXEMPLO_MIN = 30
@@ -192,6 +200,7 @@ export function ClientBillingPage() {
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [minutosAvulsos, setMinutosAvulsos] = useState<number | null>(null)
   const [payments, setPayments] = useState<ClientPaymentsResponse | null>(null)
+  const [removerPedido, setRemoverPedido] = useState(false)
 
   async function load() {
     const res = await api.get<ClientBillingOverviewResponse>("/api/client/billing/overview")
@@ -387,6 +396,24 @@ export function ClientBillingPage() {
     }
   }
 
+  // Remoção em dois cliques, sem popup nativo: o mesmo padrão já usado na
+  // exclusão de vídeos. O primeiro clique só arma, o segundo executa.
+  async function removerConexaoExtra() {
+    if (!removerPedido) {
+      setRemoverPedido(true)
+      return
+    }
+    setRemoverPedido(false)
+    await runAction("extras-remover", () =>
+      api.post("/api/client/checkout/extras/remover", { quantidade: 1 })
+    )
+  }
+
+  // Só anuncia o desconto se o cliente ainda tiver direito a ele.
+  function promoVale(plan: { firstMonthPriceCents?: number | null }) {
+    return Boolean(plan.firstMonthPriceCents) && Boolean(data?.subscription.promoDisponivel)
+  }
+
   // Os limites da barra só chegam com a resposta da API, então o estado começa
   // em null e cai no mínimo até lá - assim nenhum valor "chutado" aparece na
   // tela antes de a gente saber o preço de verdade.
@@ -418,7 +445,12 @@ export function ClientBillingPage() {
             </Card>
           )}
 
-          {!data.stripeConfigured && (
+          {/* O aviso só vale quando NENHUM provedor está de pé. Enquanto ele
+              olhava só pra Stripe, a tela dizia "pagamento por cartão
+              indisponível" para um cliente que tinha acabado de pagar pelo
+              Asaas — o pior tipo de aviso: o que contradiz o que a pessoa
+              acabou de fazer. */}
+          {!data.stripeConfigured && !data.asaasConfigured && (
             <TonePill tone="neutral">{t("plano.cartaoIndisponivel")}</TonePill>
           )}
 
@@ -533,10 +565,22 @@ export function ClientBillingPage() {
                         {/* Com 1 cartão só, a bandeira e os 4 dígitos ficam
                             aqui mesmo; com vários, a lista abaixo já mostra
                             qual está selecionado e repetir seria ruído. */}
-                        {payments && payments.cards.length === 1 && (
+                        {data.asaasCard && data.asaasCard.last4 ? (
                           <span className="text-sm text-muted-foreground">
-                            <CartaoLinha card={payments.cards[0]} />
+                            <CartaoLinha
+                              card={{
+                                brand: (data.asaasCard.brand ?? "").toLowerCase(),
+                                last4: data.asaasCard.last4,
+                              }}
+                            />
                           </span>
+                        ) : (
+                          payments &&
+                          payments.cards.length === 1 && (
+                            <span className="text-sm text-muted-foreground">
+                              <CartaoLinha card={payments.cards[0]} />
+                            </span>
+                          )
                         )}
                       </div>
 
@@ -706,10 +750,31 @@ export function ClientBillingPage() {
                         </TonePill>
                       )}
                     </div>
-                    <div className="font-heading text-3xl font-semibold tabular-nums">
-                      {formatCents(plan.priceCents)}
-                      <span className="text-sm font-normal text-muted-foreground">/mês</span>
-                    </div>
+                    {/* Os DOIS degraus do preço, sempre juntos. Mostrar só o
+                        promocional e deixar o valor cheio para a fatura do mês
+                        seguinte é o que gera estorno e reclamação. */}
+                    {promoVale(plan) ? (
+                      <div>
+                        <div className="font-heading text-3xl font-semibold tabular-nums">
+                          {formatCents(plan.firstMonthPriceCents!)}
+                          <span className="text-sm font-normal text-muted-foreground">
+                            {" "}no 1º mês
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[13px] text-muted-foreground">
+                          depois{" "}
+                          <span className="tabular-nums">{formatCents(plan.priceCents)}</span>/mês ·{" "}
+                          <span className="font-medium text-primary">
+                            {descontoPercentual(plan)}% de desconto agora
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="font-heading text-3xl font-semibold tabular-nums">
+                        {formatCents(plan.priceCents)}
+                        <span className="text-sm font-normal text-muted-foreground">/mês</span>
+                      </div>
+                    )}
                     <div className="flex flex-col gap-2">
                       <Button
                         variant={isCurrent ? "outline" : "default"}
@@ -747,6 +812,69 @@ export function ClientBillingPage() {
               })}
             </CardContent>
           </Card>
+
+          {/* Conexões extras. Só existe nos planos que vendem slot: nos
+              outros, a saída é trocar de plano, e mostrar um card vazio aqui
+              ensinaria a ignorar esta parte da tela. */}
+          {data.subscription.extraSlotPriceCents && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <IconPlus className="size-4 text-muted-foreground" />
+                  Conexões extras
+                </CardTitle>
+                <CardDescription>
+                  Cada conexão libera 1 canal do YouTube e 1 conta do TikTok a mais, por{" "}
+                  {formatCents(data.subscription.extraSlotPriceCents)} por mês.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <RateBox
+                    titulo="Conexões extras ativas"
+                    valor={String(data.subscription.extraSlots)}
+                    detalhe={
+                      data.subscription.extraSlots > 0
+                        ? `+${formatCents(data.subscription.extraSlotPriceCents * data.subscription.extraSlots)} por mês`
+                        : "Nenhuma ainda"
+                    }
+                  />
+                  <RateBox
+                    titulo="Canais do YouTube"
+                    valor={`${data.subscription.limiteCanais ?? "∞"}`}
+                    detalhe="Total que você pode monitorar"
+                  />
+                  <RateBox
+                    titulo="Contas do TikTok"
+                    valor={`${data.subscription.limiteContas ?? "∞"}`}
+                    detalhe="Total em que você pode publicar"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button asChild>
+                    <a href="/client/checkout?extras=1">
+                      Adicionar 1 conexão por {formatCents(data.subscription.extraSlotPriceCents)}/mês
+                    </a>
+                  </Button>
+                  {data.subscription.extraSlots > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busyKey === "extras-remover"}
+                      onClick={removerConexaoExtra}
+                    >
+                      {removerPedido ? "Confirmar remoção" : "Remover 1 conexão"}
+                    </Button>
+                  )}
+                </div>
+                {removerPedido && (
+                  <p className="text-xs text-muted-foreground">
+                    O mês já pago não é devolvido — a cobrança some a partir do próximo.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {payments && payments.statement.length > 0 && (
             <Card>

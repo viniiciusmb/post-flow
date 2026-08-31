@@ -13,13 +13,38 @@ const overageChargesRepository = require('../repositories/overageChargesReposito
 const downloadTunnelsRepository = require('../repositories/downloadTunnelsRepository');
 const usersRepository = require('../repositories/usersRepository');
 const stripeService = require('./stripeService');
+const asaasService = require('./asaasService');
 const logger = require('../lib/logger');
 const { ROLES } = require('../config/constants');
 
-// R$0,25/min (caminho VPS/proxy) ou R$0,15/min (caminho app do cliente) -
-// valores do pedido original, snapshotados em cada cobranca (client_overage_charges.rate_cents_per_min)
-// pra nao mudar retroativamente se um dia forem ajustados.
-const OVERAGE_RATE_CENTS_PER_MIN = { normal: 25, bonus: 15 };
+// Quanto custa o minuto que passou da cota. Duas dimensoes:
+//
+//   - CAMINHO: pela nossa internet (normal) sai mais caro que pelo programa
+//     instalado no computador do cliente (bonus), porque no segundo a banda
+//     nao e nossa.
+//   - PLANO: quanto maior o plano, mais barato o minuto excedente. Isso vive
+//     em subscription_plans (overage_cents_normal/bonus), nao aqui, pra dar
+//     pra ajustar preco sem deploy.
+//
+// Estes valores sao o PISO de seguranca: cliente sem plano nenhum (ou linha de
+// plano sem as colunas preenchidas) cai neles. Sao os do plano menor de
+// proposito - errar pro lado caro cobra a mais de quem nao devia; errar pro
+// lado barato entrega processamento abaixo do custo.
+const TAXA_PADRAO_CENTS_PER_MIN = { normal: 25, bonus: 15 };
+
+// Mantido com o nome antigo porque e o que o resto do sistema (e os testes) ja
+// importam como "a taxa". Hoje ele e so o padrao; quem manda e taxasDoPlano().
+const OVERAGE_RATE_CENTS_PER_MIN = TAXA_PADRAO_CENTS_PER_MIN;
+
+// A taxa que vale pra ESTE cliente, a partir do plano dele. O valor escolhido
+// aqui e gravado em client_overage_charges.rate_cents_per_min como snapshot -
+// cobranca antiga nunca muda de valor porque o preco do plano mudou depois.
+function taxasDoPlano(subscription) {
+  return {
+    normal: Number(subscription && subscription.overage_cents_normal) || TAXA_PADRAO_CENTS_PER_MIN.normal,
+    bonus: Number(subscription && subscription.overage_cents_bonus) || TAXA_PADRAO_CENTS_PER_MIN.bonus,
+  };
+}
 
 // O dono do sistema nao gasta credito. O motor de credito existe pra medir e
 // cobrar CLIENTE; aplicar a mesma cota a quem e dono do servidor nao mede nada
@@ -30,6 +55,12 @@ async function isento(clientUserId) {
   if (!clientUserId) return false;
   const user = await usersRepository.findById(clientUserId);
   return Boolean(user && user.role === ROLES.ADMIN);
+}
+
+// Data de vencimento no fuso de Brasilia. Usar o fuso do servidor (UTC na
+// VPS) faria uma cobranca criada de madrugada nascer com vencimento "ontem".
+function hojeNoBrasil() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
 }
 
 function minutesFor(durationSeconds) {
@@ -51,6 +82,37 @@ async function resolveBucketForClient(clientUserId) {
 // sistema que tira dinheiro sem ninguem clicar em nada - tudo que ela precisa
 // conferir fica visivel aqui.
 async function cobrarAgora({ subscription, clientUserId, sourceVideo, minutes, amountCents }) {
+  const descricao = `Post Flow - processamento de ${minutes} min de video`;
+
+  // Asaas primeiro: e onde o cartao e salvo desde que a tokenizacao foi
+  // liberada pra conta. A Stripe continua atendendo quem cadastrou cartao
+  // antes disso - por isso os dois caminhos convivem, e a escolha e por qual
+  // cartao o cliente TEM, nao por qual provedor esta configurado.
+  if (subscription.asaas_card_token && subscription.asaas_customer_id) {
+    try {
+      const cobranca = await asaasService.createPayment({
+        customerId: subscription.asaas_customer_id,
+        billingType: 'CREDIT_CARD',
+        amountCents,
+        dueDate: hojeNoBrasil(),
+        description: descricao,
+        // Amarra a cobranca ao video, pra conferir depois no painel do Asaas
+        // de onde veio cada valor.
+        externalReference: `excedente:${clientUserId}:${sourceVideo.id}`,
+        creditCardToken: subscription.asaas_card_token,
+      });
+      if (cobranca.status === 'CONFIRMED' || cobranca.status === 'RECEIVED') {
+        return { ok: true, id: cobranca.id, provider: 'asaas' };
+      }
+      // Cartao em analise: o video NAO pode comecar a rodar contando com um
+      // dinheiro que talvez nao venha - o custo (download, Whisper, IA,
+      // render) nao tem como ser desfeito depois.
+      return { ok: false, motivo: `Cobranca nao aprovada (${cobranca.status}).` };
+    } catch (err) {
+      return { ok: false, motivo: err.message };
+    }
+  }
+
   if (!stripeService.isConfigured()) {
     return { ok: false, motivo: 'Cobranca por cartao ainda nao esta configurada no sistema.' };
   }
@@ -62,11 +124,21 @@ async function cobrarAgora({ subscription, clientUserId, sourceVideo, minutes, a
     customerId: subscription.stripe_customer_id,
     paymentMethodId: subscription.stripe_default_payment_method_id,
     amountCents,
-    description: `Post Flow - processamento de ${minutes} min de video`,
+    description: descricao,
     // Amarra a cobranca ao video, pra conferir depois no painel da Stripe de
     // onde veio cada valor.
     metadata: { clientUserId: String(clientUserId), sourceVideoId: String(sourceVideo.id) },
   });
+}
+
+// Em qual coluna gravar o id da cobranca. Coluna explicita por provedor, e nao
+// uma so "id do pagamento": o extrato cruza cada cobranca com o provedor certo,
+// e um id da Stripe procurado no Asaas (ou o contrario) nao acha nada e o
+// lancamento apareceria sem origem.
+function idDaCobranca(cobranca) {
+  return cobranca.provider === 'asaas'
+    ? { asaasPaymentId: cobranca.id, stripePaymentIntentId: null }
+    : { stripePaymentIntentId: cobranca.id, asaasPaymentId: null };
 }
 
 // Chamado antes de iniciar o download de verdade (video de canal ou link
@@ -144,7 +216,7 @@ async function reserveBeforeDownload(sourceVideo, clientUserId) {
   // cartao fosse recusado, o custo (download, transcricao, IA, render) ja tinha
   // sido gasto e nao havia como desfazer. Cobrando antes, o pior caso e o video
   // esperar, nao o prejuizo.
-  const rateCentsPerMin = OVERAGE_RATE_CENTS_PER_MIN[bucket];
+  const rateCentsPerMin = taxasDoPlano(subscription)[bucket];
   const amountCents = Math.round(minutesUncovered * rateCentsPerMin);
   const cobranca = await cobrarAgora({
     subscription,
@@ -166,7 +238,7 @@ async function reserveBeforeDownload(sourceVideo, clientUserId) {
     bucket,
     minutes: minutesUncovered,
     rateCentsPerMin,
-    stripePaymentIntentId: cobranca.id,
+    ...idDaCobranca(cobranca),
   });
 
   // Parte saiu do credito: precisa do registro tambem, senao esses minutos
@@ -318,7 +390,8 @@ async function chargeForUpload(sourceVideo, clientUserId) {
   // Mesma regra do video de canal: cobra antes de processar (ver
   // reserveBeforeDownload). Aqui o arquivo ja esta em disco, mas o caro vem
   // depois - transcricao, IA e render.
-  const amountCents = Math.round(minutesUncovered * OVERAGE_RATE_CENTS_PER_MIN.normal);
+  const rateCentsPerMin = taxasDoPlano(subscription).normal;
+  const amountCents = Math.round(minutesUncovered * rateCentsPerMin);
   const cobranca = await cobrarAgora({
     subscription,
     clientUserId,
@@ -337,8 +410,8 @@ async function chargeForUpload(sourceVideo, clientUserId) {
     sourceVideoId: sourceVideo.id,
     bucket: 'normal',
     minutes: minutesUncovered,
-    rateCentsPerMin: OVERAGE_RATE_CENTS_PER_MIN.normal,
-    stripePaymentIntentId: cobranca.id,
+    rateCentsPerMin,
+    ...idDaCobranca(cobranca),
   });
 
   if (minutesFromCredit > 0) {
@@ -356,5 +429,7 @@ module.exports = {
   confirmAfterDownload,
   releaseIfReserved,
   chargeForUpload,
+  taxasDoPlano,
   OVERAGE_RATE_CENTS_PER_MIN,
+  TAXA_PADRAO_CENTS_PER_MIN,
 };

@@ -33,7 +33,9 @@ async function cenario({ quota, used, extra, duracaoMin, cartao = true }) {
      VALUES ($1, $2, $3, $4)`,
     [user.id, quota, used, extra]
   );
-  const { rows: [plano] } = await pool.query(`SELECT id FROM subscription_plans WHERE key = 'pro'`);
+  const { rows: [plano] } = await pool.query(
+    `SELECT id, overage_cents_normal FROM subscription_plans WHERE key = 'pro'`
+  );
   await pool.query(
     `INSERT INTO client_subscriptions
        (client_user_id, plan_id, status, overage_card_enabled, stripe_customer_id, stripe_default_payment_method_id)
@@ -46,7 +48,12 @@ async function cenario({ quota, used, extra, duracaoMin, cartao = true }) {
      VALUES ($1, $1, 'manual', $2, 'v', 'detected', $3) RETURNING *`,
     [user.id, `exc${contador}_${Date.now()}`.slice(0, 30), duracaoMin * 60]
   );
-  return { user, video };
+  // A TAXA vem do plano, nao de um numero escrito aqui. Ela mudou uma vez (era
+  // uma constante unica no codigo, virou coluna por plano) e todo valor
+  // decorado neste arquivo quebrou junto - decorar de novo seria repetir o
+  // erro. O que estes testes provam e a DIVISAO entre credito e cartao; o
+  // preco do minuto quem trava e taxaPorPlano.test.js.
+  return { user, video, taxa: Number(plano.overage_cents_normal) };
 }
 
 async function saldo(clientUserId) {
@@ -74,7 +81,7 @@ function comStripe(resultado, fn) {
 }
 
 test('o caso do dono: 10 min de cota sobrando, vídeo de 30 → usa os 10 e cobra 20', async () => {
-  const { user, video } = await cenario({ quota: 150, used: 140, extra: 0, duracaoMin: 30 });
+  const { user, video, taxa } = await cenario({ quota: 150, used: 140, extra: 0, duracaoMin: 30 });
 
   await comStripe({ ok: true, id: 'pi_1' }, async (cobrancas) => {
     const r = await creditsService.reserveBeforeDownload(video, user.id);
@@ -82,10 +89,10 @@ test('o caso do dono: 10 min de cota sobrando, vídeo de 30 → usa os 10 e cobr
     assert.equal(r.outcome, 'reserved_and_charged');
     assert.equal(r.minutesFromCredit, 10, 'os 10 minutos já pagos têm que ser usados');
     assert.equal(r.minutesUncovered, 20, 'só os 20 que passaram vão pro cartão');
-    // R$0,25/min no bolso normal: 20 x 25 = 500 centavos.
-    assert.equal(r.amountCents, 500, 'antes cobrava 750 (o vídeo inteiro)');
+    // So os 20 minutos descobertos, na taxa do plano deste cliente.
+    assert.equal(r.amountCents, 20 * taxa, 'antes cobrava o vídeo inteiro (30 min)');
     assert.equal(cobrancas.length, 1);
-    assert.equal(cobrancas[0].amountCents, 500);
+    assert.equal(cobrancas[0].amountCents, 20 * taxa);
   });
 
   const s = await saldo(user.id);
@@ -99,18 +106,19 @@ test('o caso do dono: 10 min de cota sobrando, vídeo de 30 → usa os 10 e cobr
 
   const overage = await overageChargesRepository.findBySourceVideoId(video.id);
   assert.equal(overage.minutes, 20, 'a cobrança registrada é só do que passou');
-  assert.equal(overage.amount_cents, 500);
+  assert.equal(overage.amount_cents, 20 * taxa);
+  assert.equal(overage.rate_cents_per_min, taxa, 'a taxa fica gravada como snapshot');
 });
 
 test('gasta a cota primeiro e o avulso comprado depois, antes de tocar no cartão', async () => {
   // 10 de cota + 25 avulsos = 35 disponíveis; vídeo de 50 → 15 vão pro cartão.
-  const { user, video } = await cenario({ quota: 150, used: 140, extra: 25, duracaoMin: 50 });
+  const { user, video, taxa } = await cenario({ quota: 150, used: 140, extra: 25, duracaoMin: 50 });
 
   await comStripe({ ok: true, id: 'pi_2' }, async () => {
     const r = await creditsService.reserveBeforeDownload(video, user.id);
     assert.equal(r.minutesFromCredit, 35);
     assert.equal(r.minutesUncovered, 15);
-    assert.equal(r.amountCents, 375);
+    assert.equal(r.amountCents, 15 * taxa);
   });
 
   const tx = await creditTransactionsRepository.findBySourceVideoId(video.id);
@@ -147,13 +155,13 @@ test('SEM cartão: devolve o crédito consumido em vez de comer parte dele', asy
 });
 
 test('cartão RECUSADO: devolve o crédito consumido', async () => {
-  const { user, video } = await cenario({ quota: 150, used: 140, extra: 25, duracaoMin: 60 });
+  const { user, video, taxa } = await cenario({ quota: 150, used: 140, extra: 25, duracaoMin: 60 });
 
   await comStripe({ ok: false, motivo: 'Cartão recusado.' }, async () => {
     const r = await creditsService.reserveBeforeDownload(video, user.id);
     assert.equal(r.outcome, 'charge_failed');
     // 60 − 35 de crédito = 25 min a cobrar.
-    assert.equal(r.amountCents, 625);
+    assert.equal(r.amountCents, 25 * taxa);
   });
 
   const s = await saldo(user.id);
@@ -163,13 +171,13 @@ test('cartão RECUSADO: devolve o crédito consumido', async () => {
 });
 
 test('sem nenhum crédito, cobra o vídeo inteiro e não cria transação de crédito', async () => {
-  const { user, video } = await cenario({ quota: 150, used: 150, extra: 0, duracaoMin: 20 });
+  const { user, video, taxa } = await cenario({ quota: 150, used: 150, extra: 0, duracaoMin: 20 });
 
   await comStripe({ ok: true, id: 'pi_3' }, async () => {
     const r = await creditsService.reserveBeforeDownload(video, user.id);
     assert.equal(r.outcome, 'charged');
     assert.equal(r.minutes, 20);
-    assert.equal(r.amountCents, 500);
+    assert.equal(r.amountCents, 20 * taxa);
   });
 
   assert.equal(await creditTransactionsRepository.findBySourceVideoId(video.id), null);

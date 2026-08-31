@@ -79,6 +79,12 @@ async function landing(req, res) {
         description: t('landing.metaDescricao'),
         publisher: { '@id': `${CONTACT.siteUrl}/#organizacao` },
         featureList: t('landing.recursos').map((r) => r.h),
+        // O preco declarado e o RECORRENTE, nao o promocional do primeiro mes:
+        // e ele que o cliente paga em quase toda a vida da assinatura, e um
+        // dado estruturado que anuncia o preco de estreia faria o Google (e as
+        // IAs que leem isto) responderem "custa R$59,90/mes", que nao e
+        // verdade. A promocao entra na descricao, onde e informacao e nao
+        // promessa de preco.
         offers: plans.map((p) => ({
           '@type': 'Offer',
           name: p.name,
@@ -86,6 +92,13 @@ async function landing(req, res) {
           priceCurrency: 'BRL',
           category: 'Assinatura mensal',
           url: `${CONTACT.siteUrl}/#planos`,
+          ...(p.first_month_price_cents && p.first_month_price_cents < p.price_cents
+            ? {
+                description: `Primeiro mes por R$ ${(p.first_month_price_cents / 100)
+                  .toFixed(2)
+                  .replace('.', ',')}.`,
+              }
+            : {}),
         })),
       },
       {

@@ -28,6 +28,7 @@ const tiktokAccountsApiRoutes = require('./routes/api/tiktokAccountsApiRoutes');
 const tunnelPublicApiRoutes = require('./routes/api/tunnelPublicApiRoutes');
 const clientTunnelApiRoutes = require('./routes/api/clientTunnelApiRoutes');
 const clientBillingApiRoutes = require('./routes/api/clientBillingApiRoutes');
+const clientCheckoutApiRoutes = require('./routes/api/clientCheckoutApiRoutes');
 const adminBillingApiRoutes = require('./routes/api/adminBillingApiRoutes');
 const stripeWebhookApiRoutes = require('./routes/api/stripeWebhookApiRoutes');
 const asaasWebhookApiRoutes = require('./routes/api/asaasWebhookApiRoutes');
@@ -208,7 +209,13 @@ app.use(
 );
 app.use('/api/tunnel', rateLimits.publicApi);
 app.use(
-  ['/api/client/billing', '/api/admin/billing', '/api/client/commissions', '/api/admin/commissions'],
+  [
+    '/api/client/billing',
+    '/api/client/checkout',
+    '/api/admin/billing',
+    '/api/client/commissions',
+    '/api/admin/commissions',
+  ],
   rateLimits.billing
 );
 app.use('/api/client/source-videos/upload', rateLimits.upload);
@@ -245,6 +252,7 @@ app.use('/api/client/tiktok-accounts', tiktokAccountsApiRoutes);
 app.use('/api/tunnel', tunnelPublicApiRoutes);
 app.use('/api/client/tunnel', clientTunnelApiRoutes);
 app.use('/api/client/billing', clientBillingApiRoutes);
+app.use('/api/client/checkout', clientCheckoutApiRoutes);
 app.use('/api/admin/billing', adminBillingApiRoutes);
 app.use('/api/client/commissions', clientCommissionsApiRoutes);
 app.use('/api/admin/commissions', adminCommissionsApiRoutes);

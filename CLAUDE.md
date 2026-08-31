@@ -181,6 +181,7 @@ As chaves chegaram (`sk_live_`/`pk_live_`), `scripts/stripe-setup.js` já rodou 
 Corrigido de forma durável: `resolveStripeCustomerId` confere se o customer ainda existe e recria quando não existe (zerando junto assinatura e cartão, que pertenciam ao customer morto), e erro da Stripe vira 502 com mensagem específica. **Mesmo assim, sempre que trocar chave/conta da Stripe, confira `client_subscriptions` e `subscription_plans.stripe_price_id`** — o auto-cura resolve o customer, mas `stripe_price_id` de plano NÃO se cura sozinho (é preciso rodar `stripe-setup.js` de novo).
 
 Pendente / conhecido:
+- **O excedente saiu da Stripe em 31/08/2026** (ver a seção do checkout transparente). A Stripe continua no código só para quem cadastrou cartão antes disso; mensalidade, crédito avulso, conexões extras e excedente passam todos pelo Asaas.
 - **Nenhum pagamento REAL foi concluído ainda** (nem mensalidade, nem crédito avulso, nem cartão de excedente). O caminho até o Checkout está provado em produção (as 3 sessões são criadas de verdade), mas o que acontece DEPOIS do pagamento — webhook chegando, crédito caindo na conta, comissão de afiliado sendo gerada — nunca rodou. Zero webhooks recebidos até 14/08.
 - **Sistema de afiliados nunca testado contra uma comissão gerada por pagamento REAL da Stripe.** No primeiro pagamento de verdade, confirmar que `handleInvoicePaid` credita o afiliado certo antes de anunciar o programa pros clientes.
 - **E-mail de contato resolvido (03/08/2026)**: o endereço publicado nas páginas públicas é `contato@postflowtiktok.com` (existe, recebe, e é o mesmo remetente verificado na Resend). O antigo `suporte@` foi abandonado — não criar, não citar em lugar nenhum. Fonte única: `src/config/constants.js` → `CONTACT.supportEmail`.
@@ -210,6 +211,30 @@ Pendente / conhecido:
   - As duas migrations foram aplicadas contra uma **restauração real do backup de produção** (142 vídeos, 61 migrations) antes do deploy, não só contra banco vazio.
 
 **Deploy de 21/08/2026 — o que deu errado no EasyPanel e como foi recuperado.** O clique em "Implantar" registrou **"Success"** no log (`/etc/easypanel/actions/*.log`) mas **as imagens `easypanel/postflow/web:latest` e `video-worker:latest` sumiram do servidor** — o Swarm entrou em loop de `Rejected: "No such image"` e só não derrubou o site porque os containers antigos continuavam rodando (container só morre se for parado; a imagem sem tag sobrevive pelo ID). **Não confie no "Success" do EasyPanel**: confira `docker service ps postflow_web --format '{{.CurrentState}} {{.Error}}'` depois de todo deploy.
+
+**ACONTECEU DE NOVO em 31/08/2026 — não é acidente, é recorrente.** Mesmo sintoma exato: `web:latest` e `video-worker:latest` sumiram, `worker:latest` sobreviveu, os containers antigos continuaram no ar (site em 200 o tempo todo) e o Swarm ficou em loop de `Rejected: "No such image"`. Receita de conserto, que leva 2 minutos:
+
+```
+# 1. Confirme QUAL codigo a imagem sobrevivente tem antes de retaggear.
+#    Em 21/08 ela era o build novo; em 31/08 era o codigo ANTIGO - retaggear
+#    sem conferir teria "implantado" outra coisa sem ninguem perceber.
+docker run --rm --entrypoint sh easypanel/postflow/worker:latest -c 'ls migrations/*.sql | wc -l; ls src/services/<arquivo-novo>.js'
+
+# 2. Confirme que os containers VIVOS rodam essa mesma imagem (ai retaggear e risco zero).
+docker ps --filter name=postflow --format '{{.Names}}' | while read n; do echo "$n -> $(docker inspect --format '{{.Image}}' $n)"; done
+
+# 3. Devolve os nomes.
+docker tag <ID> easypanel/postflow/web:latest
+docker tag <ID> easypanel/postflow/video-worker:latest
+```
+
+**Depois do retag o Swarm NÃO converge sozinho**: as tentativas recusadas viram tarefas de verdade e o serviço fica em `3/1` — três `web` e três `video-worker` rodando ao mesmo tempo, o que é perigoso no video-worker (a VPS tem 2 núcleos e o teto medido é 2 vídeos simultâneos). Force a convergência, e no video-worker com `stop-first` para nunca haver dois processando:
+
+```
+docker service update --force --update-order stop-first postflow_video-worker
+docker service update --force postflow_web     # start-first: nao derruba o site
+```
+
 
 Detalhe que salvou: **os 3 serviços rodam a MESMA imagem** (mesmo Dockerfile, comandos diferentes), e a tag `worker:latest` sobreviveu — deu pra devolver os nomes com `docker tag <ID> easypanel/postflow/web:latest`. Depois: build manual na VPS a partir do commit certo (`git clone` + `docker build`, funcionou de primeira, provando que o problema não era o código), retag dos 3 e `docker service update --force --image ...`. A imagem do código anterior ficou guardada como **`postflow-rollback:codigo-antigo-2026-08-14`** — é o caminho de volta se algo aparecer.
 
@@ -327,6 +352,41 @@ Duas lições: (1) `tsc` NÃO pega ordem de hooks — build passando não signif
 - **`computeNextScheduledFor` empilhava todo mundo no mesmo horário.** Ela pedia "1 slot a partir do índice N" (N = postados hoje + pendentes), mas `projectQueueTimes` **pula slots vencidos sem consumir índice** — então, num fim de tarde em que todos os horários do dia já passaram, os índices 0, 1, 2… devolvem todos o mesmo primeiro horário futuro. Corrigido projetando a fila inteira (`count: pendingCount + 1`) e ficando com o último — a mesma conta que `reflowScheduledFor` (botão "Corrigir horários") já fazia certo, e é por isso que clicar nele consertava.
 - **Armadilha no teste desse segundo bug**: sob o defeito os carimbos diferiam em MILISSEGUNDOS entre si (cada corte era criado num instante diferente e o cálculo preservava os segundos do "agora"), apontando todos pro mesmo horário. Comparar `scheduled_for` cru dava valores "distintos" e o teste passava com o bug em pé — só pegou quando passou a comparar o SLOT (dia + HH:MM no fuso da conta). Vale pra qualquer teste de agendamento aqui.
 - `tests/services/filaDePostagemHorarios.test.js` reproduz o cenário escolhendo em tempo de execução um fuso onde já são 23h (senão o defeito não aparece: ele depende de haver slot vencido). 424 testes (eram 417); validado por mutação — reintroduzir cada bug derruba exatamente o teste correspondente.
+
+**Checkout transparente, preços em dois degraus e conexões extras (2026-08-31, migration `073`).** Três pedidos do fundador que couberam na mesma mudança porque tocam a mesma tabela de planos.
+
+**1. O pagamento deixou de sair do site.** A tokenização de cartão foi liberada para a conta do Asaas, e com ela o checkout hospedado (que jogava quem estava comprando para outro domínio, com outra identidade visual, no momento em que mais precisa confiar no que vê) foi **removido**: `createSubscriptionCheckout`/`createPackageCheckout` não existem mais. A tela nova é `/client/checkout` (`CheckoutPage.tsx`), uma só para as três compras — mensalidade, crédito avulso e conexões extras —, resolvida por parâmetro na barra de endereço (`?plano=`, `?creditos=`, `?extras=`, `?cartao=1`). Diz "Pagamentos processados por Asaas, instituição autorizada pelo Banco Central" com o CNPJ da empresa (vindo de `config/constants`, fonte única). `asaas_checkouts` e o `CHECKOUT_PAID` do webhook continuam existindo **só** para os checkouts hospedados já criados em produção.
+
+- **O número do cartão passa pelo servidor uma vez e vira token.** Nunca é gravado nem logado — há um teste que varre a linha do banco procurando por ele, e outro que confere o CVV coluna a coluna (a primeira versão procurava "318" como pedaço do JSON e dava falso positivo o tempo todo: três dígitos aparecem por acaso em id e carimbo de hora).
+- **ORDEM QUE NÃO PODE INVERTER**: a assinatura recorrente nasce ANTES da cobrança do primeiro mês, com vencimento em +30 dias — criar assinatura futura não move dinheiro. Se o cartão for recusado, a assinatura é cancelada e o cliente termina como começou. Na ordem inversa, uma falha depois do pagamento deixaria dinheiro cobrado sem recorrência, sem jeito automático de perceber. Travado por teste e validado por mutação.
+- **Nada é liberado pela resposta síncrona sozinha.** Toda liberação passa por `asaas_payments.markPaidOnce`, condicionado ao status anterior — então o aviso do Asaas chegando depois (ou duas vezes, que é o normal dele) nunca credita em dobro. Cartão em análise (`PENDING`) NÃO ativa nada; quem ativa é o webhook quando o resultado sai.
+- **Armadilha real fechada**: o token de cartão pertence ao CLIENTE do Asaas. Quando o customer some (troca de conta/ambiente), o token vai junto — se ficasse guardado, a cobrança de excedente falharia longe da tela, no meio de um processamento. Mesmo estrago da troca de chaves da Stripe em 14/08/2026.
+- **O excedente saiu da Stripe.** `creditsService.cobrarAgora` usa o cartão tokenizado do Asaas quando existe, e a Stripe só atende quem cadastrou cartão antes. O id fica em `client_overage_charges.asaas_payment_id` (coluna própria por provedor: procurar um id do Asaas na Stripe não acha nada e o lançamento apareceria sem origem).
+
+**2. Preço em dois degraus.** `subscription_plans.price_cents` passou a ser a mensalidade CHEIA e nasceu `first_month_price_cents` com o promocional. O preço que os clientes viam até hoje virou o do primeiro mês; o cheio é ele dividido por 0,6 (desfazendo os 40% de desconto), arredondado para terminar em ,90 — regra confirmada com o fundador antes de implementar, porque "40% de desconto" e "40% a mais" dão números diferentes e ele tinha citado os dois.
+
+| plano | 1º mês | depois | canais | contas | min/sem | bônus | excedente | slot extra |
+|---|---|---|---|---|---|---|---|---|
+| starter | 59,90 | 99,90 | 1 | 1 | 90 | 120 | R$0,25/min | — |
+| pro | 99,90 | 166,90 | 2 | 2 | 180 | 240 | R$0,20/min | — |
+| max | 139,90 | 233,90 | 3 | 3 | 270 | 360 | R$0,18/min | R$29,90/mês |
+
+- **A promoção vale UMA vez por cliente** (`client_subscriptions.first_month_used_at`, marcado só quando o primeiro mês é efetivamente PAGO — quem teve o cartão recusado continua com direito). Sem isso, cancelar e reassinar seria desconto infinito. Trocar de plano depois cobra o preço cheio.
+- **O segundo degrau é dito na cara**, na landing e no checkout: "R$59,90 no 1º mês · depois R$99,90/mês". Anunciar só o promocional e deixar o cheio para a fatura seguinte é o que gera estorno.
+- **O PIX Automático aceita os dois valores no mesmo pedido**: `immediateQrCode.originalValue` é o QR que o cliente paga agora (promocional) e `value` é o débito mensal (cheio). Foi o que permitiu dois degraus num produto que só tem um valor por autorização.
+- Os dados estruturados da landing declaram o preço RECORRENTE, não o de estreia: um `Offer` que anuncia R$59,90 faria o Google (e as IAs) responderem que o produto custa isso, o que não é verdade. A promoção entra na `description`.
+
+**3. A taxa de excedente virou coluna por plano** (`overage_cents_normal`/`bonus`). Era uma constante única no código; quanto maior o plano, mais barato o minuto. O valor continua sendo gravado como snapshot em `client_overage_charges.rate_cents_per_min` — reajuste futuro não muda cobrança antiga. Cliente sem plano cai num piso, que é o do plano MENOR de propósito: errar tem que ser para o lado caro, nunca entregar processamento abaixo do custo. **Isso quebrou 4 testes de `excedenteProporcional.test.js` que tinham 25 centavos decorado** — agora eles leem a taxa do plano, porque decorar de novo seria repetir o erro.
+
+**4. Conexões extras** (`client_subscriptions.extra_slots`). Cada slot = 1 canal do YouTube **e** 1 conta do TikTok (andam em par: canal sem conta não publica, conta sem canal não tem o que postar). Só no plano maior — `extra_slot_price_cents` NULL nos outros. `planLimitsService.limitesDe()` é a fonte única do limite EFETIVO (plano + slots) e é ela que a tela e o servidor usam; mostrar um número e barrar por outro faria o cliente achar que pagou por algo que não veio. Cobrança em dois passos, igual à assinatura: uma cobrança avulsa cobre o mês corrente e libera na hora, e uma assinatura recorrente separada passa a valer no mês seguinte, sempre com o valor do TOTAL de slots. Não pagar a recorrência dos extras remove os EXTRAS, não o plano — bloquear processamento inteiro por um adicional de R$29,90 seria desproporcional, e nada é apagado (canal e conta existentes continuam; o limite só volta a barrar novos).
+
+**O plano maior deixou de ser "ilimitado"** — enquanto fosse, não haveria nada para vender como conexão extra. Um único cliente ficou acima do novo limite: a conta do próprio fundador (`interactiveliveoficial@gmail.com`, 3 canais num plano que agora dá 2). Nada foi apagado; só adicionar um canal novo seria barrado.
+
+**Testes**: 545 (eram 501). Quatro arquivos novos (`checkoutTransparente`, `conexoesExtras`, `excedentePorPlano`, `precosELimitesDosPlanos`, `checkoutTransparenteHttp`) mais um Asaas de mentira reutilizável em `tests/helpers/asaasFalso.js`. Cinco mutações validadas: promoção sem trava vira desconto infinito, slot que não soma no limite, cobrar antes de criar a recorrência, preço aceito do corpo da requisição, e token órfão sobrevivendo ao cliente morto — cada uma derruba um teste diferente. **Armadilha do helper**: os ids falsos caem numa tabela com UNIQUE, num banco compartilhado por arquivos de teste que rodam em processos paralelos — contar 1, 2, 3 em cada processo fazia arquivos diferentes gerarem `pay_falso_1` ao mesmo tempo, e o teste só falhava na suíte completa, passando sozinho. Por isso o prefixo carrega pid + instante.
+
+**Verificado de verdade**: migration aplicada contra uma restauração real do backup de produção (banco de teste na VPS, depois apagado); pagamento completo pela tela com Playwright contra um Asaas falso local (cliente criado, cartão tokenizado, assinatura criada ANTES da cobrança, R$139,90 debitados, plano ativo, cota 270/360 na hora); compra de conexão extra e PIX de crédito também pela tela; 18 combinações de largura (1280/390/320) × tema, sem rolagem horizontal e sem erro de JS. **Defeito real achado nessa passagem**: a tela "Plano e uso" dizia "pagamento por cartão indisponível" olhando só para a Stripe — o pior tipo de aviso, o que contradiz o que a pessoa acabou de fazer.
+
+**A tela de checkout está em português, fora do dicionário de idiomas, de propósito**: ela coleta CPF/CNPJ e CEP, aceita PIX e é processada por instituição brasileira — o fluxo inteiro só existe no Brasil.
 
 **Regressão no funil de venda (2026-08-21, corrigida no mesmo dia).** Clicar num plano na landing e criar a conta passou a terminar no INÍCIO do painel em vez do checkout — a pessoa tinha que caçar a tela de planos e escolher tudo de novo. Causa: ao ensinar o login a lembrar a última página (`returnTo`, para quem volta de um pagamento sem sessão), coloquei esse destino ANTES do plano em `destinoDepoisDeEntrar`. Como a sessão dura 7 dias, um `returnTo` guardado dias antes sequestrava o cadastro inteiro.
 

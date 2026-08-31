@@ -19,7 +19,9 @@ const asaasPixAuthorizationsRepository = require('../../../repositories/asaasPix
 const asaasCheckoutsRepository = require('../../../repositories/asaasCheckoutsRepository');
 const cpfCnpj = require('../../../lib/cpfCnpj');
 const creditsService = require('../../../services/creditsService');
+const planLimitsService = require('../../../services/planLimitsService');
 const subscriptionCheckoutService = require('../../../services/subscriptionCheckoutService');
+const checkoutService = require('../../../services/checkoutService');
 const { resolveStripeCustomerId } = subscriptionCheckoutService;
 
 // Credito avulso: o cliente escolhe MINUTOS numa barra, e o preco por minuto e
@@ -32,8 +34,11 @@ const CREDITO_MIN_MINUTOS = 25;
 const CREDITO_PASSO_MINUTOS = 25;
 const CREDITO_MAX_MINUTOS = 1000;
 
-function centsPorMinutoAvulso() {
-  return creditsService.OVERAGE_RATE_CENTS_PER_MIN.normal;
+// Recebe a assinatura porque a taxa mudou de "uma constante" para "depende do
+// plano" (quanto maior o plano, mais barato o minuto). Sem argumento, devolve o
+// piso - que e o do plano menor, entao errar aqui nunca vende abaixo do custo.
+function centsPorMinutoAvulso(subscription) {
+  return creditsService.taxasDoPlano(subscription).normal;
 }
 
 // Quantos minutos comprar. Isolada e exportada porque e ela que separa uma
@@ -71,8 +76,12 @@ async function overview(req, res) {
     creditTransactionsRepository.listByClientId(clientUserId, { limit: 20 }),
   ]);
 
+  const taxas = creditsService.taxasDoPlano(subscription);
+  const limites = planLimitsService.limitesDe(subscription);
+
   res.json({
     stripeConfigured: stripeService.isConfigured(),
+    asaasConfigured: asaasService.isConfigured(),
     // O dono do sistema nao gasta credito (ver creditsService). A tela precisa
     // saber disso, senao mostra cota e plano pra quem nao esta sujeito a eles.
     isExempt: req.session.user.role === 'admin',
@@ -81,7 +90,25 @@ async function overview(req, res) {
       planName: subscription.plan_name || null,
       status: subscription.status,
       overageCardEnabled: subscription.overage_card_enabled,
+      promoDisponivel: !subscription.first_month_used_at,
+      extraSlots: Number(subscription.extra_slots) || 0,
+      extraSlotPriceCents: subscription.extra_slot_price_cents || null,
+      // O limite EFETIVO (plano + conexoes compradas). A tela precisa do mesmo
+      // numero que o servidor usa pra barrar - mostrar "1 canal" enquanto o
+      // servidor aceita 3 faz o cliente achar que pagou por algo que nao veio.
+      limiteCanais: limites.canais,
+      limiteContas: limites.contas,
     },
+    // O cartao agora e tokenizado no Asaas. Devolvido aqui (e nao so no
+    // /payments, que fala com a Stripe) pra tela saber que ha cartao salvo
+    // mesmo com a Stripe fora do ar.
+    asaasCard: subscription.asaas_card_token
+      ? {
+          brand: subscription.asaas_card_brand,
+          last4: subscription.asaas_card_last4,
+          exp: subscription.asaas_card_exp,
+        }
+      : null,
     credits: {
       normal: bucketView(credits, 'normal'),
       bonus: bucketView(credits, 'bonus'),
@@ -90,21 +117,28 @@ async function overview(req, res) {
       key: p.key,
       name: p.name,
       priceCents: p.price_cents,
+      // Preco do primeiro mes. A tela mostra os dois degraus lado a lado: um
+      // preco promocional exibido sozinho, sem dizer que vira outro no mes
+      // seguinte, e propaganda enganosa.
+      firstMonthPriceCents: p.first_month_price_cents,
       weeklyMinutesNormal: p.weekly_minutes_normal,
       weeklyMinutesBonus: p.weekly_minutes_bonus,
       maxYoutubeChannels: p.max_youtube_channels,
       maxTiktokAccounts: p.max_tiktok_accounts,
+      overageCentsNormal: p.overage_cents_normal,
+      overageCentsBonus: p.overage_cents_bonus,
+      extraSlotPriceCents: p.extra_slot_price_cents,
     })),
     overage: {
-      rateCentsNormal: creditsService.OVERAGE_RATE_CENTS_PER_MIN.normal,
-      rateCentsBonus: creditsService.OVERAGE_RATE_CENTS_PER_MIN.bonus,
+      rateCentsNormal: taxas.normal,
+      rateCentsBonus: taxas.bonus,
       pendingCents: pendingOverage.reduce((sum, c) => sum + c.amount_cents, 0),
     },
     package: {
       minMinutes: CREDITO_MIN_MINUTOS,
       stepMinutes: CREDITO_PASSO_MINUTOS,
       maxMinutes: CREDITO_MAX_MINUTOS,
-      centsPerMinute: centsPorMinutoAvulso(),
+      centsPerMinute: taxas.normal,
     },
     recentPurchases: purchases.map((p) => ({
       id: p.id,
@@ -126,13 +160,15 @@ async function overview(req, res) {
   });
 }
 
-// Assinar um plano pela primeira vez ou trocar de plano - redireciona pro
-// Checkout da Stripe (assinatura). Sem Stripe configurada ainda, devolve
-// 400 - o admin pode atribuir o plano manualmente enquanto isso (tela de
-// admin, sem depender daqui).
-// Mensalidade pelo Asaas. Nao precisa de preco cadastrado la (como o
-// stripe_price_id exigia): o valor vai no proprio checkout, direto da nossa
-// tabela de planos - uma fonte da verdade a menos pra sair de sincronia.
+// Assinar um plano ou trocar de plano.
+//
+// Devolve para onde ir, nao um pagamento: com o Asaas, o destino e a NOSSA
+// tela de checkout (/client/checkout), onde o cartao e digitado sem sair do
+// sistema. Antes isto abria a tela hospedada do Asaas, em outro dominio.
+//
+// A resposta continua sendo { checkoutUrl } porque e exatamente isso que ela
+// e - um endereco para onde mandar o cliente. Quem chama nao precisa saber se
+// o destino e interno ou de um provedor.
 async function subscribe(req, res) {
   const usarAsaas = asaasBillingService.clientePodeUsarAsaas(req.session.user);
   if (!usarAsaas && !stripeService.isConfigured()) {
@@ -140,9 +176,6 @@ async function subscribe(req, res) {
   }
 
   const plan = await subscriptionPlansRepository.findByKey(String(req.body.planKey || ''));
-  // O Asaas nao precisa de preco cadastrado la (como o stripe_price_id
-  // exigia): o valor vai no proprio checkout, direto da nossa tabela de
-  // planos - uma fonte da verdade a menos pra sair de sincronia.
   if (!plan || (!usarAsaas && !plan.stripe_price_id)) {
     return res.status(400).json({ error: res.locals.t('erros.planoInvalido') });
   }
@@ -152,8 +185,7 @@ async function subscribe(req, res) {
   const origin = `${req.protocol}://${req.get('host')}`;
 
   if (usarAsaas) {
-    const { checkoutUrl } = await asaasBillingService.createSubscriptionCheckout({ clientUserId, plan, origin });
-    return res.json({ checkoutUrl });
+    return res.json({ checkoutUrl: `/client/checkout?plano=${encodeURIComponent(plan.key)}` });
   }
 
   const customerId = await resolveStripeCustomerId(clientUserId, subscription);
@@ -183,18 +215,11 @@ async function buyPackage(req, res) {
   // o preco viesse no corpo da requisicao, daria pra comprar 1000 minutos por
   // um centavo.
   const minutes = minutosPedidos(req.body.minutes);
-  const priceCents = minutes * centsPorMinutoAvulso();
+  const priceCents = minutes * centsPorMinutoAvulso(subscription);
   const origin = `${req.protocol}://${req.get('host')}`;
 
   if (usarAsaas) {
-    const { checkoutUrl } = await asaasBillingService.createPackageCheckout({
-      clientUserId,
-      minutes,
-      bucket,
-      priceCents,
-      origin,
-    });
-    return res.json({ checkoutUrl });
+    return res.json({ checkoutUrl: `/client/checkout?creditos=${minutes}` });
   }
 
   const customerId = await resolveStripeCustomerId(clientUserId, subscription);
@@ -260,8 +285,16 @@ async function subscribePix(req, res) {
     customerId = criado.id;
   }
 
-  const resultado = await asaasBillingService.createPixAutomaticSubscription({ clientUserId, plan, customerId });
-  res.json(resultado);
+  // O QR de agora sai pelo preco promocional (quando o cliente ainda tem
+  // direito a ele) e a recorrencia ja nasce pelo preco cheio.
+  const preco = checkoutService.precoDaAssinatura(plan, subscription);
+  const resultado = await asaasBillingService.createPixAutomaticSubscription({
+    clientUserId,
+    plan,
+    customerId,
+    primeiraCobrancaCents: preco.primeiraCobrancaCents,
+  });
+  res.json({ ...resultado, primeiraCobrancaCents: preco.primeiraCobrancaCents, recorrenteCents: preco.recorrenteCents });
 }
 
 // A tela fica perguntando se ja pagou: o cliente sai do site pro app do banco
@@ -331,9 +364,16 @@ async function ultimoPagamento(req, res) {
   });
 }
 
-// Cadastra cartao pra cobranca automatica de excedente (modo "setup" - nao
-// cobra nada na hora, so guarda o cartao pro overageBillingJob semanal usar).
+// Cadastra cartao pra cobranca automatica de excedente. Nao cobra nada na
+// hora - so guarda o cartao (tokenizado) pra cobranca do excedente usar.
+//
+// Com o Asaas, isso acontece na NOSSA tela: o cliente digita o cartao em
+// /client/checkout e nao sai do sistema. A Stripe continua atendendo quem
+// cadastrou cartao antes da tokenizacao ser liberada.
 async function setupOverageCard(req, res) {
+  if (asaasBillingService.clientePodeUsarAsaas(req.session.user)) {
+    return res.json({ checkoutUrl: '/client/checkout?cartao=1' });
+  }
   if (!stripeService.isConfigured()) {
     return res.status(400).json({ error: res.locals.t('erros.cartaoIndisponivel') });
   }
@@ -482,7 +522,20 @@ async function disableOverageCard(req, res) {
   res.json({ overageCardEnabled: updated.overage_card_enabled });
 }
 
+// Reunidas num objeto pra o controller de checkout usar exatamente as mesmas
+// regras (piso, teto, passo e o calculo do preco) sem reimplementar nada - duas
+// telas cobrando precos diferentes pelo mesmo credito seria o pior desencontro
+// possivel.
+const CREDITO = {
+  MIN_MINUTOS: CREDITO_MIN_MINUTOS,
+  PASSO_MINUTOS: CREDITO_PASSO_MINUTOS,
+  MAX_MINUTOS: CREDITO_MAX_MINUTOS,
+  minutosPedidos,
+  centsPorMinuto: centsPorMinutoAvulso,
+};
+
 module.exports = {
+  CREDITO,
   subscribePix,
   ultimoPagamento,
   pixAuthorizationStatus,

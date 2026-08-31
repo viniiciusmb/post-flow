@@ -27,6 +27,8 @@ const clientSubscriptionsRepository = require('../../../repositories/clientSubsc
 const clientCreditsRepository = require('../../../repositories/clientCreditsRepository');
 const subscriptionPlansRepository = require('../../../repositories/subscriptionPlansRepository');
 const creditsUnlockService = require('../../../services/creditsUnlockService');
+const asaasPaymentsRepository = require('../../../repositories/asaasPaymentsRepository');
+const checkoutService = require('../../../services/checkoutService');
 const affiliateService = require('../../../services/affiliateService');
 const logger = require('../../../lib/logger');
 
@@ -183,6 +185,20 @@ async function handlePixAuthorizationCancelada(authorizationId) {
 // pagamento avulso ligado à assinatura. É aqui que a renovação reativa quem
 // estava inadimplente e paga a comissão do afiliado.
 async function handlePaymentReceived(payment) {
+  // Checkout transparente: a cobrança foi criada por nós, direto pela API, e
+  // está registrada em asaas_payments com a finalidade dela (mensalidade,
+  // crédito avulso ou conexões extras). Este é o caminho principal desde que
+  // o checkout deixou de ser a tela hospedada do Asaas.
+  //
+  // Quando o cartão é aprovado na hora, a liberação já aconteceu de forma
+  // síncrona e este aviso não faz nada (markPaidOnce recusa a segunda vez) -
+  // ele existe para o PIX, para o cartão que ficou em análise, e para o caso
+  // de a resposta síncrona ter se perdido no meio do caminho.
+  if (payment.id) {
+    const registro = await asaasPaymentsRepository.findByAsaasId(payment.id);
+    if (registro) await checkoutService.aplicarPagamentoConfirmado(registro);
+  }
+
   // Rede de segurança: a cobrança gerada por um checkout nosso carrega o id
   // dele em checkoutSession. Se o CHECKOUT_PAID não chegar, chegar fora de
   // ordem, ou o pagamento for confirmado por fora (PIX conciliado, baixa
@@ -203,6 +219,15 @@ async function handlePaymentReceived(payment) {
 
   const assinatura = await clientSubscriptionsRepository.findByAsaasSubscriptionId(payment.subscription);
   if (!assinatura) {
+    // Pode ser a assinatura das CONEXÕES EXTRAS, que vive numa coluna própria.
+    // Ela renova normalmente e não é mensalidade, então não gera comissão nem
+    // reativa nada - só não pode virar aviso de "assinatura desconhecida", que
+    // no log parece problema e não é.
+    const extras = await clientSubscriptionsRepository.findByAsaasExtraSlotsSubscriptionId(payment.subscription);
+    if (extras) {
+      logger.info(`Asaas: renovacao das conexoes extras do cliente ${extras.client_user_id} paga (${payment.id}).`);
+      return;
+    }
     logger.warn(`Asaas: pagamento ${payment.id} de uma assinatura desconhecida (${payment.subscription}).`);
     return;
   }
@@ -232,11 +257,34 @@ async function handlePaymentReceived(payment) {
 // trava processamento novo - esperar o Asaas cancelar a assinatura sozinho
 // levaria dias de serviço prestado de graça.
 async function handlePaymentOverdue(payment) {
+  // Cobrança do checkout transparente que venceu sem pagamento (PIX que
+  // ninguém pagou, tipicamente). Sem isso ela ficaria "pendente" para sempre
+  // no histórico do cliente - o pior estado possível numa tela de pagamento,
+  // porque não dá para saber se pagou.
+  if (payment.id) await asaasPaymentsRepository.markStatusIfPending(payment.id, 'falhou');
+
   if (!payment.subscription) return;
+
   const assinatura = await clientSubscriptionsRepository.findByAsaasSubscriptionId(payment.subscription);
-  if (!assinatura) return;
-  await clientSubscriptionsRepository.setStatus(assinatura.client_user_id, 'inadimplente');
-  logger.warn(`Asaas: mensalidade ${payment.id} venceu sem pagamento - cliente ${assinatura.client_user_id} inadimplente.`);
+  if (assinatura) {
+    await clientSubscriptionsRepository.setStatus(assinatura.client_user_id, 'inadimplente');
+    logger.warn(`Asaas: mensalidade ${payment.id} venceu sem pagamento - cliente ${assinatura.client_user_id} inadimplente.`);
+    return;
+  }
+
+  // Conexões extras não pagas: o cliente perde as CONEXÕES EXTRAS, não o
+  // plano. Bloquear o processamento inteiro por causa de um adicional de
+  // R$29,90 seria desproporcional - e nada é apagado: canal e conta que já
+  // existem continuam funcionando, o limite só volta a barrar novos.
+  const extras = await clientSubscriptionsRepository.findByAsaasExtraSlotsSubscriptionId(payment.subscription);
+  if (!extras) return;
+  await clientSubscriptionsRepository.clearExtraSlotsSubscription(extras.client_user_id);
+  await asaasService.cancelSubscription(payment.subscription).catch((err) =>
+    logger.error(`Asaas: nao consegui cancelar a assinatura de extras ${payment.subscription}:`, err.message)
+  );
+  logger.warn(
+    `Asaas: conexoes extras do cliente ${extras.client_user_id} venceram sem pagamento - removidas.`
+  );
 }
 
 // ---------- rota ----------

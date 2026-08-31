@@ -13,7 +13,9 @@ async function getOrCreate(clientUserId) {
   );
   const { rows } = await pool.query(
     `SELECT cs.*, sp.key AS plan_key, sp.name AS plan_name, sp.weekly_minutes_normal, sp.weekly_minutes_bonus,
-            sp.max_youtube_channels, sp.max_tiktok_accounts, sp.queue_priority
+            sp.max_youtube_channels, sp.max_tiktok_accounts, sp.queue_priority,
+            sp.price_cents AS plan_price_cents, sp.first_month_price_cents AS plan_first_month_price_cents,
+            sp.overage_cents_normal, sp.overage_cents_bonus, sp.extra_slot_price_cents
      FROM client_subscriptions cs
      LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
      WHERE cs.client_user_id = $1`,
@@ -151,6 +153,93 @@ async function setStripeSubscription(clientUserId, stripeSubscriptionId) {
   );
 }
 
+// ---------- cartão tokenizado no Asaas ----------
+//
+// Guarda a REFERÊNCIA ao cartão, nunca o cartão. O token só vale dentro da
+// conta do Asaas; vazado, não dá para usá-lo em lugar nenhum além de cobrar
+// nesta mesma conta. Bandeira/últimos 4/validade existem só para a tela poder
+// dizer qual cartão está salvo.
+async function setAsaasCard(clientUserId, { customerId, token, brand, last4, exp, enableOverage = true }) {
+  const { rows } = await pool.query(
+    `UPDATE client_subscriptions
+        SET asaas_customer_id = COALESCE($2, asaas_customer_id),
+            asaas_card_token = $3,
+            asaas_card_brand = $4,
+            asaas_card_last4 = $5,
+            asaas_card_exp = $6,
+            overage_card_enabled = CASE WHEN $7 THEN true ELSE overage_card_enabled END,
+            updated_at = now()
+      WHERE client_user_id = $1
+      RETURNING *`,
+    [clientUserId, customerId, token, brand, last4, exp, enableOverage]
+  );
+  return rows[0] || null;
+}
+
+// Apaga o cartão salvo E desliga a cobrança automática junto. Separar as duas
+// coisas deixaria a assinatura marcada como "cobra automático" sem cartão
+// nenhum para cobrar — um estado que só falharia longe da tela, no meio de um
+// processamento.
+async function clearAsaasCard(clientUserId) {
+  const { rows } = await pool.query(
+    `UPDATE client_subscriptions
+        SET asaas_card_token = NULL, asaas_card_brand = NULL, asaas_card_last4 = NULL,
+            asaas_card_exp = NULL, overage_card_enabled = false, updated_at = now()
+      WHERE client_user_id = $1
+      RETURNING *`,
+    [clientUserId]
+  );
+  return rows[0] || null;
+}
+
+// ---------- conexões extras ----------
+
+async function setExtraSlots(clientUserId, { slots, asaasSubscriptionId = null }) {
+  const { rows } = await pool.query(
+    `UPDATE client_subscriptions
+        SET extra_slots = $2,
+            asaas_extra_slots_subscription_id = COALESCE($3, asaas_extra_slots_subscription_id),
+            updated_at = now()
+      WHERE client_user_id = $1
+      RETURNING *`,
+    [clientUserId, slots, asaasSubscriptionId]
+  );
+  return rows[0] || null;
+}
+
+async function clearExtraSlotsSubscription(clientUserId) {
+  await pool.query(
+    `UPDATE client_subscriptions
+        SET extra_slots = 0, asaas_extra_slots_subscription_id = NULL, updated_at = now()
+      WHERE client_user_id = $1`,
+    [clientUserId]
+  );
+}
+
+async function findByAsaasExtraSlotsSubscriptionId(asaasSubscriptionId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM client_subscriptions WHERE asaas_extra_slots_subscription_id = $1',
+    [asaasSubscriptionId]
+  );
+  return rows[0] || null;
+}
+
+// ---------- promoção de primeiro mês ----------
+
+// Marca a promoção como consumida, uma vez só. O `IS NULL` na cláusula é o que
+// impede cancelar e reassinar virar desconto infinito: a segunda chamada não
+// atualiza nada e devolve null.
+async function markFirstMonthUsed(clientUserId) {
+  const { rows } = await pool.query(
+    `UPDATE client_subscriptions
+        SET first_month_used_at = now(), updated_at = now()
+      WHERE client_user_id = $1 AND first_month_used_at IS NULL
+      RETURNING *`,
+    [clientUserId]
+  );
+  return rows[0] || null;
+}
+
 async function setOverageCard(clientUserId, { enabled, stripeDefaultPaymentMethodId = null }) {
   const { rows } = await pool.query(
     `UPDATE client_subscriptions
@@ -175,5 +264,11 @@ module.exports = {
   setAsaasPixAuthorization,
   findByAsaasCustomerId,
   findByAsaasSubscriptionId,
+  findByAsaasExtraSlotsSubscriptionId,
   setOverageCard,
+  setAsaasCard,
+  clearAsaasCard,
+  setExtraSlots,
+  clearExtraSlotsSubscription,
+  markFirstMonthUsed,
 };

@@ -57,13 +57,16 @@ async function criarCheckoutDeAssinatura({ clientUserId, planKey, origin, user }
 
   await clientSubscriptionsRepository.getOrCreate(clientUserId);
 
-  // Mesmo caminho do botao de dentro do painel. Antes esta funcao tinha a
-  // propria versao (Stripe) enquanto o botao ja usava o Asaas - ou seja, o
-  // mesmo cliente ia parar em provedores diferentes dependendo de ter clicado
-  // no plano na landing ou dentro do sistema.
+  // Mesmo destino do botao de dentro do painel: a NOSSA tela de checkout. Ela
+  // ja sabe se o cliente tem cartao salvo, se ainda tem direito ao primeiro
+  // mes promocional e qual plano foi escolhido - nada disso precisa ser
+  // recalculado aqui.
+  //
+  // Antes esta funcao tinha a propria versao (Stripe) enquanto o botao ja
+  // usava o Asaas: o mesmo cliente ia parar em provedores diferentes
+  // dependendo de ter clicado no plano na landing ou dentro do sistema.
   if (asaasBillingService.clientePodeUsarAsaas(user || { role: 'client' })) {
-    const { checkoutUrl } = await asaasBillingService.createSubscriptionCheckout({ clientUserId, plan, origin });
-    return checkoutUrl;
+    return `/client/checkout?plano=${encodeURIComponent(plan.key)}`;
   }
 
   if (!stripeService.isConfigured() || !plan.stripe_price_id) return null;

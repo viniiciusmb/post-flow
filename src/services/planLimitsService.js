@@ -1,8 +1,15 @@
-// Limite de canais do YouTube / contas TikTok por plano. NULL no banco
-// (subscription_plans.max_youtube_channels/max_tiktok_accounts) = sem limite
-// (plano Max). Cliente sem plano ativo (plan_id NULL - ver
-// clientSubscriptionsRepository) e tratado como limite 0, bloqueado ate o
-// admin atribuir um plano manualmente.
+// Limite de canais do YouTube / contas TikTok por plano.
+//
+// O limite efetivo e a soma de duas coisas: o que o PLANO da
+// (subscription_plans.max_youtube_channels/max_tiktok_accounts) mais as
+// CONEXOES EXTRAS que o cliente comprou (client_subscriptions.extra_slots).
+// Cada slot extra vale 1 canal E 1 conta - eles andam em par de proposito: um
+// canal sem conta pra publicar nao produz nada, e uma conta sem canal nao tem
+// o que postar.
+//
+// NULL no banco = sem limite (nao ha plano assim hoje, mas a coluna continua
+// aceitando). Cliente sem plano ativo (plan_id NULL) e tratado como limite 0,
+// bloqueado ate assinar ou ate o admin atribuir um plano manualmente.
 'use strict';
 
 const clientSubscriptionsRepository = require('../repositories/clientSubscriptionsRepository');
@@ -12,20 +19,54 @@ const clientSubscriptionsRepository = require('../repositories/clientSubscriptio
 // o jeito preguicoso de fugir do plural e denunciava mensagem escrita por
 // desenvolvedor, nao pra quem le.
 const NO_PLAN_MESSAGE =
-  'Você ainda não tem um plano ativo. Fale com o suporte pra ativar sua assinatura.';
+  'Você ainda não tem um plano ativo. Assine um plano pra começar a usar.';
 
 function plural(quantidade, singular, plural_) {
   return `${quantidade} ${quantidade === 1 ? singular : plural_}`;
 }
 
+// Quantas conexoes o cliente tem direito, ja somando o que ele comprou.
+// Exportada porque a TELA precisa do mesmo numero: mostrar "1 canal" enquanto
+// o servidor aceita 3 (ou o contrario) e o tipo de divergencia que faz o
+// cliente achar que pagou por algo que nao recebeu.
+function limitesDe(subscription) {
+  if (!subscription || !subscription.plan_id) return { canais: 0, contas: 0, extras: 0, semPlano: true };
+
+  const extras = Number(subscription.extra_slots) || 0;
+  const canaisDoPlano = subscription.max_youtube_channels;
+  const contasDoPlano = subscription.max_tiktok_accounts;
+
+  return {
+    semPlano: false,
+    extras,
+    // Plano "sem limite" continua sem limite mesmo com slots comprados -
+    // somar a null daria NaN e o limite viraria uma comparacao sempre falsa,
+    // que na pratica libera tudo por acidente em vez de por decisao.
+    canais: canaisDoPlano === null ? null : Number(canaisDoPlano) + extras,
+    contas: contasDoPlano === null ? null : Number(contasDoPlano) + extras,
+  };
+}
+
+// Pode comprar conexao extra? So nos planos que trazem preco de slot.
+function podeComprarExtras(subscription) {
+  return Boolean(subscription && subscription.plan_id && subscription.extra_slot_price_cents);
+}
+
+function comoConseguirMais(subscription) {
+  return podeComprarExtras(subscription)
+    ? 'Compre uma conexão extra em "Plano e uso" ou troque de plano.'
+    : 'Troque de plano pra adicionar mais.';
+}
+
 async function checkChannelLimit(clientUserId, currentCount) {
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  if (!subscription.plan_id) return { allowed: false, reason: NO_PLAN_MESSAGE };
-  if (subscription.max_youtube_channels === null) return { allowed: true };
-  if (currentCount >= subscription.max_youtube_channels) {
+  const limites = limitesDe(subscription);
+  if (limites.semPlano) return { allowed: false, reason: NO_PLAN_MESSAGE };
+  if (limites.canais === null) return { allowed: true };
+  if (currentCount >= limites.canais) {
     return {
       allowed: false,
-      reason: `Seu plano acompanha ${plural(subscription.max_youtube_channels, 'canal', 'canais')} do YouTube. Troque de plano pra adicionar mais.`,
+      reason: `Seu plano acompanha ${plural(limites.canais, 'canal', 'canais')} do YouTube. ${comoConseguirMais(subscription)}`,
     };
   }
   return { allowed: true };
@@ -33,15 +74,16 @@ async function checkChannelLimit(clientUserId, currentCount) {
 
 async function checkTiktokAccountLimit(clientUserId, currentCount) {
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  if (!subscription.plan_id) return { allowed: false, reason: NO_PLAN_MESSAGE };
-  if (subscription.max_tiktok_accounts === null) return { allowed: true };
-  if (currentCount >= subscription.max_tiktok_accounts) {
+  const limites = limitesDe(subscription);
+  if (limites.semPlano) return { allowed: false, reason: NO_PLAN_MESSAGE };
+  if (limites.contas === null) return { allowed: true };
+  if (currentCount >= limites.contas) {
     return {
       allowed: false,
-      reason: `Seu plano publica em ${plural(subscription.max_tiktok_accounts, 'conta', 'contas')} do TikTok. Troque de plano pra conectar mais.`,
+      reason: `Seu plano publica em ${plural(limites.contas, 'conta', 'contas')} do TikTok. ${comoConseguirMais(subscription)}`,
     };
   }
   return { allowed: true };
 }
 
-module.exports = { checkChannelLimit, checkTiktokAccountLimit };
+module.exports = { checkChannelLimit, checkTiktokAccountLimit, limitesDe, podeComprarExtras };

@@ -77,17 +77,18 @@ async function createAlreadyPaid({
   bucket,
   minutes,
   rateCentsPerMin,
-  stripePaymentIntentId,
+  stripePaymentIntentId = null,
+  asaasPaymentId = null,
 }) {
   const amountCents = Math.round(minutes * rateCentsPerMin);
   const { rows } = await pool.query(
     `INSERT INTO client_overage_charges
        (client_user_id, source_video_id, bucket, minutes, rate_cents_per_min, amount_cents,
-        status, stripe_payment_intent_id, charged_at)
-     VALUES ($1, $2, $3, $4, $5, $6, 'pago', $7, now())
+        status, stripe_payment_intent_id, asaas_payment_id, charged_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'pago', $7, $8, now())
      ON CONFLICT (source_video_id) DO NOTHING
      RETURNING *`,
-    [clientUserId, sourceVideoId, bucket, minutes, rateCentsPerMin, amountCents, stripePaymentIntentId]
+    [clientUserId, sourceVideoId, bucket, minutes, rateCentsPerMin, amountCents, stripePaymentIntentId, asaasPaymentId]
   );
   if (rows[0]) return rows[0];
   return findBySourceVideoId(sourceVideoId);

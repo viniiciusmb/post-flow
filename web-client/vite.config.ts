@@ -37,6 +37,7 @@ export default defineConfig({
         tunnel: path.resolve(__dirname, 'tunnel.html'),
         bandwidth: path.resolve(__dirname, 'bandwidth.html'),
         'client-billing': path.resolve(__dirname, 'client-billing.html'),
+        'client-checkout': path.resolve(__dirname, 'client-checkout.html'),
         'admin-billing': path.resolve(__dirname, 'admin-billing.html'),
         'client-commissions': path.resolve(__dirname, 'client-commissions.html'),
         'admin-commissions': path.resolve(__dirname, 'admin-commissions.html'),

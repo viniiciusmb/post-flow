@@ -4,13 +4,21 @@
 // vantagem: a superfície que usamos é pequena e fica toda visível neste
 // arquivo, sem uma camada de abstração escondendo o que vai na requisição.
 //
-// Escopo atual (o resto continua na Stripe, ver clientBillingApiController):
-//   - assinatura mensal (cartão pelo Checkout do Asaas, PIX Automático)
+// Escopo atual — todo o dinheiro do sistema passa por aqui:
+//   - assinatura mensal (cartão tokenizado no nosso próprio checkout, ou PIX
+//     Automático)
 //   - compra de crédito avulso (pagamento único, PIX ou cartão)
+//   - conexões extras (assinatura mensal separada, cartão)
+//   - cobrança automática de excedente (cartão tokenizado)
 //
-// A cobrança automática de excedente NÃO está aqui: ela depende de
-// tokenização de cartão, que na produção só é liberada pelo gerente da conta
-// Asaas. Até lá, esse fluxo segue na Stripe.
+// A tokenização de cartão foi liberada para a conta em 31/08/2026, e é ela que
+// permitiu duas coisas ao mesmo tempo: o checkout deixar de ser a tela
+// hospedada do Asaas (agora é a nossa, ver checkoutService) e o excedente sair
+// da Stripe.
+//
+// REGRA QUE NÃO PODE SER QUEBRADA: número de cartão, CVV e validade passam por
+// aqui uma única vez, viram token, e NUNCA são gravados nem registrados em log.
+// Só o token, a bandeira e os 4 últimos dígitos sobrevivem à requisição.
 'use strict';
 
 const crypto = require('crypto');
@@ -236,6 +244,10 @@ async function createPixAutomaticAuthorization({
   customerId,
   planName,
   amountCents,
+  // O QR que o cliente paga AGORA pode ter valor diferente do que sera
+  // debitado todo mes - e assim que a promocao de primeiro mes cabe numa
+  // autorizacao de valor fixo.
+  primeiraCobrancaCents = null,
   pixKey,
   contractId,
   startDate,
@@ -260,7 +272,7 @@ async function createPixAutomaticAuthorization({
       // valor já é fixo ("Não é permitido definir um valor mínimo quando um
       // valor fixo já foi especificado").
       immediateQrCode: {
-        originalValue: amountCents / 100,
+        originalValue: (primeiraCobrancaCents || amountCents) / 100,
         expirationSeconds: 3600,
         description: planName,
         pixKey,
@@ -313,6 +325,115 @@ async function updateWebhook(webhookId, campos) {
   return request('PUT', `/webhooks/${encodeURIComponent(webhookId)}`, { body: campos });
 }
 
+// ---------- cartão tokenizado (checkout transparente) ----------
+
+// Troca os dados do cartão por um token opaco. É a única função do sistema que
+// enxerga número e CVV, e ela não devolve nenhum dos dois: a resposta do Asaas
+// traz apenas os 4 últimos dígitos, a bandeira e o token.
+//
+// creditCardHolderInfo é obrigatório e o Asaas confere o conjunto inteiro —
+// faltar o CEP ou o número do endereço faz a tokenização ser recusada com um
+// erro que, sem isto escrito aqui, pareceria "cartão inválido" na tela de quem
+// está pagando.
+//
+// remoteIp é exigido pela análise antifraude do Asaas. Mandar o IP do nosso
+// servidor no lugar do IP de quem está pagando faria toda transação parecer vir
+// do mesmo lugar, que é exatamente o padrão que a antifraude penaliza.
+async function tokenizeCard({ customerId, card, holder, remoteIp }) {
+  return request('POST', '/creditCard/tokenizeCreditCard', {
+    body: {
+      customer: customerId,
+      creditCard: {
+        holderName: card.holderName,
+        number: card.number,
+        expiryMonth: card.expiryMonth,
+        expiryYear: card.expiryYear,
+        ccv: card.ccv,
+      },
+      creditCardHolderInfo: {
+        name: holder.name,
+        email: holder.email,
+        cpfCnpj: holder.cpfCnpj,
+        postalCode: holder.postalCode,
+        addressNumber: holder.addressNumber,
+        addressComplement: holder.addressComplement || null,
+        phone: holder.phone || undefined,
+        mobilePhone: holder.mobilePhone || holder.phone || undefined,
+      },
+      remoteIp,
+    },
+  });
+}
+
+// ---------- pagamento avulso (uma cobrança só) ----------
+
+// Cria a cobrança. No cartão com token, o Asaas já responde com o resultado da
+// autorização (status CONFIRMED quando passou), então dá para dizer "deu certo"
+// na mesma requisição em que o cliente clicou — que é o ponto inteiro do
+// checkout transparente. No PIX a cobrança nasce PENDING e o QR Code vem numa
+// segunda chamada.
+async function createPayment({
+  customerId,
+  billingType,
+  amountCents,
+  dueDate,
+  description,
+  externalReference,
+  creditCardToken = null,
+  remoteIp = null,
+}) {
+  return request('POST', '/payments', {
+    body: {
+      customer: customerId,
+      billingType,
+      value: amountCents / 100,
+      dueDate,
+      description,
+      externalReference,
+      creditCardToken: creditCardToken || undefined,
+      remoteIp: remoteIp || undefined,
+    },
+  });
+}
+
+// QR Code de uma cobrança PIX já criada. Vem separado no Asaas (não junto da
+// criação), então são sempre duas idas — não há como economizar uma.
+async function getPixQrCode(paymentId) {
+  return request('GET', `/payments/${encodeURIComponent(paymentId)}/pixQrCode`);
+}
+
+// ---------- assinatura por cartão tokenizado ----------
+
+// Assinatura recorrente cobrada no cartão salvo. nextDueDate no futuro faz o
+// Asaas NÃO cobrar agora: a primeira mensalidade (a promocional) é uma cobrança
+// avulsa separada, e esta assinatura só começa a valer no mês seguinte, já pelo
+// preço cheio. Foi assim que os dois degraus de preço couberam num produto que
+// só aceita um valor fixo por assinatura.
+async function createSubscription({
+  customerId,
+  billingType,
+  amountCents,
+  nextDueDate,
+  description,
+  externalReference,
+  creditCardToken = null,
+  remoteIp = null,
+}) {
+  return request('POST', '/subscriptions', {
+    body: {
+      customer: customerId,
+      billingType,
+      value: amountCents / 100,
+      nextDueDate,
+      cycle: 'MONTHLY',
+      description,
+      externalReference,
+      creditCardToken: creditCardToken || undefined,
+      remoteIp: remoteIp || undefined,
+    },
+  });
+}
+
 // ---------- webhook ----------
 
 // O endereço do webhook é público: sem conferir o token, qualquer um poderia
@@ -343,6 +464,10 @@ module.exports = {
   updateCustomer,
   customerExists,
   createCheckout,
+  tokenizeCard,
+  createPayment,
+  getPixQrCode,
+  createSubscription,
   listSubscriptionsByCustomer,
   createPixAutomaticAuthorization,
   getPixAutomaticAuthorization,

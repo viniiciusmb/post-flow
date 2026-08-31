@@ -521,6 +521,18 @@ strong {
   color: var(--muted);
   letter-spacing: -0.01em;
 }
+/* Segundo degrau do preco. Fica logo abaixo do valor promocional, e o desconto
+   em destaque: sem isso o "no 1o mes" pareceria letra miuda escondida. */
+.plano .preco-depois {
+  margin: -1rem 0 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.plano .preco-depois strong {
+  color: var(--acento);
+  font-weight: 600;
+}
 .plano ul {
   list-style: none;
   padding: 0;

@@ -353,9 +353,25 @@
         <div class="plano <%= i === 1 ? 'destaque' : '' %>">
           <% if (i === 1) { %><div class="marcador"><%= t('landing.maisEscolhido') %></div><% } %>
           <h3><%= plan.name %></h3>
-          <div class="preco">
-            R$ <%= (plan.price_cents / 100).toFixed(2).replace('.', ',') %><span><%= t('landing.porMes') %></span>
-          </div>
+          <%#
+            Os DOIS degraus do preco, sempre juntos. Anunciar so o promocional e
+            deixar o valor cheio pra fatura do mes seguinte e o tipo de coisa
+            que gera estorno - e, num site publico, reclamacao no Reclame Aqui.
+          %>
+          <% if (plan.first_month_price_cents && plan.first_month_price_cents < plan.price_cents) { %>
+            <div class="preco">
+              R$ <%= (plan.first_month_price_cents / 100).toFixed(2).replace('.', ',') %><span><%= t('landing.noPrimeiroMes') %></span>
+            </div>
+            <p class="preco-depois">
+              <%= t('landing.depoisPorMes', { valor: (plan.price_cents / 100).toFixed(2).replace('.', ',') }) %>
+              ·
+              <strong><%= t('landing.descontoPrimeiroMes', { n: Math.round((1 - plan.first_month_price_cents / plan.price_cents) * 100) }) %></strong>
+            </p>
+          <% } else { %>
+            <div class="preco">
+              R$ <%= (plan.price_cents / 100).toFixed(2).replace('.', ',') %><span><%= t('landing.porMes') %></span>
+            </div>
+          <% } %>
           <%# O plano viaja junto: quem clica aqui ja escolheu, e depois de
               criar a conta cai direto no checkout desse plano (o valor fica na
               sessao, ver affiliateAttribution + destinoDepoisDeEntrar). %>
@@ -382,6 +398,12 @@
                     ? t(plan.max_tiktok_accounts > 1 ? 'landing.contasTiktok' : 'landing.contaTiktok', { n: plan.max_tiktok_accounts })
                     : t('landing.contasIlimitadas') %></span>
             </li>
+            <% if (plan.extra_slot_price_cents) { %>
+            <li>
+              <span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg></span>
+              <span><%= t('landing.conexoesExtras', { valor: (plan.extra_slot_price_cents / 100).toFixed(2).replace('.', ',') }) %></span>
+            </li>
+            <% } %>
             <li>
               <span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 21l15 -15l-3 -3l-15 15l3 3" /><path d="M15 6l3 3" /><path d="M9 3a2 2 0 0 0 2 2a2 2 0 0 0 -2 2a2 2 0 0 0 -2 -2a2 2 0 0 0 2 -2" /><path d="M19 13a2 2 0 0 0 2 2a2 2 0 0 0 -2 2a2 2 0 0 0 -2 -2a2 2 0 0 0 2 -2" /></svg></span>
               <span><%= t('landing.incluiCorte') %></span>

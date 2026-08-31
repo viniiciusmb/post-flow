@@ -1,0 +1,971 @@
+import { useEffect, useMemo, useState } from "react"
+import {
+  IconLock,
+  IconCreditCard,
+  IconQrcode,
+  IconCircleCheck,
+  IconArrowLeft,
+  IconShieldCheck,
+  IconClock,
+  IconRouter,
+  IconBrandYoutube,
+  IconBrandTiktok,
+  IconPlus,
+  IconCopy,
+  IconLoader2,
+} from "@tabler/icons-react"
+import { BrandMark } from "@/components/brand-mark"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
+import { api, ApiError } from "@/lib/api"
+import { EMAIL_SUPORTE } from "@/lib/contato"
+import type { CheckoutContexto, CheckoutItem, CheckoutPagamento } from "@/types/api"
+
+/*
+ * Checkout transparente.
+ *
+ * A pessoa digita o cartão AQUI, dentro do Post Flow. Antes ela era mandada
+ * para a tela hospedada do Asaas — outro domínio, outra identidade visual,
+ * exatamente no momento em que mais precisa confiar no que está vendo.
+ *
+ * Três decisões que explicam o layout:
+ *
+ *   1. UMA COLUNA DE PAGAMENTO E UMA DE RESUMO. O que está sendo comprado, e
+ *      por quanto, fica visível o tempo inteiro — inclusive no celular, onde o
+ *      resumo vem ANTES do formulário. Ninguém deve precisar rolar para saber
+ *      quanto vai pagar.
+ *
+ *   2. O SEGUNDO DEGRAU DO PREÇO É DITO NA CARA. Mostrar só o valor
+ *      promocional e deixar o preço cheio para a fatura do mês seguinte é o
+ *      tipo de coisa que gera estorno e desconfiança. O resumo diz o que sai
+ *      hoje e o que passa a sair depois.
+ *
+ *   3. A PÁGINA ESTÁ EM PORTUGUÊS, sem passar pelo dicionário de idiomas. Não
+ *      é descuido: ela coleta CPF/CNPJ e CEP, aceita PIX e é processada por
+ *      uma instituição brasileira — o fluxo inteiro só existe no Brasil.
+ */
+
+function formatCents(cents: number) {
+  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+// ---------------------------------------------------------------------------
+// Máscaras
+//
+// Digitação livre num campo de cartão é onde mais se erra: sem os espaços a
+// pessoa perde a conta dos dígitos, e sem a barra na validade metade digita
+// "0527" e a outra metade "05/27". As máscaras guardam só os números por baixo
+// — o que vai para o servidor nunca depende de como ficou na tela.
+// ---------------------------------------------------------------------------
+function soDigitos(v: string) {
+  return v.replace(/\D/g, "")
+}
+
+function mascaraCartao(v: string) {
+  return soDigitos(v).slice(0, 19).replace(/(\d{4})(?=\d)/g, "$1 ")
+}
+
+function mascaraValidade(v: string) {
+  const d = soDigitos(v).slice(0, 4)
+  return d.length <= 2 ? d : `${d.slice(0, 2)}/${d.slice(2)}`
+}
+
+function mascaraDocumento(v: string) {
+  const d = soDigitos(v).slice(0, 14)
+  if (d.length <= 11) {
+    return d
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2")
+  }
+  return d
+    .replace(/(\d{2})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1/$2")
+    .replace(/(\d{4})(\d{1,2})$/, "$1-$2")
+}
+
+function mascaraCep(v: string) {
+  const d = soDigitos(v).slice(0, 8)
+  return d.length <= 5 ? d : `${d.slice(0, 5)}-${d.slice(5)}`
+}
+
+function mascaraTelefone(v: string) {
+  const d = soDigitos(v).slice(0, 11)
+  if (d.length <= 10) return d.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d{1,4})$/, "$1-$2")
+  return d.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d{1,4})$/, "$1-$2")
+}
+
+// Só para desenhar a bandeira enquanto a pessoa digita. Quem decide de verdade
+// qual é a bandeira é o Asaas; errar aqui não muda nada além do rótulo.
+function bandeiraProvavel(numero: string) {
+  const d = soDigitos(numero)
+  if (/^4/.test(d)) return "Visa"
+  if (/^(5[1-5]|2[2-7])/.test(d)) return "Mastercard"
+  if (/^3[47]/.test(d)) return "Amex"
+  if (/^(4011|4312|4389|4514|4576|5041|5066|5090|6277|6362|6363|650|651|655)/.test(d)) return "Elo"
+  if (/^(38|60)/.test(d)) return "Hipercard"
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// Pedaços da tela
+// ---------------------------------------------------------------------------
+
+function Campo({
+  label,
+  children,
+  dica,
+  className = "",
+}: {
+  label: string
+  children: React.ReactNode
+  dica?: string
+  className?: string
+}) {
+  return (
+    <label className={`flex flex-col gap-1.5 ${className}`}>
+      <span className="text-[13px] font-medium">{label}</span>
+      {children}
+      {dica && <span className="text-[11.5px] leading-snug text-muted-foreground">{dica}</span>}
+    </label>
+  )
+}
+
+function LinhaResumo({
+  rotulo,
+  valor,
+  forte,
+  suave,
+}: {
+  rotulo: React.ReactNode
+  valor: React.ReactNode
+  forte?: boolean
+  suave?: boolean
+}) {
+  return (
+    <div
+      className={`flex items-baseline justify-between gap-4 ${
+        forte ? "text-base font-semibold" : suave ? "text-[13px] text-muted-foreground" : "text-sm"
+      }`}
+    >
+      <span className={forte ? "font-heading" : ""}>{rotulo}</span>
+      <span className={`tabular-nums ${forte ? "font-heading" : ""}`}>{valor}</span>
+    </div>
+  )
+}
+
+function Beneficio({ icone, texto }: { icone: React.ReactNode; texto: string }) {
+  return (
+    <li className="flex items-start gap-2 text-[13px] text-muted-foreground">
+      <span className="mt-0.5 shrink-0 text-primary">{icone}</span>
+      <span>{texto}</span>
+    </li>
+  )
+}
+
+// Rodapé de confiança. Não é enfeite: quem está prestes a digitar um cartão
+// procura exatamente estas três informações — quem processa, o que acontece
+// com o número do cartão, e quem é a empresa por trás.
+function SeloDeConfianca({ cnpj, empresa }: { cnpj: string; empresa: string }) {
+  return (
+    <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-muted/40 p-4">
+      <div className="flex items-start gap-2.5">
+        <IconShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+          Pagamentos processados por{" "}
+          <a
+            href="https://www.asaas.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-foreground underline decoration-dotted underline-offset-2"
+          >
+            Asaas
+          </a>
+          , instituição de pagamento autorizada pelo Banco Central do Brasil.
+        </p>
+      </div>
+      <div className="flex items-start gap-2.5">
+        <IconLock className="mt-0.5 size-4 shrink-0 text-primary" />
+        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+          Conexão criptografada. Os dados do seu cartão não ficam guardados nos nossos servidores.
+        </p>
+      </div>
+      <p className="border-t border-border pt-2.5 text-[11.5px] leading-relaxed text-muted-foreground/80">
+        {empresa} · CNPJ {cnpj}
+      </p>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// A página
+// ---------------------------------------------------------------------------
+
+type Metodo = "cartao" | "pix"
+
+export function CheckoutPage() {
+  const [ctx, setCtx] = useState<CheckoutContexto | null>(null)
+  const [erro, setErro] = useState<string | null>(null)
+  const [enviando, setEnviando] = useState(false)
+  const [metodo, setMetodo] = useState<Metodo>("cartao")
+  const [usarOutroCartao, setUsarOutroCartao] = useState(false)
+  const [concluido, setConcluido] = useState<CheckoutPagamento | null>(null)
+  const [pix, setPix] = useState<{ paymentId: string; copiaECola: string; qr: string } | null>(null)
+  const [copiado, setCopiado] = useState(false)
+
+  // O que está sendo comprado vem da barra de endereço. Uma tela só para as
+  // três compras: duplicá-la seria garantir que uma delas ia ficar para trás
+  // no próximo ajuste de layout.
+  const item: CheckoutItem = useMemo(() => {
+    const q = new URLSearchParams(window.location.search)
+    if (q.get("plano")) return { tipo: "plano", planKey: q.get("plano")! }
+    if (q.get("creditos")) return { tipo: "creditos", minutos: Number(q.get("creditos")) || 25 }
+    if (q.get("extras")) return { tipo: "extras", quantidade: Number(q.get("extras")) || 1 }
+    return { tipo: "cartao" }
+  }, [])
+
+  // Cartão
+  const [numero, setNumero] = useState("")
+  const [validade, setValidade] = useState("")
+  const [cvv, setCvv] = useState("")
+  const [nomeNoCartao, setNomeNoCartao] = useState("")
+  // Titular (o Asaas exige o conjunto inteiro para tokenizar)
+  const [nome, setNome] = useState("")
+  const [documento, setDocumento] = useState("")
+  const [telefone, setTelefone] = useState("")
+  const [cep, setCep] = useState("")
+  const [numeroEndereco, setNumeroEndereco] = useState("")
+
+  async function carregar() {
+    const r = await api.get<CheckoutContexto>("/api/client/checkout/contexto")
+    setCtx(r)
+    setNome((atual) => atual || r.perfil.nome)
+    setDocumento((atual) => atual || r.perfil.cpfCnpj)
+  }
+
+  useEffect(() => {
+    carregar().catch((e) => setErro(e instanceof Error ? e.message : "Não consegui carregar o checkout."))
+  }, [])
+
+  // Enquanto o QR está na tela, pergunta ao servidor se o PIX já caiu. É a
+  // única forma de saber: o pagamento acontece no app do banco, fora daqui.
+  useEffect(() => {
+    if (!pix || concluido) return
+    const timer = setInterval(async () => {
+      try {
+        const r = await api.get<{ status: string }>(`/api/client/checkout/pagamento/${pix.paymentId}`)
+        if (r.status === "pago") {
+          setConcluido({ pago: true, tipo: item.tipo === "creditos" ? "creditos" : "plano" })
+          clearInterval(timer)
+        }
+      } catch {
+        // Falha de rede aqui não vira mensagem: a próxima tentativa vem em 4s.
+      }
+    }, 4000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pix, concluido])
+
+  const plano = ctx?.plans.find((p) => p.key === (item.tipo === "plano" ? item.planKey : null)) ?? null
+
+  // Preço do que está sendo comprado. Calculado a partir do MESMO contexto que
+  // o servidor usa; o servidor recalcula tudo de novo por conta dele — aqui é
+  // só para mostrar, nunca para decidir quanto cobrar.
+  const preco = useMemo(() => {
+    if (!ctx) return null
+    if (item.tipo === "plano" && plano) {
+      const promo = Boolean(plano.firstMonthPriceCents) && ctx.subscription.promoDisponivel
+      return {
+        hojeCents: promo ? plano.firstMonthPriceCents! : plano.priceCents,
+        depoisCents: plano.priceCents,
+        promo,
+      }
+    }
+    if (item.tipo === "creditos") {
+      return { hojeCents: item.minutos * ctx.package.centsPerMinute, depoisCents: null, promo: false }
+    }
+    if (item.tipo === "extras") {
+      const unit = ctx.subscription.extraSlotPriceCents ?? 0
+      return { hojeCents: unit * item.quantidade, depoisCents: unit * item.quantidade, promo: false }
+    }
+    return { hojeCents: 0, depoisCents: null, promo: false }
+  }, [ctx, item, plano])
+
+  const temCartaoSalvo = Boolean(ctx?.card) && !usarOutroCartao
+  const precisaDoFormulario = metodo === "cartao" && !temCartaoSalvo
+
+  function corpoDoCartao() {
+    const [mes, ano] = validade.split("/")
+    return {
+      titular: {
+        nome,
+        documento,
+        email: ctx?.perfil.email,
+        cep,
+        numeroEndereco,
+        telefone,
+      },
+      cartao: {
+        number: soDigitos(numero),
+        expiryMonth: mes || "",
+        expiryYear: ano || "",
+        ccv: cvv,
+        holderName: nomeNoCartao,
+      },
+    }
+  }
+
+  async function pagar() {
+    setErro(null)
+    setEnviando(true)
+    try {
+      // Só cadastrar cartão: não há compra, então não passa pelo /pagar.
+      if (item.tipo === "cartao") {
+        await api.post("/api/client/checkout/cartao", corpoDoCartao())
+        setConcluido({ pago: true, tipo: "cartao" })
+        return
+      }
+
+      const corpo: Record<string, unknown> = { tipo: item.tipo, metodo }
+      if (item.tipo === "plano") corpo.planKey = item.planKey
+      if (item.tipo === "creditos") corpo.minutos = item.minutos
+      if (item.tipo === "extras") corpo.quantidade = item.quantidade
+      if (precisaDoFormulario || metodo === "pix") Object.assign(corpo, corpoDoCartao())
+      // O cartão salvo é usado pelo token guardado no servidor: nada de cartão
+      // sai daqui nesse caso.
+      if (temCartaoSalvo && metodo === "cartao") delete corpo.cartao
+
+      const r = await api.post<CheckoutPagamento>("/api/client/checkout/pagar", corpo)
+
+      if (r.pixCopiaECola && r.qrCodeBase64 && r.paymentId) {
+        setPix({ paymentId: r.paymentId, copiaECola: r.pixCopiaECola, qr: r.qrCodeBase64 })
+        return
+      }
+      setConcluido(r)
+      if (!r.pago) {
+        // Cartão em análise: dizer "pronto" agora seria mentir para quem
+        // acabou de pagar.
+        setErro(null)
+      }
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : "Não consegui concluir o pagamento agora.")
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const podePagar =
+    !enviando &&
+    (metodo === "pix"
+      ? nome.trim().length >= 3 && soDigitos(documento).length >= 11
+      : temCartaoSalvo
+        ? true
+        : soDigitos(numero).length >= 13 &&
+          validade.length === 5 &&
+          cvv.length >= 3 &&
+          nomeNoCartao.trim().length >= 3 &&
+          nome.trim().length >= 3 &&
+          soDigitos(documento).length >= 11 &&
+          soDigitos(cep).length === 8 &&
+          numeroEndereco.trim().length > 0)
+
+  const titulo =
+    item.tipo === "plano"
+      ? `Assinar ${plano?.name ?? ""}`.trim()
+      : item.tipo === "creditos"
+        ? "Comprar créditos"
+        : item.tipo === "extras"
+          ? "Conexões extras"
+          : "Cadastrar cartão"
+
+  return (
+    <div className="flex min-h-screen flex-col bg-muted/30">
+      <header className="border-b border-border bg-background">
+        <div className="mx-auto flex w-full max-w-[1080px] items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+          <a href="/client/billing" className="flex items-center gap-2.5">
+            <BrandMark className="size-7" />
+            <span className="font-heading text-base font-bold tracking-tight">Post Flow</span>
+          </a>
+          <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground">
+            <IconLock className="size-3.5" />
+            Pagamento seguro
+          </span>
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-[1080px] flex-1 px-4 py-6 sm:px-6 sm:py-10">
+        <a
+          href="/client/billing"
+          className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
+        >
+          <IconArrowLeft className="size-4" />
+          Voltar para Plano e uso
+        </a>
+
+        {!ctx || !preco ? (
+          <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+            <Skeleton className="h-96" />
+            <Skeleton className="h-64" />
+          </div>
+        ) : concluido ? (
+          <ConcluidoView concluido={concluido} item={item} planName={plano?.name ?? null} />
+        ) : (
+          <>
+            <h1 className="font-heading mb-1 text-2xl font-semibold tracking-tight">{titulo}</h1>
+            <p className="mb-6 text-sm text-muted-foreground">
+              {item.tipo === "cartao"
+                ? "Guarde um cartão para as cobranças automáticas. Nada é cobrado agora."
+                : "Confira o resumo e escolha como quer pagar."}
+            </p>
+
+            <div className="grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start">
+              {/* O resumo vem PRIMEIRO no celular (order-first) e à direita no
+                  desktop: quanto se vai pagar não pode depender de rolar. */}
+              <aside className="order-first flex flex-col gap-4 lg:order-last lg:sticky lg:top-6">
+                <ResumoDoPedido ctx={ctx} item={item} plano={plano} preco={preco} />
+                <SeloDeConfianca cnpj={ctx.empresa.cnpj} empresa={ctx.empresa.nome} />
+              </aside>
+
+              <section className="flex flex-col gap-5 rounded-xl border border-border bg-background p-5 shadow-[var(--shadow-raised)] sm:p-6">
+                {pix ? (
+                  <PixView pix={pix} copiado={copiado} setCopiado={setCopiado} />
+                ) : (
+                  <>
+                    {item.tipo !== "cartao" && (
+                      <MetodoSeletor
+                        metodo={metodo}
+                        setMetodo={setMetodo}
+                        pixDisponivel={item.tipo === "creditos"}
+                      />
+                    )}
+
+                    {metodo === "cartao" && ctx.card && (
+                      <CartaoSalvo
+                        card={ctx.card}
+                        usandoOutro={usarOutroCartao}
+                        onTrocar={() => setUsarOutroCartao((v) => !v)}
+                      />
+                    )}
+
+                    {precisaDoFormulario && (
+                      <FormularioDeCartao
+                        numero={numero}
+                        setNumero={setNumero}
+                        validade={validade}
+                        setValidade={setValidade}
+                        cvv={cvv}
+                        setCvv={setCvv}
+                        nomeNoCartao={nomeNoCartao}
+                        setNomeNoCartao={setNomeNoCartao}
+                      />
+                    )}
+
+                    {(precisaDoFormulario || metodo === "pix") && (
+                      <DadosDoTitular
+                        pix={metodo === "pix"}
+                        nome={nome}
+                        setNome={setNome}
+                        documento={documento}
+                        setDocumento={setDocumento}
+                        telefone={telefone}
+                        setTelefone={setTelefone}
+                        cep={cep}
+                        setCep={setCep}
+                        numeroEndereco={numeroEndereco}
+                        setNumeroEndereco={setNumeroEndereco}
+                      />
+                    )}
+
+                    {erro && (
+                      <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                        {erro}
+                      </p>
+                    )}
+
+                    <Button size="lg" className="w-full gap-2" disabled={!podePagar} onClick={pagar}>
+                      {enviando ? (
+                        <>
+                          <IconLoader2 className="size-4 animate-spin" />
+                          Processando...
+                        </>
+                      ) : item.tipo === "cartao" ? (
+                        "Salvar cartão"
+                      ) : metodo === "pix" ? (
+                        <>
+                          <IconQrcode className="size-4" />
+                          Gerar código PIX
+                        </>
+                      ) : (
+                        <>
+                          <IconLock className="size-4" />
+                          Pagar {formatCents(preco.hojeCents)}
+                        </>
+                      )}
+                    </Button>
+
+                    <p className="text-center text-[11.5px] leading-relaxed text-muted-foreground">
+                      Ao continuar você concorda com os{" "}
+                      <a href="/termos" target="_blank" className="underline underline-offset-2">
+                        Termos de Uso
+                      </a>{" "}
+                      e a{" "}
+                      <a href="/privacidade" target="_blank" className="underline underline-offset-2">
+                        Política de Privacidade
+                      </a>
+                      .
+                    </p>
+                  </>
+                )}
+              </section>
+            </div>
+          </>
+        )}
+      </main>
+
+      <footer className="border-t border-border bg-background py-5">
+        <p className="mx-auto max-w-[1080px] px-4 text-center text-[11.5px] text-muted-foreground sm:px-6">
+          Dúvidas sobre a cobrança? Escreva para{" "}
+          <a href={`mailto:${EMAIL_SUPORTE}`} className="underline underline-offset-2">
+            {EMAIL_SUPORTE}
+          </a>
+        </p>
+      </footer>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+function MetodoSeletor({
+  metodo,
+  setMetodo,
+  pixDisponivel,
+}: {
+  metodo: Metodo
+  setMetodo: (m: Metodo) => void
+  pixDisponivel: boolean
+}) {
+  const opcoes: { id: Metodo; rotulo: string; icone: React.ReactNode; nota?: string }[] = [
+    { id: "cartao", rotulo: "Cartão de crédito", icone: <IconCreditCard className="size-4" /> },
+    ...(pixDisponivel
+      ? [{ id: "pix" as const, rotulo: "PIX", icone: <IconQrcode className="size-4" />, nota: "Cai na hora" }]
+      : []),
+  ]
+  if (opcoes.length === 1) return null
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-[13px] font-medium">Como você quer pagar</span>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {opcoes.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => setMetodo(o.id)}
+            aria-pressed={metodo === o.id}
+            className={`flex items-center gap-2.5 rounded-lg border px-3.5 py-3 text-left text-sm transition-colors ${
+              metodo === o.id
+                ? "border-primary bg-primary/[0.05] font-medium"
+                : "border-border hover:bg-muted"
+            }`}
+          >
+            <span className={metodo === o.id ? "text-primary" : "text-muted-foreground"}>{o.icone}</span>
+            <span className="flex-1">{o.rotulo}</span>
+            {o.nota && (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                {o.nota}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function CartaoSalvo({
+  card,
+  usandoOutro,
+  onTrocar,
+}: {
+  card: { brand: string | null; last4: string | null; exp: string | null }
+  usandoOutro: boolean
+  onTrocar: () => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3.5 py-3">
+      <span className="flex items-center gap-2 text-sm">
+        <IconCreditCard className="size-4 text-muted-foreground" />
+        <span className={usandoOutro ? "text-muted-foreground line-through" : ""}>
+          {card.brand ?? "Cartão"} <span className="tabular-nums">•••• {card.last4}</span>
+        </span>
+      </span>
+      <Button variant="ghost" size="sm" onClick={onTrocar}>
+        {usandoOutro ? "Usar o cartão salvo" : "Usar outro cartão"}
+      </Button>
+    </div>
+  )
+}
+
+function FormularioDeCartao({
+  numero,
+  setNumero,
+  validade,
+  setValidade,
+  cvv,
+  setCvv,
+  nomeNoCartao,
+  setNomeNoCartao,
+}: {
+  numero: string
+  setNumero: (v: string) => void
+  validade: string
+  setValidade: (v: string) => void
+  cvv: string
+  setCvv: (v: string) => void
+  nomeNoCartao: string
+  setNomeNoCartao: (v: string) => void
+}) {
+  const bandeira = bandeiraProvavel(numero)
+  return (
+    <div className="flex flex-col gap-3.5">
+      <span className="text-[13px] font-medium">Dados do cartão</span>
+
+      <Campo label="Número do cartão">
+        <div className="relative">
+          <Input
+            value={numero}
+            onChange={(e) => setNumero(mascaraCartao(e.target.value))}
+            inputMode="numeric"
+            autoComplete="cc-number"
+            placeholder="0000 0000 0000 0000"
+            className="pr-20 tabular-nums"
+          />
+          {bandeira && (
+            <span className="absolute top-1/2 right-3 -translate-y-1/2 text-[11.5px] font-medium text-muted-foreground">
+              {bandeira}
+            </span>
+          )}
+        </div>
+      </Campo>
+
+      <div className="grid gap-3.5 sm:grid-cols-2">
+        <Campo label="Validade">
+          <Input
+            value={validade}
+            onChange={(e) => setValidade(mascaraValidade(e.target.value))}
+            inputMode="numeric"
+            autoComplete="cc-exp"
+            placeholder="MM/AA"
+            className="tabular-nums"
+          />
+        </Campo>
+        <Campo label="Código de segurança">
+          <Input
+            value={cvv}
+            onChange={(e) => setCvv(soDigitos(e.target.value).slice(0, 4))}
+            inputMode="numeric"
+            autoComplete="cc-csc"
+            placeholder="CVV"
+            className="tabular-nums"
+          />
+        </Campo>
+      </div>
+
+      <Campo label="Nome impresso no cartão">
+        <Input
+          value={nomeNoCartao}
+          onChange={(e) => setNomeNoCartao(e.target.value.toUpperCase())}
+          autoComplete="cc-name"
+          placeholder="COMO ESTÁ NO CARTÃO"
+        />
+      </Campo>
+    </div>
+  )
+}
+
+function DadosDoTitular({
+  pix,
+  nome,
+  setNome,
+  documento,
+  setDocumento,
+  telefone,
+  setTelefone,
+  cep,
+  setCep,
+  numeroEndereco,
+  setNumeroEndereco,
+}: {
+  pix: boolean
+  nome: string
+  setNome: (v: string) => void
+  documento: string
+  setDocumento: (v: string) => void
+  telefone: string
+  setTelefone: (v: string) => void
+  cep: string
+  setCep: (v: string) => void
+  numeroEndereco: string
+  setNumeroEndereco: (v: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-3.5 border-t border-border pt-5">
+      <div>
+        <span className="text-[13px] font-medium">{pix ? "Seus dados" : "Dados de cobrança"}</span>
+        <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">
+          {pix
+            ? "O emissor do PIX exige a identificação de quem está pagando."
+            : "O banco emissor do cartão confere estes dados antes de aprovar. Use o endereço da fatura."}
+        </p>
+      </div>
+
+      <Campo label={pix ? "Nome completo" : "Nome completo do titular"}>
+        <Input value={nome} onChange={(e) => setNome(e.target.value)} autoComplete="name" />
+      </Campo>
+
+      <div className="grid gap-3.5 sm:grid-cols-2">
+        <Campo label="CPF ou CNPJ">
+          <Input
+            value={documento}
+            onChange={(e) => setDocumento(mascaraDocumento(e.target.value))}
+            inputMode="numeric"
+            className="tabular-nums"
+          />
+        </Campo>
+        <Campo label="Celular" dica="Opcional">
+          <Input
+            value={telefone}
+            onChange={(e) => setTelefone(mascaraTelefone(e.target.value))}
+            inputMode="numeric"
+            autoComplete="tel"
+            placeholder="(00) 00000-0000"
+            className="tabular-nums"
+          />
+        </Campo>
+      </div>
+
+      {!pix && (
+        <div className="grid gap-3.5 sm:grid-cols-[1fr_140px]">
+          <Campo label="CEP da fatura">
+            <Input
+              value={cep}
+              onChange={(e) => setCep(mascaraCep(e.target.value))}
+              inputMode="numeric"
+              autoComplete="postal-code"
+              placeholder="00000-000"
+              className="tabular-nums"
+            />
+          </Campo>
+          <Campo label="Número">
+            <Input value={numeroEndereco} onChange={(e) => setNumeroEndereco(e.target.value)} />
+          </Campo>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PixView({
+  pix,
+  copiado,
+  setCopiado,
+}: {
+  pix: { copiaECola: string; qr: string }
+  copiado: boolean
+  setCopiado: (v: boolean) => void
+}) {
+  return (
+    <div className="flex flex-col items-center gap-4 py-2 text-center">
+      <h2 className="font-heading text-lg font-semibold">Escaneie para pagar</h2>
+      <img
+        src={`data:image/png;base64,${pix.qr}`}
+        alt="QR Code do PIX"
+        className="size-56 rounded-lg border border-border bg-white p-2"
+      />
+      {/* Quem paga pelo computador não consegue ler o QR da própria tela — por
+          isso o copia-e-cola precisa existir junto, não como alternativa
+          escondida. */}
+      <Button
+        variant="outline"
+        className="w-full gap-2"
+        onClick={() => {
+          navigator.clipboard.writeText(pix.copiaECola)
+          setCopiado(true)
+          setTimeout(() => setCopiado(false), 2000)
+        }}
+      >
+        <IconCopy className="size-4" />
+        {copiado ? "Código copiado" : "Copiar código PIX"}
+      </Button>
+      <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
+        <IconLoader2 className="size-4 animate-spin" />
+        Esperando o pagamento. Esta tela se atualiza sozinha.
+      </p>
+    </div>
+  )
+}
+
+function ResumoDoPedido({
+  ctx,
+  item,
+  plano,
+  preco,
+}: {
+  ctx: CheckoutContexto
+  item: CheckoutItem
+  plano: CheckoutContexto["plans"][number] | null
+  preco: { hojeCents: number; depoisCents: number | null; promo: boolean }
+}) {
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-border bg-background p-5 shadow-[var(--shadow-raised)]">
+      <h2 className="font-heading text-base font-semibold">Resumo do pedido</h2>
+
+      {item.tipo === "plano" && plano && (
+        <>
+          <div className="flex flex-col gap-1">
+            <LinhaResumo rotulo={`Plano ${plano.name}`} valor={formatCents(preco.hojeCents)} />
+            {preco.promo && (
+              <LinhaResumo
+                suave
+                rotulo="Preço normal"
+                valor={<span className="line-through">{formatCents(plano.priceCents)}</span>}
+              />
+            )}
+          </div>
+          <ul className="flex flex-col gap-2 border-t border-border pt-4">
+            <Beneficio icone={<IconClock className="size-4" />} texto={`${plano.weeklyMinutesNormal} minutos de vídeo por semana`} />
+            <Beneficio icone={<IconRouter className="size-4" />} texto={`${plano.weeklyMinutesBonus} minutos por semana usando a sua internet`} />
+            <Beneficio
+              icone={<IconBrandYoutube className="size-4" />}
+              texto={`${plano.maxYoutubeChannels ?? "∞"} ${plano.maxYoutubeChannels === 1 ? "canal do YouTube" : "canais do YouTube"}`}
+            />
+            <Beneficio
+              icone={<IconBrandTiktok className="size-4" />}
+              texto={`${plano.maxTiktokAccounts ?? "∞"} ${plano.maxTiktokAccounts === 1 ? "conta do TikTok" : "contas do TikTok"}`}
+            />
+            {plano.extraSlotPriceCents && (
+              <Beneficio
+                icone={<IconPlus className="size-4" />}
+                texto={`Pode comprar conexões extras por ${formatCents(plano.extraSlotPriceCents)}/mês cada`}
+              />
+            )}
+          </ul>
+        </>
+      )}
+
+      {item.tipo === "creditos" && (
+        <>
+          <LinhaResumo rotulo={`${item.minutos} minutos de crédito`} valor={formatCents(preco.hojeCents)} />
+          <p className="border-t border-border pt-4 text-[12.5px] leading-relaxed text-muted-foreground">
+            {formatCents(ctx.package.centsPerMinute)} por minuto de vídeo — o mesmo preço que você pagaria
+            estourando a cota. Créditos avulsos não expiram e não somem na virada da semana.
+          </p>
+        </>
+      )}
+
+      {item.tipo === "extras" && (
+        <>
+          <LinhaResumo
+            rotulo={`${item.quantidade} ${item.quantidade === 1 ? "conexão extra" : "conexões extras"}`}
+            valor={formatCents(preco.hojeCents)}
+          />
+          <p className="border-t border-border pt-4 text-[12.5px] leading-relaxed text-muted-foreground">
+            Cada conexão libera <strong className="text-foreground">1 canal do YouTube e 1 conta do TikTok</strong>{" "}
+            a mais, cobrada todo mês junto com o seu plano. Você pode cancelar quando quiser — o mês já pago
+            não é devolvido.
+          </p>
+        </>
+      )}
+
+      {item.tipo === "cartao" && (
+        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+          Nenhum valor é cobrado agora. O cartão fica salvo para as cobranças automáticas: quando a sua cota
+          semanal acabar, o vídeo continua sendo processado e você paga só o que passou.
+        </p>
+      )}
+
+      {item.tipo !== "cartao" && (
+        <div className="flex flex-col gap-2 border-t border-border pt-4">
+          <LinhaResumo forte rotulo="Total hoje" valor={formatCents(preco.hojeCents)} />
+          {/* O segundo degrau do preço fica escrito ANTES do pagamento. Deixar
+              para a fatura do mês seguinte é o que gera estorno. */}
+          {item.tipo === "plano" && preco.depoisCents !== null && (
+            <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+              {preco.promo ? (
+                <>
+                  Depois do primeiro mês, {formatCents(preco.depoisCents)} por mês. Cancele quando quiser.
+                </>
+              ) : (
+                <>Renova automaticamente por {formatCents(preco.depoisCents)} todo mês. Cancele quando quiser.</>
+              )}
+            </p>
+          )}
+          {item.tipo === "extras" && (
+            <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+              Depois, {formatCents(preco.depoisCents ?? 0)} por mês enquanto as conexões estiverem ativas.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ConcluidoView({
+  concluido,
+  item,
+  planName,
+}: {
+  concluido: CheckoutPagamento
+  item: CheckoutItem
+  planName: string | null
+}) {
+  // "Em análise" não é fracasso nem sucesso: alguns cartões levam minutos para
+  // responder. Dizer "pronto" seria mentir, e dizer "falhou" mandaria a pessoa
+  // pagar de novo — o que poderia cobrar duas vezes.
+  const emAnalise = !concluido.pago
+  return (
+    <div className="mx-auto flex max-w-[520px] flex-col items-center gap-5 rounded-xl border border-border bg-background px-6 py-12 text-center shadow-[var(--shadow-raised)]">
+      {emAnalise ? (
+        <IconClock className="size-14 text-muted-foreground" />
+      ) : (
+        <IconCircleCheck className="size-14 text-emerald-500" />
+      )}
+      <div>
+        <h1 className="font-heading text-xl font-semibold">
+          {emAnalise
+            ? "Pagamento em análise"
+            : item.tipo === "plano"
+              ? `Plano ${planName ?? ""} ativado`
+              : item.tipo === "creditos"
+                ? "Créditos adicionados"
+                : item.tipo === "extras"
+                  ? "Conexões liberadas"
+                  : "Cartão salvo"}
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          {emAnalise
+            ? "O banco está confirmando a cobrança. Assim que o resultado sair, liberamos tudo sozinho — não precisa pagar de novo."
+            : item.tipo === "plano"
+              ? "Sua cota semanal já está disponível e os vídeos parados voltaram para a fila."
+              : item.tipo === "creditos"
+                ? "Os minutos já estão no seu saldo."
+                : item.tipo === "extras"
+                  ? "Você já pode conectar mais um canal e mais uma conta do TikTok."
+                  : "Ele será usado nas cobranças automáticas."}
+        </p>
+      </div>
+      <div className="flex flex-wrap justify-center gap-2">
+        <Button asChild>
+          <a href="/client">Ir para o painel</a>
+        </Button>
+        <Button variant="outline" asChild>
+          <a href="/client/billing">Ver plano e uso</a>
+        </Button>
+      </div>
+    </div>
+  )
+}

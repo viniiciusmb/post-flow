@@ -555,11 +555,63 @@ export interface CreditBucketView {
 export interface BillingPlan {
   key: string
   name: string
+  /** Mensalidade cheia — o que passa a ser cobrado a partir do 2º mês. */
   priceCents: number
+  /** Preço promocional do 1º mês. null = plano sem promoção. */
+  firstMonthPriceCents?: number | null
   weeklyMinutesNormal: number
   weeklyMinutesBonus: number
   maxYoutubeChannels: number | null
   maxTiktokAccounts: number | null
+  /** Quanto custa o minuto que passa da cota, neste plano. */
+  overageCentsNormal?: number
+  overageCentsBonus?: number
+  /** Preço mensal de 1 conexão extra. null = o plano não vende conexões extras. */
+  extraSlotPriceCents?: number | null
+}
+
+/** O que está sendo comprado na tela de checkout, lido da barra de endereço. */
+export type CheckoutItem =
+  | { tipo: "plano"; planKey: string }
+  | { tipo: "creditos"; minutos: number }
+  | { tipo: "extras"; quantidade: number }
+  | { tipo: "cartao" }
+
+export interface CheckoutContexto {
+  asaasDisponivel: boolean
+  plans: BillingPlan[]
+  subscription: {
+    planKey: string | null
+    planName: string | null
+    status: SubscriptionStatus
+    /** false = a promoção de 1º mês já foi usada; a tela não pode anunciá-la. */
+    promoDisponivel: boolean
+    extraSlots: number
+    extraSlotPriceCents: number | null
+    limites: { canais: number | null; contas: number | null }
+    emUso: { canais: number; contas: number }
+    overageCardEnabled: boolean
+  }
+  /** Cartão tokenizado no Asaas, quando já existe um salvo. */
+  card: { brand: string | null; last4: string | null; exp: string | null } | null
+  perfil: { nome: string; email: string; cpfCnpj: string }
+  package: { minMinutes: number; stepMinutes: number; maxMinutes: number; centsPerMinute: number }
+  overage: { rateCentsNormal: number; rateCentsBonus: number }
+  empresa: { nome: string; cnpj: string }
+  maxSlotsPorCompra: number
+}
+
+export interface CheckoutPagamento {
+  /** false = cartão em análise. Não é falha: o resultado chega pelo webhook. */
+  pago: boolean
+  tipo?: "plano" | "creditos" | "extras" | "cartao"
+  status?: string
+  paymentId?: string
+  planName?: string | null
+  minutes?: number
+  slots?: number
+  pixCopiaECola?: string
+  qrCodeBase64?: string
 }
 
 export interface SavedCard {
@@ -603,12 +655,21 @@ export interface CreditTransactionView {
 
 export interface ClientBillingOverviewResponse {
   stripeConfigured: boolean
+  asaasConfigured: boolean
   subscription: {
     planKey: string | null
     planName: string | null
     status: SubscriptionStatus
     overageCardEnabled: boolean
+    promoDisponivel: boolean
+    extraSlots: number
+    extraSlotPriceCents: number | null
+    /** Limite EFETIVO: o que o plano dá mais as conexões compradas. */
+    limiteCanais: number | null
+    limiteContas: number | null
   }
+  /** Cartão tokenizado no Asaas (independente do cartão antigo da Stripe). */
+  asaasCard: { brand: string | null; last4: string | null; exp: string | null } | null
   credits: { normal: CreditBucketView; bonus: CreditBucketView }
   /** true = conta do dono do sistema: não gasta crédito nem depende de plano. */
   isExempt: boolean
