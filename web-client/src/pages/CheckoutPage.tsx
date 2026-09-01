@@ -270,8 +270,13 @@ export function CheckoutPage() {
     if (!pix || concluido) return
     const timer = setInterval(async () => {
       try {
-        const r = await api.get<{ status: string }>(`/api/client/checkout/pagamento/${pix.paymentId}`)
-        if (r.status === "pago") {
+        // Duas perguntas diferentes: compra avulsa tem um pagamento com id;
+        // mensalidade por PIX Automático tem uma AUTORIZAÇÃO, que é o que
+        // realmente ativa o plano quando o aviso do Asaas chega.
+        const r = pix.paymentId
+          ? await api.get<{ status: string }>(`/api/client/checkout/pagamento/${pix.paymentId}`)
+          : await api.get<{ status: string }>("/api/client/billing/pix-authorization")
+        if (r.status === "pago" || r.status === "ativa") {
           setConcluido({ pago: true, tipo: item.tipo === "creditos" ? "creditos" : "plano" })
           clearInterval(timer)
         }
@@ -356,6 +361,21 @@ export function CheckoutPage() {
         // Quem entrou aqui já decidiu guardar o cartão; a única pergunta que
         // falta é se ele pode ser cobrado sozinho quando a cota acabar.
         setOferta("excedente")
+        return
+      }
+
+      // Mensalidade por PIX não passa pelo /pagar: ela é uma AUTORIZAÇÃO de
+      // débito recorrente (PIX Automático), com endpoint próprio. Um QR paga a
+      // primeira mensalidade e autoriza as seguintes.
+      if (item.tipo === "plano" && metodo === "pix") {
+        const dados = corpoDoCartao()
+        const r = await api.post<{ pixCopiaECola: string; qrCodeBase64: string }>(
+          "/api/client/billing/subscribe-pix",
+          { planKey: item.planKey, name: dados.titular?.nome, cpfCnpj: dados.titular?.documento }
+        )
+        // Sem paymentId: quem confirma esta compra é a autorização, e ela tem
+        // um endereço de status próprio (ver o polling lá em cima).
+        setPix({ paymentId: "", copiaECola: r.pixCopiaECola, qr: r.qrCodeBase64 })
         return
       }
 
@@ -506,7 +526,13 @@ export function CheckoutPage() {
                       <MetodoSeletor
                         metodo={metodo}
                         setMetodo={setMetodo}
-                        pixDisponivel={item.tipo === "creditos"}
+                        pixDisponivel={item.tipo === "creditos" || item.tipo === "plano"}
+                        // Mensalidade por PIX é o PIX AUTOMÁTICO: um QR paga a
+                        // primeira e autoriza as próximas sozinho. É outra
+                        // coisa de um PIX avulso, e chamar os dois de "PIX"
+                        // faria o cliente achar que teria de pagar na mão todo
+                        // mês - ou pior, que não teria.
+                        pixEhAutomatico={item.tipo === "plano"}
                       />
                     )}
 
@@ -725,15 +751,27 @@ function MetodoSeletor({
   metodo,
   setMetodo,
   pixDisponivel,
+  pixEhAutomatico = false,
 }: {
   metodo: Metodo
   setMetodo: (m: Metodo) => void
   pixDisponivel: boolean
+  /** Mensalidade: o QR paga a primeira E autoriza as próximas sozinho. */
+  pixEhAutomatico?: boolean
 }) {
+  // Cartão SEMPRE primeiro. É o meio que renova sozinho sem o cliente precisar
+  // autorizar nada no banco, e é o que o fundador pediu para priorizar.
   const opcoes: { id: Metodo; rotulo: string; icone: React.ReactNode; nota?: string }[] = [
     { id: "cartao", rotulo: "Cartão de crédito", icone: <IconCreditCard className="size-4" /> },
     ...(pixDisponivel
-      ? [{ id: "pix" as const, rotulo: "PIX", icone: <IconQrcode className="size-4" />, nota: "Cai na hora" }]
+      ? [
+          {
+            id: "pix" as const,
+            rotulo: pixEhAutomatico ? "PIX Automático" : "PIX",
+            icone: <IconQrcode className="size-4" />,
+            nota: pixEhAutomatico ? "Renova sozinho" : "Cai na hora",
+          },
+        ]
       : []),
   ]
   if (opcoes.length === 1) return null
@@ -779,10 +817,20 @@ function CartaoSalvo({
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3.5 py-3">
-      <span className="flex items-center gap-2 text-sm">
-        <IconCreditCard className="size-4 text-muted-foreground" />
+      {/* O SELO da bandeira, não o nome escrito: a pessoa reconhece o cartão
+          dela pelo desenho antes de ler. O nome fica no `title`, para quem usa
+          leitor de tela ou passa o mouse. */}
+      <span className="flex items-center gap-2 text-sm" title={card.brand ?? "Cartão"}>
+        {(() => {
+          const marca = bandeiraDoAsaas(card.brand)
+          return marca ? (
+            <Bandeira id={marca} className="shrink-0" />
+          ) : (
+            <IconCreditCard className="size-4 shrink-0 text-muted-foreground" />
+          )
+        })()}
         <span className={usandoOutro ? "text-muted-foreground line-through" : ""}>
-          {card.brand ?? "Cartão"} <span className="tabular-nums">•••• {card.last4}</span>
+          <span className="tabular-nums">•••• {card.last4}</span>
         </span>
       </span>
       <Button variant="ghost" size="sm" onClick={onTrocar}>

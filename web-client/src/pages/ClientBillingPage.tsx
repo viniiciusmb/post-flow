@@ -6,13 +6,13 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
+import { Bandeira, bandeiraDoAsaas } from "@/components/checkout/BandeirasDeCartao"
 import { dataHora } from "@/lib/formatoLocal"
 import type {
   ClientBillingOverviewResponse,
@@ -179,13 +179,35 @@ function nomeDaBandeira(brand: string) {
   return BANDEIRAS[brand] ?? brand.charAt(0).toUpperCase() + brand.slice(1)
 }
 
+// O SELO da bandeira, não o nome escrito.
+//
+// É como todo lugar que lida com cartão mostra — a pessoa reconhece o cartão
+// dela pelo desenho antes de ler qualquer coisa, e "Visa •••• 5808" gasta uma
+// linha inteira dizendo o que um selo de 32px já diz.
+//
+// O nome continua existindo no `title` e no texto alternativo: quem usa leitor
+// de tela, ou quem passa o mouse, não perde a informação — ela só deixa de
+// ocupar espaço para quem já enxerga o desenho.
+//
+// Bandeira que não reconhecemos cai no ícone genérico COM o nome ao lado: aí o
+// texto é a única informação que existe, e escondê-lo deixaria a pessoa sem
+// saber de que cartão se trata.
+function SeloDoCartao({ brand }: { brand: string | null | undefined }) {
+  const id = bandeiraDoAsaas(brand)
+  if (id) return <Bandeira id={id} className="shrink-0" />
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 text-muted-foreground">
+      <IconCreditCard className="size-3.5" />
+      {brand ? nomeDaBandeira(brand) : "Cartão"}
+    </span>
+  )
+}
+
 function CartaoLinha({ card }: { card: { brand: string; last4: string } }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <IconCreditCard className="size-3.5 shrink-0 text-muted-foreground" />
-      <span>
-        {nomeDaBandeira(card.brand)} <span className="tabular-nums">•••• {card.last4}</span>
-      </span>
+    <span className="inline-flex items-center gap-1.5" title={nomeDaBandeira(card.brand)}>
+      <SeloDoCartao brand={card.brand} />
+      <span className="tabular-nums">•••• {card.last4}</span>
     </span>
   )
 }
@@ -303,65 +325,9 @@ export function ClientBillingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ---- PIX Automático ----
-  // O cliente lê um QR Code que paga a primeira mensalidade E autoriza as
-  // próximas. Ele sai daqui para o app do banco e pode nunca voltar, então
-  // quem realmente ativa o plano é o aviso do Asaas — esta tela só acompanha.
-  const [pixPlano, setPixPlano] = useState<string | null>(null)
-  const [pixNome, setPixNome] = useState("")
-  const [pixDoc, setPixDoc] = useState("")
-  const [pixErro, setPixErro] = useState<string | null>(null)
-  const [pixGerando, setPixGerando] = useState(false)
-  const [pixCodigo, setPixCodigo] = useState<{ copiaECola: string; qr: string } | null>(null)
-  const [pixPago, setPixPago] = useState(false)
-  const [copiado, setCopiado] = useState(false)
-
-  function abrirPix(planKey: string) {
-    setPixPlano(planKey)
-    setPixNome("")
-    setPixDoc("")
-    setPixErro(null)
-    setPixCodigo(null)
-    setPixPago(false)
-  }
-
-  async function gerarPix() {
-    if (!pixPlano) return
-    setPixGerando(true)
-    setPixErro(null)
-    try {
-      const r = await api.post<{ pixCopiaECola: string; qrCodeBase64: string }>(
-        "/api/client/billing/subscribe-pix",
-        { planKey: pixPlano, name: pixNome, cpfCnpj: pixDoc }
-      )
-      setPixCodigo({ copiaECola: r.pixCopiaECola, qr: r.qrCodeBase64 })
-    } catch (e) {
-      setPixErro(e instanceof Error ? e.message : "Não consegui gerar o código.")
-    } finally {
-      setPixGerando(false)
-    }
-  }
-
-  // Enquanto o QR está na tela, pergunta ao servidor se o pagamento já
-  // chegou. É a única forma de a tela saber: o pagamento acontece no app do
-  // banco, fora daqui.
-  useEffect(() => {
-    if (!pixCodigo || pixPago) return
-    const t = setInterval(async () => {
-      try {
-        const r = await api.get<{ status: string | null }>("/api/client/billing/pix-authorization")
-        if (r.status === "ativa") {
-          setPixPago(true)
-          load()
-        }
-      } catch {
-        // Falha de rede aqui não precisa virar erro na tela: a próxima
-        // tentativa acontece em 5 segundos.
-      }
-    }, 5000)
-    return () => clearInterval(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pixCodigo, pixPago])
+  // O PIX Automático saiu desta tela em 01/09/2026 e passou a viver no
+  // checkout, como alternativa ao cartão. O fluxo inteiro (formulário, QR e a
+  // espera pelo aviso do Asaas) foi junto - ver CheckoutPage.
 
   // Sai só DEPOIS de todos os hooks. React exige que a quantidade e a ordem
   // dos hooks sejam idênticas em toda renderização; sair antes fazia a
@@ -855,11 +821,12 @@ export function ClientBillingPage() {
                       >
                         {isCurrent ? "Plano atual" : t("plano.assinarTrocar")}
                       </Button>
-                      {!isCurrent && (
-                        <Button variant="outline" size="sm" onClick={() => abrirPix(plan.key)}>
-                          {t("plano.assinarPix")}
-                        </Button>
-                      )}
+                      {/* O PIX Automático saiu daqui em 01/09/2026.
+                          Dois botões lado a lado pediam a decisão do MEIO DE
+                          PAGAMENTO antes da decisão que importa nesta tela, que
+                          é qual plano. Agora existe um botão só, e o meio de
+                          pagamento é escolhido no checkout - com cartão em
+                          primeiro e PIX Automático como alternativa. */}
                     </div>
                     <ul className="flex flex-1 flex-col gap-2 border-t border-border pt-4 text-sm text-muted-foreground">
                       <li className="flex items-start gap-2">
@@ -1028,9 +995,11 @@ export function ClientBillingPage() {
                           <td className="py-2.5 pr-3">{f.produto}</td>
                           <td className="py-2.5 pr-3 whitespace-nowrap text-muted-foreground">
                             {f.cartao && f.cartao.final ? (
-                              <span className="inline-flex items-center gap-1.5">
-                                <IconCreditCard className="size-3.5 shrink-0" />
-                                {f.cartao.bandeira ? nomeDaBandeira(f.cartao.bandeira) : "Cartão"}{" "}
+                              <span
+                                className="inline-flex items-center gap-1.5"
+                                title={f.cartao.bandeira ? nomeDaBandeira(f.cartao.bandeira) : "Cartão"}
+                              >
+                                <SeloDoCartao brand={f.cartao.bandeira} />
                                 <span className="tabular-nums">•••• {f.cartao.final}</span>
                               </span>
                             ) : (
@@ -1199,63 +1168,6 @@ export function ClientBillingPage() {
         </DialogContent>
       </Dialog>
 
-      {/* PIX Automático: um QR Code paga a primeira mensalidade e autoriza
-          as próximas. É o caminho de quem não usa cartão de crédito. */}
-      <Dialog open={pixPlano !== null} onOpenChange={(aberto) => !aberto && setPixPlano(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{pixPago ? t("pix.tudoCerto") : t("pix.assinarComPix")}</DialogTitle>
-            <DialogDescription>
-              {pixPago ? t("pix.planoAtivado") : pixCodigo ? t("pix.leiaNoBanco") : t("pix.precisamosDoDocumento")}
-            </DialogDescription>
-          </DialogHeader>
-
-          {pixPago ? (
-            <div className="flex flex-col items-center gap-3 py-4">
-              <IconCircleCheck className="size-14 text-emerald-500" />
-              <Button onClick={() => setPixPlano(null)}>{t("comum.fechar")}</Button>
-            </div>
-          ) : pixCodigo ? (
-            <div className="flex flex-col items-center gap-4">
-              <img
-                src={`data:image/png;base64,${pixCodigo.qr}`}
-                alt="QR Code do PIX"
-                className="size-56 rounded-lg border border-border bg-white p-2"
-              />
-              {/* Quem paga pelo computador não consegue ler o QR da própria
-                  tela - por isso o copia-e-cola tem que estar aqui também. */}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  navigator.clipboard.writeText(pixCodigo.copiaECola)
-                  setCopiado(true)
-                  setTimeout(() => setCopiado(false), 2000)
-                }}
-              >
-                {copiado ? t("pix.copiado") : t("pix.copiarCodigo")}
-              </Button>
-              <p className="text-center text-xs text-muted-foreground">{t("pix.esperandoPagamento")}</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium" htmlFor="pix-nome">{t("pix.nomeCompleto")}</label>
-                <Input id="pix-nome" value={pixNome} onChange={(e) => setPixNome(e.target.value)} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium" htmlFor="pix-doc">{t("pix.cpfOuCnpj")}</label>
-                <Input id="pix-doc" value={pixDoc} onChange={(e) => setPixDoc(e.target.value)} inputMode="numeric" />
-              </div>
-              {pixErro && <p className="text-sm text-destructive">{pixErro}</p>}
-              <Button onClick={gerarPix} disabled={pixGerando || pixNome.trim().length < 3 || pixDoc.length < 11}>
-                {pixGerando ? t("pix.gerando") : t("pix.gerarCodigo")}
-              </Button>
-              <p className="text-xs text-muted-foreground">{t("pix.porqueDocumento")}</p>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   )
 }
