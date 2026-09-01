@@ -19,6 +19,7 @@ router.post('/:id/tiktok-account', asyncHandler(controller.setTiktokAccount));
 router.post('/:id/export-folder', asyncHandler(controller.setExportFolder));
 router.post('/:id/drive-export-mode', asyncHandler(controller.setDriveExportMode));
 router.post('/:id/process-latest-video', asyncHandler(controller.processLatestVideo));
+router.put('/:id/audio-language', asyncHandler(controller.setAudioLanguage));
 router.delete('/:id', asyncHandler(controller.remove));
 
 module.exports = router;

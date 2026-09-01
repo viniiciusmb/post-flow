@@ -715,6 +715,15 @@ export interface LatestChannelVideo {
   thumbnailUrl: string | null
   durationSeconds: number | null
   publishedAt: string | null
+  /**
+   * Trilhas de áudio dubladas que este vídeo oferece (códigos ISO). Vem vazia
+   * quando o vídeo tem uma trilha só — e também quando não deu pra ler (ler as
+   * trilhas depende do túnel/proxy, e é melhor esforço). Vazia = a tela não
+   * pergunta idioma nenhum.
+   */
+  audioLanguages: string[]
+  /** Qual deixar marcado: o idioma do painel, se o vídeo tiver. */
+  audioLanguageSuggestion: string
 }
 
 export interface AdminOverageSummaryResponse {

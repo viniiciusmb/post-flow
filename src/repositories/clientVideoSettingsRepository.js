@@ -193,7 +193,47 @@ async function removeChannelOverride(clientUserId, youtubeChannelId) {
   return rowCount > 0;
 }
 
+// Muda SÓ o idioma do áudio de um canal, preservando todo o resto.
+//
+// Existe separado do upsert por um motivo concreto: o upsert grava a linha
+// inteira, e quem chama precisa ter em mãos todas as outras configurações. A
+// tela de Canais não tem — ela nunca carregou o estilo de corte do cliente.
+// Mandá-la gravar a linha toda faria o pop-up de idioma apagar em silêncio o
+// estilo que o cliente já tinha configurado.
+//
+// Quando o canal ainda não tem exceção própria, ela NASCE a partir do padrão
+// atual do cliente (e não dos DEFAULTS do código) — senão escolher um idioma
+// jogaria fora o estilo que o cliente configurou para todos os canais.
+async function setChannelAudioLanguage(clientUserId, youtubeChannelId, audioLanguage) {
+  const existente = await findChannelOverride(clientUserId, youtubeChannelId);
+  if (existente) {
+    const { rows } = await pool.query(
+      `UPDATE client_video_settings SET audio_language = $3, updated_at = now()
+        WHERE client_user_id = $1 AND youtube_channel_id = $2
+        RETURNING *`,
+      [clientUserId, youtubeChannelId, audioLanguage]
+    );
+    return rows[0];
+  }
+
+  const padrao = await findByClientId(clientUserId);
+  return upsert(clientUserId, { ...doColunaParaCamel(padrao), audioLanguage }, youtubeChannelId);
+}
+
+// Volta de coluna pra camelCase, que é o formato que o upsert espera. Escrito
+// a partir de COLUNAS para não haver duas listas de campos que precisem ser
+// mantidas iguais: um campo novo entra numa lista só.
+function doColunaParaCamel(linha) {
+  const saida = {};
+  for (const coluna of COLUNAS) {
+    const camel = coluna.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    saida[camel] = linha[coluna];
+  }
+  return saida;
+}
+
 module.exports = {
+  setChannelAudioLanguage,
   DEFAULTS,
   findByClientId,
   findChannelOverride,

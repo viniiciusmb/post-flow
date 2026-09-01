@@ -380,6 +380,10 @@ async function getVideoMetadata(url) {
     // Idioma declarado do video ('pt-BR', 'en'...). Serve de palpite inicial
     // ate o Whisper detectar o idioma falado de verdade.
     language: entry.language || null,
+    // Trilhas de audio DUBLADAS que este video oferece. Sai de graca do mesmo
+    // JSON - nao e consulta a mais. Lista vazia = uma trilha so, nao ha
+    // escolha a fazer.
+    audioLanguages: idiomaDoAudio.trilhasDisponiveis(entry.formats),
     // Ver src/lib/disponibilidadeDoVideo.js.
     liveStatus: entry.live_status || null,
     // Quando a estreia vai ao ar (segundos desde 1970, do proprio YouTube).

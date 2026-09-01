@@ -1,4 +1,5 @@
-import { useT, type ChaveDeTraducao } from "@/i18n"
+import { useI18n, useT, type ChaveDeTraducao } from "@/i18n"
+import { nomeDeIdioma } from "@/lib/nomeDeIdioma"
 import { useEffect, useRef, useState } from "react"
 import { IconAdjustmentsHorizontal } from "@tabler/icons-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -691,6 +692,7 @@ function PartLabelPositionPicker({
 
 export function ClipStyleEditorCard() {
   const t = useT()
+  const { idioma } = useI18n()
   const [settings, setSettings] = useState<ClientVideoSettingsResponse | null>(null)
   const [zoomDraft, setZoomDraft] = useState(100)
   // Rascunho local do texto fixo: salvar a cada tecla dispararia uma
@@ -845,7 +847,9 @@ export function ClipStyleEditorCard() {
               </SelectTrigger>
               <SelectContent>
                 {settings.options.audioLanguages.map((i) => (
-                  <SelectItem key={i.codigo} value={i.codigo}>{i.nome}</SelectItem>
+                  <SelectItem key={i.codigo} value={i.codigo}>
+                    {i.codigo === "original" ? t("canais.idiomaOriginal") : nomeDeIdioma(i.codigo, idioma)}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

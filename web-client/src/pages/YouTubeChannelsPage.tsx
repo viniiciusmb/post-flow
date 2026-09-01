@@ -24,7 +24,8 @@ import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
 import type { DriveStatusResponse, LatestChannelVideo, SourceVideo, TikTokAccountSummary, YoutubeChannel } from "@/types/api"
-import { useT } from "@/i18n"
+import { useI18n, useT } from "@/i18n"
+import { nomeDeIdioma } from "@/lib/nomeDeIdioma"
 
 function formatDuration(seconds: number | null) {
   if (!seconds) return null
@@ -387,6 +388,7 @@ function ChannelCard({
 
 export function YouTubeChannelsPage() {
   const t = useT()
+  const { idioma } = useI18n()
   const { user, loading: authLoading, logout } = useAuth()
   const [channels, setChannels] = useState<YoutubeChannel[] | null>(null)
   const [videos, setVideos] = useState<SourceVideo[]>([])
@@ -402,6 +404,9 @@ export function YouTubeChannelsPage() {
   const [latestVideoPrompt, setLatestVideoPrompt] = useState<{ channelId: number; video: LatestChannelVideo } | null>(null)
   const [processingLatest, setProcessingLatest] = useState(false)
   const [latestVideoError, setLatestVideoError] = useState<string | null>(null)
+  // Idioma escolhido no pop-up. Só existe quando o vídeo mais recente tem mais
+  // de uma trilha de áudio (canal dublado); senão não há escolha a fazer.
+  const [idiomaEscolhido, setIdiomaEscolhido] = useState<string>("original")
   // Pedir um canal sem ter onde publicar produz um canal que baixa, corta e
   // depois trava - o corte fica pronto e nao tem conta pra receber. Melhor
   // parar aqui e explicar do que deixar a pessoa descobrir sozinha dois dias
@@ -452,6 +457,9 @@ export function YouTubeChannelsPage() {
       await load()
       if (created.latestVideo) {
         setLatestVideoPrompt({ channelId: created.channel.id, video: created.latestVideo })
+        // Quem usa o painel em português vê português já marcado (o servidor
+        // decide isso, olhando o que o vídeo realmente tem).
+        setIdiomaEscolhido(created.latestVideo.audioLanguageSuggestion || "original")
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("canais.naoFoiPossivelAdicionar"))
@@ -460,11 +468,27 @@ export function YouTubeChannelsPage() {
     }
   }
 
+  // Grava a escolha de idioma antes de qualquer outra coisa.
+  //
+  // Vale nos DOIS caminhos do pop-up: recusar só quer dizer "não processe ESTE
+  // vídeo", enquanto a escolha de idioma é sobre o canal e continua valendo
+  // pros próximos. E vale ANTES de mandar processar: gravar depois faria o
+  // vídeo baixar a trilha antiga e o cliente receber o corte no idioma errado
+  // justo no primeiro vídeo, que é o que ele vai olhar.
+  async function salvarIdioma() {
+    if (!latestVideoPrompt) return
+    if (latestVideoPrompt.video.audioLanguages.length < 2) return
+    await api.put(`/api/client/youtube-channels/${latestVideoPrompt.channelId}/audio-language`, {
+      audioLanguage: idiomaEscolhido,
+    })
+  }
+
   async function acceptLatestVideo() {
     if (!latestVideoPrompt) return
     setProcessingLatest(true)
     setLatestVideoError(null)
     try {
+      await salvarIdioma()
       await api.post(`/api/client/youtube-channels/${latestVideoPrompt.channelId}/process-latest-video`, {})
       setLatestVideoPrompt(null)
       await load()
@@ -628,10 +652,40 @@ export function YouTubeChannelsPage() {
               </div>
             </div>
           )}
+          {/* Canal dublado: o mesmo vídeo existe em várias línguas, e é aqui —
+              no momento de conectar o canal — que perguntar sai barato. Depois,
+              o cliente teria que descobrir sozinho que existe um seletor de
+              idioma dentro da tela de estilo do corte.
+
+              Só aparece com 2+ trilhas. Vídeo de uma língua só não tem escolha
+              a fazer, e um seletor de uma opção é ruído. */}
+          {latestVideoPrompt && latestVideoPrompt.video.audioLanguages.length > 1 && (
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3">
+              <p className="text-sm font-medium">{t("canais.idiomaDoCanal")}</p>
+              <p className="text-xs text-muted-foreground">{t("canais.idiomaDoCanalTexto")}</p>
+              <Select value={idiomaEscolhido} onValueChange={(v) => v && setIdiomaEscolhido(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="original">{t("canais.idiomaOriginal")}</SelectItem>
+                  {latestVideoPrompt.video.audioLanguages.map((codigo) => (
+                    <SelectItem key={codigo} value={codigo}>
+                      {nomeDeIdioma(codigo, idioma)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => {
+              onClick={async () => {
+                // Recusar processar ESTE vídeo não desfaz a escolha de idioma:
+                // ela é sobre o canal e vale pros próximos. Falhar aqui não
+                // pode segurar o pop-up aberto — o cliente disse "não, obrigado".
+                await salvarIdioma().catch(() => {})
                 setLatestVideoPrompt(null)
                 setLatestVideoError(null)
               }}

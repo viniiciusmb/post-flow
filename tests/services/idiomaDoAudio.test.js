@@ -416,3 +416,67 @@ test('pedir o idioma de volta NÃO transforma o download numa simulação', asyn
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Perguntar o idioma na hora de conectar o canal
+// ---------------------------------------------------------------------------
+//
+// Pedido do fundador (01/09/2026): o pop-up que já pergunta "quer processar o
+// vídeo mais recente?" passa a mostrar os idiomas que AQUELE vídeo tem, com o
+// idioma do painel já marcado. É o único momento em que a pergunta sai barata:
+// depois, o cliente teria que descobrir sozinho que existe um seletor de idioma
+// dentro da tela de estilo do corte.
+
+// Formatos com a mesma forma que o yt-dlp devolve de verdade — conferido num
+// vídeo real do MrBeast Gaming.
+const FORMATOS_DUBLADOS = [
+  { format_id: '397', acodec: 'none', vcodec: 'av01', language: null },
+  { format_id: '140-0', acodec: 'mp4a.40.2', vcodec: 'none', language: 'en' },
+  { format_id: '140-9', acodec: 'mp4a.40.2', vcodec: 'none', language: 'pt' },
+  { format_id: '251-3', acodec: 'opus', vcodec: 'none', language: 'pt' },
+  { format_id: '140-4', acodec: 'mp4a.40.2', vcodec: 'none', language: 'es' },
+  { format_id: '18', acodec: 'mp4a.40.2', vcodec: 'avc1', language: null },
+];
+
+test('as trilhas saem do JSON que o yt-dlp já devolve — sem consulta a mais', () => {
+  const trilhas = idiomaDoAudio.trilhasDisponiveis(FORMATOS_DUBLADOS);
+  assert.deepEqual(trilhas, ['en', 'es', 'pt'], 'não leu as trilhas dubladas do vídeo');
+});
+
+test('formato combinado (áudio+vídeo) não inventa trilha', () => {
+  // Ele não declara idioma; contá-lo faria aparecer uma trilha que não existe.
+  const trilhas = idiomaDoAudio.trilhasDisponiveis([
+    { acodec: 'mp4a.40.2', vcodec: 'avc1', language: 'en' },
+  ]);
+  assert.deepEqual(trilhas, [], 'um formato com vídeo junto não é trilha de dublagem');
+});
+
+test('vídeo de uma trilha só devolve lista VAZIA, não ["original"]', () => {
+  // "Não há escolha a fazer" é diferente de "há uma escolha chamada original".
+  // É essa diferença que decide se a tela mostra ou esconde o seletor.
+  const trilhas = idiomaDoAudio.trilhasDisponiveis([
+    { acodec: 'mp4a.40.2', vcodec: 'none', language: null },
+    { acodec: 'none', vcodec: 'avc1', language: null },
+  ]);
+  assert.deepEqual(trilhas, []);
+});
+
+test('quem usa o painel em português vê português marcado', () => {
+  assert.equal(idiomaDoAudio.sugestaoPara('pt', ['en', 'es', 'pt']), 'pt');
+  assert.equal(idiomaDoAudio.sugestaoPara('es', ['en', 'es', 'pt']), 'es');
+  assert.equal(idiomaDoAudio.sugestaoPara('en', ['en', 'es', 'pt']), 'en');
+});
+
+test('vídeo sem a língua do painel marca "original", não uma terceira qualquer', () => {
+  // Marcar espanhol para quem lê a tela em português seria escolher pelo
+  // cliente sem ele saber.
+  assert.equal(idiomaDoAudio.sugestaoPara('pt', ['en', 'es']), 'original');
+  assert.equal(idiomaDoAudio.sugestaoPara('pt', []), 'original');
+});
+
+test('formats ausente não quebra nada', () => {
+  // Uma estreia marcada devolve metadado sem formato nenhum — e o cadastro do
+  // canal não pode morrer por causa disso.
+  assert.deepEqual(idiomaDoAudio.trilhasDisponiveis(undefined), []);
+  assert.deepEqual(idiomaDoAudio.trilhasDisponiveis(null), []);
+});

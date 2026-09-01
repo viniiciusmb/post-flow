@@ -83,4 +83,60 @@ function seletorDeFormato(idioma, alturaMaxima) {
   return `bestvideo[height<=${alturaMaxima}]+bestaudio[language^=${codigo}]/${padrao}`;
 }
 
-module.exports = { ORIGINAL, IDIOMAS, CODIGOS, ehValido, normalizar, seletorDeFormato };
+// Quais trilhas de áudio um vídeo oferece, lidas do JSON que o yt-dlp já
+// devolve. De graça: os formatos vêm no mesmo `--dump-json` que já é feito
+// para saber título e duração — não é uma consulta a mais.
+//
+// Só interessam os formatos de ÁUDIO PURO (acodec presente, sem vídeo): são
+// eles que carregam a dublagem. Um formato combinado não declara idioma, e
+// contá-lo aqui inventaria uma trilha que não existe.
+//
+// Vídeo de uma trilha só devolve lista VAZIA, não ['original']: "não há escolha
+// a fazer" é diferente de "há uma escolha, e ela se chama original" — é essa
+// diferença que decide se a tela mostra ou não o seletor.
+function trilhasDisponiveis(formats) {
+  if (!Array.isArray(formats)) return [];
+  const codigos = new Set();
+  for (const f of formats) {
+    if (!f || !f.acodec || f.acodec === 'none') continue;
+    if (f.vcodec && f.vcodec !== 'none') continue;
+    if (!f.language) continue;
+    codigos.add(normalizar(f.language));
+  }
+  codigos.delete(ORIGINAL);
+  return [...codigos].sort();
+}
+
+// Qual idioma deixar marcado no seletor.
+//
+// A regra do fundador: quem usa o painel em português vê português marcado por
+// padrão, e troca se quiser. O idioma do painel é o melhor palpite que existe
+// sobre em que língua a pessoa quer publicar — ela está lendo a tela nele.
+//
+// Quando o vídeo não tem a língua do painel, marca 'original': marcar uma
+// terceira língua qualquer seria escolher pelo cliente sem ele saber.
+function sugestaoPara(idiomaDoPainel, trilhas) {
+  const alvo = normalizar(idiomaDoPainel);
+  if (alvo !== ORIGINAL && Array.isArray(trilhas) && trilhas.includes(alvo)) return alvo;
+  return ORIGINAL;
+}
+
+// O nome de um código, para a tela poder listar trilhas que não estão em
+// IDIOMAS (um canal pode dublar em língua que não previmos). Sem isto, uma
+// trilha desconhecida apareceria como um código cru no meio de nomes escritos.
+function nomeDoIdioma(codigo) {
+  const conhecido = IDIOMAS.find((i) => i.codigo === normalizar(codigo));
+  return conhecido ? conhecido.nome : String(codigo || '').toUpperCase();
+}
+
+module.exports = {
+  ORIGINAL,
+  IDIOMAS,
+  CODIGOS,
+  ehValido,
+  normalizar,
+  seletorDeFormato,
+  trilhasDisponiveis,
+  sugestaoPara,
+  nomeDoIdioma,
+};

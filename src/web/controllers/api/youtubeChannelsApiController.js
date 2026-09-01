@@ -10,6 +10,9 @@ const planLimitsService = require('../../../services/planLimitsService');
 const ytDlpService = require('../../../services/ytDlpService');
 const queueService = require('../../../services/queueService');
 const queuePriorityService = require('../../../services/queuePriorityService');
+const clientVideoSettingsRepository = require('../../../repositories/clientVideoSettingsRepository');
+const idiomaDoAudio = require('../../../lib/idiomaDoAudio');
+const locales = require('../../../config/locales');
 const logger = require('../../../lib/logger');
 const { extractDriveFolderId } = require('../../../lib/driveFolderId');
 
@@ -47,6 +50,40 @@ async function list(req, res) {
       };
     }),
   });
+}
+
+// Quais idiomas de audio o video mais recente do canal oferece.
+//
+// Canal grande publica o mesmo video dublado em varias linguas (verificado no
+// MrBeast Gaming: 13 trilhas). Perguntar isso AGORA, na hora de conectar o
+// canal, e o unico momento em que a pergunta e barata pro cliente: depois ele
+// teria que descobrir sozinho que existe uma tela de estilo com um seletor de
+// idioma la dentro.
+//
+// MELHOR ESFORCO, igual a busca do video mais recente. Ler as trilhas exige
+// extracao completa do video, que o YouTube BLOQUEIA quando sai direto do IP da
+// VPS (confirmado ao vivo: "Sign in to confirm you're not a bot") - entao ela
+// depende do tunel ou do proxy estar de pe. Falhar aqui nao pode impedir
+// ninguem de cadastrar um canal: a tela so deixa de oferecer a escolha, e o
+// canal segue o padrao do cliente, que e o que acontecia antes de tudo isso
+// existir.
+async function trilhasDoVideo(videoId, req) {
+  try {
+    const meta = await ytDlpService.getVideoMetadata(`https://www.youtube.com/watch?v=${videoId}`);
+    const trilhas = meta.audioLanguages || [];
+    // Uma trilha so (ou nenhuma declarada) nao e escolha nenhuma - um seletor
+    // com uma opcao e ruido numa tela que ja tem uma decisao pra tomar.
+    if (trilhas.length < 2) return {};
+    return {
+      audioLanguages: trilhas,
+      // O idioma do painel e o melhor palpite sobre em que lingua a pessoa quer
+      // publicar: ela esta lendo a tela nele.
+      audioLanguageSuggestion: idiomaDoAudio.sugestaoPara(locales.resolverDaRequisicao(req), trilhas),
+    };
+  } catch (err) {
+    logger.warn(`Nao consegui ler as trilhas de audio do video ${videoId} (seguindo sem oferecer a escolha): ${err.message}`);
+    return {};
+  }
 }
 
 async function create(req, res) {
@@ -101,7 +138,12 @@ async function create(req, res) {
         thumbnailUrl: video.thumbnailUrl,
         durationSeconds: video.durationSeconds,
         publishedAt: video.publishedAt,
+        // Preenchidos logo abaixo, se der. Ausentes = a tela nao pergunta
+        // idioma nenhum, e o canal segue o padrao do cliente.
+        audioLanguages: [],
+        audioLanguageSuggestion: idiomaDoAudio.ORIGINAL,
       };
+      Object.assign(latestVideo, await trilhasDoVideo(video.videoId, req));
     }
   } catch (err) {
     logger.error(`Falha ao buscar o video mais recente do canal recem-cadastrado ${channel.id}:`, err);
@@ -268,6 +310,47 @@ async function setDriveExportMode(req, res) {
   res.json({ driveExportMode: channel.drive_export_mode });
 }
 
+// Grava o idioma de audio escolhido no pop-up de cadastro do canal.
+//
+// Rota propria, e nao a de "configuracoes de video" que ja existe, porque a
+// tela de Canais nunca carregou as configuracoes de corte do cliente - mandar
+// ela gravar a linha inteira faria o pop-up apagar em silencio o estilo que o
+// cliente ja tinha escolhido (ver setChannelAudioLanguage).
+//
+// Vale nos DOIS caminhos do pop-up: aceitar processar o video mais recente e
+// recusar. Recusar so quer dizer "nao processe ESTE video"; a escolha de idioma
+// e sobre o canal, e continua valendo pros proximos.
+async function setAudioLanguage(req, res) {
+  const channel = await youtubeChannelsRepository.findById(Number(req.params.id));
+  if (!channel || String(channel.client_user_id) !== String(req.session.user.id)) {
+    return res.status(404).json({ error: res.locals.t('erros.canalNaoEncontrado') });
+  }
+
+  const { audioLanguage } = req.body;
+  // Um canal pode dublar numa lingua que nao esta na nossa lista de nomes, e o
+  // seletor da tela oferece o que o VIDEO tem. Por isso a checagem aqui e de
+  // FORMATO (codigo ISO, com ou sem regiao), nao de pertencer a lista - recusar
+  // 'sv' porque ele nao esta no menu barraria uma escolha legitima que a
+  // propria tela ofereceu.
+  //
+  // A checagem e feita no valor CRU, antes de normalizar. Normalizar primeiro
+  // corta tudo depois do hifen, entao "nao-e-idioma-nenhum" viraria "nao" e
+  // passaria por um codigo de 3 letras valido - o filtro deixaria entrar
+  // justamente o lixo que ele existe pra barrar.
+  const bruto = String(audioLanguage ?? '').trim();
+  if (!/^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,4})?$/.test(bruto) && bruto.toLowerCase() !== idiomaDoAudio.ORIGINAL) {
+    return res.status(400).json({ error: res.locals.t('erros.idiomaAudioInvalido') });
+  }
+  const codigo = idiomaDoAudio.normalizar(bruto);
+
+  const salvo = await clientVideoSettingsRepository.setChannelAudioLanguage(
+    req.session.user.id,
+    channel.id,
+    codigo
+  );
+  res.json({ audioLanguage: salvo.audio_language });
+}
+
 module.exports = {
   list,
   create,
@@ -278,4 +361,5 @@ module.exports = {
   setDriveExportMode,
   setTiktokAccount,
   processLatestVideo,
+  setAudioLanguage,
 };
