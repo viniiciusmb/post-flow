@@ -8,7 +8,7 @@ const ytDlpService = require('../../services/ytDlpService');
 const queuePriorityService = require('../../services/queuePriorityService');
 const postingsRepository = require('../../repositories/postingsRepository');
 const errorReportService = require('../../services/errorReportService');
-const { podeBaixarAgora, motivoDaEspera } = require('../../lib/disponibilidadeDoVideo');
+const { podeBaixarAgora, motivoDaEspera, ehPublico } = require('../../lib/disponibilidadeDoVideo');
 const logger = require('../../lib/logger');
 
 const QUEUE_VIDEO_PROCESSING = 'video-processing';
@@ -29,6 +29,82 @@ async function filaEstaLivre(channel) {
   if (!channel.tiktok_account_id) return true;
   const pendentes = await postingsRepository.countPendingForAccount(channel.tiktok_account_id);
   return pendentes <= CORTES_NA_FILA_PRA_LIBERAR;
+}
+
+// Cadastra um video exclusivo de membros com selo proprio, sem enfileirar.
+//
+// Diferente da estreia, que e ADIADA sem cadastrar: uma estreia vira video
+// normal em minutos, enquanto um video de membros pode passar semanas assim - e
+// o cliente precisa entender por que aquele video nao virou corte, em vez de
+// olhar um canal que simplesmente parou de trazer coisa. Foi pedido explicito
+// do fundador (01/09/2026).
+//
+// Segura o marco d'agua pelo mesmo motivo da estreia: um video ABAIXO do marco
+// nunca mais e olhado, entao quando ele abrisse ja estaria perdido em silencio.
+async function cadastrarComSelo({ channel, video, title, seguramOMarco }) {
+  seguramOMarco.add(video.videoId);
+
+  const created = await sourceVideosRepository.createIfNotExists({
+    youtubeChannelId: channel.id,
+    ownerClientUserId: channel.client_user_id,
+    youtubeVideoId: video.videoId,
+    title,
+    thumbnailUrl: video.thumbnailUrl,
+    publishedAt: video.publishedAt,
+    durationSeconds: video.durationSeconds,
+    status: 'somente_membros',
+  });
+  if (!created) return;
+
+  logger.info(
+    `Canal "${channel.channel_name}": "${created.title}" e exclusivo para membros - ` +
+      `cadastrado com selo, sem entrar na fila. Entra sozinho se abrir pro publico.`
+  );
+}
+
+// Poe na fila os videos deste canal que estavam com selo de "somente membros"
+// e agora aparecem publicos na listagem.
+//
+// O fundador pediu que o video entre em processamento "se ele sair para o
+// publico e for o video mais recente". A segunda metade importa: o freio de
+// engarrafamento e o marco d'agua existem justamente pra o sistema nao
+// desengavetar conteudo velho, e um video que ficou 3 semanas fechado e velho
+// quando abre. Por isso a liberacao segue a MESMA regra do resto: entra quem e
+// o mais recente do canal naquele momento.
+//
+// O que fica pra tras nao vira lixo eterno: ele deixa de ser exclusivo (o selo
+// sai, porque o selo estaria mentindo) e fica como um video detectado que o
+// cliente pode enfileirar na mao se quiser.
+async function liberarQuemAbriu({ channel, videos, priority, boss }) {
+  const comSelo = await sourceVideosRepository.listMembersOnlyByChannel(channel.id);
+  if (!comSelo.length) return;
+
+  // O mais recente do canal AGORA - o mesmo criterio que o marco d'agua usa.
+  const maisRecente = videos.find((v) => ehPublico(v.availability) && podeBaixarAgora(v.liveStatus));
+
+  for (const video of comSelo) {
+    const naListagem = videos.find((v) => v.videoId === video.youtube_video_id);
+    // Sumiu da listagem: nao da pra afirmar nada sobre ele. Mexer aqui seria
+    // adivinhar.
+    if (!naListagem) continue;
+    if (!ehPublico(naListagem.availability)) continue; // continua fechado, nada muda
+
+    const liberado = await sourceVideosRepository.liberarDeSomenteMembros(video.id, { title: naListagem.title });
+    if (!liberado) continue;
+
+    if (maisRecente && maisRecente.videoId === video.youtube_video_id) {
+      logger.info(
+        `Canal "${channel.channel_name}": "${liberado.title}" saiu de "somente membros" e e o mais ` +
+          `recente do canal - entrando na fila.`
+      );
+      await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: liberado.id }, { priority });
+    } else {
+      logger.info(
+        `Canal "${channel.channel_name}": "${liberado.title}" saiu de "somente membros", mas ja nao e ` +
+          `o mais recente - fica disponivel pro cliente enfileirar na mao.`
+      );
+    }
+  }
 }
 
 async function run(boss) {
@@ -83,27 +159,65 @@ async function run(boss) {
       // cronologica (e pro video mais recente, no fim do loop, virar o
       // novo marco d'agua).
       const priority = await queuePriorityService.resolveQueuePriorityForClient(channel.client_user_id);
-      // Estreias/lives que ficaram pra depois. O marco d'agua NAO pode passar
-      // por cima delas - ver logo abaixo do loop.
-      const adiados = new Set();
+
+      // ------------------------------------------------------------------
+      // Videos que estavam so pra membros e ABRIRAM pro publico.
+      // ------------------------------------------------------------------
+      //
+      // Precisa acontecer FORA do loop de videos novos: um video ja cadastrado
+      // e "ja conhecido", entao o loop o descarta na primeira linha - e ele
+      // ficaria esperando pra sempre por uma liberacao que ninguem ia notar.
+      //
+      // A `videos` da listagem ja traz o `availability` atualizado de cada um,
+      // entao conferir isso nao custa consulta nenhuma: a resposta ja esta em
+      // maos. Se o video nem aparece mais na listagem (saiu do ar, ficou
+      // privado, ou o canal publicou muita coisa desde entao), nada acontece -
+      // ele continua com o selo, que e a verdade que sabemos.
+      await liberarQuemAbriu({ channel, videos, priority, boss });
+      // Videos que SEGURAM o marco d'agua - ver logo abaixo do loop.
+      //
+      // Duas coisas caem aqui, por motivos diferentes:
+      //   - estreia/live: adiada sem cadastrar, vira video normal em minutos.
+      //   - exclusivo de membros: cadastrado com selo, mas ainda nao publico.
+      //
+      // Nos dois casos o marco nao pode passar por cima: um video ABAIXO do
+      // marco nunca mais e olhado, entao quando ele finalmente abrisse ja
+      // estaria perdido em silencio. Foi exatamente assim que um video da conta
+      // risestyle sumiu em 27/08/2026.
+      const seguramOMarco = new Set();
       for (const video of [...newVideos].reverse()) {
         // Ja conhecido: nao gasta consulta nenhuma com ele. Sem essa checagem,
-        // um marco d'agua segurado por uma estreia (ver adiados) faria o
+        // um marco d'agua segurado por uma estreia (ver seguramOMarco) faria o
         // sistema reconsultar os mesmos videos a cada 20 minutos, pra sempre.
         const jaConhecido = await sourceVideosRepository.findByYoutubeVideoIdForOwner(
           video.videoId,
           channel.client_user_id
         );
-        if (jaConhecido) continue;
+        if (jaConhecido) {
+          // Video ja cadastrado com selo de "somente membros" continua segurando
+          // o marco. Sem isto, na volta SEGUINTE o marco passaria por cima dele
+          // e a liberacao dependeria so da listagem ainda alcanca-lo.
+          if (jaConhecido.status === 'somente_membros') seguramOMarco.add(video.videoId);
+          continue;
+        }
 
         // A listagem ja costuma dizer que e estreia/live. Quando diz, nem
         // precisamos consultar o video (que, nesse caso, e a consulta mais
         // cara: o yt-dlp tenta achar formato e nao acha).
         if (!podeBaixarAgora(video.liveStatus)) {
-          adiados.add(video.videoId);
+          seguramOMarco.add(video.videoId);
           logger.info(
             `Canal "${channel.channel_name}": adiando "${video.title}" - ${motivoDaEspera(video.liveStatus, null)}.`
           );
+          continue;
+        }
+
+        // Exclusivo de membros, e a LISTAGEM ja disse. Decidido aqui em cima,
+        // antes da consulta individual, porque nesse caso ela e pura perda: sai
+        // pelo proxy pago, tenta todos os clients e nao devolve formato nenhum
+        // (o video existe, mas nao e nosso pra baixar).
+        if (!ehPublico(video.availability)) {
+          await cadastrarComSelo({ channel, video, title: video.title, seguramOMarco });
           continue;
         }
 
@@ -125,10 +239,17 @@ async function run(boss) {
         // A listagem do canal pode nao ter marcado a estreia (o campo vem de um
         // selo visual da pagina); a consulta individual sempre traz.
         if (original && !podeBaixarAgora(original.liveStatus)) {
-          adiados.add(video.videoId);
+          seguramOMarco.add(video.videoId);
           logger.info(
             `Canal "${channel.channel_name}": adiando "${original.title}" - ${motivoDaEspera(original.liveStatus, original.releaseAt)}.`
           );
+          continue;
+        }
+
+        // Segunda checagem de acesso, agora com a resposta do proprio video: a
+        // listagem pode nao ter trazido o campo.
+        if (original && !ehPublico(original.availability)) {
+          await cadastrarComSelo({ channel, video, title: original.title, seguramOMarco });
           continue;
         }
 
@@ -154,7 +275,8 @@ async function run(boss) {
       }
 
       // O marco d'agua so pode avancar ate o video mais recente que NAO ficou
-      // pra depois. Passar por cima de uma estreia adiada seria perde-la pra
+      // pra depois nem sobre um video que ainda nao e publico. Passar por cima
+      // de uma estreia adiada seria perde-la pra
       // sempre: quando ela finalmente for ao ar, ja estara "abaixo" do marco e
       // ninguem mais vai olhar pra ela. Foi exatamente assim que um video da
       // conta risestyle sumiu em 27/08/2026.
@@ -163,12 +285,15 @@ async function run(boss) {
       // adiado e o marco certo. Se TODOS foram adiados, lastVideoId nulo
       // preserva o marco atual (e ainda registra que a checagem aconteceu).
       //
-      // A segunda condicao cobre a PRIMEIRA checagem do canal, que nao passa
-      // pelo loop acima (ela so estabelece o marco, sem enfileirar nada do
-      // historico): sem ela, um canal cadastrado enquanto uma estreia esta
-      // marcada nasceria com o marco em cima da estreia - e o primeiro video
-      // que esse cliente veria seria o SEGUNDO do canal.
-      const marco = videos.find((v) => !adiados.has(v.videoId) && podeBaixarAgora(v.liveStatus));
+      // As duas condicoes de disponibilidade cobrem a PRIMEIRA checagem do
+      // canal, que nao passa pelo loop acima (ela so estabelece o marco, sem
+      // enfileirar nada do historico): sem elas, um canal cadastrado enquanto o
+      // video mais recente e uma estreia - ou e exclusivo de membros - nasceria
+      // com o marco em cima dele, e o primeiro video que esse cliente veria
+      // seria o SEGUNDO do canal.
+      const marco = videos.find(
+        (v) => !seguramOMarco.has(v.videoId) && podeBaixarAgora(v.liveStatus) && ehPublico(v.availability)
+      );
       await youtubeChannelsRepository.updatePollState(channel.id, { lastVideoId: marco ? marco.videoId : null });
       // Voltou a funcionar: fecha o erro sozinho, pra lista do painel nao
       // encher de problema que ja passou.

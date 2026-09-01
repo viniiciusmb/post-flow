@@ -10,13 +10,71 @@ const pool = require('../db/pool');
 // diferentes poderem processar o MESMO video do YouTube de forma
 // independente (cada um paga o proprio credito), inclusive quando os dois
 // monitoram o mesmo canal real por engano/coincidencia.
-async function createIfNotExists({ youtubeChannelId, ownerClientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds }) {
+// `status` existe pra que um video que ainda nao e publico (exclusivo de
+// membros) nasca ja no estado certo, e nao como 'detected' - que significaria
+// "pode processar" e o mandaria pra fila pra falhar no download.
+async function createIfNotExists({
+  youtubeChannelId,
+  ownerClientUserId,
+  youtubeVideoId,
+  title,
+  thumbnailUrl,
+  publishedAt,
+  durationSeconds,
+  status = 'detected',
+}) {
   const { rows } = await pool.query(
-    `INSERT INTO source_videos (youtube_channel_id, owner_client_user_id, youtube_video_id, title, thumbnail_url, published_at, duration_seconds)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO source_videos (youtube_channel_id, owner_client_user_id, youtube_video_id, title, thumbnail_url, published_at, duration_seconds, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (youtube_video_id, owner_client_user_id) WHERE youtube_video_id IS NOT NULL DO NOTHING
      RETURNING *`,
-    [youtubeChannelId, ownerClientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds]
+    [youtubeChannelId, ownerClientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds, status]
+  );
+  return rows[0] || null;
+}
+
+// Quantos videos com selo de "somente membros" cada canal tem.
+//
+// Uma consulta so pra lista inteira de canais, e nao uma por canal: a tela de
+// Canais ja carrega tudo de uma vez, e uma consulta por linha e o caminho curto
+// pra uma pagina que fica lenta quando o cliente tem varios canais.
+async function countMembersOnlyByChannelIds(youtubeChannelIds) {
+  if (!youtubeChannelIds || !youtubeChannelIds.length) return new Map();
+  const { rows } = await pool.query(
+    `SELECT youtube_channel_id, count(*)::int AS n
+       FROM source_videos
+      WHERE youtube_channel_id = ANY($1::bigint[]) AND status = 'somente_membros'
+      GROUP BY youtube_channel_id`,
+    [youtubeChannelIds]
+  );
+  return new Map(rows.map((r) => [Number(r.youtube_channel_id), r.n]));
+}
+
+// Videos deste canal que estao parados esperando deixar de ser "so para
+// membros". A checagem do canal olha estes a cada volta pra ver se ja abriram.
+async function listMembersOnlyByChannel(youtubeChannelId) {
+  const { rows } = await pool.query(
+    `SELECT * FROM source_videos
+      WHERE youtube_channel_id = $1 AND status = 'somente_membros'
+      ORDER BY id DESC`,
+    [youtubeChannelId]
+  );
+  return rows;
+}
+
+// O video abriu pro publico: volta pro comeco do fluxo normal, como se
+// tivesse acabado de ser detectado. O titulo tambem e atualizado - enquanto
+// ele era exclusivo, so tinhamos o titulo TRADUZIDO da listagem do canal.
+async function liberarDeSomenteMembros(id, { title } = {}) {
+  const { rows } = await pool.query(
+    `UPDATE source_videos
+        SET status = 'detected',
+            title = coalesce($2, title),
+            error_message = NULL, error_transient = NULL, auto_retry_count = 0,
+            updated_at = now()
+      WHERE id = $1 AND status = 'somente_membros'
+      RETURNING *`,
+    [id, title || null]
   );
   return rows[0] || null;
 }
@@ -591,6 +649,9 @@ async function listRecentHistory({ limit = 20 } = {}) {
 
 module.exports = {
   createIfNotExists,
+  listMembersOnlyByChannel,
+  countMembersOnlyByChannelIds,
+  liberarDeSomenteMembros,
   createManual,
   createUpload,
   findByYoutubeVideoIdForOwner,

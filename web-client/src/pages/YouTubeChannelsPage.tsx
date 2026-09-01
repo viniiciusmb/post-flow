@@ -209,6 +209,19 @@ function ChannelCard({
                 </span>
               </p>
             )}
+            {/* Vídeo exclusivo de membros esperando abrir. Fica no CANAL porque
+                é aqui que mora a dúvida: "por que esse canal parou de trazer
+                vídeo novo?". Não é aviso de erro — é o canal funcionando. */}
+            {channel.membersOnlyCount > 0 && (
+              <p className="mt-1 flex items-start gap-1.5 text-xs text-tone-success-ink">
+                <svg viewBox="0 0 24 24" className="mt-px size-3.5 shrink-0" fill="currentColor" aria-hidden="true">
+                  <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm4.6 8.3-2 1.9.5 2.8a.6.6 0 0 1-.9.6L12 14.3l-2.5 1.3a.6.6 0 0 1-.9-.6l.5-2.8-2-1.9a.6.6 0 0 1 .3-1l2.8-.4 1.2-2.5a.6.6 0 0 1 1.1 0l1.2 2.5 2.8.4a.6.6 0 0 1 .3 1Z" />
+                </svg>
+                <span className="min-w-0">
+                  {t("canais.ultimoSomenteMembros")}. {t("canais.ultimoSomenteMembrosTexto")}
+                </span>
+              </p>
+            )}
           </div>
           <Button variant="ghost" size="icon-sm" onClick={onRemove} title={t("canais.removerCanal")}>
             <IconTrash />

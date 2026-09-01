@@ -36,6 +36,9 @@ export const SOURCE_VIDEO_STATUS_TONE: Record<
   paused: { tone: "neutral", label: "status.video.pausado" },
   aguardando_creditos: { tone: "danger", label: "status.video.aguardandoCredito" },
   aguardando_conexao: { tone: "cyan", label: "status.video.aguardandoConexao" },
+  // Verde como o selo do YouTube: não é erro nem espera nossa — é uma escolha
+  // do canal, e o vídeo entra na fila sozinho quando abrir.
+  somente_membros: { tone: "success", label: "status.video.somenteMembros" },
 }
 
 export const CLIP_STATUS_TONE: Record<

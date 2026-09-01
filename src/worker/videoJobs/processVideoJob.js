@@ -852,6 +852,24 @@ async function run(sourceVideoId) {
     // confirmacao) - libera o credito reservado, se houver (sem-op se ja
     // tinha sido confirmado ou nunca reservado, ver releaseIfReserved).
     await creditsService.releaseIfReserved(sourceVideo.id);
+
+    // Virou exclusivo de membros DEPOIS de entrar na fila (o canal fechou o
+    // video no meio do caminho). Nao e erro: e o mesmo estado que a checagem do
+    // canal ja sabe reconhecer, com selo proprio na tela, e o video volta pra
+    // fila sozinho se o canal abrir de novo.
+    //
+    // Nao vai pro painel de erros do admin de proposito - nao ha nada pra
+    // consertar, e erro que nao e defeito ensina a ignorar a lista.
+    if (erroDeProcessamento.ehSoParaMembros(err)) {
+      logger.info(
+        `Video-fonte ${sourceVideo.id} e exclusivo para membros do canal - marcado com selo, sem virar erro.`
+      );
+      await sourceVideosRepository.updateStatus(sourceVideo.id, 'somente_membros', {
+        errorMessage: null,
+        errorTransient: null,
+      });
+      return;
+    }
     logger.error(`Falha ao processar o video-fonte ${sourceVideo.id}:`, err);
     // A mensagem tecnica nao vai mais pra tela do cliente - ela vive no painel
     // de erros do admin. O cliente ve so que o video falhou e pode tentar de

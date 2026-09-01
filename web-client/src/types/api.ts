@@ -433,6 +433,11 @@ export interface YoutubeChannel {
   processOnlyWhenQueueClear: boolean
   tiktokAccountId: number | null
   tiktokAccountName: string | null
+  /**
+   * Vídeos deste canal parados por serem exclusivos de membros. Não é erro:
+   * eles entram na fila sozinhos se o canal abrir para todo mundo.
+   */
+  membersOnlyCount: number
 }
 
 /** Por que um vídeo está parado esperando cobrança. Só vem preenchido junto de `aguardando_creditos`. */
@@ -450,6 +455,8 @@ export type SourceVideoStatus =
   | "paused"
   | "aguardando_creditos"
   | "aguardando_conexao"
+  /** Exclusivo de membros do canal: não é erro, e entra na fila sozinho se abrir. */
+  | "somente_membros"
 
 export interface SourceVideo {
   id: number

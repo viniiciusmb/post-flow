@@ -10,7 +10,12 @@ const driveFoldersRepository = require('../../../repositories/driveFoldersReposi
 const driveConnectionsRepository = require('../../../repositories/driveConnectionsRepository');
 const googleService = require('../../../services/googleService');
 const ytDlpService = require('../../../services/ytDlpService');
-const { podeBaixarAgora, motivoDaEspera } = require('../../../lib/disponibilidadeDoVideo');
+const {
+  podeBaixarAgora,
+  motivoDaEspera,
+  ehPublico,
+  motivoDeNaoSerPublico,
+} = require('../../../lib/disponibilidadeDoVideo');
 const videoEditingService = require('../../../services/videoEditingService');
 const queueService = require('../../../services/queueService');
 const queuePriorityService = require('../../../services/queuePriorityService');
@@ -186,6 +191,15 @@ async function createManual(req, res) {
   // pelo YouTube: a pagina existe, o arquivo nao. Recusar aqui, com data e
   // motivo, e melhor do que aceitar e o video virar "erro" minutos depois sem
   // o cliente entender por que.
+  // Video que existe mas ainda nao e publico (exclusivo de membros/Premium).
+  // Recusar aqui, com o motivo, e melhor do que aceitar e o cliente descobrir
+  // minutos depois que virou "erro" - o video nao tem defeito nenhum.
+  if (!ehPublico(metadata.availability)) {
+    return res.status(409).json({
+      error: `${res.locals.t('erros.videoAindaNaoDisponivel')} (${motivoDeNaoSerPublico(metadata.availability)}).`,
+    });
+  }
+
   if (!podeBaixarAgora(metadata.liveStatus)) {
     return res.status(409).json({
       error: `${res.locals.t('erros.videoAindaNaoDisponivel')} (${motivoDaEspera(metadata.liveStatus, metadata.releaseAt)}).`,

@@ -11,6 +11,31 @@
 
 // Nao adianta repetir: o proximo download daria o mesmo resultado, ou o
 // problema exige alguem resolver algo fora do sistema.
+// Video que existe mas ainda nao e NOSSO pra baixar: exclusivo de membros do
+// canal, do Premium, ou que exige login.
+//
+// Nao e erro nem coisa passageira - e um estado proprio, com selo proprio na
+// tela (status 'somente_membros'). Ate 01/09/2026 'members-only' morava na
+// lista de PERMANENTES e o video virava erro definitivo: o cliente via "Nao deu
+// pra processar este video" num video que nao tem defeito nenhum, e o pior, o
+// marco d'agua do canal passava por cima dele - quando o canal abrisse o video,
+// ninguem mais olharia pra ele.
+//
+// O caminho principal e nem chegar aqui (o channelCheckJob ja cadastra com o
+// selo, sem enfileirar). Isto e a rede de seguranca pro caso de o video virar
+// exclusivo DEPOIS de ter entrado na fila.
+const SINAIS_DE_SO_PARA_MEMBROS = [
+  'members-only',
+  'members only',
+  'join this channel to get access',
+  'this video is available to this channel',
+];
+
+function ehSoParaMembros(err) {
+  const texto = String((err && err.message) || err || '').toLowerCase();
+  return SINAIS_DE_SO_PARA_MEMBROS.some((sinal) => texto.includes(sinal));
+}
+
 const SINAIS_PERMANENTES = [
   // Conta da OpenAI sem saldo, chave invalida.
   'no credits remaining',
@@ -20,7 +45,6 @@ const SINAIS_PERMANENTES = [
   // Video que nao da pra baixar por natureza, nao por azar.
   'private video',
   'video unavailable',
-  'members-only',
   'is not available in your country',
   'removed by the uploader',
   'age-restricted',
@@ -92,4 +116,4 @@ function ehPassageiro(erro) {
   return false;
 }
 
-module.exports = { ehPassageiro, MAX_TENTATIVAS };
+module.exports = { ehSoParaMembros, ehPassageiro, MAX_TENTATIVAS };

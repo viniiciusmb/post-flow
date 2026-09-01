@@ -26,6 +26,11 @@ async function list(req, res) {
   const exportFolders = await driveFoldersRepository.findExportFoldersByChannelIds(channels.map((c) => c.id));
   const exportFolderByChannel = new Map(exportFolders.map((f) => [f.youtube_channel_id, f]));
   const tiktokAccountById = new Map(tiktokAccounts.map((a) => [a.id, a]));
+  // Videos deste canal parados por serem exclusivos de membros. A tela avisa
+  // aqui tambem (e nao so em "Videos & Cortes") porque e o canal que explica
+  // por que ele parou de trazer video novo - quem esta olhando o canal e quem
+  // esta com essa duvida.
+  const somenteMembrosPorCanal = await sourceVideosRepository.countMembersOnlyByChannelIds(channels.map((c) => c.id));
 
   res.json({
     channels: channels.map((c) => {
@@ -47,6 +52,7 @@ async function list(req, res) {
         processOnlyWhenQueueClear: c.process_only_when_queue_clear,
         tiktokAccountId: c.tiktok_account_id,
         tiktokAccountName: tiktokAccount ? tiktokAccount.display_name || tiktokAccount.tiktok_open_id : null,
+        membersOnlyCount: somenteMembrosPorCanal.get(Number(c.id)) || 0,
       };
     }),
   });
@@ -166,6 +172,8 @@ async function create(req, res) {
       processOnlyWhenQueueClear: channel.process_only_when_queue_clear,
       tiktokAccountId: channel.tiktok_account_id,
       tiktokAccountName: tiktokAccounts.length === 1 ? tiktokAccounts[0].display_name || tiktokAccounts[0].tiktok_open_id : null,
+      // Canal recem-cadastrado nunca tem video com selo ainda.
+      membersOnlyCount: 0,
     },
     latestVideo,
   });

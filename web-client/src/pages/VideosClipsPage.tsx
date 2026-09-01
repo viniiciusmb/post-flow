@@ -292,6 +292,23 @@ function useClipsPolling(videoId: number, open: boolean, videoStatus: SourceVide
   return { clips, reload: load }
 }
 
+// O selo "Somente membros" do YouTube: estrela dentro de um círculo, em verde.
+//
+// Desenhado à mão em SVG em vez de usar o ícone oficial — o selo do YouTube é
+// material de marca de terceiro, e carregá-lo obrigaria a buscar um arquivo de
+// fora. A forma é o que faz o cliente reconhecer, e ela é genérica.
+function SeloDeMembros() {
+  const t = useT()
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-tone-success-wash px-2 py-1 text-xs font-semibold text-tone-success-ink">
+      <svg viewBox="0 0 24 24" className="size-3.5" fill="currentColor" aria-hidden="true">
+        <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm4.6 8.3-2 1.9.5 2.8a.6.6 0 0 1-.9.6L12 14.3l-2.5 1.3a.6.6 0 0 1-.9-.6l.5-2.8-2-1.9a.6.6 0 0 1 .3-1l2.8-.4 1.2-2.5a.6.6 0 0 1 1.1 0l1.2 2.5 2.8.4a.6.6 0 0 1 .3 1Z" />
+      </svg>
+      {t("cortes.somenteMembros")}
+    </span>
+  )
+}
+
 function VideoRow({
   video,
   avgProcessingSeconds,
@@ -501,6 +518,16 @@ function VideoRow({
             <IconRefresh className="size-3" />
             {retrying ? "Reiniciando..." : "Tentar novamente"}
           </Button>
+        </div>
+      )}
+
+      {/* Vídeo exclusivo de membros do canal. Não é erro e não tem nada pra
+          consertar: o canal decidiu assim. Explicar isso é o que impede o
+          cliente de ficar tentando reprocessar um vídeo que não vai baixar. */}
+      {video.status === "somente_membros" && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-2">
+          <SeloDeMembros />
+          <p className="text-xs text-muted-foreground">{t("cortes.somenteMembrosTexto")}</p>
         </div>
       )}
 
@@ -753,7 +780,7 @@ function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tik
   )
 }
 
-const PENDING_STATUSES = ["detected", "paused", "aguardando_creditos", "aguardando_conexao", ...ACTIVE_STATUSES]
+const PENDING_STATUSES = ["detected", "paused", "aguardando_creditos", "aguardando_conexao", "somente_membros", ...ACTIVE_STATUSES]
 const STAGE_PRIORITY: Record<string, number> = {
   paused: -1,
   cutting: 0,
@@ -763,6 +790,7 @@ const STAGE_PRIORITY: Record<string, number> = {
   detected: 4,
   aguardando_creditos: 5,
   aguardando_conexao: 5,
+  somente_membros: 5,
 }
 
 export function VideosClipsPage() {

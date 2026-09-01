@@ -27,7 +27,7 @@ const path = require('path');
 const os = require('os');
 const config = require('../config');
 const { PausedError } = require('../lib/errors');
-const { podeBaixarAgora } = require('../lib/disponibilidadeDoVideo');
+const { podeBaixarAgora, ehPublico } = require('../lib/disponibilidadeDoVideo');
 const idiomaDoAudio = require('../lib/idiomaDoAudio');
 const downloadTunnelsRepository = require('../repositories/downloadTunnelsRepository');
 const settingsRepository = require('../repositories/settingsRepository');
@@ -315,6 +315,10 @@ async function listChannelVideos(channelUrl, { limit = 15 } = {}) {
       // acontecendo agora. Video normal nem traz o campo (fica null) - ver
       // src/lib/disponibilidadeDoVideo.js.
       liveStatus: entry.live_status || null,
+      // "subscriber_only" num video exclusivo de membros. A LISTAGEM ja traz
+      // isso (confirmado no canal "Manual do Mundo" antes de escrever isto), o
+      // que permite tratar o caso sem nenhuma consulta a mais - de graca.
+      availability: entry.availability || null,
     }));
 }
 
@@ -364,7 +368,15 @@ async function getVideoMetadata(url) {
       validarSaida: (saida) => {
         const bruto = JSON.parse(saida.trim().split('\n')[0]);
         const temFormatos = Array.isArray(bruto.formats) && bruto.formats.length > 0;
-        if (!temFormatos && podeBaixarAgora(bruto.live_status)) {
+        // `availability` explica o vazio tanto quanto `live_status`.
+        //
+        // Sem esta metade, um video exclusivo de membros (formats: [],
+        // live_status: 'not_live') era tratado como BLOQUEIO: a consulta era
+        // dada como perdida e o rodizio tentava todas as saidas e todos os
+        // clients de novo - varias voltas pelo proxy PAGO, por video, toda vez
+        // - pra no fim devolver erro e o video acabar cadastrado com o titulo
+        // traduzido da listagem. Foi o que aconteceu de verdade em 31/08/2026.
+        if (!temFormatos && podeBaixarAgora(bruto.live_status) && ehPublico(bruto.availability)) {
           throw new Error('yt-dlp devolveu metadados sem nenhum formato (provavel bloqueio do YouTube).');
         }
       },
@@ -386,6 +398,9 @@ async function getVideoMetadata(url) {
     audioLanguages: idiomaDoAudio.trilhasDisponiveis(entry.formats),
     // Ver src/lib/disponibilidadeDoVideo.js.
     liveStatus: entry.live_status || null,
+    // "subscriber_only" / "premium_only" / "needs_auth" - video que tem pagina
+    // mas ainda nao e nosso pra baixar.
+    availability: entry.availability || null,
     // Quando a estreia vai ao ar (segundos desde 1970, do proprio YouTube).
     releaseAt: entry.release_timestamp ? new Date(entry.release_timestamp * 1000) : null,
     // A flag acima faz o yt-dlp devolver JSON tambem quando NAO ha nada pra
