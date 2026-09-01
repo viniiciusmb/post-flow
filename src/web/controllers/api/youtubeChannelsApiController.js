@@ -13,8 +13,8 @@ const queuePriorityService = require('../../../services/queuePriorityService');
 const clientVideoSettingsRepository = require('../../../repositories/clientVideoSettingsRepository');
 const idiomaDoAudio = require('../../../lib/idiomaDoAudio');
 const locales = require('../../../config/locales');
+const driveExportFolderService = require('../../../services/driveExportFolderService');
 const logger = require('../../../lib/logger');
-const { extractDriveFolderId } = require('../../../lib/driveFolderId');
 
 const QUEUE_VIDEO_PROCESSING = 'video-processing';
 
@@ -279,22 +279,26 @@ async function setExportFolder(req, res) {
     return res.status(404).json({ error: res.locals.t('erros.canalNaoEncontrado') });
   }
 
-  const driveFolderId = extractDriveFolderId(req.body.folderLink);
-  if (!driveFolderId) {
-    return res.status(400).json({ error: res.locals.t('erros.coleLinkPasta') });
-  }
-
   const connection = await driveConnectionsRepository.findByOwnerId(req.session.user.id);
   if (!connection) {
     return res.status(400).json({ error: res.locals.t('erros.conecteDriveConfig') });
   }
 
-  const folder = await driveFoldersRepository.upsertChannelExportFolder({
-    youtubeChannelId: channel.id,
-    driveFolderId,
-    folderName: req.body.folderName || null,
-    connectionId: connection.id,
-  });
+  // NOS criamos a pasta, o cliente nao cola link nenhum.
+  //
+  // Com o escopo `drive.file` (o unico que temos desde 02/08/2026) o Post Flow
+  // so enxerga o que ele mesmo criou: uma pasta que o cliente fez a mao responde
+  // 404 "File not found". A tela aceitava o link, gravava, e os cortes nunca
+  // chegavam la - era esse o "adicionei a pasta e nao vai" (01/09/2026).
+  let folder;
+  try {
+    folder = await driveExportFolderService.garantirPasta(channel, connection);
+  } catch (err) {
+    logger.error(`Falha ao preparar a pasta de destino do canal ${channel.id}:`, err);
+    // 502: o problema esta do lado do Google, nao no que o cliente mandou. Um
+    // 400 aqui faria a tela dizer "voce errou alguma coisa", que nao e verdade.
+    return res.status(502).json({ error: err.message });
+  }
 
   // Ao cadastrar a pasta, o cliente ja pode marcar "salvar automaticamente"
   // de uma vez (checkbox no mesmo formulario) - sem isso o modo continua
@@ -305,7 +309,7 @@ async function setExportFolder(req, res) {
       : channel;
 
   res.json({
-    exportFolder: { id: folder.drive_folder_id, name: folder.folder_name },
+    exportFolder: { id: folder.id, name: folder.name, webViewLink: folder.webViewLink, criada: folder.criada },
     driveExportMode: updatedChannel.drive_export_mode,
   });
 }

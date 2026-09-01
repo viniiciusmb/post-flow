@@ -1,5 +1,4 @@
 import { useT } from "@/i18n"
-import { dataHora } from "@/lib/formatoLocal"
 import { useEffect, useState, type FormEvent } from "react"
 import { IconBrandGoogleDrive, IconUserCircle, IconLock } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
@@ -250,15 +249,31 @@ function DriveSection() {
               </Button>
             </div>
 
-            {status.folder && (
-              <p className="text-sm text-muted-foreground">
-                Pasta atual: <span className="font-medium text-foreground">{status.folder.name ?? status.folder.id}</span>
-                {status.folder.lastPolledAt &&
-                  `. Última checagem em ${dataHora(status.folder.lastPolledAt)}`}
-              </p>
-            )}
+            {/* PASTA DE ORIGEM — desligada em 01/09/2026.
 
-            <form onSubmit={handleSubmit}>
+                Ela vigiava uma pasta do Drive do cliente esperando vídeo novo,
+                e para isso precisava do escopo `drive.readonly`. Esse escopo foi
+                removido em 02/08/2026 porque é RESTRITO e obriga auditoria de
+                segurança paga todo ano — e a produção mostrava zero clientes
+                usando o recurso.
+
+                O que ninguém percebeu é que a tela continuou oferecendo o campo.
+                Quem cadastrasse uma pasta aqui via "última checagem" atualizando
+                a cada 5 minutos e nunca um vídeo — porque com `drive.file` a
+                listagem responde 200 com a lista VAZIA: não dá erro, só não
+                enxerga nada. Uma promessa silenciosa.
+
+                Escondido em vez de apagado: o código todo continua aqui, e volta
+                a valer no dia em que existir o seletor do Google (que dá acesso
+                à pasta escolhida sem escopo restrito). Enquanto isso, oferecer
+                seria mentir.
+
+                A pasta de DESTINO (enviar cortes prontos) não é afetada — ela
+                usa `drive.file` e agora funciona de verdade, com a pasta criada
+                por nós. */}
+            <p className="text-sm text-muted-foreground">{t("config.driveSoDestino")}</p>
+
+            <form onSubmit={handleSubmit} hidden>
               <FieldGroup>
                 {error && (
                   <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">

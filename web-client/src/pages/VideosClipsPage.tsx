@@ -87,7 +87,6 @@ function ClipCard({
   const t = useT()
   const [playing, setPlaying] = useState(false)
   const [showPasteFolder, setShowPasteFolder] = useState(false)
-  const [folderLink, setFolderLink] = useState("")
   const [autoMode, setAutoMode] = useState(false)
   const [savingFolder, setSavingFolder] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -107,15 +106,17 @@ function ClipCard({
     }
   }
 
-  async function handleChooseFolder(event: FormEvent) {
+  // Nós criamos a pasta no Drive do cliente — ele não cola link nenhum. Com o
+  // escopo que temos, uma pasta feita à mão pelo cliente é invisível pro Post
+  // Flow (o Google responde 404), então o link nunca poderia funcionar.
+  async function handleCreateFolder(event: FormEvent) {
     event.preventDefault()
     if (!channel) return
     setSavingFolder(true)
     setDriveError(null)
     try {
-      await api.post(`/api/client/youtube-channels/${channel.id}/export-folder`, { folderLink, autoMode })
+      await api.post(`/api/client/youtube-channels/${channel.id}/export-folder`, { autoMode })
       setShowPasteFolder(false)
-      setFolderLink("")
       onFolderSet()
     } catch (err) {
       setDriveError(err instanceof ApiError ? err.message : t("cortes.naoFoiPossivelSalvarPasta"))
@@ -198,22 +199,18 @@ function ClipCard({
                   onClick={() => setShowPasteFolder((v) => !v)}
                   className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
                 >
-                  <IconBrandGoogleDrive className="size-3" />{t("cortes.escolherPasta")}</button>
+                  <IconBrandGoogleDrive className="size-3" />{t("cortes.criarPasta")}</button>
                 {showPasteFolder && (
-                  <form onSubmit={handleChooseFolder} className="mt-2 flex flex-col gap-1.5">
-                    <Input
-                      value={folderLink}
-                      onChange={(e) => setFolderLink(e.target.value)}
-                      placeholder={t("cortes.linkDaPastaDrive")}
-                      required
-                      className="h-7 text-[11px]"
-                    />
+                  <form onSubmit={handleCreateFolder} className="mt-2 flex flex-col gap-1.5">
+                    <p className="text-[11px] leading-snug text-muted-foreground">
+                      {t("cortes.criarPastaTexto", { canal: channel.channelName ?? "" })}
+                    </p>
                     <label className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
                       <Checkbox checked={autoMode} onCheckedChange={(c) => setAutoMode(c === true)} className="mt-0.5" />
                       {t("cortes.confirmarPastaCanal", { canal: channel.channelName ?? "" })}
                     </label>
                     <Button type="submit" size="sm" disabled={savingFolder} className="h-7 text-[11px]">
-                      {savingFolder ? "Salvando..." : t("comum.salvar")}
+                      {savingFolder ? t("cortes.criandoPasta") : t("cortes.criarPastaBotao")}
                     </Button>
                   </form>
                 )}

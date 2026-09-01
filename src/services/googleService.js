@@ -167,6 +167,58 @@ async function getUserEmail(accessToken) {
   return data.email;
 }
 
+// Cria uma pasta no Drive do cliente e devolve id + link pra abrir.
+//
+// ESTE E O UNICO JEITO DE A EXPORTACAO FUNCIONAR com o escopo que temos.
+//
+// `drive.file` da acesso APENAS aos arquivos que o proprio Post Flow criou.
+// Uma pasta que o cliente criou na mao e colou o link e INVISIVEL pra nos -
+// nao e questao de permissao de leitura, o Google responde 404 "File not
+// found" como se ela nao existisse. Confirmado contra a API real em
+// 01/09/2026, com a conexao de um cliente de verdade: GET na pasta colada deu
+// 404; a pasta CRIADA por nos respondeu 200 em criar, ler e subir arquivo.
+//
+// Era isso que fazia "adicionar pasta do Drive" parecer que salvava e depois
+// nada chegar la. O caminho alternativo (aceitar pasta existente) exige o
+// seletor do proprio Google ou o escopo restrito `drive.readonly`, que custa
+// auditoria de seguranca paga TODO ANO - ver o comentario do SCOPES acima.
+async function createFolder(accessToken, name, parentId = null) {
+  const corpo = { name, mimeType: 'application/vnd.google-apps.folder' };
+  if (parentId) corpo.parents = [parentId];
+
+  const response = await fetch(`${FILES_URL}?fields=id,name,webViewLink`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpo),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(`Falha ao criar a pasta no Drive: ${data.error?.message || response.statusText}`);
+  }
+  return { id: data.id, name: data.name, webViewLink: data.webViewLink };
+}
+
+// A pasta ainda existe E ainda e nossa pra usar?
+//
+// Devolve null em vez de lancar quando o Drive diz que nao conhece o arquivo:
+// e o caso normal de uma pasta apagada pelo cliente, ou de uma pasta antiga
+// cadastrada por link (que nunca foi acessivel). Quem chama trata criando
+// outra, em vez de deixar a exportacao falhar em silencio pra sempre.
+async function getFolder(accessToken, folderId) {
+  const response = await fetch(`${FILES_URL}/${encodeURIComponent(folderId)}?fields=id,name,trashed,webViewLink`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (response.status === 404 || response.status === 403) return null;
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(`Falha ao conferir a pasta no Drive: ${data.error?.message || response.statusText}`);
+  }
+  // Pasta na lixeira nao serve: o arquivo iria junto pro lixo.
+  if (data.trashed) return null;
+  return { id: data.id, name: data.name, webViewLink: data.webViewLink };
+}
+
 // Lista todos os videos (nao-excluidos) dentro de uma pasta do Drive,
 // paginando ate acabar. Nao filtra por data: a deteccao de duplicados
 // e feita no banco (drive_file_id e unico), entao repetir a listagem
@@ -240,4 +292,6 @@ module.exports = {
   getUserEmail,
   listVideosInFolder,
   uploadFile,
+  createFolder,
+  getFolder,
 };

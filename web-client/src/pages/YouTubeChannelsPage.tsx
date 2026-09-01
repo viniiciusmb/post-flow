@@ -86,7 +86,7 @@ function ChannelCard({
   hasDriveConnection: boolean
   onToggleActive: (checked: boolean) => Promise<void>
   onSetTiktokAccount: (tiktokAccountId: number | null) => Promise<void>
-  onSetExportFolder: (folderLink: string, autoMode: boolean) => Promise<void>
+  onSetExportFolder: (autoMode: boolean) => Promise<void>
   onSetDriveExportMode: (mode: "auto" | "manual") => Promise<void>
   onRemove: () => void
 }) {
@@ -98,7 +98,6 @@ function ChannelCard({
   const [queueGate, setQueueGate] = useState(channel.processOnlyWhenQueueClear)
   const [savingTiktokAccount, setSavingTiktokAccount] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [exportFolderLink, setExportFolderLink] = useState("")
   const [autoModeOnCreate, setAutoModeOnCreate] = useState(false)
   const [savingExportFolder, setSavingExportFolder] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -149,8 +148,7 @@ function ChannelCard({
     setExportError(null)
     setSavingExportFolder(true)
     try {
-      await onSetExportFolder(exportFolderLink, autoModeOnCreate)
-      setExportFolderLink("")
+      await onSetExportFolder(autoModeOnCreate)
       setAutoModeOnCreate(false)
     } catch (err) {
       setExportError(err instanceof ApiError ? err.message : t("canais.naoFoiPossivelSalvarPasta"))
@@ -355,17 +353,22 @@ function ChannelCard({
               ) : (
                 <p className="text-xs text-muted-foreground">{t("canais.opcionalPasta")}</p>
               )}
+              {/* Nós criamos a pasta no Drive do cliente — ele não cola link.
+                  Com o escopo `drive.file`, uma pasta que o cliente fez à mão é
+                  invisível pro Post Flow (o Google responde 404), então o campo
+                  de link aceitava um valor que nunca ia funcionar. */}
               <form onSubmit={handleSetExportFolder} className="flex flex-col gap-2">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder={t("canais.linkOuIdPasta")}
-                    value={exportFolderLink}
-                    onChange={(e) => setExportFolderLink(e.target.value)}
-                    required
-                    className="h-8 text-xs"
-                  />
-                  <Button type="submit" size="sm" disabled={savingExportFolder} className="shrink-0">
-                    {savingExportFolder ? "Salvando..." : channel.exportFolder ? t("canais.trocar") : t("comum.salvar")}
+                <p className="text-xs text-muted-foreground">
+                  {t("canais.criarPastaTexto", { canal: channel.channelName ?? "" })}
+                </p>
+                <div>
+                  <Button type="submit" size="sm" disabled={savingExportFolder} className="shrink-0 gap-1.5">
+                    <IconBrandGoogleDrive className="size-3.5" />
+                    {savingExportFolder
+                      ? t("canais.criandoPasta")
+                      : channel.exportFolder
+                        ? t("canais.criarOutraPasta")
+                        : t("canais.criarPastaBotao")}
                   </Button>
                 </div>
                 {!channel.exportFolder && (
@@ -527,8 +530,8 @@ export function YouTubeChannelsPage() {
     await load()
   }
 
-  async function setExportFolder(channel: YoutubeChannel, folderLink: string, autoMode: boolean) {
-    await api.post(`/api/client/youtube-channels/${channel.id}/export-folder`, { folderLink, autoMode })
+  async function setExportFolder(channel: YoutubeChannel, autoMode: boolean) {
+    await api.post(`/api/client/youtube-channels/${channel.id}/export-folder`, { autoMode })
     await load()
   }
 
@@ -612,7 +615,7 @@ export function YouTubeChannelsPage() {
                 hasDriveConnection={hasDriveConnection}
                 onToggleActive={(checked) => toggleActive(channel, checked)}
                 onSetTiktokAccount={(tiktokAccountId) => setTiktokAccount(channel, tiktokAccountId)}
-                onSetExportFolder={(folderLink, autoMode) => setExportFolder(channel, folderLink, autoMode)}
+                onSetExportFolder={(autoMode) => setExportFolder(channel, autoMode)}
                 onSetDriveExportMode={(mode) => setDriveExportMode(channel, mode)}
                 onRemove={() => removeChannel(channel)}
               />

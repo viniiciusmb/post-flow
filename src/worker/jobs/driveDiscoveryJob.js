@@ -13,9 +13,29 @@ const errorReportService = require('../../services/errorReportService');
 const logger = require('../../lib/logger');
 
 async function run() {
-  const folders = await driveFoldersRepository.listAll();
+  // So pasta de ORIGEM. `listAll()` traz tambem as de destino (client_export),
+  // e o job estava tentando LISTAR arquivos dentro delas - chamada inutil ao
+  // Google por pasta de destino, a cada 5 minutos.
+  const folders = (await driveFoldersRepository.listAll()).filter((f) => f.type === 'client');
+
   for (const folder of folders) {
-    await processFolder(folder);
+    // UMA pasta com problema nao pode derrubar a varredura inteira.
+    //
+    // Era exatamente o que acontecia (visto em producao em 01/09/2026): a
+    // conexao Google de um cliente antigo tinha o refresh token revogado, o
+    // getValidAccessToken lancava "Google recusou a solicitacao de token: Bad
+    // Request", e o run() morria ali - as pastas seguintes NUNCA eram
+    // processadas, o job nunca chegava ao log de "concluida", e o pg-boss
+    // repetia 3 vezes a cada 5 minutos, pra sempre. Nos logs so aparecia
+    // "Checando pastas do Drive..." tres vezes, sem nenhum erro visivel.
+    try {
+      await processFolder(folder);
+    } catch (err) {
+      logger.error(
+        `Drive discovery: pasta "${folder.folder_name || folder.drive_folder_id}" falhou ` +
+          `(seguindo com as outras): ${err.message}`
+      );
+    }
   }
 }
 
