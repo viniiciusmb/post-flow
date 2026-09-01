@@ -167,7 +167,7 @@ module.exports = {
     noPrimeiroMes: 'first month',
     depoisPorMes: 'then R$ {valor}/month',
     descontoPrimeiroMes: '{n}% off the first month',
-    conexoesExtras: 'Extra connections at R$ {valor}/month each',
+    conexoesExtras: 'Extra channel for R$ {canal}/mo, extra account for R$ {conta}/mo',
     minutosPorSemana: '{n} minutes',
     minutosPorSemanaResto: 'of video per week',
     minutosBonus: '{n} minutes',

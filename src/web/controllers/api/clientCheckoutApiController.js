@@ -10,6 +10,7 @@
 // tokenização e não é gravado nem registrado em log em lugar nenhum.
 'use strict';
 
+const precosDasConexoes = require('../../../lib/precoDasConexoesExtras');
 const logger = require('../../../lib/logger');
 const checkoutService = require('../../../services/checkoutService');
 const asaasService = require('../../../services/asaasService');
@@ -75,7 +76,9 @@ async function contexto(req, res) {
       maxTiktokAccounts: p.max_tiktok_accounts,
       overageCentsNormal: p.overage_cents_normal,
       overageCentsBonus: p.overage_cents_bonus,
-      extraSlotPriceCents: p.extra_slot_price_cents,
+      extraChannelPriceCents: p.extra_channel_price_cents,
+      extraTiktokPriceCents: p.extra_tiktok_price_cents,
+      extraBothPriceCents: p.extra_both_price_cents,
     })),
     subscription: {
       planKey: subscription.plan_key || null,
@@ -86,8 +89,9 @@ async function contexto(req, res) {
       // checkoutService usa para CALCULAR o valor cobrado — se as duas
       // pudessem discordar, a tela mostraria um preço e o cartão veria outro.
       promoDisponivel: promocaoDisponivel(subscription),
-      extraSlots: Number(subscription.extra_slots) || 0,
-      extraSlotPriceCents: subscription.extra_slot_price_cents || null,
+      extraChannels: Number(subscription.extra_channels) || 0,
+      extraTiktokAccounts: Number(subscription.extra_tiktok_accounts) || 0,
+      precosExtras: precosDasConexoes.precosDoPlano(subscription),
       limites: { canais: limites.canais, contas: limites.contas },
       emUso: { canais, contas: contasAtivas },
       overageCardEnabled: subscription.overage_card_enabled,
@@ -163,11 +167,18 @@ async function resolverItem(req, clientUserId) {
   }
 
   if (tipo === 'extras') {
-    const quantidade = Math.trunc(Number(req.body.quantidade));
-    if (!Number.isFinite(quantidade) || quantidade < 1 || quantidade > MAX_SLOTS_POR_COMPRA) {
-      throw new DadosInvalidosError(`Escolha de 1 a ${MAX_SLOTS_POR_COMPRA} conexões extras.`);
+    // Dois contadores independentes desde 01/09/2026: canal do YouTube e conta
+    // do TikTok. O cliente pode levar só um dos dois, ou os dois (que sai mais
+    // barato - ver lib/precoDasConexoesExtras).
+    const canais = Math.trunc(Number(req.body.canais) || 0);
+    const contas = Math.trunc(Number(req.body.contas) || 0);
+    if (canais < 0 || contas < 0 || canais + contas < 1) {
+      throw new DadosInvalidosError('Escolha pelo menos uma conexão para adicionar.');
     }
-    return { tipo, quantidade };
+    if (canais > MAX_SLOTS_POR_COMPRA || contas > MAX_SLOTS_POR_COMPRA) {
+      throw new DadosInvalidosError(`Escolha no máximo ${MAX_SLOTS_POR_COMPRA} de cada por compra.`);
+    }
+    return { tipo, canais, contas };
   }
 
   throw new DadosInvalidosError('Não entendi o que você quer comprar.');
@@ -235,9 +246,10 @@ async function pagar(req, res) {
     if (metodo === 'pix') {
       return res.status(400).json({ error: 'Conexões extras só podem ser pagas no cartão.' });
     }
-    const r = await checkoutService.comprarSlotsExtras({
+    const r = await checkoutService.comprarExtras({
       clientUserId,
-      quantidade: item.quantidade,
+      canais: item.canais,
+      contas: item.contas,
       remoteIp: req.ip,
     });
     return res.json({ ...r, tipo: 'extras' });
@@ -255,13 +267,14 @@ async function statusDoPagamento(req, res) {
 }
 
 async function removerExtras(req, res) {
-  const quantidade = Math.trunc(Number(req.body.quantidade));
-  if (!Number.isFinite(quantidade) || quantidade < 1) {
-    return res.status(400).json({ error: 'Quantidade inválida.' });
+  const canais = Math.max(0, Math.trunc(Number(req.body.canais) || 0));
+  const contas = Math.max(0, Math.trunc(Number(req.body.contas) || 0));
+  if (canais + contas < 1) {
+    return res.status(400).json({ error: 'Escolha o que quer remover.' });
   }
   try {
-    const total = await checkoutService.removerSlotsExtras({ clientUserId: req.session.user.id, quantidade });
-    res.json({ extraSlots: total });
+    const totais = await checkoutService.removerExtras({ clientUserId: req.session.user.id, canais, contas });
+    res.json({ extraChannels: totais.canais, extraTiktokAccounts: totais.contas });
   } catch (err) {
     logger.error(`Falha ao remover conexoes extras do cliente ${req.session.user.id}:`, err);
     return responderErro(res, err);

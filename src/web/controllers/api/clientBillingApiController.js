@@ -20,6 +20,8 @@ const asaasCheckoutsRepository = require('../../../repositories/asaasCheckoutsRe
 const cpfCnpj = require('../../../lib/cpfCnpj');
 const creditsService = require('../../../services/creditsService');
 const { promocaoDisponivel } = require('../../../lib/promocaoDePrimeiroMes');
+const precosDasConexoes = require('../../../lib/precoDasConexoesExtras');
+const asaasPaymentsRepository = require('../../../repositories/asaasPaymentsRepository');
 const planLimitsService = require('../../../services/planLimitsService');
 const subscriptionCheckoutService = require('../../../services/subscriptionCheckoutService');
 const checkoutService = require('../../../services/checkoutService');
@@ -66,21 +68,58 @@ function bucketView(credits, key) {
   };
 }
 
+// O que essa fatura comprou, escrito pra quem vai ler o extrato um mês depois.
+// "extra_slots: 2" não responde a pergunta que a pessoa tem — ela quer saber se
+// pagou por um canal ou por uma conta do TikTok.
+function nomeDoProduto(f) {
+  if (f.purpose === 'subscription') return f.plan_name ? `Plano ${f.plan_name}` : 'Mensalidade do plano';
+  if (f.purpose === 'credit_package') return 'Pacote de minutos avulsos';
+  if (f.purpose === 'extra_slots') {
+    const partes = [];
+    const canais = Number(f.extra_channels) || 0;
+    const contas = Number(f.extra_tiktok_accounts) || 0;
+    if (canais) partes.push(`${canais} canal${canais > 1 ? 'is' : ''} do YouTube`);
+    if (contas) partes.push(`${contas} conta${contas > 1 ? 's' : ''} do TikTok`);
+    // Compras feitas antes de 01/09/2026 só têm o total em `slots`, sem saber
+    // quantos de cada - naquele modelo cada slot valia os dois.
+    if (!partes.length) return `Conexões extras (${Number(f.slots) || 0})`;
+    return `Conexão extra: ${partes.join(' + ')}`;
+  }
+  return 'Compra';
+}
+
 async function overview(req, res) {
   const clientUserId = req.session.user.id;
-  const [subscription, credits, plans, pendingOverage, purchases, recentTransactions] = await Promise.all([
+  const [subscription, credits, plans, pendingOverage, purchases, recentTransactions, faturas] = await Promise.all([
     clientSubscriptionsRepository.getOrCreate(clientUserId),
     clientCreditsRepository.getOrCreate(clientUserId),
     subscriptionPlansRepository.listActive(),
     overageChargesRepository.listPendingByClient(clientUserId),
     creditPurchasesRepository.listByClientId(clientUserId, { limit: 10 }),
     creditTransactionsRepository.listByClientId(clientUserId, { limit: 20 }),
+    // Extrato de faturas: tudo que o cliente PAGOU.
+    asaasPaymentsRepository.listPaidByClient(clientUserId, { limit: 50 }),
   ]);
 
   const taxas = creditsService.taxasDoPlano(subscription);
   const limites = planLimitsService.limitesDe(subscription);
 
   res.json({
+    // O que o cliente pagou: dia, hora, valor, produto e cartão usado.
+    //
+    // O nome do produto é montado AQUI e não guardado como texto na compra: o
+    // extrato precisa dizer "Plano Pro" com o nome que o plano tem hoje, e
+    // congelar o texto faria faturas antigas mostrarem um nome de produto que
+    // não existe mais. O que NÃO pode ser recalculado é o cartão e o valor —
+    // esses ficam gravados na fatura (ver asaasPaymentsRepository.create).
+    faturas: faturas.map((f) => ({
+      id: Number(f.id),
+      pagoEm: f.paid_at || f.created_at,
+      valorCents: Number(f.amount_cents),
+      produto: nomeDoProduto(f),
+      meio: f.billing_type === 'PIX' ? 'PIX' : 'Cartão',
+      cartao: f.card_brand || f.card_last4 ? { bandeira: f.card_brand, final: f.card_last4 } : null,
+    })),
     stripeConfigured: stripeService.isConfigured(),
     asaasConfigured: asaasService.isConfigured(),
     // O dono do sistema nao gasta credito (ver creditsService). A tela precisa
@@ -96,8 +135,9 @@ async function overview(req, res) {
       // anunciar um desconto aqui que o checkout não vai cobrar é o defeito
       // que motivou esta regra.
       promoDisponivel: promocaoDisponivel(subscription),
-      extraSlots: Number(subscription.extra_slots) || 0,
-      extraSlotPriceCents: subscription.extra_slot_price_cents || null,
+      extraChannels: Number(subscription.extra_channels) || 0,
+      extraTiktokAccounts: Number(subscription.extra_tiktok_accounts) || 0,
+      precosExtras: precosDasConexoes.precosDoPlano(subscription),
       // O limite EFETIVO (plano + conexoes compradas). A tela precisa do mesmo
       // numero que o servidor usa pra barrar - mostrar "1 canal" enquanto o
       // servidor aceita 3 faz o cliente achar que pagou por algo que nao veio.
@@ -132,7 +172,9 @@ async function overview(req, res) {
       maxTiktokAccounts: p.max_tiktok_accounts,
       overageCentsNormal: p.overage_cents_normal,
       overageCentsBonus: p.overage_cents_bonus,
-      extraSlotPriceCents: p.extra_slot_price_cents,
+      extraChannelPriceCents: p.extra_channel_price_cents,
+      extraTiktokPriceCents: p.extra_tiktok_price_cents,
+      extraBothPriceCents: p.extra_both_price_cents,
     })),
     overage: {
       rateCentsNormal: taxas.normal,

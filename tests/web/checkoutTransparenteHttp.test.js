@@ -81,7 +81,7 @@ test('o contexto traz os dois degraus de preço e NUNCA o token do cartão', asy
     last4: '4242',
     exp: '05/2030',
   });
-  await clientSubscriptionsRepository.setExtraSlots(cliente.id, { slots: 2 });
+  await clientSubscriptionsRepository.setExtras(cliente.id, { canais: 2, contas: 3 });
 
   const r = await agent.get('/api/client/checkout/contexto');
   assert.equal(r.status, 200);
@@ -98,8 +98,11 @@ test('o contexto traz os dois degraus de preço e NUNCA o token do cartão', asy
   // Limite efetivo = plano + conexões compradas. É o número que a tela mostra
   // e o mesmo que o servidor aplica.
   assert.equal(r.body.subscription.limites.canais, plano.max_youtube_channels + 2);
-  assert.equal(r.body.subscription.limites.contas, plano.max_tiktok_accounts + 2);
-  assert.equal(r.body.subscription.extraSlots, 2);
+  assert.equal(r.body.subscription.limites.contas, plano.max_tiktok_accounts + 3, 'canal e conta são contados separado');
+  assert.equal(r.body.subscription.extraChannels, 2);
+  assert.equal(r.body.subscription.extraTiktokAccounts, 3);
+  assert.ok(r.body.subscription.precosExtras.canal < r.body.subscription.precosExtras.conta,
+    'a tela precisa dos três preços para montar a escolha');
 
   // O minuto avulso segue a taxa do plano, não uma constante.
   assert.equal(r.body.package.centsPerMinute, plano.overage_cents_normal);

@@ -400,10 +400,13 @@
                     ? t(plan.max_tiktok_accounts > 1 ? 'landing.contasTiktok' : 'landing.contaTiktok', { n: plan.max_tiktok_accounts })
                     : t('landing.contasIlimitadas') %></span>
             </li>
-            <% if (plan.extra_slot_price_cents) { %>
+            <% if (plan.extra_channel_price_cents) { %>
             <li>
               <span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg></span>
-              <span><%= t('landing.conexoesExtras', { valor: (plan.extra_slot_price_cents / 100).toFixed(2).replace('.', ',') }) %></span>
+              <span><%= t('landing.conexoesExtras', {
+                    canal: (plan.extra_channel_price_cents / 100).toFixed(2).replace('.', ','),
+                    conta: (plan.extra_tiktok_price_cents / 100).toFixed(2).replace('.', ',')
+                  }) %></span>
             </li>
             <% } %>
             <li>

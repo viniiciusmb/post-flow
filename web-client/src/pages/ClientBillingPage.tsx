@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
+import { dataHora } from "@/lib/formatoLocal"
 import type {
   ClientBillingOverviewResponse,
   ClientPaymentsResponse,
@@ -201,7 +202,7 @@ export function ClientBillingPage() {
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [minutosAvulsos, setMinutosAvulsos] = useState<number | null>(null)
   const [payments, setPayments] = useState<ClientPaymentsResponse | null>(null)
-  const [removerPedido, setRemoverPedido] = useState(false)
+  const [removerPedido, setRemoverPedido] = useState<"canais" | "contas" | null>(null)
 
   async function load() {
     const res = await api.get<ClientBillingOverviewResponse>("/api/client/billing/overview")
@@ -403,14 +404,18 @@ export function ClientBillingPage() {
 
   // Remoção em dois cliques, sem popup nativo: o mesmo padrão já usado na
   // exclusão de vídeos. O primeiro clique só arma, o segundo executa.
-  async function removerConexaoExtra() {
-    if (!removerPedido) {
-      setRemoverPedido(true)
+  // Dois cliques: o primeiro pede confirmação no próprio botão, o segundo
+  // executa. `removerPedido` guarda QUAL dos dois está sendo confirmado — com
+  // um booleano, pedir para remover um canal deixaria o botão de conta também
+  // dizendo "confirmar", e o cliente removeria o que não queria.
+  async function removerConexaoExtra(oQue: "canais" | "contas") {
+    if (removerPedido !== oQue) {
+      setRemoverPedido(oQue)
       return
     }
-    setRemoverPedido(false)
+    setRemoverPedido(null)
     await runAction("extras-remover", () =>
-      api.post("/api/client/checkout/extras/remover", { quantidade: 1 })
+      api.post("/api/client/checkout/extras/remover", { [oQue]: 1 })
     )
   }
 
@@ -882,10 +887,13 @@ export function ClientBillingPage() {
             </CardContent>
           </Card>
 
-          {/* Conexões extras. Só existe nos planos que vendem slot: nos
-              outros, a saída é trocar de plano, e mostrar um card vazio aqui
-              ensinaria a ignorar esta parte da tela. */}
-          {data.subscription.extraSlotPriceCents && (
+          {/* Conexões extras. Desde 01/09/2026 são dois produtos separados —
+              canal do YouTube e conta do TikTok — em vez de um pacote fechado
+              que valia os dois. Quem leva o par paga menos que os dois avulsos.
+
+              Só aparece nos planos que vendem: nos outros a saída é trocar de
+              plano, e um card vazio aqui ensinaria a ignorar esta parte da tela. */}
+          {data.subscription.precosExtras && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -893,54 +901,148 @@ export function ClientBillingPage() {
                   Conexões extras
                 </CardTitle>
                 <CardDescription>
-                  Cada conexão libera 1 canal do YouTube e 1 conta do TikTok a mais, por{" "}
-                  {formatCents(data.subscription.extraSlotPriceCents)} por mês.
+                  Adicione só o que faltar: mais um canal para monitorar, mais uma conta para publicar, ou os
+                  dois. O par sai por {formatCents(data.subscription.precosExtras.ambos)} — mais barato que
+                  comprar separado.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <RateBox
-                    titulo="Conexões extras ativas"
-                    valor={String(data.subscription.extraSlots)}
-                    detalhe={
-                      data.subscription.extraSlots > 0
-                        ? `+${formatCents(data.subscription.extraSlotPriceCents * data.subscription.extraSlots)} por mês`
-                        : "Nenhuma ainda"
-                    }
-                  />
+                <div className="grid gap-2 sm:grid-cols-2">
                   <RateBox
                     titulo="Canais do YouTube"
                     valor={`${data.subscription.limiteCanais ?? "∞"}`}
-                    detalhe="Total que você pode monitorar"
+                    detalhe={
+                      data.subscription.extraChannels > 0
+                        ? `${data.subscription.extraChannels} extra(s) que você comprou`
+                        : "Total que você pode monitorar"
+                    }
                   />
                   <RateBox
                     titulo="Contas do TikTok"
                     valor={`${data.subscription.limiteContas ?? "∞"}`}
-                    detalhe="Total em que você pode publicar"
+                    detalhe={
+                      data.subscription.extraTiktokAccounts > 0
+                        ? `${data.subscription.extraTiktokAccounts} extra(s) que você comprou`
+                        : "Total em que você pode publicar"
+                    }
                   />
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button asChild>
-                    <a href="/client/checkout?extras=1">
-                      Adicionar 1 conexão por {formatCents(data.subscription.extraSlotPriceCents)}/mês
+
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Button asChild variant="outline" className="h-auto flex-col items-start gap-0.5 py-2.5">
+                    <a href="/client/checkout?extras=1&canais=1">
+                      <span className="text-xs font-normal text-muted-foreground">+1 canal do YouTube</span>
+                      <span className="font-semibold">{formatCents(data.subscription.precosExtras.canal)}/mês</span>
                     </a>
                   </Button>
-                  {data.subscription.extraSlots > 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busyKey === "extras-remover"}
-                      onClick={removerConexaoExtra}
-                    >
-                      {removerPedido ? "Confirmar remoção" : "Remover 1 conexão"}
-                    </Button>
-                  )}
+                  <Button asChild variant="outline" className="h-auto flex-col items-start gap-0.5 py-2.5">
+                    <a href="/client/checkout?extras=1&contas=1">
+                      <span className="text-xs font-normal text-muted-foreground">+1 conta do TikTok</span>
+                      <span className="font-semibold">{formatCents(data.subscription.precosExtras.conta)}/mês</span>
+                    </a>
+                  </Button>
+                  <Button asChild className="h-auto flex-col items-start gap-0.5 py-2.5">
+                    <a href="/client/checkout?extras=1&canais=1&contas=1">
+                      <span className="text-xs font-normal opacity-80">+1 canal e +1 conta</span>
+                      <span className="font-semibold">{formatCents(data.subscription.precosExtras.ambos)}/mês</span>
+                    </a>
+                  </Button>
                 </div>
-                {removerPedido && (
-                  <p className="text-xs text-muted-foreground">
-                    O mês já pago não é devolvido — a cobrança some a partir do próximo.
-                  </p>
+
+                {/* A primeira cobrança sai agora; a partir do ciclo seguinte ela
+                    cai no mesmo dia da mensalidade. Dizer isso aqui evita a
+                    dúvida de "por que fui cobrado duas vezes esse mês". */}
+                <p className="text-xs text-muted-foreground">
+                  Você paga a conexão agora e, a partir do mês seguinte, ela é cobrada junto com a sua
+                  mensalidade, numa data só.
+                </p>
+
+                {(data.subscription.extraChannels > 0 || data.subscription.extraTiktokAccounts > 0) && (
+                  <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                    {data.subscription.extraChannels > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busyKey === "extras-remover"}
+                        onClick={() => removerConexaoExtra("canais")}
+                      >
+                        {removerPedido === "canais" ? "Confirmar remoção" : "Remover 1 canal"}
+                      </Button>
+                    )}
+                    {data.subscription.extraTiktokAccounts > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busyKey === "extras-remover"}
+                        onClick={() => removerConexaoExtra("contas")}
+                      >
+                        {removerPedido === "contas" ? "Confirmar remoção" : "Remover 1 conta"}
+                      </Button>
+                    )}
+                    {removerPedido && (
+                      <p className="w-full text-xs text-muted-foreground">
+                        O mês já pago não é devolvido — a cobrança some a partir do próximo.
+                      </p>
+                    )}
+                  </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* FATURAS PAGAS: tudo que o cliente já pagou, com dia, hora, valor,
+              produto e o cartão usado NAQUELA compra.
+
+              O cartão vem gravado na fatura, e não lido do cadastro atual: o
+              cliente troca de cartão e o extrato inteiro passaria a dizer que
+              tudo foi pago no cartão novo — reescrevendo o passado numa tela
+              que existe justamente para provar o que aconteceu. */}
+          {data.faturas.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <IconReceipt className="size-4 text-muted-foreground" />
+                  Faturas pagas
+                </CardTitle>
+                <CardDescription>Tudo que você já pagou no Post Flow.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {/* A tabela rola dentro do próprio cartão: sem isto, no celular
+                    ela empurra a PÁGINA inteira de lado. */}
+                <div className="-mx-2 overflow-x-auto px-2">
+                  <table className="w-full min-w-[34rem] text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                        <th className="pb-2 pr-3 font-medium">Quando</th>
+                        <th className="pb-2 pr-3 font-medium">Produto</th>
+                        <th className="pb-2 pr-3 font-medium">Pago com</th>
+                        <th className="pb-2 text-right font-medium">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.faturas.map((f) => (
+                        <tr key={f.id} className="border-b border-border/60 last:border-0">
+                          <td className="py-2.5 pr-3 whitespace-nowrap text-muted-foreground tabular-nums">
+                            {dataHora(f.pagoEm)}
+                          </td>
+                          <td className="py-2.5 pr-3">{f.produto}</td>
+                          <td className="py-2.5 pr-3 whitespace-nowrap text-muted-foreground">
+                            {f.cartao && f.cartao.final ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <IconCreditCard className="size-3.5 shrink-0" />
+                                {f.cartao.bandeira ? nomeDaBandeira(f.cartao.bandeira) : "Cartão"}{" "}
+                                <span className="tabular-nums">•••• {f.cartao.final}</span>
+                              </span>
+                            ) : (
+                              f.meio
+                            )}
+                          </td>
+                          <td className="py-2.5 text-right font-medium tabular-nums">{formatCents(f.valorCents)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           )}

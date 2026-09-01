@@ -227,7 +227,17 @@ export function CheckoutPage() {
     const q = new URLSearchParams(window.location.search)
     if (q.get("plano")) return { tipo: "plano", planKey: q.get("plano")! }
     if (q.get("creditos")) return { tipo: "creditos", minutos: Number(q.get("creditos")) || 25 }
-    if (q.get("extras")) return { tipo: "extras", quantidade: Number(q.get("extras")) || 1 }
+    if (q.get("extras")) {
+      // Canal e conta são pedidos separados desde 01/09/2026. Sem nenhum dos
+      // dois na URL, cai no par — que é o que o link antigo (?extras=1) queria
+      // dizer, e o que a tela de Plano e uso manda quando o cliente clica no
+      // botão do par.
+      const canais = Number(q.get("canais")) || 0
+      const contas = Number(q.get("contas")) || 0
+      return canais + contas > 0
+        ? { tipo: "extras", canais, contas }
+        : { tipo: "extras", canais: 1, contas: 1 }
+    }
     return { tipo: "cartao" }
   }, [])
 
@@ -297,8 +307,15 @@ export function CheckoutPage() {
       return { hojeCents: item.minutos * ctx.package.centsPerMinute, depoisCents: null, promo: false }
     }
     if (item.tipo === "extras") {
-      const unit = ctx.subscription.extraSlotPriceCents ?? 0
-      return { hojeCents: unit * item.quantidade, depoisCents: unit * item.quantidade, promo: false }
+      // Mesma conta do servidor (ver lib/precoDasConexoesExtras): o par tem
+      // desconto, e o desconto vale por par. Aqui é só para MOSTRAR — quem
+      // decide quanto cobrar é o servidor, que recalcula tudo de novo.
+      const p = ctx.subscription.precosExtras
+      if (!p) return { hojeCents: 0, depoisCents: null, promo: false }
+      const pares = Math.min(item.canais, item.contas)
+      const total =
+        pares * p.ambos + (item.canais - pares) * p.canal + (item.contas - pares) * p.conta
+      return { hojeCents: total, depoisCents: total, promo: false }
     }
     return { hojeCents: 0, depoisCents: null, promo: false }
   }, [ctx, item, plano])
@@ -345,7 +362,10 @@ export function CheckoutPage() {
       const corpo: Record<string, unknown> = { tipo: item.tipo, metodo }
       if (item.tipo === "plano") corpo.planKey = item.planKey
       if (item.tipo === "creditos") corpo.minutos = item.minutos
-      if (item.tipo === "extras") corpo.quantidade = item.quantidade
+      if (item.tipo === "extras") {
+        corpo.canais = item.canais
+        corpo.contas = item.contas
+      }
       if (precisaDoFormulario || metodo === "pix") Object.assign(corpo, corpoDoCartao())
       // O cartão salvo é usado pelo token guardado no servidor: nada de cartão
       // sai daqui nesse caso.
@@ -1046,10 +1066,10 @@ function ResumoDoPedido({
               icone={<IconBrandTiktok className="size-4" />}
               texto={`${plano.maxTiktokAccounts ?? "∞"} ${plano.maxTiktokAccounts === 1 ? "conta do TikTok" : "contas do TikTok"}`}
             />
-            {plano.extraSlotPriceCents && (
+            {plano.extraBothPriceCents && (
               <Beneficio
                 icone={<IconPlus className="size-4" />}
-                texto={`Pode comprar conexões extras por ${formatCents(plano.extraSlotPriceCents)}/mês cada`}
+                texto={`Pode comprar canal extra por ${formatCents(plano.extraChannelPriceCents!)}/mês ou conta extra por ${formatCents(plano.extraTiktokPriceCents!)}/mês`}
               />
             )}
           </ul>
@@ -1069,7 +1089,12 @@ function ResumoDoPedido({
       {item.tipo === "extras" && (
         <>
           <LinhaResumo
-            rotulo={`${item.quantidade} ${item.quantidade === 1 ? "conexão extra" : "conexões extras"}`}
+            rotulo={[
+              item.canais > 0 ? `${item.canais} canal${item.canais > 1 ? "is" : ""} do YouTube` : null,
+              item.contas > 0 ? `${item.contas} conta${item.contas > 1 ? "s" : ""} do TikTok` : null,
+            ]
+              .filter(Boolean)
+              .join(" + ")}
             valor={formatCents(preco.hojeCents)}
           />
           <p className="border-t border-border pt-4 text-[12.5px] leading-relaxed text-muted-foreground">

@@ -1,13 +1,22 @@
-// Conexões extras: comprar mais 1 canal do YouTube + 1 conta do TikTok.
+// Conexões extras: mais um canal do YouTube, ou mais uma conta do TikTok.
+//
+// Até 01/09/2026 era um pacote fechado — 1 canal E 1 conta, indivisível — e
+// quem só queria mais um canal pagava pelos dois. Agora são dois produtos:
+//
+//   canal do YouTube ....... R$ 14,90
+//   conta do TikTok ........ R$ 29,90
+//   os dois juntos ......... R$ 39,90
 //
 // O que estes testes travam:
-//   - o limite EFETIVO é plano + conexões compradas, e é o mesmo número que o
-//     servidor usa para barrar (mostrar um e barrar por outro faz o cliente
-//     achar que pagou por algo que não veio);
-//   - quem não tem plano continua barrado, com ou sem slot;
-//   - só o plano que vende slot pode comprar;
-//   - a cobrança do mês corrente é avulsa e a recorrência nasce depois, com o
-//     valor do TOTAL de slots (não só dos que acabaram de ser comprados);
+//   - canal e conta são contadores INDEPENDENTES (comprar canal não dá conta);
+//   - o desconto do par vale por par, e o preço vem do plano, nunca do cliente;
+//   - o limite EFETIVO é plano + comprado, e é o mesmo número que o servidor
+//     usa para barrar (mostrar um e barrar por outro faz o cliente achar que
+//     pagou por algo que não veio);
+//   - quem não tem plano continua barrado, com ou sem extras;
+//   - só o plano que vende extras pode comprar;
+//   - a cobrança de agora é avulsa e a recorrência nasce ALINHADA ao ciclo do
+//     plano, um ciclo depois — a regra de junção que o fundador pediu;
 //   - liberar duas vezes o mesmo pagamento não dobra as conexões.
 'use strict';
 
@@ -57,49 +66,65 @@ async function clientePronto(planKey, chamadas) {
   return { cliente, plano };
 }
 
-test('cada conexão extra vale 1 canal E 1 conta a mais', async () => {
+test('canal e conta são contadores independentes', async () => {
   await comAsaasFalso(respostasPadrao(), async (chamadas) => {
     const { cliente, plano } = await clientePronto('max', chamadas);
 
     const antes = await planLimitsService.checkChannelLimit(cliente.id, plano.max_youtube_channels);
     assert.equal(antes.allowed, false, 'no limite do plano, tem que barrar');
 
-    await checkoutService.comprarSlotsExtras({ clientUserId: cliente.id, quantidade: 2, remoteIp: '1.2.3.4' });
+    // Compra SÓ canal: a conta do TikTok não pode subir junto.
+    await checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 2, contas: 0, remoteIp: '1.2.3.4' });
 
     const sub = await clientSubscriptionsRepository.getOrCreate(cliente.id);
-    assert.equal(Number(sub.extra_slots), 2);
+    assert.equal(Number(sub.extra_channels), 2);
+    assert.equal(Number(sub.extra_tiktok_accounts), 0, 'comprar canal deu conta do TikTok de brinde');
 
     const limites = planLimitsService.limitesDe(sub);
     assert.equal(limites.canais, plano.max_youtube_channels + 2);
-    assert.equal(limites.contas, plano.max_tiktok_accounts + 2);
+    assert.equal(limites.contas, plano.max_tiktok_accounts, 'o limite de contas não podia ter mudado');
 
     // O limite que a tela mostra tem que ser o mesmo que o servidor aplica.
     const depois = await planLimitsService.checkChannelLimit(cliente.id, plano.max_youtube_channels);
     assert.equal(depois.allowed, true);
     const noNovoTeto = await planLimitsService.checkTiktokAccountLimit(cliente.id, limites.contas);
     assert.equal(noNovoTeto.allowed, false, 'o teto novo também é um teto');
+
+    // E agora só conta: o canal fica onde está.
+    await checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 0, contas: 1, remoteIp: '1.2.3.4' });
+    const depoisDaConta = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+    assert.equal(Number(depoisDaConta.extra_channels), 2, 'comprar conta mexeu no número de canais');
+    assert.equal(Number(depoisDaConta.extra_tiktok_accounts), 1);
   });
 });
 
-test('cobra o mês corrente à vista e deixa a recorrência com o valor do TOTAL de slots', async () => {
+test('o par sai mais barato que os dois separados, e o preço vem do plano', async () => {
   await comAsaasFalso(respostasPadrao(), async (chamadas) => {
     const { cliente, plano } = await clientePronto('max', chamadas);
 
-    await checkoutService.comprarSlotsExtras({ clientUserId: cliente.id, quantidade: 1, remoteIp: '1.2.3.4' });
+    await checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 1, contas: 1, remoteIp: '1.2.3.4' });
 
     const cobranca = chamadas.find((c) => c.metodo === 'POST' && c.caminho === '/payments');
-    assert.equal(cobranca.corpo.value, plano.extra_slot_price_cents / 100, 'o mês corrente sai à vista');
+    assert.equal(cobranca.corpo.value, plano.extra_both_price_cents / 100, 'o par tem que sair pelo preço do par');
+    assert.ok(
+      plano.extra_both_price_cents < plano.extra_channel_price_cents + plano.extra_tiktok_price_cents,
+      'o par precisa ser mais barato que comprar separado, senão o desconto não existe'
+    );
 
     const assinatura = chamadas.find((c) => c.metodo === 'POST' && c.caminho === '/subscriptions');
-    assert.equal(assinatura.corpo.value, plano.extra_slot_price_cents / 100);
+    assert.equal(assinatura.corpo.value, plano.extra_both_price_cents / 100, 'a mensalidade segue a mesma conta da compra');
 
-    // Comprando mais uma: a recorrência passa a valer 2 slots, não 1.
+    // Comprando mais um canal: a recorrência passa a valer o TOTAL.
     chamadas.length = 0;
-    await checkoutService.comprarSlotsExtras({ clientUserId: cliente.id, quantidade: 1, remoteIp: '1.2.3.4' });
+    await checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 1, contas: 0, remoteIp: '1.2.3.4' });
+
+    const cobranca2 = chamadas.find((c) => c.metodo === 'POST' && c.caminho === '/payments');
+    assert.equal(cobranca2.corpo.value, plano.extra_channel_price_cents / 100, 'canal sozinho é preço de canal');
 
     const ajuste = chamadas.find((c) => c.metodo === 'POST' && c.caminho.startsWith('/subscriptions/'));
     assert.ok(ajuste, 'a assinatura existente tem que ser ajustada, não duplicada');
-    assert.equal(ajuste.corpo.value, (plano.extra_slot_price_cents * 2) / 100);
+    // 2 canais + 1 conta = 1 par + 1 canal solto.
+    assert.equal(ajuste.corpo.value, (plano.extra_both_price_cents + plano.extra_channel_price_cents) / 100);
     assert.equal(ajuste.corpo.updatePendingPayments, true);
 
     assert.ok(
@@ -112,11 +137,11 @@ test('cobra o mês corrente à vista e deixa a recorrência com o valor do TOTAL
 test('devolver a última conexão cancela a assinatura de extras', async () => {
   await comAsaasFalso(respostasPadrao(), async (chamadas) => {
     const { cliente } = await clientePronto('max', chamadas);
-    await checkoutService.comprarSlotsExtras({ clientUserId: cliente.id, quantidade: 1, remoteIp: '1.2.3.4' });
+    await checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 1, contas: 0, remoteIp: '1.2.3.4' });
 
     chamadas.length = 0;
-    const total = await checkoutService.removerSlotsExtras({ clientUserId: cliente.id, quantidade: 1 });
-    assert.equal(total, 0);
+    const totais = await checkoutService.removerExtras({ clientUserId: cliente.id, canais: 1 });
+    assert.deepEqual(totais, { canais: 0, contas: 0 });
 
     assert.ok(
       chamadas.some((c) => c.metodo === 'DELETE' && c.caminho.startsWith('/subscriptions/')),
@@ -124,7 +149,8 @@ test('devolver a última conexão cancela a assinatura de extras', async () => {
     );
 
     const sub = await clientSubscriptionsRepository.getOrCreate(cliente.id);
-    assert.equal(Number(sub.extra_slots), 0);
+    assert.equal(Number(sub.extra_channels), 0);
+    assert.equal(Number(sub.extra_tiktok_accounts), 0);
     assert.equal(sub.asaas_extra_slots_subscription_id, null);
   });
 });
@@ -134,7 +160,7 @@ test('plano que não vende conexão extra recusa a compra', async () => {
     const { cliente } = await clientePronto('starter', chamadas);
 
     await assert.rejects(
-      () => checkoutService.comprarSlotsExtras({ clientUserId: cliente.id, quantidade: 1, remoteIp: '1.2.3.4' }),
+      () => checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 1, remoteIp: '1.2.3.4' }),
       (err) => {
         assert.equal(err.name, 'DadosInvalidosError');
         assert.match(err.message, /não vende conexões extras/);
@@ -151,13 +177,16 @@ test('sem plano, conexão extra não existe — nem para comprar, nem para liber
     await clientSubscriptionsRepository.getOrCreate(cliente.id);
 
     await assert.rejects(
-      () => checkoutService.comprarSlotsExtras({ clientUserId: cliente.id, quantidade: 1, remoteIp: '1.2.3.4' }),
+      () => checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 1, remoteIp: '1.2.3.4' }),
       /Assine um plano/
     );
 
     // Mesmo forçando slots no banco: sem plano, o limite continua zero. Slot
     // não pode virar uma porta lateral para usar o sistema sem assinatura.
-    await pool.query('UPDATE client_subscriptions SET extra_slots = 5 WHERE client_user_id = $1', [cliente.id]);
+    await pool.query(
+      'UPDATE client_subscriptions SET extra_channels = 5, extra_tiktok_accounts = 5 WHERE client_user_id = $1',
+      [cliente.id]
+    );
     const sub = await clientSubscriptionsRepository.getOrCreate(cliente.id);
     assert.deepEqual(planLimitsService.limitesDe(sub), { canais: 0, contas: 0, extras: 0, semPlano: true });
     const check = await planLimitsService.checkChannelLimit(cliente.id, 0);
@@ -168,13 +197,14 @@ test('sem plano, conexão extra não existe — nem para comprar, nem para liber
 test('aviso repetido do Asaas não dobra as conexões', async () => {
   await comAsaasFalso(respostasPadrao(), async (chamadas) => {
     const { cliente } = await clientePronto('max', chamadas);
-    const r = await checkoutService.comprarSlotsExtras({ clientUserId: cliente.id, quantidade: 1, remoteIp: '1.2.3.4' });
+    const r = await checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 1, contas: 1, remoteIp: '1.2.3.4' });
 
     const registro = await asaasPaymentsRepository.findByAsaasId(r.paymentId);
     await checkoutService.aplicarPagamentoConfirmado(registro);
     await checkoutService.aplicarPagamentoConfirmado(registro);
 
     const sub = await clientSubscriptionsRepository.getOrCreate(cliente.id);
-    assert.equal(Number(sub.extra_slots), 1, 'o Asaas entrega "pelo menos uma vez" — repetir é o normal');
+    assert.equal(Number(sub.extra_channels), 1, 'o Asaas entrega "pelo menos uma vez" — repetir é o normal');
+    assert.equal(Number(sub.extra_tiktok_accounts), 1);
   });
 });

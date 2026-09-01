@@ -590,14 +590,16 @@ export interface BillingPlan {
   overageCentsNormal?: number
   overageCentsBonus?: number
   /** Preço mensal de 1 conexão extra. null = o plano não vende conexões extras. */
-  extraSlotPriceCents?: number | null
+  extraChannelPriceCents?: number | null
+  extraTiktokPriceCents?: number | null
+  extraBothPriceCents?: number | null
 }
 
 /** O que está sendo comprado na tela de checkout, lido da barra de endereço. */
 export type CheckoutItem =
   | { tipo: "plano"; planKey: string }
   | { tipo: "creditos"; minutos: number }
-  | { tipo: "extras"; quantidade: number }
+  | { tipo: "extras"; canais: number; contas: number }
   | { tipo: "cartao" }
 
 export interface CheckoutContexto {
@@ -609,8 +611,10 @@ export interface CheckoutContexto {
     status: SubscriptionStatus
     /** false = a promoção de 1º mês já foi usada; a tela não pode anunciá-la. */
     promoDisponivel: boolean
-    extraSlots: number
-    extraSlotPriceCents: number | null
+    extraChannels: number
+    extraTiktokAccounts: number
+    /** Preços das conexões extras, ou null quando o plano não vende. */
+    precosExtras: { canal: number; conta: number; ambos: number } | null
     limites: { canais: number | null; contas: number | null }
     emUso: { canais: number; contas: number }
     overageCardEnabled: boolean
@@ -676,7 +680,19 @@ export interface CreditTransactionView {
   createdAt: string
 }
 
+/** Uma linha do extrato: o que o cliente pagou, quando e em qual cartão. */
+export interface FaturaPaga {
+  id: number
+  pagoEm: string
+  valorCents: number
+  produto: string
+  meio: string
+  cartao: { bandeira: string | null; final: string | null } | null
+}
+
 export interface ClientBillingOverviewResponse {
+  /** Extrato de tudo que já foi pago, do mais novo pro mais velho. */
+  faturas: FaturaPaga[]
   stripeConfigured: boolean
   asaasConfigured: boolean
   subscription: {
@@ -685,8 +701,10 @@ export interface ClientBillingOverviewResponse {
     status: SubscriptionStatus
     overageCardEnabled: boolean
     promoDisponivel: boolean
-    extraSlots: number
-    extraSlotPriceCents: number | null
+    extraChannels: number
+    extraTiktokAccounts: number
+    /** Preços das conexões extras, ou null quando o plano não vende. */
+    precosExtras: { canal: number; conta: number; ambos: number } | null
     /** Limite EFETIVO: o que o plano dá mais as conexões compradas. */
     limiteCanais: number | null
     limiteContas: number | null

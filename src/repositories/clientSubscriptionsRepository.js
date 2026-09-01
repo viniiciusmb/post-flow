@@ -15,7 +15,8 @@ async function getOrCreate(clientUserId) {
     `SELECT cs.*, sp.key AS plan_key, sp.name AS plan_name, sp.weekly_minutes_normal, sp.weekly_minutes_bonus,
             sp.max_youtube_channels, sp.max_tiktok_accounts, sp.queue_priority,
             sp.price_cents AS plan_price_cents, sp.first_month_price_cents AS plan_first_month_price_cents,
-            sp.overage_cents_normal, sp.overage_cents_bonus, sp.extra_slot_price_cents
+            sp.overage_cents_normal, sp.overage_cents_bonus,
+            sp.extra_channel_price_cents, sp.extra_tiktok_price_cents, sp.extra_both_price_cents
      FROM client_subscriptions cs
      LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
      WHERE cs.client_user_id = $1`,
@@ -206,15 +207,19 @@ async function clearAsaasCard(clientUserId) {
 
 // ---------- conexões extras ----------
 
-async function setExtraSlots(clientUserId, { slots, asaasSubscriptionId = null }) {
+// Canal e conta sao contadores INDEPENDENTES desde 01/09/2026 (antes era um
+// slot so, valendo os dois). `canais`/`contas` ausentes preservam o valor
+// atual: quem compra so canal nao pode zerar as contas que ja pagou.
+async function setExtras(clientUserId, { canais = null, contas = null, asaasSubscriptionId = null }) {
   const { rows } = await pool.query(
     `UPDATE client_subscriptions
-        SET extra_slots = $2,
-            asaas_extra_slots_subscription_id = COALESCE($3, asaas_extra_slots_subscription_id),
+        SET extra_channels = COALESCE($2, extra_channels),
+            extra_tiktok_accounts = COALESCE($3, extra_tiktok_accounts),
+            asaas_extra_slots_subscription_id = COALESCE($4, asaas_extra_slots_subscription_id),
             updated_at = now()
       WHERE client_user_id = $1
       RETURNING *`,
-    [clientUserId, slots, asaasSubscriptionId]
+    [clientUserId, canais, contas, asaasSubscriptionId]
   );
   return rows[0] || null;
 }
@@ -222,7 +227,8 @@ async function setExtraSlots(clientUserId, { slots, asaasSubscriptionId = null }
 async function clearExtraSlotsSubscription(clientUserId) {
   await pool.query(
     `UPDATE client_subscriptions
-        SET extra_slots = 0, asaas_extra_slots_subscription_id = NULL, updated_at = now()
+        SET extra_channels = 0, extra_tiktok_accounts = 0,
+            asaas_extra_slots_subscription_id = NULL, updated_at = now()
       WHERE client_user_id = $1`,
     [clientUserId]
   );
@@ -280,7 +286,7 @@ module.exports = {
   setOverageCard,
   setAsaasCard,
   clearAsaasCard,
-  setExtraSlots,
+  setExtras,
   clearExtraSlotsSubscription,
   markFirstMonthUsed,
 };

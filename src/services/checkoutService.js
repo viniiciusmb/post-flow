@@ -34,6 +34,7 @@ const usersRepository = require('../repositories/usersRepository');
 const creditsUnlockService = require('./creditsUnlockService');
 const affiliateService = require('./affiliateService');
 const cpfCnpj = require('../lib/cpfCnpj');
+const precosDasConexoes = require('../lib/precoDasConexoesExtras');
 const { aplicaPromocao } = require('../lib/promocaoDePrimeiroMes');
 const logger = require('../lib/logger');
 
@@ -320,6 +321,8 @@ async function assinarComCartaoSalvo({ clientUserId, plan, remoteIp }) {
     billingType: 'CREDIT_CARD',
     amountCents: preco.primeiraCobrancaCents,
     planId: plan.id,
+    cardBrand: subscription.asaas_card_brand,
+    cardLast4: subscription.asaas_card_last4,
   });
 
   await clientSubscriptionsRepository.setAsaasSubscription(clientUserId, {
@@ -439,6 +442,8 @@ async function comprarCreditoComCartao({ clientUserId, minutes, bucket, priceCen
     billingType: 'CREDIT_CARD',
     amountCents: priceCents,
     creditPurchaseId: compra.id,
+    cardBrand: subscription.asaas_card_brand,
+    cardLast4: subscription.asaas_card_last4,
   });
 
   if (!pagamentoAprovado(cobranca)) return { pago: false, status: cobranca.status, paymentId: cobranca.id };
@@ -526,34 +531,48 @@ async function liberarCreditoPago({ asaasPaymentId, clientUserId, creditPurchase
 // Conexões extras
 // ---------------------------------------------------------------------------
 
-// Cada slot = 1 canal do YouTube + 1 conta do TikTok a mais. Só existe nos
-// planos que trazem extra_slot_price_cents; nos outros, a saída é trocar de
-// plano (e é isso que a tela diz).
+// Dois produtos independentes desde 01/09/2026: canal do YouTube e conta do
+// TikTok. Antes era um pacote fechado que valia os dois, e quem queria só mais
+// um canal pagava pelos dois. O par continua com desconto no PREÇO (ver
+// lib/precoDasConexoesExtras), mas cada lado conta separado no limite.
+//
+// Só existe nos planos que trazem preço; nos outros, a saída é trocar de plano
+// (e é isso que a tela diz).
 //
 // Mesma estrutura de dois passos da assinatura: uma cobrança avulsa cobre o
-// mês corrente (e é ela que libera os slots na hora), e a recorrência passa a
-// valer do mês seguinte em diante.
-async function comprarSlotsExtras({ clientUserId, quantidade, remoteIp }) {
+// período corrente (e é ela que libera as conexões na hora), e a recorrência
+// passa a valer a partir do ciclo seguinte, JUNTO com o do plano.
+async function comprarExtras({ clientUserId, canais = 0, contas = 0, remoteIp }) {
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
   if (!subscription.plan_id) throw new DadosInvalidosError('Assine um plano antes de comprar conexões extras.');
-  if (!subscription.extra_slot_price_cents) {
+
+  const precos = precosDasConexoes.precosDoPlano(subscription);
+  if (!precos) {
     throw new DadosInvalidosError('Seu plano não vende conexões extras — troque para o plano maior.');
   }
   if (!subscription.asaas_card_token || !subscription.asaas_customer_id) {
     throw new DadosInvalidosError('Nenhum cartão salvo — cadastre um cartão antes de comprar.');
   }
 
-  const precoUnitario = Number(subscription.extra_slot_price_cents);
-  const total = Number(subscription.extra_slots) + quantidade;
-  const valorAgoraCents = precoUnitario * quantidade;
+  const pedido = {
+    canais: Math.max(0, Math.trunc(Number(canais) || 0)),
+    contas: Math.max(0, Math.trunc(Number(contas) || 0)),
+  };
+  if (pedido.canais + pedido.contas === 0) {
+    throw new DadosInvalidosError('Escolha pelo menos uma conexão para adicionar.');
+  }
+
+  // O preço vem do PLANO, nunca do que o navegador mandou. Aceitar valor do
+  // corpo da requisição deixaria qualquer pessoa escolher quanto pagar.
+  const { totalCents } = precosDasConexoes.precoDosExtras(pedido, precos);
 
   const cobranca = await asaasService.createPayment({
     customerId: subscription.asaas_customer_id,
     billingType: 'CREDIT_CARD',
-    amountCents: valorAgoraCents,
+    amountCents: totalCents,
     dueDate: dataAsaas(0),
-    description: `Post Flow - ${quantidade} conexao(oes) extra(s)`,
-    externalReference: `extras:${clientUserId}:${quantidade}`,
+    description: descricaoDosExtras(pedido),
+    externalReference: `extras:${clientUserId}:${pedido.canais}c:${pedido.contas}t`,
     creditCardToken: subscription.asaas_card_token,
     remoteIp,
   });
@@ -563,56 +582,103 @@ async function comprarSlotsExtras({ clientUserId, quantidade, remoteIp }) {
     clientUserId,
     purpose: 'extra_slots',
     billingType: 'CREDIT_CARD',
-    amountCents: valorAgoraCents,
-    slots: quantidade,
+    amountCents: totalCents,
+    slots: pedido.canais + pedido.contas,
+    extraChannels: pedido.canais,
+    extraTiktokAccounts: pedido.contas,
+    cardBrand: subscription.asaas_card_brand,
+    cardLast4: subscription.asaas_card_last4,
   });
 
   if (!pagamentoAprovado(cobranca)) return { pago: false, status: cobranca.status, paymentId: cobranca.id };
 
-  await liberarSlotsPagos({ asaasPaymentId: cobranca.id, clientUserId, slots: quantidade });
-  return { pago: true, paymentId: cobranca.id, slots: total };
+  const totais = await liberarExtrasPagos({ asaasPaymentId: cobranca.id, clientUserId, pedido });
+  return { pago: true, paymentId: cobranca.id, ...totais, cobradoCents: totalCents };
 }
 
-// Ponto único de liberação de slot — síncrono e webhook caem aqui.
+// Texto que o cliente vê na fatura do cartão. Precisa dizer o que ele comprou:
+// "conexao extra" não diferencia mais canal de conta, e é justamente essa a
+// dúvida de quem olha a fatura um mês depois.
+function descricaoDosExtras({ canais, contas }) {
+  const partes = [];
+  if (canais) partes.push(`${canais} canal(is) do YouTube`);
+  if (contas) partes.push(`${contas} conta(s) do TikTok`);
+  return `Post Flow - conexao extra: ${partes.join(' + ')}`;
+}
+
+// Ponto único de liberação — síncrono e webhook caem aqui.
 //
-// A recorrência é ajustada DEPOIS de os slots já valerem: se o Asaas falhar
+// A recorrência é ajustada DEPOIS de as conexões já valerem: se o Asaas falhar
 // nessa hora, o cliente fica com o que pagou e o problema é nosso (aparece no
 // log), não dele.
-async function liberarSlotsPagos({ asaasPaymentId, clientUserId, slots }) {
+async function liberarExtrasPagos({ asaasPaymentId, clientUserId, pedido }) {
   const marcado = await asaasPaymentsRepository.markPaidOnce(asaasPaymentId);
-  if (!marcado) return false;
+  if (!marcado) return null;
 
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  const total = Number(subscription.extra_slots) + Number(slots);
-  await clientSubscriptionsRepository.setExtraSlots(clientUserId, { slots: total });
+  const canais = Number(subscription.extra_channels) + Number(pedido.canais);
+  const contas = Number(subscription.extra_tiktok_accounts) + Number(pedido.contas);
+  await clientSubscriptionsRepository.setExtras(clientUserId, { canais, contas });
 
   try {
     await sincronizarAssinaturaDeExtras(clientUserId);
   } catch (err) {
     logger.error(
-      `ATENCAO: cliente ${clientUserId} pagou ${slots} conexao(oes) extra(s) mas a recorrencia nao foi ajustada:`,
+      `ATENCAO: cliente ${clientUserId} pagou conexoes extras mas a recorrencia nao foi ajustada:`,
       err.message
     );
   }
-  logger.info(`Cliente ${clientUserId} agora tem ${total} conexao(oes) extra(s).`);
-  return true;
+  logger.info(`Cliente ${clientUserId} agora tem ${canais} canal(is) e ${contas} conta(s) extras.`);
+  return { canais, contas };
+}
+
+// QUANDO a recorrência das conexões extras começa a cobrar.
+//
+// Regra confirmada com o fundador em 01/09/2026: a cobrança do plano segue o
+// ciclo dela sem interrupção, e a partir do ciclo SEGUINTE tudo cai no mesmo
+// dia. Exemplo: plano vence 15/set, cliente compra um extra em 05/set — ele
+// paga o extra na hora, o plano cobra normal em 15/set, e de 15/out em diante
+// as duas caem juntas.
+//
+// Por que alinhar em vez de somar no valor do plano: mexer no valor da
+// assinatura do plano agora arriscaria alterar uma cobrança JÁ GERADA pelo
+// Asaas (a de 15/set), e o cliente pagaria o extra duas vezes no mesmo mês.
+// Alinhar a data é determinístico e não toca em nada que já está a caminho.
+//
+// Sem assinatura de plano no Asaas (plano dado pelo admin), cai no padrão de
+// sempre: 30 dias.
+async function proximaCobrancaDosExtras(subscription) {
+  if (!subscription.asaas_subscription_id) return dataAsaas(DIAS_ATE_A_RENOVACAO);
+
+  try {
+    const doPlano = await asaasService.getSubscription(subscription.asaas_subscription_id);
+    if (!doPlano || !doPlano.nextDueDate) return dataAsaas(DIAS_ATE_A_RENOVACAO);
+
+    // O vencimento do plano JÁ está a caminho e foi coberto pela cobrança
+    // avulsa de agora - então a recorrência dos extras começa um ciclo depois.
+    const proxima = new Date(`${doPlano.nextDueDate}T12:00:00Z`);
+    proxima.setUTCMonth(proxima.getUTCMonth() + 1);
+    return proxima.toISOString().slice(0, 10);
+  } catch (err) {
+    logger.warn(`Nao consegui ler o vencimento do plano do cliente (usando 30 dias): ${err.message}`);
+    return dataAsaas(DIAS_ATE_A_RENOVACAO);
+  }
 }
 
 // Deixa a assinatura recorrente das conexões extras com o valor certo para o
-// número atual de slots. Cria, ajusta ou cancela — uma função só, porque as
-// três situações têm que terminar consistentes com a mesma coluna.
+// que o cliente tem hoje. Cria, ajusta ou cancela — uma função só, porque as
+// três situações têm que terminar consistentes com as mesmas colunas.
 async function sincronizarAssinaturaDeExtras(clientUserId) {
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  const slots = Number(subscription.extra_slots);
+  const precos = precosDasConexoes.precosDoPlano(subscription);
   const idAtual = subscription.asaas_extra_slots_subscription_id;
+  const valorCents = precos ? precosDasConexoes.mensalidadeDosExtras(subscription, precos) : 0;
 
-  if (slots === 0) {
+  if (valorCents === 0) {
     if (idAtual) await asaasService.cancelSubscription(idAtual);
     await clientSubscriptionsRepository.clearExtraSlotsSubscription(clientUserId);
     return null;
   }
-
-  const valorCents = Number(subscription.extra_slot_price_cents) * slots;
 
   if (idAtual) {
     await asaasService.updateSubscription(idAtual, { value: valorCents / 100, updatePendingPayments: true });
@@ -623,27 +689,26 @@ async function sincronizarAssinaturaDeExtras(clientUserId) {
     customerId: subscription.asaas_customer_id,
     billingType: 'CREDIT_CARD',
     amountCents: valorCents,
-    // O mês corrente já foi pago na cobrança avulsa que liberou os slots.
-    nextDueDate: dataAsaas(DIAS_ATE_A_RENOVACAO),
+    nextDueDate: await proximaCobrancaDosExtras(subscription),
     description: 'Post Flow - conexoes extras',
     externalReference: `extras:${clientUserId}`,
     creditCardToken: subscription.asaas_card_token,
   });
-  await clientSubscriptionsRepository.setExtraSlots(clientUserId, {
-    slots,
-    asaasSubscriptionId: assinatura.id,
-  });
+  await clientSubscriptionsRepository.setExtras(clientUserId, { asaasSubscriptionId: assinatura.id });
   return assinatura.id;
 }
 
 // Devolver conexões extras. Sem reembolso do mês em curso (está escrito na
 // tela): o que muda é o que será cobrado daqui para frente.
-async function removerSlotsExtras({ clientUserId, quantidade }) {
+async function removerExtras({ clientUserId, canais = 0, contas = 0 }) {
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  const total = Math.max(Number(subscription.extra_slots) - quantidade, 0);
-  await clientSubscriptionsRepository.setExtraSlots(clientUserId, { slots: total });
+  const totais = {
+    canais: Math.max(Number(subscription.extra_channels) - (Number(canais) || 0), 0),
+    contas: Math.max(Number(subscription.extra_tiktok_accounts) - (Number(contas) || 0), 0),
+  };
+  await clientSubscriptionsRepository.setExtras(clientUserId, totais);
   await sincronizarAssinaturaDeExtras(clientUserId);
-  return total;
+  return totais;
 }
 
 // ---------------------------------------------------------------------------
@@ -692,10 +757,13 @@ async function aplicarPagamentoConfirmado(registro) {
   }
 
   if (registro.purpose === 'extra_slots') {
-    return liberarSlotsPagos({
+    return liberarExtrasPagos({
       asaasPaymentId: registro.asaas_payment_id,
       clientUserId,
-      slots: Number(registro.slots),
+      pedido: {
+        canais: Number(registro.extra_channels) || 0,
+        contas: Number(registro.extra_tiktok_accounts) || 0,
+      },
     });
   }
 
@@ -724,14 +792,15 @@ module.exports = {
   assinarComCartaoSalvo,
   comprarCreditoComCartao,
   comprarCreditoComPix,
-  comprarSlotsExtras,
-  removerSlotsExtras,
+  comprarExtras,
+  removerExtras,
   sincronizarAssinaturaDeExtras,
   conferirPagamentoPendente,
   aplicarPagamentoConfirmado,
   ativarAssinaturaPaga,
   liberarCreditoPago,
-  liberarSlotsPagos,
+  liberarExtrasPagos,
+  precoDosExtras: precosDasConexoes.precoDosExtras,
   pagamentoAprovado,
   DIAS_ATE_A_RENOVACAO,
 };

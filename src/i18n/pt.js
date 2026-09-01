@@ -176,7 +176,7 @@ module.exports = {
     noPrimeiroMes: 'no 1º mês',
     depoisPorMes: 'depois R$ {valor}/mês',
     descontoPrimeiroMes: '{n}% de desconto no 1º mês',
-    conexoesExtras: 'Conexões extras por R$ {valor}/mês cada',
+    conexoesExtras: 'Canal extra por R$ {canal}/mês, conta extra por R$ {conta}/mês',
     minutosPorSemana: '{n} minutos',
     minutosPorSemanaResto: 'de vídeo por semana',
     minutosBonus: '{n} minutos',

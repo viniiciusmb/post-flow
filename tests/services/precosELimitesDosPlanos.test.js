@@ -41,7 +41,7 @@ const COMBINADO = {
   },
   pro: {
     primeiroMes: 9990,
-    mensal: 16690,
+    mensal: 15990,
     canais: 2,
     contas: 2,
     minutos: 180,
@@ -52,14 +52,16 @@ const COMBINADO = {
   },
   max: {
     primeiroMes: 13990,
-    mensal: 23390,
+    mensal: 22990,
     canais: 3,
     contas: 3,
     minutos: 270,
     bonus: 360,
     excedente: 18,
     excedenteBonus: 11,
-    slotExtra: 2990,
+    extraCanal: 1490,
+    extraConta: 2990,
+    extraAmbos: 3990,
   },
 };
 
@@ -75,19 +77,23 @@ test('cada plano tem exatamente os preços, limites e cotas combinados', async (
     assert.equal(plano.weekly_minutes_bonus, esperado.bonus, `minutos bônus do ${chave}`);
     assert.equal(plano.overage_cents_normal, esperado.excedente, `excedente do ${chave}`);
     assert.equal(plano.overage_cents_bonus, esperado.excedenteBonus, `excedente bônus do ${chave}`);
-    assert.equal(plano.extra_slot_price_cents, esperado.slotExtra, `slot extra do ${chave}`);
+    assert.equal(plano.extra_channel_price_cents, esperado.extraCanal ?? null, `canal extra do ${chave}`);
+    assert.equal(plano.extra_tiktok_price_cents, esperado.extraConta ?? null, `conta extra do ${chave}`);
+    assert.equal(plano.extra_both_price_cents, esperado.extraAmbos ?? null, `par extra do ${chave}`);
   }
 });
 
-test('o primeiro mês é 40% mais barato que a mensalidade', async () => {
+test('o primeiro mês é um desconto de verdade, mas não um preço novo', async () => {
+  // Era "exatamente 40%" enquanto as mensalidades foram DERIVADAS do preço de
+  // estreia. Em 01/09/2026 o fundador passou a definir a mensalidade direto
+  // (Pro 159,90 e Max 229,90), então a proporção deixou de ser a regra - o que
+  // continua valendo é a faixa: desconto que se sente, sem virar outro produto.
   const planos = await subscriptionPlansRepository.listActive();
   for (const p of planos) {
     const desconto = 1 - p.first_month_price_cents / p.price_cents;
-    // Tolerância de 1 ponto: os preços foram arredondados para terminar em ,90,
-    // então 40% exatos dariam centavos quebrados na tela.
     assert.ok(
-      Math.abs(desconto - 0.4) < 0.01,
-      `o desconto do ${p.key} deu ${(desconto * 100).toFixed(1)}%, e o combinado é 40%`
+      desconto >= 0.25 && desconto <= 0.5,
+      `o desconto de estreia do ${p.key} deu ${(desconto * 100).toFixed(1)}% - fora da faixa de 25% a 50%`
     );
   }
 });
@@ -97,8 +103,8 @@ test('todo preço termina em ,90 — foi a regra pedida para não sair número q
   for (const p of planos) {
     assert.equal(p.price_cents % 100, 90, `a mensalidade do ${p.key} não termina em ,90`);
     assert.equal(p.first_month_price_cents % 100, 90, `o 1º mês do ${p.key} não termina em ,90`);
-    if (p.extra_slot_price_cents) {
-      assert.equal(p.extra_slot_price_cents % 100, 90, `o slot extra do ${p.key} não termina em ,90`);
+    for (const coluna of ['extra_channel_price_cents', 'extra_tiktok_price_cents', 'extra_both_price_cents']) {
+      if (p[coluna]) assert.equal(p[coluna] % 100, 90, `${coluna} do ${p.key} não termina em ,90`);
     }
   }
 });
@@ -139,7 +145,7 @@ test('nenhum plano é "ilimitado" — o limite existe para poder ser vendido', a
     assert.ok(p.max_youtube_channels !== null, `${p.key} sem limite de canais`);
     assert.ok(p.max_tiktok_accounts !== null, `${p.key} sem limite de contas`);
   }
-  const vendemExtras = planos.filter((p) => p.extra_slot_price_cents);
+  const vendemExtras = planos.filter((p) => p.extra_channel_price_cents);
   assert.equal(vendemExtras.length, 1, 'só o plano maior vende conexões extras');
   assert.equal(vendemExtras[0].key, planos[planos.length - 1].key);
 });

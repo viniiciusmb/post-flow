@@ -2,10 +2,13 @@
 //
 // O limite efetivo e a soma de duas coisas: o que o PLANO da
 // (subscription_plans.max_youtube_channels/max_tiktok_accounts) mais as
-// CONEXOES EXTRAS que o cliente comprou (client_subscriptions.extra_slots).
-// Cada slot extra vale 1 canal E 1 conta - eles andam em par de proposito: um
-// canal sem conta pra publicar nao produz nada, e uma conta sem canal nao tem
-// o que postar.
+// CONEXOES EXTRAS que o cliente comprou.
+//
+// Ate 01/09/2026 extra era um pacote fechado (1 canal E 1 conta, sempre em
+// par). Agora sao dois contadores independentes - extra_channels e
+// extra_tiktok_accounts - porque quem so queria mais um canal estava pagando
+// pelos dois. Quem leva o par continua ganhando desconto no PRECO (ver
+// lib/precoDasConexoesExtras), mas o limite de cada lado e contado separado.
 //
 // NULL no banco = sem limite (nao ha plano assim hoje, mas a coluna continua
 // aceitando). Cliente sem plano ativo (plan_id NULL) e tratado como limite 0,
@@ -32,24 +35,31 @@ function plural(quantidade, singular, plural_) {
 function limitesDe(subscription) {
   if (!subscription || !subscription.plan_id) return { canais: 0, contas: 0, extras: 0, semPlano: true };
 
-  const extras = Number(subscription.extra_slots) || 0;
+  const extraCanais = Number(subscription.extra_channels) || 0;
+  const extraContas = Number(subscription.extra_tiktok_accounts) || 0;
   const canaisDoPlano = subscription.max_youtube_channels;
   const contasDoPlano = subscription.max_tiktok_accounts;
 
   return {
     semPlano: false,
-    extras,
-    // Plano "sem limite" continua sem limite mesmo com slots comprados -
+    extraCanais,
+    extraContas,
+    // Plano "sem limite" continua sem limite mesmo com extras comprados -
     // somar a null daria NaN e o limite viraria uma comparacao sempre falsa,
     // que na pratica libera tudo por acidente em vez de por decisao.
-    canais: canaisDoPlano === null ? null : Number(canaisDoPlano) + extras,
-    contas: contasDoPlano === null ? null : Number(contasDoPlano) + extras,
+    canais: canaisDoPlano === null ? null : Number(canaisDoPlano) + extraCanais,
+    contas: contasDoPlano === null ? null : Number(contasDoPlano) + extraContas,
   };
 }
 
-// Pode comprar conexao extra? So nos planos que trazem preco de slot.
+// Pode comprar conexao extra? So nos planos que trazem preco.
+//
+// Continua sendo so o plano maior, como antes desta mudanca: quem esta no
+// Starter ou no Pro sobe de plano, que sai mais barato pra ele do que comprar
+// avulso. Liberar extras em todos os planos seria outra decisao de negocio, e
+// nao foi o que foi pedido - o pedido foi separar canal de conta.
 function podeComprarExtras(subscription) {
-  return Boolean(subscription && subscription.plan_id && subscription.extra_slot_price_cents);
+  return Boolean(subscription && subscription.plan_id && subscription.extra_channel_price_cents);
 }
 
 function comoConseguirMais(subscription) {
