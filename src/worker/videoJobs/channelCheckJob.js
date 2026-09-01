@@ -13,6 +13,23 @@ const logger = require('../../lib/logger');
 
 const QUEUE_VIDEO_PROCESSING = 'video-processing';
 
+// TETO DE VIDEOS QUE UMA CHECAGEM PODE ENFILEIRAR, POR CANAL.
+//
+// Segunda tranca, independente de qualquer raciocinio sobre marco d'agua.
+//
+// Em 01/09/2026 uma checagem enfileirou 14 videos de uma vez e gastou banda
+// paga, IA e a cota do cliente antes de alguem ver. A causa daquele dia esta
+// corrigida logo abaixo (marco d'agua perdido virava "tudo e novidade"), mas a
+// licao maior e que NENHUM caminho deveria conseguir fazer isso: um canal
+// publica ~1 video por dia e a checagem roda a cada 20 minutos, entao 3 ja e
+// muito mais do que o normal - e qualquer numero acima disso e sinal de defeito,
+// nao de canal produtivo.
+//
+// O que passar do teto NAO se perde: fica acima do marco d'agua (igual a
+// estreia e ao video de membros) e e pego na checagem seguinte, 20 minutos
+// depois. O preco de errar aqui e atraso; o preco de nao ter teto e fatura.
+const MAX_VIDEOS_POR_CHECAGEM = 3;
+
 // Com "so processar quando a fila estiver quase vazia" ligado, o canal so pega
 // video novo quando restam no maximo ESTE tanto de cortes esperando publicacao.
 //
@@ -148,11 +165,36 @@ async function run(boss) {
         newVideos = [];
       } else {
         const knownIndex = videos.findIndex((v) => v.videoId === channel.last_video_id);
-        // Marco d'agua nao aparece mais entre os ultimos 15 (canal
-        // publicou mais que isso entre um poll e outro) - processa a lista
-        // toda; createIfNotExists ja descarta qualquer um que porventura
-        // ja tenha sido visto antes, entao nao ha risco de duplicar.
-        newVideos = knownIndex === -1 ? videos : videos.slice(0, knownIndex);
+
+        if (knownIndex === -1) {
+          // PERDEMOS O LUGAR NA FILA. Isso NAO significa "tudo e novidade".
+          //
+          // Ate 01/09/2026 esta linha era `newVideos = videos`: a lista INTEIRA
+          // virava video novo. Custou dinheiro de verdade nesse dia, no canal
+          // "Manual do Mundo": o video que era o marco d'agua saiu da listagem
+          // do canal (era exclusivo de membros e o canal o tirou da aba
+          // /videos), o findIndex devolveu -1, e a checagem seguinte baixou e
+          // transcreveu 14 videos ANTIGOS de uma vez - 479 MB pelo proxy pago,
+          // US$ 1,05 de IA e 132 minutos da cota do cliente, por nada.
+          //
+          // O comentario antigo dizia que o createIfNotExists protegia contra
+          // duplicar. Protege - mas so contra video JA CADASTRADO. Num canal em
+          // que so 3 dos ultimos 15 tinham sido processados, os outros 12 eram
+          // todos "novos" e todos entraram na fila.
+          //
+          // A escolha certa quando nao se sabe onde parou e NAO PROCESSAR NADA e
+          // reancorar no video mais recente. O pior caso vira "deixamos de pegar
+          // um video", que o cliente resolve colando o link em 10 segundos. O
+          // outro lado do erro e uma fatura.
+          logger.warn(
+            `Canal "${channel.channel_name}": o video marco d'agua (${channel.last_video_id}) sumiu da ` +
+              `listagem. Reancorando no mais recente SEM processar nada - se algum video foi perdido ` +
+              `nessa troca, ele pode ser adicionado pelo link.`
+          );
+          newVideos = [];
+        } else {
+          newVideos = videos.slice(0, knownIndex);
+        }
       }
 
       // Do mais antigo pro mais novo, pra entrar na fila em ordem
@@ -185,7 +227,15 @@ async function run(boss) {
       // estaria perdido em silencio. Foi exatamente assim que um video da conta
       // risestyle sumiu em 27/08/2026.
       const seguramOMarco = new Set();
+      let enfileirados = 0;
       for (const video of [...newVideos].reverse()) {
+        // Teto batido: o resto SEGURA O MARCO e fica pra proxima checagem, em
+        // vez de entrar na fila agora. Sem segurar o marco isto viraria perda
+        // de video em vez de adiamento.
+        if (enfileirados >= MAX_VIDEOS_POR_CHECAGEM) {
+          seguramOMarco.add(video.videoId);
+          continue;
+        }
         // Ja conhecido: nao gasta consulta nenhuma com ele. Sem essa checagem,
         // um marco d'agua segurado por uma estreia (ver seguramOMarco) faria o
         // sistema reconsultar os mesmos videos a cada 20 minutos, pra sempre.
@@ -272,6 +322,13 @@ async function run(boss) {
 
         logger.info(`Novo video detectado: "${created.title}" (canal ${channel.channel_name}).`);
         await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: created.id }, { priority });
+        enfileirados += 1;
+        if (enfileirados === MAX_VIDEOS_POR_CHECAGEM) {
+          logger.warn(
+            `Canal "${channel.channel_name}": teto de ${MAX_VIDEOS_POR_CHECAGEM} videos por checagem atingido. ` +
+              `O que sobrou fica pra proxima checagem - se isso se repetir, tem algo errado na deteccao.`
+          );
+        }
       }
 
       // O marco d'agua so pode avancar ate o video mais recente que NAO ficou
@@ -316,4 +373,4 @@ async function run(boss) {
   }
 }
 
-module.exports = { run };
+module.exports = { run, MAX_VIDEOS_POR_CHECAGEM };

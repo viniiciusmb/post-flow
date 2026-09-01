@@ -138,7 +138,13 @@ test('a data de publicacao do video novo vem da consulta individual, nao da list
   // Sem isso o canal fica no caso "primeira checagem" (last_video_id nulo),
   // que so estabelece o marco d'agua e nunca enfileira nada - ver
   // channelCheckJob.run().
-  await pool.query('UPDATE youtube_channels SET last_video_id = $2 WHERE id = $1', [canal.id, 'video_marco_dagua']);
+  //
+  // O marco precisa ESTAR na listagem abaixo. Ate 01/09/2026 este teste usava
+  // um marco inventado, e funcionava porque marco nao encontrado fazia a lista
+  // inteira virar novidade - o mesmo comportamento que naquele dia baixou 14
+  // videos antigos de um canal real e gastou banda paga, IA e a cota do
+  // cliente. Ver tests/services/rajadaDeVideos.test.js.
+  await pool.query('UPDATE youtube_channels SET last_video_id = $2 WHERE id = $1', [canal.id, 'video_anterior']);
 
   const originalGetMetadata = ytDlpService.getVideoMetadata;
   ytDlpService.getVideoMetadata = async () => ({
@@ -153,6 +159,7 @@ test('a data de publicacao do video novo vem da consulta individual, nao da list
     await comListagem(
       async () => [
         { videoId: 'abc12345678', title: 'Titulo traduzido', thumbnailUrl: null, publishedAt: null, durationSeconds: 600 },
+        { videoId: 'video_anterior', title: 'Ja conhecido', thumbnailUrl: null, publishedAt: null, durationSeconds: 600 },
       ],
       () => channelCheckJob.run(bossFalso)
     );

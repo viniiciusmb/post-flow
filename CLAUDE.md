@@ -489,4 +489,16 @@ Travado por `tests/web/assinarPelaLanding.test.js`, validado por mutação (rein
 - **Lição para o resto do projeto**: quando um escopo de API é removido, o caminho que dependia dele raramente falha com erro — ele passa a devolver **vazio**. Vale procurar toda tela que ainda oferece o recurso.
 - 624 testes (eram 617). Três mutações validadas: reaproveitar a pasta sem conferir, uma pasta ruim derrubando a varredura, e a varredura voltando a olhar pasta de destino.
 
+**RAJADA DE 14 VÍDEOS QUE CUSTOU DINHEIRO (01/09/2026) — a lição mais cara desta sessão.** O canal "Manual do Mundo" baixou e transcreveu **14 vídeos antigos em 80 segundos**, sem ninguém pedir: **479 MB pelo proxy pago, US$ 1,05 de IA e 132 minutos da cota do cliente**, além de 64 cortes gerados à toa.
+
+- **A causa era uma linha que estava lá desde sempre**, no `channelCheckJob`:
+  `newVideos = knownIndex === -1 ? videos : videos.slice(0, knownIndex)`.
+  Ou seja: **"perdi meu lugar na fila" era tratado como "tudo é novidade"**. O comentário jurava que `createIfNotExists` protegia contra duplicar — e protege, mas só contra vídeo **já cadastrado**. Num canal em que 3 dos últimos 15 tinham sido processados, os outros 12 eram todos novos.
+- **O gatilho**: o vídeo que era o marco d'água era o exclusivo de membros, e o canal o **tirou da aba /videos**. O `findIndex` devolveu -1 e a bomba armou. Duas coisas raras precisaram acontecer juntas (o marco sumir da listagem E o freio de engarrafamento estar aberto naquele minuto) — que é exatamente o perfil de um defeito que dorme por meses.
+- **A correção é escolher o lado certo do erro**: marco d'água perdido agora **não processa nada** e só reancora no vídeo mais recente, com aviso no log. O pior caso vira "deixamos de pegar um vídeo", que o cliente resolve colando o link em 10 segundos. O outro lado do erro é uma fatura.
+- **Segunda tranca, independente**: `MAX_VIDEOS_POR_CHECAGEM = 3`. Nenhum caminho — nem os que ainda não existem — consegue enfileirar em rajada. Um canal publica ~1 vídeo/dia e a checagem roda a cada 20 min, então 3 já é muito acima do normal; qualquer número maior é sinal de defeito, não de canal produtivo. **O que passa do teto não se perde**: segura o marco (igual à estreia e ao vídeo de membros) e é pego na checagem seguinte.
+- **Um teste existente dependia do comportamento perigoso** (`channelCheck.test.js` usava um marco d'água inventado, que só funcionava porque -1 processava tudo). Foi corrigido para pôr o marco na listagem. **Vale como alerta geral**: quando um teste precisa de um estado impossível para passar, ele pode estar documentando um defeito em vez de um requisito.
+- **Reparação feita**: os 14 vídeos e 28 arquivos apagados, os 132 minutos devolvidos à conta (`used_normal` 150 → 18, lançamentos marcados como `liberado` na mesma transação), o canal pausado. Nenhuma cobrança de excedente havia sido gerada.
+- 629 testes (eram 624). Duas mutações validadas: reintroduzir a linha do -1 e remover o teto derrubam testes diferentes.
+
 Para o histórico completo de decisões e "porquês", ver a memória do projeto (arquivos em `~/.claude/projects/.../memory/`, carregados automaticamente) — especialmente `post-flow-architecture`, `post-flow-deployment`, `post-flow-project-status`, `post-flow-tiktok-oauth`, `post-flow-google-drive`, `feedback-run-migrations-immediately`.
