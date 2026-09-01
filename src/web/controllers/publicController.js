@@ -5,6 +5,7 @@
 // redirecionava pro /login.
 'use strict';
 
+const exibicaoDoTunel = require('../../lib/exibicaoDoTunel');
 const subscriptionPlansRepository = require('../../repositories/subscriptionPlansRepository');
 const logger = require('../../lib/logger');
 const { CONTACT, COMPANY } = require('../../config/constants');
@@ -51,7 +52,19 @@ function criarPreenchedor() {
 
 async function landing(req, res) {
   const t = res.locals.t;
-  const perguntas = t('perguntas');
+  const mostrarTunel = await exibicaoDoTunel.mostrarTunel();
+
+  // Uma das perguntas cita o programa que faz o download sair pela internet do
+  // cliente. Com o tunel escondido, ela responde a mesma coisa sem citar o
+  // programa - a pergunta continua valendo ("preciso deixar o computador
+  // ligado?"), so a metade que oferece o opcional e que sai.
+  //
+  // A troca acontece AQUI, e nao na pagina, porque este mesmo array vira o
+  // FAQPage dos dados estruturados: resposta diferente da que esta na tela e
+  // exatamente o que faz o Google desconfiar do dado estruturado.
+  const perguntas = t('perguntas').map((item) =>
+    !mostrarTunel && item.rSemTunel ? { p: item.p, r: item.rSemTunel } : { p: item.p, r: item.r }
+  );
   // Precos vem do banco (subscription_plans) em vez de escritos na pagina, pra
   // que a landing nunca fique divergindo do que o sistema realmente cobra.
   let plans = PLANOS_RESERVA;
@@ -132,6 +145,11 @@ async function landing(req, res) {
     structuredData: `<script type="application/ld+json">${JSON.stringify(dadosEstruturados)}</script>`,
     perguntas,
     plans,
+    // Esconde a linha "N minutos usando sua internet" das caixas de preco.
+    // Anunciar na landing minutos que o produto nao esta oferecendo e a pior
+    // versao do problema: vira promessa de venda. So exibicao - ver
+    // lib/exibicaoDoTunel.
+    mostrarTunel,
     contact: CONTACT,
     company: COMPANY,
   });

@@ -15,11 +15,12 @@
  * medir um elemento, escurecer o resto e posicionar uma caixa. Uma dependência
  * traria tema próprio pra brigar com o nosso, e mais peso do que o recurso.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { IconArrowRight, IconArrowLeft, IconX, IconSparkles } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { useI18n, useT } from "@/i18n"
 import { PASSOS_DO_TOUR, type PassoDoTour } from "@/content/tour"
+import { useAuth } from "@/hooks/useAuth"
 
 const CHAVE_PASSO = "postflow-tour-passo"
 const CHAVE_ATIVO = "postflow-tour-ativo"
@@ -64,13 +65,24 @@ export function iniciarTour(doZero = true) {
 export function GuidedTour({ autoIniciar = false }: { autoIniciar?: boolean }) {
   const t = useT()
   const { idioma } = useI18n()
+  const { mostrarTunel } = useAuth()
   const [ativo, setAtivo] = useState(false)
   const [indice, setIndice] = useState(0)
   const [alvo, setAlvo] = useState<Caixa | null>(null)
   const [pronto, setPronto] = useState(false)
   const caixaRef = useRef<HTMLDivElement>(null)
 
-  const passos = PASSOS_DO_TOUR
+  // O roteiro depende do que o produto está oferecendo: com a exibição do
+  // túnel desligada, o passo "Sua conexão" sai fora. Deixá-lo levaria o tour a
+  // navegar pra uma tela que hoje redireciona, e o tour terminaria sozinho no
+  // meio, numa página que não é a dele.
+  //
+  // useMemo porque a lista é recriada a cada render e ela alimenta um efeito
+  // que mede o alvo na tela — sem isso o efeito rodaria sem parar.
+  const passos = useMemo(
+    () => PASSOS_DO_TOUR.filter((p) => mostrarTunel || !p.soComTunel),
+    [mostrarTunel]
+  )
   const passo: PassoDoTour | undefined = passos[indice]
 
   // --- ligar/desligar ---
@@ -237,7 +249,11 @@ export function GuidedTour({ autoIniciar = false }: { autoIniciar?: boolean }) {
 
   if (!ativo || !passo) return null
 
-  const texto = passo.texto[idioma] ?? passo.texto.pt
+  // Dois passos falam da cota bônus e do menu "Sua conexão" no meio da frase.
+  // Escondê-los inteiros tiraria explicação que continua valendo (o que é a
+  // cota, onde ver o que sobrou), então eles têm uma redação alternativa.
+  const dicionarioDoTexto = !mostrarTunel && passo.textoSemTunel ? passo.textoSemTunel : passo.texto
+  const texto = dicionarioDoTexto[idioma] ?? dicionarioDoTexto.pt
   const titulo = passo.titulo[idioma] ?? passo.titulo.pt
   const larguraCaixa = Math.min(LARGURA_CAIXA, typeof window !== "undefined" ? window.innerWidth - 2 * MARGEM : LARGURA_CAIXA)
   const ultimo = indice === passos.length - 1

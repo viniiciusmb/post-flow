@@ -92,16 +92,23 @@ const CLIENT_GROUPS: Grupo[] = [
 export function AppSidebar({
   user,
   onLogout,
+  // Quando o admin desliga a exibição do túnel, "Sua conexão" some do menu.
+  // Só o menu: a página e as rotas continuam existindo, e quem já pareou o
+  // programa continua baixando pela internet dele (ver lib/exibicaoDoTunel).
+  mostrarTunel = false,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   user: SessionUser
   onLogout: () => void
+  mostrarTunel?: boolean
 }) {
   const t = useT()
   const grupos = user.role === "admin" ? ADMIN_GROUPS : CLIENT_GROUPS
   const groups: { label?: string; items: NavItem[] }[] = grupos.map((g) => ({
     label: g.label ? t(g.label) : undefined,
-    items: g.items.map((i) => ({ ...i, title: t(i.title) })),
+    items: g.items
+      .filter((i) => mostrarTunel || i.url !== "/client/tunnel")
+      .map((i) => ({ ...i, title: t(i.title) })),
   }))
 
   return (

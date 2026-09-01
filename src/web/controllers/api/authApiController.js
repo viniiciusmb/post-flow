@@ -1,5 +1,6 @@
 'use strict';
 
+const exibicaoDoTunel = require('../../../lib/exibicaoDoTunel');
 const authService = require('../../../services/authService');
 const usersRepository = require('../../../repositories/usersRepository');
 const subscriptionCheckoutService = require('../../../services/subscriptionCheckoutService');
@@ -39,8 +40,15 @@ function logout(req, res) {
   req.session.destroy(() => res.status(204).end());
 }
 
-function me(req, res) {
-  res.json({ user: req.session.user });
+// O painel busca isto em TODA tela (ver useAuth), entao e o lugar certo pra
+// carregar as chaves de exibicao: uma requisicao a mais em cada pagina so pra
+// perguntar "mostro o menu da conexao?" seria desperdicio, e a resposta
+// chegaria depois da tela ja ter sido desenhada - o menu apareceria e sumiria.
+async function me(req, res) {
+  res.json({
+    user: req.session.user,
+    ui: { mostrarTunel: await exibicaoDoTunel.mostrarTunel() },
+  });
 }
 
 module.exports = { login, logout, me };

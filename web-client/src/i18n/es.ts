@@ -488,6 +488,8 @@ export const es: Dicionario = {
   "plano.ultimaCobrancaFalhou": "Tu último cobro falló — actualiza la tarjeta para mantener la suscripción activa.",
   "plano.creditosNormais": "Créditos normales",
   "plano.creditosNormaisTexto": "Cuota semanal de tu plan. Es la que se usa cuando la descarga sale por nuestra conexión.",
+  "plano.creditosNormaisTextoSozinho": "Cuota semanal de tu plan, en minutos de video procesado.",
+  "plano.porMinuto": "Por minuto de video",
   "plano.creditosBonus": "Créditos bonus",
   "plano.creditosBonusTexto": "Cuota extra, desbloqueada cuando el programa de tu ordenador está conectado.",
   "plano.configurarConexao": "Configurar mi conexión",

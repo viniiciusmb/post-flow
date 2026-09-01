@@ -159,6 +159,10 @@ module.exports = {
     planosTitulo: 'Pagas por minuto de vídeo procesado',
     planosTexto:
       'Los minutos se renuevan cada semana. Cuando las descargas salen por tu propia conexión a internet, nuestro coste baja, y ese ahorro vuelve a ti en forma de minutos bonus.',
+    // Version usada cuando el tunel esta oculto: sin prometer minutos bonus
+    // que el cliente no tiene como liberar (ver lib/exibicaoDoTunel).
+    planosTextoSemTunel:
+      'Los minutos se renuevan cada semana. Pagas por minuto del video original, no por cantidad de cortes: un video de 30 minutos cuesta lo mismo si rinde 3 cortes o 12.',
     maisEscolhido: 'El más elegido',
     porMes: '/mes',
     noPrimeiroMes: 'el 1.er mes',
@@ -213,6 +217,8 @@ module.exports = {
     {
       p: '¿Necesito dejar el ordenador encendido?',
       r: 'No. Todo el procesamiento ocurre en nuestros servidores. Existe un programa opcional que hace que las descargas salgan por tu conexión y te da minutos extra en el plan, pero es opcional y tú eliges si el vídeo espera a tu ordenador o no.',
+      // Sin el tunel, la respuesta no cita el programa opcional.
+      rSemTunel: 'No. Todo el procesamiento ocurre en nuestros servidores. Lo configuras una vez y puedes apagar el ordenador — los cortes siguen saliendo y publicándose en los horarios que elegiste.',
     },
     {
       p: '¿Cuántos clips salen de cada vídeo?',

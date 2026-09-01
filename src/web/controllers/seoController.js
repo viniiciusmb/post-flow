@@ -6,6 +6,7 @@
 // que não ter sitemap. Aqui a lista de páginas vive num lugar só.
 'use strict';
 
+const exibicaoDoTunel = require('../../lib/exibicaoDoTunel');
 const subscriptionPlansRepository = require('../../repositories/subscriptionPlansRepository');
 const { CONTACT, COMPANY } = require('../../config/constants');
 const logger = require('../../lib/logger');
@@ -79,11 +80,18 @@ async function llms(req, res) {
     logger.error('llms.txt sem a tabela de planos:', err.message);
   }
 
+  const mostrarTunel = await exibicaoDoTunel.mostrarTunel();
+
   const linhasDePlano = planos.map((p) => {
     const preco = (p.price_cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const canais = p.max_youtube_channels === null ? 'canais ilimitados' : `${p.max_youtube_channels} canal(is)`;
     const contas = p.max_tiktok_accounts === null ? 'contas ilimitadas' : `${p.max_tiktok_accounts} conta(s)`;
-    return `- ${p.name}: ${preco}/mês. ${p.weekly_minutes_normal} min de vídeo por semana (+${p.weekly_minutes_bonus} min usando a internet do próprio cliente). ${canais} do YouTube, ${contas} do TikTok.`;
+    // Os minutos bonus so entram quando o tunel esta sendo oferecido. Este
+    // arquivo e lido por IA e por buscador: descrever um beneficio que o
+    // produto nao esta entregando faria uma IA responder pro cliente uma coisa
+    // que a landing nao diz.
+    const bonus = mostrarTunel ? ` (+${p.weekly_minutes_bonus} min usando a internet do próprio cliente)` : '';
+    return `- ${p.name}: ${preco}/mês. ${p.weekly_minutes_normal} min de vídeo por semana${bonus}. ${canais} do YouTube, ${contas} do TikTok.`;
   });
 
   res.type('text/plain').send(
@@ -131,7 +139,11 @@ Quem passa da cota pode comprar minutos avulsos ou cadastrar cartão para cobran
 
 **O Post Flow publica sozinho no TikTok?** Sim. O criador escolhe entre receber o corte como rascunho no aplicativo do TikTok ou publicar direto no perfil. Na publicação direta, ele define privacidade e interações antes de cada corte sair.
 
-**Precisa deixar o computador ligado?** Não. O processamento roda nos servidores do Post Flow. Existe um programa opcional que faz os downloads saírem pela internet do próprio criador, e ele dá minutos extras - mas é opcional.
+**Precisa deixar o computador ligado?** Não. O processamento roda inteiro nos servidores do Post Flow.${
+      mostrarTunel
+        ? ' Existe um programa opcional que faz os downloads saírem pela internet do próprio criador, e ele dá minutos extras - mas é opcional.'
+        : ''
+    }
 
 **Funciona com qualquer canal do YouTube?** Funciona com o canal do próprio criador. O Post Flow é para quem reaproveita o próprio conteúdo.
 

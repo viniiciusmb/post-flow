@@ -1,5 +1,6 @@
 'use strict';
 
+const exibicaoDoTunel = require('../../../lib/exibicaoDoTunel');
 const metricsRepository = require('../../../repositories/metricsRepository');
 const downloadTunnelsRepository = require('../../../repositories/downloadTunnelsRepository');
 const sharedVideoAssetsRepository = require('../../../repositories/sharedVideoAssetsRepository');
@@ -31,6 +32,9 @@ async function overview(req, res) {
 
   res.json({
     range: { key: range, since, until },
+    // Se o cliente ve ou nao qualquer coisa sobre a internet dele. Vive nesta
+    // tela porque e aqui que o fundador ja decide por onde a banda sai.
+    mostrarTunelParaClientes: await exibicaoDoTunel.mostrarTunel(),
     byEgress,
     byClient,
     economia,
@@ -67,6 +71,15 @@ async function toggleFounderTunnel(req, res) {
   res.json({ enabled: updated.enabled });
 }
 
+// Mostrar ou nao, pro CLIENTE, tudo que fala da internet dele (menu "Sua
+// conexao", cota bonus, minutos extras nas caixas de preco, passo do tour).
+// So exibicao: o tunel continua funcionando pra quem ja pareou - ver
+// lib/exibicaoDoTunel.
+async function toggleMostrarTunel(req, res) {
+  const mostrar = await exibicaoDoTunel.definirMostrarTunel(req.body.mostrar);
+  res.json({ mostrarTunelParaClientes: mostrar });
+}
+
 async function toggleProxy(req, res) {
   const enabled = Boolean(req.body.enabled);
   await settingsRepository.setValue(RESIDENTIAL_PROXY_ENABLED_KEY, enabled);
@@ -85,4 +98,4 @@ async function setProxyPurchased(req, res) {
   res.json({ purchasedBytes });
 }
 
-module.exports = { overview, toggleFounderTunnel, toggleProxy, setProxyPurchased };
+module.exports = { overview, toggleFounderTunnel, toggleProxy, setProxyPurchased, toggleMostrarTunel };

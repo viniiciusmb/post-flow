@@ -20,6 +20,15 @@ export type PassoDoTour = {
   abrir?: string
   titulo: Record<Idioma, string>
   texto: Record<Idioma, string>
+  /**
+   * Passo que só existe quando o admin está oferecendo o túnel (o programa que
+   * faz os downloads saírem pela internet do cliente). Escondido, ele é
+   * retirado do roteiro — um passo que navega pra uma tela que não existe mais
+   * deixaria o tour parado numa página em branco.
+   */
+  soComTunel?: boolean
+  /** Texto alternativo pra quando o túnel está escondido. */
+  textoSemTunel?: Record<Idioma, string>
 }
 
 export const PASSOS_DO_TOUR: PassoDoTour[] = [
@@ -182,6 +191,11 @@ export const PASSOS_DO_TOUR: PassoDoTour[] = [
       en: "Cutting video costs money: downloading, transcribing and rendering. Your plan gives a weekly quota in minutes of video, and that's what runs when the download goes through our internet. Beside it, the BONUS quota — extra, unlocked when the program on your computer is connected.",
       es: "Cortar vídeo cuesta: descargar, transcribir y renderizar. Tu plan da una cuota semanal en minutos de vídeo, y es la que corre cuando la descarga sale por nuestra internet. Al lado, la cuota BONO — extra, liberada cuando el programa de tu ordenador está conectado.",
     },
+    textoSemTunel: {
+      pt: "Cortar vídeo custa: baixar, transcrever e renderizar. Seu plano dá uma cota semanal, medida em minutos de vídeo processado — não em quantidade de cortes. Um vídeo de 30 minutos gasta 30, renda ele 3 ou 12 cortes.",
+      en: "Cutting video costs money: downloading, transcribing and rendering. Your plan gives a weekly quota measured in minutes of processed video — not in number of clips. A 30-minute video spends 30, whether it yields 3 clips or 12.",
+      es: "Cortar vídeo cuesta: descargar, transcribir y renderizar. Tu plan da una cuota semanal medida en minutos de vídeo procesado — no en cantidad de cortes. Un vídeo de 30 minutos gasta 30, rinda 3 cortes o 12.",
+    },
   },
   {
     pagina: "/client/billing",
@@ -208,6 +222,7 @@ export const PASSOS_DO_TOUR: PassoDoTour[] = [
     },
   },
   {
+    soComTunel: true,
     pagina: "/client/tunnel",
     alvo: '[data-tour="conexao-explicacao"]',
     titulo: {
@@ -228,6 +243,11 @@ export const PASSOS_DO_TOUR: PassoDoTour[] = [
       pt: "Feitos os três passos, o sistema toca sozinho: vídeo novo no canal vira cortes e sai no TikTok nos seus horários. “Plano e uso” mostra quanto crédito resta, e “Sua conexão” é o jeito de gastar menos. Se quiser rever qualquer detalhe, o menu “Tutorial” tem tudo explicado com imagens — e você pode repetir este tour por lá quando quiser.",
       en: "With those three done, the system runs itself: a new video on the channel becomes clips and goes out on TikTok at your times. “Plan and usage” shows how much credit is left, and “Your connection” is how you spend less. To revisit any detail, the “Tutorial” menu explains everything with pictures — and you can replay this tour from there any time.",
       es: "Con los tres pasos hechos, el sistema funciona solo: un vídeo nuevo en el canal se vuelve clips y sale en TikTok en tus horarios. “Plan y uso” muestra cuánto crédito queda, y “Tu conexión” es la forma de gastar menos. Para repasar cualquier detalle, el menú “Tutorial” lo explica todo con imágenes — y puedes repetir este tour desde allí cuando quieras.",
+    },
+    textoSemTunel: {
+      pt: "Feitos os três passos, o sistema toca sozinho: vídeo novo no canal vira cortes e sai no TikTok nos seus horários. “Plano e uso” mostra quanto crédito resta. Se quiser rever qualquer detalhe, o menu “Tutorial” tem tudo explicado com imagens — e você pode repetir este tour por lá quando quiser.",
+      en: "With those three done, the system runs itself: a new video on the channel becomes clips and goes out on TikTok at your times. “Plan and usage” shows how much credit is left. To revisit any detail, the “Tutorial” menu explains everything with pictures — and you can replay this tour from there any time.",
+      es: "Con los tres pasos hechos, el sistema funciona solo: un vídeo nuevo en el canal se vuelve clips y sale en TikTok en tus horarios. “Plan y uso” muestra cuánto crédito queda. Para repasar cualquier detalle, el menú “Tutorial” lo explica todo con imágenes — y puedes repetir este tour desde allí cuando quieras.",
     },
   },
 ]

@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api, ApiError } from "@/lib/api"
+import { useAuth } from "@/hooks/useAuth"
 import { EMAIL_SUPORTE } from "@/lib/contato"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import {
@@ -203,6 +204,7 @@ function SeloDeConfianca({ cnpj, empresa }: { cnpj: string; empresa: string }) {
 type Metodo = "cartao" | "pix"
 
 export function CheckoutPage() {
+  const { mostrarTunel } = useAuth()
   const [ctx, setCtx] = useState<CheckoutContexto | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -471,7 +473,7 @@ export function CheckoutPage() {
               {/* O resumo vem PRIMEIRO no celular (order-first) e à direita no
                   desktop: quanto se vai pagar não pode depender de rolar. */}
               <aside className="order-first flex flex-col gap-4 lg:order-last lg:sticky lg:top-6">
-                <ResumoDoPedido ctx={ctx} item={item} plano={plano} preco={preco} />
+                <ResumoDoPedido ctx={ctx} item={item} plano={plano} preco={preco} mostrarTunel={mostrarTunel} />
                 <SeloDeConfianca cnpj={ctx.empresa.cnpj} empresa={ctx.empresa.nome} />
               </aside>
 
@@ -656,8 +658,8 @@ export function CheckoutPage() {
                     <>
                       {" "}
                       — <strong className="text-foreground">{formatCents(ctx.overage.rateCentsNormal)} por
-                      minuto</strong> de vídeo, ou {formatCents(ctx.overage.rateCentsBonus)} usando a sua
-                      própria internet
+                      minuto</strong> de vídeo
+                      {mostrarTunel && <>, ou {formatCents(ctx.overage.rateCentsBonus)} usando a sua própria internet</>}
                     </>
                   )}
                   .
@@ -1004,11 +1006,13 @@ function ResumoDoPedido({
   item,
   plano,
   preco,
+  mostrarTunel,
 }: {
   ctx: CheckoutContexto
   item: CheckoutItem
   plano: CheckoutContexto["plans"][number] | null
   preco: { hojeCents: number; depoisCents: number | null; promo: boolean }
+  mostrarTunel: boolean
 }) {
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border bg-background p-5 shadow-[var(--shadow-raised)]">
@@ -1028,7 +1032,12 @@ function ResumoDoPedido({
           </div>
           <ul className="flex flex-col gap-2 border-t border-border pt-4">
             <Beneficio icone={<IconClock className="size-4" />} texto={`${plano.weeklyMinutesNormal} minutos de vídeo por semana`} />
-            <Beneficio icone={<IconRouter className="size-4" />} texto={`${plano.weeklyMinutesBonus} minutos por semana usando a sua internet`} />
+            {/* Minutos que só existem com o programa instalado. Com a exibição
+                do túnel desligada, anunciá-los no resumo de um pagamento seria
+                vender algo que o cliente não tem como usar. */}
+            {mostrarTunel && (
+              <Beneficio icone={<IconRouter className="size-4" />} texto={`${plano.weeklyMinutesBonus} minutos por semana usando a sua internet`} />
+            )}
             <Beneficio
               icone={<IconBrandYoutube className="size-4" />}
               texto={`${plano.maxYoutubeChannels ?? "∞"} ${plano.maxYoutubeChannels === 1 ? "canal do YouTube" : "canais do YouTube"}`}

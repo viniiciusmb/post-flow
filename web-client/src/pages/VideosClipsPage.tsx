@@ -300,6 +300,7 @@ function VideoRow({
   onDeleted,
   selected,
   onToggleSelect,
+  mostrarTunel,
 }: {
   video: SourceVideo
   avgProcessingSeconds: number
@@ -308,6 +309,8 @@ function VideoRow({
   onDeleted: () => void
   selected: boolean
   onToggleSelect: () => void
+  /** Vem da página (uma consulta só) em vez de cada linha chamar useAuth. */
+  mostrarTunel: boolean
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
@@ -501,7 +504,15 @@ function VideoRow({
         </div>
       )}
 
-      {video.status === "aguardando_conexao" && (
+      {/* Explicação de vídeo parado esperando o computador do cliente. Some
+          inteira quando o admin desliga a exibição do túnel — o pedido foi que
+          NADA sobre a internet do cliente aparecesse, e este texto é sobre
+          exatamente isso.
+          Esconder não deixa ninguém no escuro: o estado só existe pra quem
+          escolheu "baixar só pela minha internet" na tela da conexão, que é a
+          primeira coisa a sumir. O selo de status do vídeo continua aparecendo
+          na linha acima, então ele nunca fica invisível. */}
+      {video.status === "aguardando_conexao" && mostrarTunel && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2">
           <p className="text-xs text-muted-foreground">
             Você escolheu baixar só pela sua internet. Este vídeo começa assim que o seu computador
@@ -756,7 +767,7 @@ const STAGE_PRIORITY: Record<string, number> = {
 
 export function VideosClipsPage() {
   const t = useT()
-  const { user, loading: authLoading, logout } = useAuth()
+  const { user, loading: authLoading, logout, mostrarTunel } = useAuth()
   const [videos, setVideos] = useState<SourceVideo[] | null>(null)
   const [channels, setChannels] = useState<YoutubeChannel[]>([])
   const [tiktokAccounts, setTiktokAccounts] = useState<TikTokAccountSummary[]>([])
@@ -925,6 +936,7 @@ export function VideosClipsPage() {
                   onDeleted={load}
                   selected={selectedIds.has(video.id)}
                   onToggleSelect={() => toggleSelect(video.id)}
+                  mostrarTunel={mostrarTunel}
                 />
               ))
             )}
@@ -943,6 +955,7 @@ export function VideosClipsPage() {
                   onDeleted={load}
                   selected={selectedIds.has(video.id)}
                   onToggleSelect={() => toggleSelect(video.id)}
+                  mostrarTunel={mostrarTunel}
                 />
               ))
             )}

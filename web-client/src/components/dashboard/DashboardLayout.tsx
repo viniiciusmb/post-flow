@@ -3,6 +3,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { GuidedTour } from "@/components/tour/GuidedTour"
+import { useAuth } from "@/hooks/useAuth"
 import type { SessionUser } from "@/types/api"
 
 export function DashboardLayout({
@@ -19,6 +20,10 @@ export function DashboardLayout({
   /** Só a tela inicial liga isto: o tour abre sozinho na primeira visita. */
   autoIniciarTour?: boolean
 }) {
+  // O layout monta o menu, então é ele que precisa saber se "Sua conexão"
+  // aparece. Reaproveita a MESMA requisição que a página já fez (ver useAuth).
+  const { mostrarTunel } = useAuth()
+
   return (
     <SidebarProvider
       style={
@@ -28,7 +33,7 @@ export function DashboardLayout({
         } as React.CSSProperties
       }
     >
-      <AppSidebar user={user} onLogout={onLogout} variant="inset" />
+      <AppSidebar user={user} onLogout={onLogout} mostrarTunel={mostrarTunel} variant="inset" />
       <SidebarInset>
         <SiteHeader title={title} />
         <div className="flex flex-1 flex-col">

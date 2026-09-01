@@ -158,6 +158,10 @@ module.exports = {
     planosTitulo: 'You pay per minute of video processed',
     planosTexto:
       'Minutes renew every week. When downloads go out through your own internet connection, our cost drops, and that saving comes back to you as bonus minutes.',
+    // Versao usada quando o tunel esta escondido: sem prometer minutos bonus
+    // que o cliente nao tem como liberar (ver lib/exibicaoDoTunel).
+    planosTextoSemTunel:
+      'Minutes renew every week. You pay per minute of the original video, not per number of clips: a 30-minute video costs the same whether it yields 3 clips or 12.',
     maisEscolhido: 'Most popular',
     porMes: '/month',
     noPrimeiroMes: 'first month',
@@ -212,6 +216,8 @@ module.exports = {
     {
       p: 'Do I need to leave my computer on?',
       r: 'No. All the processing happens on our servers. There is an optional program that routes downloads through your internet connection and earns you extra minutes on your plan, but it is optional and you choose whether the video waits for your computer or not.',
+      // Sem o tunel, a resposta nao cita o programa opcional.
+      rSemTunel: 'No. All processing happens on our servers. You set it up once and can turn your computer off — clips keep coming out and being published at the times you chose.',
     },
     {
       p: 'How many clips come out of each video?',

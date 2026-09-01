@@ -538,6 +538,11 @@ export interface BandwidthEconomia {
 }
 
 export interface AdminBandwidthResponse {
+  /**
+   * Se o cliente enxerga qualquer coisa sobre usar a internet dele. É só
+   * exibição: o túnel continua funcionando para quem já pareou o programa.
+   */
+  mostrarTunelParaClientes: boolean
   range: RangeInfo
   byEgress: BandwidthByEgress[]
   byClient: BandwidthByClient[]

@@ -10,7 +10,7 @@ const router = express.Router();
 
 router.post('/login', asyncHandler(authApiController.login));
 router.post('/logout', requireAuthApi, authApiController.logout);
-router.get('/me', requireAuthApi, authApiController.me);
+router.get('/me', requireAuthApi, asyncHandler(authApiController.me));
 
 // Recuperacao de senha. Sem requireAuthApi: quem esqueceu a senha nao esta
 // logado. O que protege aqui e o token do link (uso unico, 30min, so o hash no

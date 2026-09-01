@@ -53,7 +53,8 @@ function RateBox({
 }: {
   titulo: string
   valor: string
-  detalhe: string
+  /** Ausente quando não há uma segunda tarifa pra contrastar com esta. */
+  detalhe?: string
   destaque?: boolean
 }) {
   return (
@@ -62,7 +63,7 @@ function RateBox({
     >
       <div className="text-xs text-muted-foreground">{titulo}</div>
       <div className="font-heading mt-0.5 text-lg font-semibold tabular-nums">{valor}</div>
-      <div className="mt-0.5 text-xs leading-snug text-muted-foreground">{detalhe}</div>
+      {detalhe && <div className="mt-0.5 text-xs leading-snug text-muted-foreground">{detalhe}</div>}
     </div>
   )
 }
@@ -194,7 +195,7 @@ function formatarData(iso: string) {
 
 export function ClientBillingPage() {
   const t = useT()
-  const { user, loading: authLoading, logout } = useAuth()
+  const { user, loading: authLoading, logout, mostrarTunel } = useAuth()
   const [data, setData] = useState<ClientBillingOverviewResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
@@ -484,28 +485,37 @@ export function ClientBillingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">{t("plano.creditosNormais")}</CardTitle>
-                <CardDescription>{t("plano.creditosNormaisTexto")}</CardDescription>
+                <CardDescription>
+                  {mostrarTunel ? t("plano.creditosNormaisTexto") : t("plano.creditosNormaisTextoSozinho")}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <BucketMeter label="Normais" bucket={data.credits.normal} />
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">{t("plano.creditosBonus")}</CardTitle>
-                <CardDescription>{t("plano.creditosBonusTexto")}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <BucketMeter label={t("plano.bonus")} bucket={data.credits.bonus} />
-                {/* Quem chega aqui e vê "0 min disponíveis" no bônus precisa
-                    saber onde ligar isso. Sem o caminho, a cota bônus vira um
-                    número sem explicação. */}
-                <Button variant="outline" size="sm" asChild className="w-fit gap-1.5">
-                  <a href="/client/tunnel">
-                    <IconRouter className="size-4" />{t("plano.configurarConexao")}</a>
-                </Button>
-              </CardContent>
-            </Card>
+            {/* Cota bônus: só existe pra quem instala o programa e faz os
+                downloads saírem pela internet dele. Com a exibição do túnel
+                desligada, mostrar esse cartão seria oferecer minutos que o
+                cliente não tem como liberar. A cota continua no banco e
+                continua sendo usada por quem já pareou. */}
+            {mostrarTunel && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">{t("plano.creditosBonus")}</CardTitle>
+                  <CardDescription>{t("plano.creditosBonusTexto")}</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  <BucketMeter label={t("plano.bonus")} bucket={data.credits.bonus} />
+                  {/* Quem chega aqui e vê "0 min disponíveis" no bônus precisa
+                      saber onde ligar isso. Sem o caminho, a cota bônus vira um
+                      número sem explicação. */}
+                  <Button variant="outline" size="sm" asChild className="w-fit gap-1.5">
+                    <a href="/client/tunnel">
+                      <IconRouter className="size-4" />{t("plano.configurarConexao")}</a>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* As duas formas de nao ficar sem credito no meio do mes ficam
@@ -519,18 +529,23 @@ export function ClientBillingPage() {
                 <CardDescription>{t("plano.maquinaDeViews")}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col gap-4">
-                <div className="grid gap-2 sm:grid-cols-2">
+                {/* Com o túnel escondido só existe UMA tarifa, então a grade
+                    de duas colunas viraria uma caixa solta e torta no meio da
+                    largura. */}
+                <div className={mostrarTunel ? "grid gap-2 sm:grid-cols-2" : "grid gap-2"}>
                   <RateBox
-                    titulo={t("plano.pelaNossaInternet")}
+                    titulo={mostrarTunel ? t("plano.pelaNossaInternet") : t("plano.porMinuto")}
                     valor={`${formatCents(data.overage.rateCentsNormal)} / min`}
-                    detalhe={t("plano.semInstalarNada")}
+                    detalhe={mostrarTunel ? t("plano.semInstalarNada") : undefined}
                   />
-                  <RateBox
-                    titulo={t("plano.pelaSuaInternet")}
-                    valor={`${formatCents(data.overage.rateCentsBonus)} / min`}
-                    detalhe={t("plano.comProgramaInstalado")}
-                    destaque
-                  />
+                  {mostrarTunel && (
+                    <RateBox
+                      titulo={t("plano.pelaSuaInternet")}
+                      valor={`${formatCents(data.overage.rateCentsBonus)} / min`}
+                      detalhe={t("plano.comProgramaInstalado")}
+                      destaque
+                    />
+                  )}
                 </div>
 
                 {/* Fechado por padrão: quem só quer saber o preço já viu os dois
@@ -558,12 +573,14 @@ export function ClientBillingPage() {
                           tarifa: formatCents(data.overage.rateCentsNormal),
                         })}
                       />
-                      <Rico
-                        className="mt-2 block text-[13px]"
-                        html={t("plano.cobrancaExemplo2", {
-                          total: formatCents(data.overage.rateCentsBonus * VIDEO_EXEMPLO_MIN),
-                        })}
-                      />
+                      {mostrarTunel && (
+                        <Rico
+                          className="mt-2 block text-[13px]"
+                          html={t("plano.cobrancaExemplo2", {
+                            total: formatCents(data.overage.rateCentsBonus * VIDEO_EXEMPLO_MIN),
+                          })}
+                        />
+                      )}
                     </div>
 
                     <p className="text-xs">{t("plano.cotaPrimeiro")}</p>
@@ -844,10 +861,12 @@ export function ClientBillingPage() {
                         <IconClock className="mt-0.5 size-4 shrink-0 text-primary" />
                         {t("plano.minutosPorSemana", { n: plan.weeklyMinutesNormal })}
                       </li>
-                      <li className="flex items-start gap-2">
-                        <IconRouter className="mt-0.5 size-4 shrink-0 text-primary" />
-                        {t("plano.minutosSuaInternet", { n: plan.weeklyMinutesBonus })}
-                      </li>
+                      {mostrarTunel && (
+                        <li className="flex items-start gap-2">
+                          <IconRouter className="mt-0.5 size-4 shrink-0 text-primary" />
+                          {t("plano.minutosSuaInternet", { n: plan.weeklyMinutesBonus })}
+                        </li>
+                      )}
                       <li className="flex items-start gap-2">
                         <IconBrandYoutube className="mt-0.5 size-4 shrink-0 text-primary" />
                         {plural(plan.maxYoutubeChannels, t("plano.canalYoutube"), t("plano.canaisYoutube"), t("plano.canaisIlimitados"))}

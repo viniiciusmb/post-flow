@@ -488,6 +488,8 @@ export const en: Dicionario = {
   "plano.ultimaCobrancaFalhou": "Your last charge failed — update the card to keep the subscription active.",
   "plano.creditosNormais": "Normal credits",
   "plano.creditosNormaisTexto": "Your plan's weekly allowance. This is what runs when the download goes out through our internet.",
+  "plano.creditosNormaisTextoSozinho": "Your plan's weekly quota, in minutes of processed video.",
+  "plano.porMinuto": "Per minute of video",
   "plano.creditosBonus": "Bonus credits",
   "plano.creditosBonusTexto": "Extra allowance, unlocked when the program on your computer is connected.",
   "plano.configurarConexao": "Set up my connection",

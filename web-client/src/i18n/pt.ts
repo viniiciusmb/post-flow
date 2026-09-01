@@ -494,6 +494,8 @@ export const pt = {
   "plano.ultimaCobrancaFalhou": "Sua última cobrança falhou — atualize o cartão pra manter a assinatura ativa.",
   "plano.creditosNormais": "Créditos normais",
   "plano.creditosNormaisTexto": "Cota semanal do seu plano. É a que roda quando o download sai pela nossa internet.",
+  "plano.creditosNormaisTextoSozinho": "Cota semanal do seu plano, em minutos de vídeo processado.",
+  "plano.porMinuto": "Por minuto de vídeo",
   "plano.creditosBonus": "Créditos bônus",
   "plano.creditosBonusTexto": "Cota extra, liberada quando o programa do seu computador está conectado.",
   "plano.configurarConexao": "Configurar minha conexão",

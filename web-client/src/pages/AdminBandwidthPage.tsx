@@ -45,6 +45,7 @@ export function AdminBandwidthPage() {
   const [data, setData] = useState<AdminBandwidthResponse | null>(null)
   const [savingFounder, setSavingFounder] = useState(false)
   const [savingProxy, setSavingProxy] = useState(false)
+  const [savingMostrar, setSavingMostrar] = useState(false)
   const [purchasedDraft, setPurchasedDraft] = useState<string | null>(null)
   const [savingPurchased, setSavingPurchased] = useState(false)
 
@@ -81,6 +82,16 @@ export function AdminBandwidthPage() {
     }
   }
 
+  async function toggleMostrarTunel(checked: boolean) {
+    setSavingMostrar(true)
+    try {
+      await api.post("/api/admin/bandwidth/mostrar-tunel", { mostrar: checked })
+      await load()
+    } finally {
+      setSavingMostrar(false)
+    }
+  }
+
   async function savePurchased() {
     if (purchasedDraft === null) return
     const purchasedGb = Number(purchasedDraft)
@@ -112,6 +123,44 @@ export function AdminBandwidthPage() {
         <Skeleton className="h-40" />
       ) : (
         <>
+          {/* Decisão sobre o que o CLIENTE vê, não sobre por onde a banda sai —
+              por isso fica acima e sozinha, e não na grade das saídas. */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Oferecer a conexão do cliente</CardTitle>
+              <CardDescription>
+                Controla se o cliente enxerga qualquer coisa sobre usar a internet dele: o menu “Sua
+                conexão”, a cota bônus em “Plano e uso”, a linha de minutos extras nas caixas de preço
+                (aqui e na página pública), o passo do tour guiado.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="mostrar-tunel"
+                  checked={data.mostrarTunelParaClientes}
+                  onCheckedChange={(c) => toggleMostrarTunel(c === true)}
+                  disabled={savingMostrar}
+                />
+                <label htmlFor="mostrar-tunel" className="cursor-pointer text-sm font-medium">
+                  Mostrar para os clientes
+                </label>
+                <TonePill tone={data.mostrarTunelParaClientes ? "success" : "neutral"} className="ml-auto">
+                  {data.mostrarTunelParaClientes ? "Visível" : "Escondido"}
+                </TonePill>
+              </div>
+              {/* O fundador precisa saber que isto NÃO desliga o túnel: quem já
+                  pareou o programa continua baixando pela internet dele. Sem
+                  esta frase, "escondido" pareceria "desativado", e ele poderia
+                  desligar achando que estava cortando o custo. */}
+              <p className="text-xs text-muted-foreground">
+                Só muda o que aparece na tela. Quem já instalou o programa continua baixando pela
+                internet dele e continua ganhando a cota bônus normalmente — para desligar de verdade,
+                use “Minha internet” e os túneis de cliente abaixo.
+              </p>
+            </CardContent>
+          </Card>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Card>
               <CardHeader>
