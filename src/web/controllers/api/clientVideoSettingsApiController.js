@@ -8,6 +8,7 @@
 
 const clientVideoSettingsRepository = require('../../../repositories/clientVideoSettingsRepository');
 const videoEditingService = require('../../../services/videoEditingService');
+const idiomaDoAudio = require('../../../lib/idiomaDoAudio');
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 
 const CAPTION_STYLES = [...Object.keys(videoEditingService.CAPTION_STYLES), 'none'];
@@ -28,6 +29,10 @@ const FULL_PARTS_MAX_COUNT = 30;
 const DESCRIPTION_MODES = ['auto', 'fixed', 'none'];
 const CROP_STYLE_MODES = ['auto', 'manual'];
 const PART_LABEL_POSITIONS = ['top_left', 'top_center', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right'];
+// Tamanho do adesivo "Parte N", em % do tamanho-base. Os mesmos limites do
+// CHECK da coluna part_label_size_percent - uma fonte so pra tela e o banco.
+const PART_LABEL_MIN_SIZE = 50;
+const PART_LABEL_MAX_SIZE = 200;
 
 function toApi(settings) {
   return {
@@ -52,6 +57,7 @@ function toApi(settings) {
     cropZoomPercent: settings.crop_zoom_percent,
     showPartLabel: settings.show_part_label,
     partLabelPosition: settings.part_label_position,
+    partLabelSizePercent: settings.part_label_size_percent ?? 100,
     titleStyle: settings.title_style,
     // Só o fato de existir um template interessa ao front (o arquivo em si é
     // servido por rota própria, nunca por caminho de disco).
@@ -60,6 +66,7 @@ function toApi(settings) {
     backgroundVideoHeightPercent: settings.background_video_height_percent ?? 100,
     backgroundVideoOffsetPercent: settings.background_video_offset_percent ?? 50,
     thumbnailPosition: settings.thumbnail_position || 'top',
+    audioLanguage: settings.audio_language || 'original',
   };
 }
 
@@ -71,6 +78,12 @@ const OPTIONS_PAYLOAD = {
   descriptionModes: DESCRIPTION_MODES,
   cropStyleModes: CROP_STYLE_MODES,
   partLabelPositions: PART_LABEL_POSITIONS,
+  partLabelMinSize: PART_LABEL_MIN_SIZE,
+  partLabelMaxSize: PART_LABEL_MAX_SIZE,
+  // Idiomas de audio oferecidos na tela. Vem do servidor (e nao escritos no
+  // front) porque e a MESMA lista que o servidor valida - duas listas sairiam
+  // de sincronia e a tela ofereceria um idioma que o PUT recusa.
+  audioLanguages: idiomaDoAudio.IDIOMAS,
   titleStyles: TITLE_STYLES,
   fullPartsModes: FULL_PARTS_MODES,
   fullPartsMinMinutes: FULL_PARTS_MIN_MINUTES,
@@ -157,6 +170,8 @@ async function update(req, res) {
     cropZoomPercent,
     showPartLabel,
     partLabelPosition,
+    partLabelSizePercent,
+    audioLanguage,
     titleStyle,
     captionFont,
     titleFont,
@@ -221,6 +236,23 @@ async function update(req, res) {
   const modoEstilo = daLista(cropStyleMode, atual.crop_style_mode, CROP_STYLE_MODES, 'erros.modoEstiloInvalido', 'auto');
   const posicaoNumeracao = daLista(
     partLabelPosition, atual.part_label_position, PART_LABEL_POSITIONS, 'erros.posicaoNumeracaoInvalida', 'top_right'
+  );
+
+  // Tamanho do adesivo "Parte N", em % do tamanho-base. O piso e o teto sao os
+  // mesmos do CHECK da coluna: um valor fora deles seria recusado pelo banco
+  // com erro de restricao, e a tela mostraria "algo deu errado" em vez de
+  // dizer o que esta fora.
+  const tamanhoNumeracao = inteiro(
+    partLabelSizePercent, atual.part_label_size_percent, 50, 200, 'erros.tamanhoNumeracaoInvalido', 100
+  );
+
+  // Idioma da trilha de audio. Pedir um idioma que o video nao tem NAO e erro:
+  // o download cai no original de proposito (ver lib/idiomaDoAudio). O que e
+  // recusado aqui e um codigo que nao esta na lista - nao ha como saber se ele
+  // e um idioma de verdade, e o seletor do yt-dlp aceitaria qualquer coisa
+  // calado, sempre caindo no original sem ninguem entender por que.
+  const idioma = daLista(
+    audioLanguage, atual.audio_language, idiomaDoAudio.CODIGOS, 'erros.idiomaAudioInvalido', 'original'
   );
 
   const maxClipsNum = inteiro(maxClips, atual.max_clips, 1, 30, 'erros.numeroCortesInvalido', 4);
@@ -364,6 +396,8 @@ async function update(req, res) {
           ? atual.show_part_label
           : Boolean(showPartLabel),
     partLabelPosition: posicaoNumeracao,
+    partLabelSizePercent: tamanhoNumeracao,
+    audioLanguage: idioma,
     titleStyle: estiloTitulo,
   }, alvo.channelId);
   res.json(toApiWithOptions(saved));

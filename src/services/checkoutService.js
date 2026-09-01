@@ -34,6 +34,7 @@ const usersRepository = require('../repositories/usersRepository');
 const creditsUnlockService = require('./creditsUnlockService');
 const affiliateService = require('./affiliateService');
 const cpfCnpj = require('../lib/cpfCnpj');
+const { aplicaPromocao } = require('../lib/promocaoDePrimeiroMes');
 const logger = require('../lib/logger');
 
 const { AsaasError } = asaasService;
@@ -57,10 +58,12 @@ const DIAS_ATE_A_RENOVACAO = 30;
 // ---------------------------------------------------------------------------
 
 // Os dois degraus do preço. `price_cents` é o valor cheio da mensalidade;
-// `first_month_price_cents` é o promocional, e ele só vale uma vez por cliente
-// — sem isso, cancelar e reassinar viraria desconto permanente.
+// `first_month_price_cents` é o promocional de ESTREIA — quem decide se ele
+// vale é promocaoDePrimeiroMes, a fonte única dessa regra (a tela de Plano e
+// uso e a de checkout consultam a MESMA função; mostrar um preço e cobrar
+// outro é o pior defeito possível numa tela de pagamento).
 function precoDaAssinatura(plan, subscription) {
-  const temPromo = Boolean(plan.first_month_price_cents) && !subscription.first_month_used_at;
+  const temPromo = aplicaPromocao(plan, subscription);
   return {
     promo: temPromo,
     primeiraCobrancaCents: temPromo ? plan.first_month_price_cents : plan.price_cents,

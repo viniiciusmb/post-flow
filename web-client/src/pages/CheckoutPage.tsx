@@ -279,7 +279,12 @@ export function CheckoutPage() {
   const preco = useMemo(() => {
     if (!ctx) return null
     if (item.tipo === "plano" && plano) {
-      const promo = Boolean(plano.firstMonthPriceCents) && ctx.subscription.promoDisponivel
+      // Mesma regra do servidor: preço promocional que existe E é menor que o
+      // cheio, e cliente com direito a ele (nunca teve plano nenhum).
+      const promo =
+        Boolean(plano.firstMonthPriceCents) &&
+        plano.firstMonthPriceCents! < plano.priceCents &&
+        ctx.subscription.promoDisponivel
       return {
         hojeCents: promo ? plano.firstMonthPriceCents! : plano.priceCents,
         depoisCents: plano.priceCents,

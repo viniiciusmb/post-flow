@@ -28,6 +28,7 @@ const os = require('os');
 const config = require('../config');
 const { PausedError } = require('../lib/errors');
 const { podeBaixarAgora } = require('../lib/disponibilidadeDoVideo');
+const idiomaDoAudio = require('../lib/idiomaDoAudio');
 const downloadTunnelsRepository = require('../repositories/downloadTunnelsRepository');
 const settingsRepository = require('../repositories/settingsRepository');
 
@@ -259,7 +260,9 @@ function sleep(ms) {
 }
 
 async function waitBeforeDownload(checkCancelled) {
-  const totalMs = 10_000 + Math.floor(Math.random() * 30_000);
+  const min = Math.max(0, config.youtube.downloadWaitMinMs);
+  const max = Math.max(min, config.youtube.downloadWaitMaxMs);
+  const totalMs = min + Math.floor(Math.random() * (max - min));
   const stepMs = 2000;
   let waited = 0;
   while (waited < totalMs) {
@@ -389,24 +392,51 @@ async function getVideoMetadata(url) {
   };
 }
 
-// Baixa video+audio pro disco (mp4, ate 480p) e devolve o caminho do arquivo.
+// Altura maxima do download.
 //
 // 480p e uma decisao de CUSTO, tomada pelo fundador em 23/08/2026: o corte
 // final e um recorte vertical bem mais estreito que a largura do original,
 // e a banda e paga por GB quando sai pelo proxy residencial. Era 720p antes.
-// Trocar de volta e mudar os dois numeros da linha abaixo - nada mais no
-// pipeline depende dessa resolucao.
-async function downloadVideo(videoId, outputDir, { checkCancelled, clientUserId } = {}) {
+// Trocar de volta e mudar so este numero - nada mais no pipeline depende dessa
+// resolucao.
+const ALTURA_MAXIMA = 480;
+
+// Marcador que o yt-dlp imprime junto com o download, dizendo qual trilha de
+// audio ele acabou escolhendo.
+//
+// Existe porque o PEDIDO e o RESULTADO podem divergir: pedir portugues num
+// video que so tem ingles cai no ingles (de proposito - ver idiomaDoAudio), e
+// quem chama precisa saber disso. Sem essa resposta, o arquivo em ingles seria
+// guardado como se fosse a versao em portugues, e o proximo cliente que
+// pedisse portugues receberia ingles em silencio.
+const MARCA_DO_IDIOMA = 'POSTFLOW_IDIOMA_AUDIO=';
+
+// Baixa video+audio pro disco (mp4) e devolve o caminho do arquivo.
+//
+// `audioLanguage` escolhe a trilha dublada (ver src/lib/idiomaDoAudio.js).
+// Ausente ou 'original' = a trilha padrao do YouTube, que e o comportamento de
+// sempre.
+async function downloadVideo(videoId, outputDir, { checkCancelled, clientUserId, audioLanguage } = {}) {
   fs.mkdirSync(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, '%(id)s.%(ext)s');
 
   await waitBeforeDownload(checkCancelled);
 
-  const { usedCandidate } = await run(
+  const { stdout, usedCandidate } = await run(
     [
-      '-f', 'bestvideo[height<=480]+bestaudio/best[height<=480]',
+      '-f', idiomaDoAudio.seletorDeFormato(audioLanguage, ALTURA_MAXIMA),
       '--merge-output-format', 'mp4',
       '--no-warnings',
+      // requested_formats.1 e a trilha de AUDIO do par video+audio escolhido.
+      //
+      // --no-simulate NAO E OPCIONAL AQUI. No yt-dlp, `--print` implica
+      // `--simulate`: sozinho, ele transforma TODO download numa simulacao -
+      // imprime o idioma certinho, sai com codigo 0, e nao grava arquivo
+      // nenhum. O pipeline inteiro passaria a morrer em "Download concluido
+      // mas o arquivo esperado nao foi encontrado em disco", para todos os
+      // videos, sem nenhuma pista do motivo. Confirmado na VPS antes do deploy.
+      '--print', `${MARCA_DO_IDIOMA}%(requested_formats.1.language)s`,
+      '--no-simulate',
       '-o', outputTemplate,
       `https://www.youtube.com/watch?v=${videoId}`,
     ],
@@ -417,7 +447,23 @@ async function downloadVideo(videoId, outputDir, { checkCancelled, clientUserId 
   if (!fs.existsSync(filePath)) {
     throw new Error('Download concluído mas o arquivo esperado não foi encontrado em disco.');
   }
-  return { filePath, egressType: usedCandidate.type, tunnelId: usedCandidate.tunnelId };
+  return {
+    filePath,
+    egressType: usedCandidate.type,
+    tunnelId: usedCandidate.tunnelId,
+    audioLanguage: lerIdiomaDaSaida(stdout),
+  };
 }
 
-module.exports = { listChannelVideos, downloadVideo, extractVideoId, getVideoMetadata };
+// Pesca o marcador no meio da saida do yt-dlp (que traz linhas de progresso e
+// de merge junto). Saida sem o marcador cai em 'original' - e o que ela era
+// antes desta mudanca, e o que todo video de uma trilha so e de qualquer jeito.
+function lerIdiomaDaSaida(stdout) {
+  const linha = String(stdout || '')
+    .split('\n')
+    .find((l) => l.includes(MARCA_DO_IDIOMA));
+  if (!linha) return idiomaDoAudio.ORIGINAL;
+  return idiomaDoAudio.normalizar(linha.slice(linha.indexOf(MARCA_DO_IDIOMA) + MARCA_DO_IDIOMA.length));
+}
+
+module.exports = { listChannelVideos, downloadVideo, extractVideoId, getVideoMetadata, lerIdiomaDaSaida, ALTURA_MAXIMA };

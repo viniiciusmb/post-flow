@@ -358,6 +358,8 @@ module.exports = {
     documentoInvalido: "CPF ou CNPJ inválido. Confira os números e tente de novo.",
     nomeInvalido: "Informe o nome completo.",
     posicaoNumeracaoInvalida: "Posicao da numeracao de parte inválida.",
+    tamanhoNumeracaoInvalido: "Tamanho da numeração inválido (50% a 200%).",
+    idiomaAudioInvalido: "Idioma do áudio inválido.",
     posicaoVideoInvalida: "Posição do vídeo no template inválida (0 a 100).",
     postagemNaoNaFila: "Postagem não encontrada ou já saiu da fila de espera.",
     postagemSemErro: "Postagem não encontrada ou não está com erro.",

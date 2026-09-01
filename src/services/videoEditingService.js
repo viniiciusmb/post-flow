@@ -104,6 +104,17 @@ const CAMINHO_PAPEL_RASGADO = path.join(__dirname, '..', '..', 'assets', 'imagen
 // que e falso. Faixa de largura fixa e o que o visual de referencia usa.
 const LARGURA_DO_PAPEL = 0.86;
 
+// Tamanho real do arquivo de papel (assets/imagens/papel-rasgado.png). Escrito
+// aqui porque o filtro passou a declarar a altura explicitamente pra poder
+// crescer com o titulo - e sem a proporcao original, o papel de UMA linha
+// sairia esticado ou achatado em relacao ao que sempre foi.
+const LARGURA_DO_PAPEL_ORIGINAL = 1080;
+const ALTURA_DO_PAPEL_ORIGINAL = 300;
+
+// Respiro entre a ultima letra e a borda rasgada, quando o papel precisa
+// crescer pra caber o titulo.
+const RESPIRO_DO_PAPEL = 40;
+
 // #RRGGBB -> &HAABBGGRR. O ASS inverte a ordem dos canais e usa 00 como
 // OPACO no primeiro par - errar isso da uma cor plausivel mas trocada (azul
 // virando vermelho), que passa despercebido ate alguem reparar.
@@ -186,6 +197,118 @@ function linhaDeEstilo({ nome, preset, fonte, alinhamento, margemV, corEscolhida
     margemV,
     1,
   ].join(',');
+}
+
+// Tamanho do adesivo "Parte N" quando o cliente deixa em 100%.
+//
+// Era 56 fixo no codigo - menos da metade da legenda (96-112) num video que e
+// assistido no celular. O fundador relatou em 01/09/2026 que ele "quase nao
+// aparece". 96 poe a numeracao no mesmo patamar de leitura da legenda, e o
+// cliente ajusta de 50% a 200% a partir dai (part_label_size_percent).
+const TAMANHO_BASE_DA_NUMERACAO = 96;
+
+// O respiro da caixa atras da numeracao acompanha o tamanho da letra. Fixo em
+// 10 (como era), uma numeracao de 200% ficaria espremida numa caixa de 56 -
+// o tipo de defeito que so aparece no tamanho que ninguem testou.
+const RESPIRO_DA_CAIXA_DA_NUMERACAO = 10 / 56;
+
+function tamanhoDaNumeracao(percentual) {
+  const p = Number.isFinite(Number(percentual)) ? Number(percentual) : 100;
+  const limitado = Math.min(Math.max(p, 50), 200);
+  return Math.round((TAMANHO_BASE_DA_NUMERACAO * limitado) / 100);
+}
+
+// ---------------------------------------------------------------------------
+// Titulo que quebra linha
+// ---------------------------------------------------------------------------
+
+// Quanto uma letra ocupa, em media, em relacao ao corpo da fonte.
+//
+// Serve so pra DECIDIR ONDE QUEBRAR a linha - nao ha como medir texto de
+// verdade aqui (quem tem as metricas e o libass, dentro do ffmpeg). Os valores
+// sao propositalmente GENEROSOS: superestimar a largura quebra a linha antes
+// do necessario (o titulo fica com uma linha a mais, e continua centralizado),
+// enquanto subestimar deixaria o texto passar da borda do quadro. Errar pro
+// lado da quebra e barato; errar pro outro estraga o corte.
+const LARGURA_MEDIA_DA_LETRA = {
+  Anton: 0.5,
+  'Bebas Neue': 0.45,
+  Poppins: 0.62,
+  'Liberation Sans': 0.58,
+  'DejaVu Sans': 0.6,
+};
+const LARGURA_MEDIA_PADRAO = 0.6;
+
+// Distancia entre as bases de duas linhas, em relacao ao corpo da fonte. E o
+// entrelinha que o libass usa por padrao.
+const ENTRELINHA = 1.2;
+
+// Margem lateral do titulo, igual dos dois lados (e o que a linha de estilo
+// declara em MarginL/MarginR).
+const MARGEM_LATERAL = 80;
+
+// Teto de linhas. Um titulo gigante quebrado em 6 linhas cobriria o video
+// inteiro; cortar com reticencias e feio, mas e melhor que tapar o corte.
+const MAX_LINHAS_DO_TITULO = 3;
+
+// Quebra o titulo em linhas ANTES de entregar ao libass, em vez de deixar ele
+// quebrar sozinho.
+//
+// O motivo nao e estetico: e que o numero de linhas precisa ser CONHECIDO aqui
+// pra centralizar o texto e dimensionar o fundo (papel rasgado) em volta dele.
+// Deixando o libass quebrar, o texto ia parar num lugar que este codigo nao
+// sabe calcular - foi exatamente o defeito relatado em 01/09/2026, com a
+// segunda linha do titulo caindo pra fora do papel.
+//
+// A quebra e por PALAVRA (nunca no meio de uma) e o libass continua com a
+// quebra automatica ligada como rede de seguranca: se a estimativa errar pra
+// menos, ele ainda evita o texto sair do quadro.
+function quebrarTitulo(texto, fonte, tamanho, larguraUtil = SAIDA.w - 2 * MARGEM_LATERAL) {
+  const palavras = String(texto || '').trim().split(/\s+/).filter(Boolean);
+  if (!palavras.length) return [];
+
+  const larguraDaLetra = (LARGURA_MEDIA_DA_LETRA[fonte] ?? LARGURA_MEDIA_PADRAO) * tamanho;
+  const maxLetras = Math.max(1, Math.floor(larguraUtil / larguraDaLetra));
+
+  const linhas = [];
+  let atual = '';
+  for (const palavra of palavras) {
+    const candidata = atual ? `${atual} ${palavra}` : palavra;
+    if (candidata.length <= maxLetras || !atual) {
+      atual = candidata;
+    } else {
+      linhas.push(atual);
+      atual = palavra;
+    }
+  }
+  if (atual) linhas.push(atual);
+
+  // Passou do teto: junta o resto na ultima linha permitida. O libass ainda
+  // quebra o excedente sozinho - o titulo fica maior que o previsto, mas nada
+  // sai do quadro.
+  if (linhas.length > MAX_LINHAS_DO_TITULO) {
+    const cabeca = linhas.slice(0, MAX_LINHAS_DO_TITULO - 1);
+    cabeca.push(linhas.slice(MAX_LINHAS_DO_TITULO - 1).join(' '));
+    return cabeca;
+  }
+  return linhas;
+}
+
+// Onde fica o CENTRO do bloco de titulo, em pixels a partir do topo.
+//
+// A altura escolhida pelo cliente (title_height_percent) sempre marcou o TOPO
+// da primeira linha. Com uma linha so isso da no mesmo; com duas, o texto
+// crescia so pra BAIXO e escapava do fundo, que fica parado. Ancorar pelo
+// CENTRO da primeira linha faz o titulo de uma linha sair exatamente onde
+// sempre saiu (ninguem ve mudanca) e o de duas ou tres crescer pros dois
+// lados, centrado no mesmo ponto que o fundo.
+function centroDoTitulo(margemV, tamanhoDaFonte) {
+  return Math.round(margemV + (tamanhoDaFonte * ENTRELINHA) / 2);
+}
+
+// Altura total do bloco de titulo, pra quem precisa desenhar um fundo em volta.
+function alturaDoTitulo(linhas, tamanhoDaFonte) {
+  return Math.round(Math.max(1, linhas) * tamanhoDaFonte * ENTRELINHA);
 }
 
 // Mapeia a posicao escolhida (numeracao "Parte N") pro campo Alignment do
@@ -415,9 +538,19 @@ function buildAssSubtitles(
   partLabelPosition,
   clipDuration,
   // Escolhas do cliente que atravessam qualquer estilo: fonte e altura.
-  { captionFont, titleFont, captionHeightPercent, titleHeightPercent, captionBoxColor, titleBoxColor } = {}
+  {
+    captionFont,
+    titleFont,
+    captionHeightPercent,
+    titleHeightPercent,
+    captionBoxColor,
+    titleBoxColor,
+    partLabelSizePercent,
+  } = {}
 ) {
   const partAlignment = PART_LABEL_ALIGNMENT[partLabelPosition] || PART_LABEL_ALIGNMENT.top_right;
+  const tamanhoNumeracao = tamanhoDaNumeracao(partLabelSizePercent);
+  const respiroNumeracao = Math.max(4, Math.round(tamanhoNumeracao * RESPIRO_DA_CAIXA_DA_NUMERACAO));
 
   const presetLegenda = CAPTION_STYLES[captionStyle] || CAPTION_STYLES.classic;
   const presetTitulo = TITLE_STYLES[titleStyle] || TITLE_STYLES.classic;
@@ -433,12 +566,17 @@ function buildAssSubtitles(
     margemV: margemVertical(captionHeightPercent, 14),
     corEscolhida: captionBoxColor,
   });
+  // O titulo e posicionado por \pos na propria fala (ver abaixo), entao o
+  // alinhamento e a margem da linha de estilo servem so de padrao. Ficam
+  // coerentes com o que o \pos faz pra nao haver duas verdades no arquivo.
+  const fonteDoTitulo = fonteValida(titleFont);
+  const margemDoTitulo = margemVertical(titleHeightPercent, 8);
   const estiloTitulo = linhaDeEstilo({
     nome: 'Title',
     preset: presetTitulo,
-    fonte: fonteValida(titleFont),
+    fonte: fonteDoTitulo,
     alinhamento: 8,
-    margemV: margemVertical(titleHeightPercent, 8),
+    margemV: margemDoTitulo,
     corEscolhida: titleBoxColor,
   });
   const header = `[Script Info]
@@ -451,7 +589,7 @@ ScaledBorderAndShadow: yes
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 ${estiloLegenda}
 ${estiloTitulo}
-Style: Part,${fonteValida(captionFont)},56,&H00FFFFFF,&H000000FF,&H00000000,&H50000000,1,0,0,0,100,100,0,0,3,10,0,${partAlignment},50,50,50,1
+Style: Part,${fonteValida(captionFont)},${tamanhoNumeracao},&H00FFFFFF,&H000000FF,&H00000000,&H50000000,1,0,0,0,100,100,0,0,3,${respiroNumeracao},0,${partAlignment},50,50,50,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -466,7 +604,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
   if (title && titleSeconds > 0) {
     const titleText = title.trim().replace(/[{}]/g, '');
-    lines.unshift(`Dialogue: 1,0:00:00.00,${formatAssTimestamp(titleSeconds)},Title,,0,0,0,,${titleText}`);
+    // \an5 + \pos: o bloco inteiro fica centrado NO PONTO, e nao pendurado
+    // pelo topo. E o que mantem um titulo de duas linhas dentro do fundo
+    // escolhido pra ele - antes a segunda linha crescia pra baixo e escapava.
+    const linhasDoTitulo = quebrarTitulo(titleText, fonteDoTitulo, presetTitulo.tamanho);
+    const centro = centroDoTitulo(margemDoTitulo, presetTitulo.tamanho);
+    const texto = linhasDoTitulo.join('\\N');
+    lines.unshift(
+      `Dialogue: 1,0:00:00.00,${formatAssTimestamp(titleSeconds)},Title,,0,0,0,,` +
+        `{\\an5\\pos(${Math.round(SAIDA.w / 2)},${centro})}${texto}`
+    );
   }
 
   if (partLabel) {
@@ -623,7 +770,21 @@ function buildBackgroundFilter({ w, h, subtitlesFilter, style, heightPercent, of
 // ANTES da legenda (pro texto ficar por cima do papel). Como overlay exige
 // duas entradas, qualquer caminho que use `-vf` simples vira filter_complex
 // aqui - por isso a funcao recebe o resultado do buildFilter e o converte.
-function aplicarPapelRasgado({ resultado, papelIndice, w, h, alturaPercent, corHex, segundos, subtitlesFilter }) {
+function aplicarPapelRasgado({
+  resultado,
+  papelIndice,
+  w,
+  h,
+  alturaPercent,
+  corHex,
+  segundos,
+  subtitlesFilter,
+  // Quantas linhas o titulo tem e de que tamanho e a letra. O papel precisa
+  // saber: um titulo de duas linhas dentro de um papel de uma so foi
+  // exatamente o defeito relatado em 01/09/2026.
+  linhasDoTitulo = 1,
+  tamanhoDaFonte = 76,
+}) {
   const partes = [];
 
   // Normaliza: os dois formatos que o buildFilter devolve viram uma cadeia
@@ -640,20 +801,38 @@ function aplicarPapelRasgado({ resultado, papelIndice, w, h, alturaPercent, corH
   const { r, g, b } = hexParaFatores(corHex);
   const larguraPapel = Math.round(w * LARGURA_DO_PAPEL);
 
+  // Altura natural do papel: a imagem esticada proporcionalmente pra largura
+  // acima. So e usada quando o titulo cabe nela.
+  const alturaNatural = Math.round((larguraPapel * ALTURA_DO_PAPEL_ORIGINAL) / LARGURA_DO_PAPEL_ORIGINAL);
+
+  // Quando o titulo quebra em mais linhas do que o papel comporta, o papel
+  // CRESCE em vez de deixar sobrar texto pra fora dele. O respiro garante que
+  // as letras nunca encostem na borda rasgada.
+  const alturaDoTexto = alturaDoTitulo(linhasDoTitulo, tamanhoDaFonte);
+  const alturaPapel = Math.max(alturaNatural, alturaDoTexto + 2 * RESPIRO_DO_PAPEL);
+
   // A imagem e BRANCA: multiplicar cada canal pelo fator da cor da exatamente
   // a cor pedida, e a transparencia das bordas passa intacta (por isso os
   // fatores de alfa ficam em 1).
+  //
+  // Altura EXPLICITA (e nao -1): e ela que faz o papel acompanhar um titulo de
+  // duas ou tres linhas. Esticar o rasgado verticalmente nao denuncia nada -
+  // um rasgo nao tem proporcao "certa" - enquanto texto pra fora do papel
+  // denuncia na hora.
   partes.push(
-    `[${papelIndice}:v]scale=${larguraPapel}:-1,` +
+    `[${papelIndice}:v]scale=${larguraPapel}:${alturaPapel},` +
       `colorchannelmixer=rr=${r.toFixed(4)}:rg=0:rb=0:gr=0:gg=${g.toFixed(4)}:gb=0:br=0:bg=0:bb=${b.toFixed(4)}[papel]`
   );
 
-  // O papel fica centrado na altura escolhida pro titulo. O deslocamento de
-  // meia altura do papel centraliza a FAIXA nessa linha, em vez de comecar
-  // nela - senao o texto (que e centrado) sairia acima do papel.
-  const topo = Math.round((Math.min(Math.max(Number(alturaPercent) || 8, 0), 80) / 100) * h);
+  // O papel fica centrado NO MESMO PONTO que o texto (ver centroDoTitulo).
+  // Antes eram duas contas diferentes que so coincidiam por acaso quando o
+  // titulo tinha uma linha - o texto pendurado pelo topo, o papel centrado
+  // numa aproximacao. Com as duas partindo do mesmo centro, eles ficam
+  // concentricos com qualquer numero de linhas.
+  const margemV = margemVertical(alturaPercent, 8);
+  const centro = centroDoTitulo(margemV, tamanhoDaFonte);
   partes.push(
-    `${rotuloBase}[papel]overlay=(W-w)/2:${topo}-h/2+${Math.round(h * 0.02)}:` +
+    `${rotuloBase}[papel]overlay=(W-w)/2:${centro}-h/2:` +
       // So enquanto o titulo esta na tela - o papel some junto com ele.
       `enable='between(t,0,${Number(segundos).toFixed(2)})'` +
       `${subtitlesFilter ? `,${subtitlesFilter}` : ''}[comPapel]`
@@ -867,6 +1046,7 @@ async function renderClip({
           titleHeightPercent: settings.title_height_percent,
           captionBoxColor: settings.caption_box_color,
           titleBoxColor: settings.title_box_color,
+          partLabelSizePercent: settings.part_label_size_percent,
         }
       )
     );
@@ -899,6 +1079,15 @@ async function renderClip({
       corHex: settings.title_box_color,
       segundos: titleSeconds,
       subtitlesFilter,
+      // O papel e o texto precisam partir da MESMA contagem de linhas, senao
+      // voltam a discordar - por isso a quebra e feita pela mesma funcao que o
+      // .ass usa, com a mesma fonte e o mesmo corpo de letra.
+      linhasDoTitulo: quebrarTitulo(
+        String(title || '').trim().replace(/[{}]/g, ''),
+        fonteValida(settings.title_font),
+        (TITLE_STYLES[titleStyle] || TITLE_STYLES.classic).tamanho
+      ).length,
+      tamanhoDaFonte: (TITLE_STYLES[titleStyle] || TITLE_STYLES.classic).tamanho,
     });
   }
 
@@ -996,5 +1185,8 @@ module.exports = {
   hexParaFatores,
   CAMINHO_PAPEL_RASGADO,
   buildAssSubtitles,
+  quebrarTitulo,
+  centroDoTitulo,
+  tamanhoDaNumeracao,
   margemVertical,
 };

@@ -37,12 +37,14 @@ const DEFAULTS = {
   crop_zoom_percent: 100,
   show_part_label: false,
   part_label_position: 'top_right',
+  part_label_size_percent: 100,
   title_style: 'classic',
   background_style: 'blur',
   background_template_path: null,
   background_video_height_percent: 100,
   background_video_offset_percent: 50,
   thumbnail_position: 'top',
+  audio_language: 'original',
 };
 
 const COLUNAS = [
@@ -67,12 +69,14 @@ const COLUNAS = [
   'crop_zoom_percent',
   'show_part_label',
   'part_label_position',
+  'part_label_size_percent',
   'title_style',
   'background_style',
   'background_template_path',
   'background_video_height_percent',
   'background_video_offset_percent',
   'thumbnail_position',
+  'audio_language',
 ];
 
 function doCamelParaColuna(entrada) {
@@ -102,12 +106,14 @@ function doCamelParaColuna(entrada) {
     crop_zoom_percent: entrada.cropZoomPercent,
     show_part_label: entrada.showPartLabel,
     part_label_position: entrada.partLabelPosition,
+    part_label_size_percent: entrada.partLabelSizePercent ?? DEFAULTS.part_label_size_percent,
     title_style: entrada.titleStyle,
     background_style: entrada.backgroundStyle || 'blur',
     background_template_path: entrada.backgroundTemplatePath ?? null,
     background_video_height_percent: entrada.backgroundVideoHeightPercent ?? 100,
     background_video_offset_percent: entrada.backgroundVideoOffsetPercent ?? 50,
     thumbnail_position: entrada.thumbnailPosition || 'top',
+    audio_language: entrada.audioLanguage || DEFAULTS.audio_language,
   };
 }
 

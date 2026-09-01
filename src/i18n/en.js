@@ -349,6 +349,8 @@ module.exports = {
     documentoInvalido: "Invalid CPF or CNPJ. Check the numbers and try again.",
     nomeInvalido: "Enter the full name.",
     posicaoNumeracaoInvalida: "Invalid part numbering position.",
+    tamanhoNumeracaoInvalido: "Invalid part numbering size (50% to 200%).",
+    idiomaAudioInvalido: "Invalid audio language.",
     posicaoVideoInvalida: "Invalid video position in the template (0 to 100).",
     postagemNaoNaFila: "Post not found or already out of the waiting queue.",
     postagemSemErro: "Post not found or not in error.",

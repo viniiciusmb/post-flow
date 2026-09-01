@@ -271,14 +271,54 @@ async function updateStatus(id, status, { errorMessage = null, billingBlockReaso
   return rows[0] || null;
 }
 
-async function saveDownload(id, localVideoPath, { bytes = null, egressType = null, tunnelId = null } = {}) {
+async function saveDownload(
+  id,
+  localVideoPath,
+  {
+    bytes = null,
+    egressType = null,
+    tunnelId = null,
+    // O idioma que o cliente PEDIU e o que veio de verdade. Os dois, porque
+    // divergem sempre que o video nao tem a trilha pedida - ver
+    // idiomaRealParaPedido logo abaixo.
+    requestedAudioLanguage = null,
+    audioLanguage = null,
+  } = {}
+) {
   await pool.query(
     `UPDATE source_videos
      SET local_video_path = $2, download_bytes = $3, download_egress_type = $4, download_tunnel_id = $5,
+         requested_audio_language = coalesce($6, requested_audio_language),
+         audio_language = coalesce($7, audio_language),
          download_completed_at = now(), updated_at = now()
      WHERE id = $1`,
-    [id, localVideoPath, bytes, egressType, tunnelId]
+    [id, localVideoPath, bytes, egressType, tunnelId, requestedAudioLanguage, audioLanguage]
   );
+}
+
+// "Da ultima vez que alguem pediu ESTE idioma NESTE video, qual trilha veio?"
+//
+// E o que permite o cache de download acertar quando pedido e resultado
+// divergem. Sem isso, marcar "portugues" num canal ja em portugues faria todo
+// video ser baixado de novo pra cada cliente: o cache e indexado pelo idioma
+// REAL ('original', porque video de uma trilha so nao declara idioma) e a
+// consulta chegaria com 'pt', errando sempre.
+//
+// Devolve null quando nunca ninguem pediu - e ai o download acontece e a
+// resposta fica gravada pra proxima vez.
+async function idiomaRealParaPedido(youtubeVideoId, requestedAudioLanguage) {
+  if (!youtubeVideoId) return null;
+  const { rows } = await pool.query(
+    `SELECT audio_language
+       FROM source_videos
+      WHERE youtube_video_id = $1
+        AND requested_audio_language = $2
+        AND audio_language IS NOT NULL
+      ORDER BY id DESC
+      LIMIT 1`,
+    [youtubeVideoId, requestedAudioLanguage]
+  );
+  return rows[0] ? rows[0].audio_language : null;
 }
 
 // reused = a transcricao veio pronta de shared_video_assets (outro cliente
@@ -324,12 +364,19 @@ const STATUS_QUE_AINDA_PRECISA_DO_ARQUIVO = [
   'error',
 ];
 
-async function countPendingByYoutubeVideoId(youtubeVideoId) {
+// Quantos videos ainda precisam do arquivo compartilhado DAQUELE idioma.
+//
+// O idioma importa: um video em ingles pendente nao segura o arquivo em
+// portugues em disco (sao dois arquivos), e contar os dois juntos faria a
+// limpeza guardar cada um deles pelo tempo do outro.
+async function countPendingByYoutubeVideoId(youtubeVideoId, audioLanguage = 'original') {
   const { rows } = await pool.query(
     `SELECT count(*)::int AS n
        FROM source_videos
-      WHERE youtube_video_id = $1 AND status = ANY($2::text[])`,
-    [youtubeVideoId, STATUS_QUE_AINDA_PRECISA_DO_ARQUIVO]
+      WHERE youtube_video_id = $1
+        AND coalesce(audio_language, 'original') = $2
+        AND status = ANY($3::text[])`,
+    [youtubeVideoId, audioLanguage, STATUS_QUE_AINDA_PRECISA_DO_ARQUIVO]
   );
   return rows[0].n;
 }
@@ -568,6 +615,7 @@ module.exports = {
   saveDownload,
   saveTranscript,
   countPendingByYoutubeVideoId,
+  idiomaRealParaPedido,
   STATUS_QUE_AINDA_PRECISA_DO_ARQUIVO,
   saveClaudeUsage,
   markClipSelectionCompleted,

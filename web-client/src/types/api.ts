@@ -363,6 +363,8 @@ export interface ClientVideoSettings {
   cropZoomPercent: number
   showPartLabel: boolean
   partLabelPosition: PartLabelPosition
+  /** Tamanho do adesivo "Parte N", em % do tamanho-base. 50 a 200. */
+  partLabelSizePercent: number
   titleStyle: VideoCaptionStyle
   /**
    * O que aparece atrás do vídeo quando ele não ocupa a tela inteira.
@@ -375,6 +377,12 @@ export interface ClientVideoSettings {
   backgroundVideoOffsetPercent: number
   /** De que lado fica a faixa da capa. Só vale para backgroundStyle "thumbnail". */
   thumbnailPosition: "top" | "bottom"
+  /**
+   * Qual trilha de áudio baixar quando o canal publica o vídeo dublado em
+   * vários idiomas. "original" = a trilha padrão do YouTube. Um vídeo que não
+   * tenha o idioma pedido cai no original — não falha.
+   */
+  audioLanguage: string
 }
 
 export interface ClientVideoSettingsResponse extends ClientVideoSettings {
@@ -392,6 +400,9 @@ export interface ClientVideoSettingsResponse extends ClientVideoSettings {
     fullPartsMaxMinutes: number
     fullPartsMinCount: number
     fullPartsMaxCount: number
+    partLabelMinSize: number
+    partLabelMaxSize: number
+    audioLanguages: { codigo: string; nome: string }[]
   }
   /** null = a configuração de todos os canais. */
   channelId: number | null

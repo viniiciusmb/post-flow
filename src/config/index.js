@@ -55,6 +55,12 @@ const config = {
     // por ser IP de datacenter, independente de cookie/token. Usado como
     // reserva quando o tunel SSH (abaixo) nao esta disponivel.
     proxyUrl: process.env.YTDLP_PROXY_URL || '',
+    // Espera aleatoria antes de cada download de verdade (ver
+    // waitBeforeDownload). Configuravel porque e um numero de comportamento,
+    // nao uma constante da natureza - e porque teste automatizado nao pode
+    // ficar 40s parado esperando um disfarce anti-bloqueio.
+    downloadWaitMinMs: Number(process.env.YTDLP_WAIT_MIN_MS ?? 10_000),
+    downloadWaitMaxMs: Number(process.env.YTDLP_WAIT_MAX_MS ?? 40_000),
     // Rele SOCKS5 generico opcional (ex: um proxy externo qualquer) - so
     // entra como candidato se essa variavel for configurada; hoje nao esta
     // configurada em producao, o tunel SSH por cliente/founder (abaixo) e

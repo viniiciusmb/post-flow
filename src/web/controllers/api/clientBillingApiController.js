@@ -19,6 +19,7 @@ const asaasPixAuthorizationsRepository = require('../../../repositories/asaasPix
 const asaasCheckoutsRepository = require('../../../repositories/asaasCheckoutsRepository');
 const cpfCnpj = require('../../../lib/cpfCnpj');
 const creditsService = require('../../../services/creditsService');
+const { promocaoDisponivel } = require('../../../lib/promocaoDePrimeiroMes');
 const planLimitsService = require('../../../services/planLimitsService');
 const subscriptionCheckoutService = require('../../../services/subscriptionCheckoutService');
 const checkoutService = require('../../../services/checkoutService');
@@ -90,7 +91,11 @@ async function overview(req, res) {
       planName: subscription.plan_name || null,
       status: subscription.status,
       overageCardEnabled: subscription.overage_card_enabled,
-      promoDisponivel: !subscription.first_month_used_at,
+      // Promoção de estreia: só para quem NUNCA teve plano nenhum. A tela e o
+      // checkout consultam a MESMA função (ver lib/promocaoDePrimeiroMes) —
+      // anunciar um desconto aqui que o checkout não vai cobrar é o defeito
+      // que motivou esta regra.
+      promoDisponivel: promocaoDisponivel(subscription),
       extraSlots: Number(subscription.extra_slots) || 0,
       extraSlotPriceCents: subscription.extra_slot_price_cents || null,
       // O limite EFETIVO (plano + conexoes compradas). A tela precisa do mesmo

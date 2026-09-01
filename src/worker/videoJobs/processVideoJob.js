@@ -23,6 +23,7 @@ const sourceVideoTiktokTargetsRepository = require('../../repositories/sourceVid
 const clientVideoSettingsRepository = require('../../repositories/clientVideoSettingsRepository');
 const sharedVideoAssetsRepository = require('../../repositories/sharedVideoAssetsRepository');
 const sharedVideoFiles = require('../../lib/sharedVideoFiles');
+const idiomaDoAudio = require('../../lib/idiomaDoAudio');
 const ytDlpService = require('../../services/ytDlpService');
 const videoEditingService = require('../../services/videoEditingService');
 const openaiTranscriptionService = require('../../services/openaiTranscriptionService');
@@ -164,8 +165,8 @@ async function baixarCapaDoVideo(sourceVideo, workDir) {
 // Nunca derruba o video: se por algum motivo nao der pra mover, segue com o
 // arquivo onde ele esta e so perde o compartilhamento. O download ja foi pago
 // e ja aconteceu - falhar aqui jogaria fora justamente a parte cara.
-function guardarComoCompartilhado(filePath, youtubeVideoId) {
-  const destino = sharedVideoFiles.pathFor(youtubeVideoId, path.extname(filePath) || '.mp4');
+function guardarComoCompartilhado(filePath, youtubeVideoId, audioLanguage) {
+  const destino = sharedVideoFiles.pathFor(youtubeVideoId, path.extname(filePath) || '.mp4', audioLanguage);
   fs.mkdirSync(sharedVideoFiles.dir(), { recursive: true });
   try {
     fs.renameSync(filePath, destino);
@@ -252,6 +253,14 @@ async function run(sourceVideoId) {
     clientUserId,
     sourceVideo.youtube_channel_id
   );
+  // Em que idioma este video vai ser cortado. Vem da configuracao do canal (ou
+  // do padrao do cliente) e vale pra escolha da TRILHA DE AUDIO no download -
+  // a partir dai o resto do pipeline segue sozinho, porque o Whisper transcreve
+  // o audio que recebeu e o Claude ja escreve no idioma da transcricao.
+  //
+  // 'original' = a trilha padrao do YouTube, que e o que sempre aconteceu.
+  const idiomaPedido = idiomaDoAudio.normalizar(settings.audio_language);
+
   const checkCancelled = () => isCancelRequested(sourceVideo.id);
   const heartbeat = startProcessingHeartbeat(sourceVideo.id);
 
@@ -267,6 +276,10 @@ async function run(sourceVideoId) {
     fs.mkdirSync(workDir, { recursive: true });
 
     let videoPath = sourceVideo.local_video_path;
+    // Idioma REAL da trilha que temos em maos - nao o pedido. Comeca com o que
+    // esta no banco, que e o que cobre RETOMAR um video pausado: o download
+    // aconteceu numa execucao anterior, que morreu junto com a memoria dela.
+    let idiomaDoArquivo = idiomaDoAudio.normalizar(sourceVideo.audio_language);
     if (sourceVideo.input_type === 'upload') {
       // Arquivo ja esta em disco (upload direto) - so confirma que ainda
       // existe (pasta compartilhada, mas por seguranca).
@@ -296,12 +309,31 @@ async function run(sourceVideoId) {
       //
       // Downloads de videos DIFERENTES seguem em paralelo: a trava e por id
       // de video, nao global.
-      videoPath = await sharedVideoAssetsRepository.comTravaDeDownload(sourceVideo.youtube_video_id, async () => {
-      // Este MESMO video do YouTube ja foi baixado por outro cliente (dois
-      // clientes monitorando o mesmo canal geram dois source_videos para o
-      // mesmo video) e o arquivo ainda esta em disco? Entao nao ha nada pra
-      // baixar - e o mesmo arquivo, byte por byte.
-      const compartilhado = await sharedVideoAssetsRepository.findByYoutubeVideoId(sourceVideo.youtube_video_id);
+      videoPath = await sharedVideoAssetsRepository.comTravaDeDownload(
+        sourceVideo.youtube_video_id,
+        async () => {
+      // Traduz o idioma PEDIDO no idioma que ele deu da ultima vez neste
+      // video. Pedir portugues num canal que so tem uma trilha devolve
+      // 'original', e sem esta traducao a consulta ao cache erraria sempre
+      // (ver idiomaRealParaPedido). Nunca pediram ainda? Entao a melhor aposta
+      // e o proprio pedido - se errar, o download acontece e a resposta fica
+      // gravada pra proxima vez.
+      const idiomaProvavel =
+        (await sourceVideosRepository.idiomaRealParaPedido(sourceVideo.youtube_video_id, idiomaPedido)) ||
+        idiomaPedido;
+
+      // Este MESMO video do YouTube, NESTA MESMA trilha de audio, ja foi
+      // baixado por outro cliente (dois clientes monitorando o mesmo canal
+      // geram dois source_videos para o mesmo video) e o arquivo ainda esta em
+      // disco? Entao nao ha nada pra baixar - e o mesmo arquivo, byte por byte.
+      //
+      // O idioma faz parte da pergunta: o mesmo video dublado em portugues e
+      // em ingles sao dois arquivos, e reaproveitar um pelo outro entregaria o
+      // idioma errado sem erro nenhum em lugar nenhum.
+      const compartilhado = await sharedVideoAssetsRepository.findByYoutubeVideoId(
+        sourceVideo.youtube_video_id,
+        idiomaProvavel
+      );
       const reaproveitavel =
         compartilhado && compartilhado.local_video_path && fs.existsSync(compartilhado.local_video_path)
           ? compartilhado
@@ -348,8 +380,14 @@ async function run(sourceVideoId) {
           bytes: 0,
           egressType: 'reuse',
           tunnelId: null,
+          requestedAudioLanguage: idiomaPedido,
+          audioLanguage: reaproveitavel.audio_language,
         });
-        await sharedVideoAssetsRepository.registerDownloadReuse(sourceVideo.youtube_video_id);
+        idiomaDoArquivo = idiomaDoAudio.normalizar(reaproveitavel.audio_language);
+        await sharedVideoAssetsRepository.registerDownloadReuse(
+          sourceVideo.youtube_video_id,
+          reaproveitavel.audio_language
+        );
         await creditsService.confirmAfterDownload(sourceVideo, clientUserId, reserveOutcome, {
           egressType: 'reuse',
           tunnelId: null,
@@ -363,7 +401,21 @@ async function run(sourceVideoId) {
       // Nao ha o que reaproveitar: baixa de verdade.
       {
         await sourceVideosRepository.updateStatus(sourceVideo.id, 'downloading');
-        const downloadResult = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir, { checkCancelled, clientUserId });
+        const downloadResult = await ytDlpService.downloadVideo(sourceVideo.youtube_video_id, workDir, {
+          checkCancelled,
+          clientUserId,
+          audioLanguage: idiomaPedido,
+        });
+        // O que veio de verdade. Pode nao ser o que foi pedido (video sem a
+        // trilha), e e o REAL que identifica o arquivo daqui pra frente.
+        const idiomaBaixado = downloadResult.audioLanguage || idiomaDoAudio.ORIGINAL;
+        idiomaDoArquivo = idiomaBaixado;
+        if (idiomaPedido !== idiomaDoAudio.ORIGINAL && idiomaBaixado !== idiomaPedido) {
+          logger.info(
+            `Video-fonte ${sourceVideo.id}: pedi audio em "${idiomaPedido}" mas o video nao tem essa trilha - ` +
+              `baixado em "${idiomaBaixado}". O corte vai sair nesse idioma.`
+          );
+        }
 
         // Tamanho real do arquivo baixado = consumo de banda de verdade pra
         // essa origem (tunel do cliente/founder ou proxy) - alimenta o painel
@@ -376,7 +428,7 @@ async function run(sourceVideoId) {
         let compartilhou = true;
         let caminho;
         try {
-          caminho = guardarComoCompartilhado(downloadResult.filePath, sourceVideo.youtube_video_id);
+          caminho = guardarComoCompartilhado(downloadResult.filePath, sourceVideo.youtube_video_id, idiomaBaixado);
         } catch (err) {
           logger.error(
             `Nao consegui mover o video ${sourceVideo.id} pra pasta compartilhada (seguindo sem compartilhar):`,
@@ -390,6 +442,8 @@ async function run(sourceVideoId) {
           bytes: downloadBytes,
           egressType: downloadResult.egressType,
           tunnelId: downloadResult.tunnelId,
+          requestedAudioLanguage: idiomaPedido,
+          audioLanguage: idiomaBaixado,
         });
         if (compartilhou) {
           await sharedVideoAssetsRepository.saveDownload(sourceVideo.youtube_video_id, {
@@ -397,6 +451,7 @@ async function run(sourceVideoId) {
             bytes: downloadBytes,
             egressType: downloadResult.egressType,
             tunnelId: downloadResult.tunnelId,
+            audioLanguage: idiomaBaixado,
           });
         }
         // Download terminou com sucesso - confirma a cobranca (ou fatura de
@@ -404,7 +459,9 @@ async function run(sourceVideoId) {
         await creditsService.confirmAfterDownload(sourceVideo, clientUserId, reserveOutcome, downloadResult);
         return caminho;
       }
-      });
+        },
+        idiomaPedido
+      );
     }
 
     await checkPaused(sourceVideo.id);
@@ -430,7 +487,14 @@ async function run(sourceVideoId) {
       // A transcricao guardada dura MUITO mais que o arquivo de video: mesmo
       // depois do arquivo ser apagado do disco, um cliente que adicionar o
       // canal semanas depois baixa o video de novo mas nao paga o Whisper.
-      const compartilhado = await sharedVideoAssetsRepository.findByYoutubeVideoId(sourceVideo.youtube_video_id);
+      // A transcricao e do IDIOMA que baixamos, nao do que foi pedido: a trilha
+      // em portugues e a em ingles do mesmo video sao dois textos diferentes, e
+      // trocar um pelo outro entregaria a transcricao errada sem erro nenhum em
+      // lugar nenhum.
+      const compartilhado = await sharedVideoAssetsRepository.findByYoutubeVideoId(
+        sourceVideo.youtube_video_id,
+        idiomaDoArquivo
+      );
 
       if (compartilhado && compartilhado.transcript_words) {
         transcript = {
@@ -451,7 +515,7 @@ async function run(sourceVideoId) {
           language: transcript.language,
           reused: true,
         });
-        await sharedVideoAssetsRepository.registerTranscriptReuse(sourceVideo.youtube_video_id);
+        await sharedVideoAssetsRepository.registerTranscriptReuse(sourceVideo.youtube_video_id, idiomaDoArquivo);
         logger.info(
           `Video-fonte ${sourceVideo.id}: transcricao reaproveitada de ${sourceVideo.youtube_video_id} - Whisper nao foi chamado.`
         );
@@ -459,7 +523,17 @@ async function run(sourceVideoId) {
         await sourceVideosRepository.updateStatus(sourceVideo.id, 'transcribing');
         const audioPath = path.join(workDir, 'audio.mp3');
         await videoEditingService.extractAudio(videoPath, audioPath);
-        transcript = await openaiTranscriptionService.transcribeAudio(audioPath, { checkCancelled });
+        // Dica de idioma pro Whisper quando a trilha baixada declara um.
+        //
+        // Ele detecta sozinho e acerta quase sempre, mas erra justamente onde
+        // dublagem aparece: os primeiros segundos de um video dublado costumam
+        // ser musica ou vinheta, e uma deteccao errada ali contamina a
+        // transcricao inteira - e, com ela, o idioma do titulo e da legenda.
+        // 'original' nao vira dica: nao ha nada declarado pra afirmar.
+        transcript = await openaiTranscriptionService.transcribeAudio(audioPath, {
+          checkCancelled,
+          language: idiomaDoArquivo === idiomaDoAudio.ORIGINAL ? undefined : idiomaDoArquivo,
+        });
         await sourceVideosRepository.saveTranscript(sourceVideo.id, {
           transcriptText: transcript.text,
           transcriptWords: transcript.words,
@@ -477,6 +551,7 @@ async function run(sourceVideoId) {
             whisperAudioSeconds: transcript.durationSeconds,
             whisperCostUsd: transcript.costUsd,
             language: transcript.language,
+            audioLanguage: idiomaDoArquivo,
           });
         }
         fs.unlinkSync(audioPath);

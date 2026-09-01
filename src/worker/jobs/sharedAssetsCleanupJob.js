@@ -47,7 +47,10 @@ async function limparArquivosSemConsumidor() {
   for (const asset of assets) {
     try {
       const existeEmDisco = fs.existsSync(asset.local_video_path);
-      const pendentes = await sourceVideosRepository.countPendingByYoutubeVideoId(asset.youtube_video_id);
+      const pendentes = await sourceVideosRepository.countPendingByYoutubeVideoId(
+        asset.youtube_video_id,
+        asset.audio_language
+      );
       const horas = asset.downloaded_at ? (Date.now() - new Date(asset.downloaded_at).getTime()) / 3_600_000 : Infinity;
       const velhoDemais = horas >= MAX_HORAS_EM_DISCO;
 
@@ -55,17 +58,17 @@ async function limparArquivosSemConsumidor() {
       // perdeu o volume): a linha precisa refletir isso, senão o pipeline
       // acha que dá pra reaproveitar e falha na hora de cortar.
       if (!existeEmDisco) {
-        await sharedVideoAssetsRepository.clearFile(asset.youtube_video_id);
+        await sharedVideoAssetsRepository.clearFile(asset.youtube_video_id, asset.audio_language);
         continue;
       }
 
       if (pendentes > 0 && !velhoDemais) continue;
 
       fs.rmSync(asset.local_video_path, { force: true });
-      await sharedVideoAssetsRepository.clearFile(asset.youtube_video_id);
+      await sharedVideoAssetsRepository.clearFile(asset.youtube_video_id, asset.audio_language);
       apagados += 1;
       logger.info(
-        `Video compartilhado ${asset.youtube_video_id} apagado do disco ` +
+        `Video compartilhado ${asset.youtube_video_id} (audio: ${asset.audio_language}) apagado do disco ` +
           `(${pendentes} video(s) ainda pendente(s), ${Math.round(horas)}h em disco). ` +
           `Foi reaproveitado ${asset.download_reuse_count}x; a transcricao continua guardada.`
       );

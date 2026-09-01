@@ -481,10 +481,16 @@ function AlturaSlider({
   label,
   valor,
   onChange,
+  min = 0,
+  max = 80,
+  ajuda,
 }: {
   label: string
   valor: number
   onChange: (v: number) => void
+  min?: number
+  max?: number
+  ajuda?: string
 }) {
   const [rascunho, setRascunho] = useState(valor)
   useEffect(() => setRascunho(valor), [valor])
@@ -493,10 +499,11 @@ function AlturaSlider({
       <FieldLabel>
         {label} <span className="font-normal text-muted-foreground">({rascunho}%)</span>
       </FieldLabel>
+      {ajuda && <p className="-mt-1 text-xs text-muted-foreground">{ajuda}</p>}
       <input
         type="range"
-        min={0}
-        max={80}
+        min={min}
+        max={max}
         step={1}
         value={rascunho}
         onChange={(e) => setRascunho(Number(e.target.value))}
@@ -645,19 +652,35 @@ const POSITION_STYLE: Record<PartLabelPosition, React.CSSProperties> = {
   bottom_right: { bottom: 8, right: 8 },
 }
 
-function PartLabelPositionPicker({ value, onChange }: { value: PartLabelPosition; onChange: (v: PartLabelPosition) => void }) {
+// O adesivo "Parte N" na prévia acompanha o tamanho escolhido, na mesma
+// proporção do vídeo real: 10px aqui equivalem ao tamanho-base de 96px num
+// quadro de 1920 de altura, e a prévia tem 180. Sem essa ligação, mexer no
+// tamanho não mudaria nada na tela e o cliente escolheria às cegas — que é
+// justamente o problema que este controle existe para resolver.
+const TAMANHO_BASE_NA_PREVIA = 10
+
+function PartLabelPositionPicker({
+  value,
+  onChange,
+  tamanhoPercent = 100,
+}: {
+  value: PartLabelPosition
+  onChange: (v: PartLabelPosition) => void
+  tamanhoPercent?: number
+}) {
   const t = useT()
+  const fonte = (TAMANHO_BASE_NA_PREVIA * tamanhoPercent) / 100
   return (
-    <div className="relative rounded-md bg-neutral-900" style={{ width: 240, height: 180 }}>
+    <div className="relative overflow-hidden rounded-md bg-neutral-900" style={{ width: 240, height: 180 }}>
       <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white/25">{t("ce.corte916")}</span>
       {POSITIONS.map((pos) => (
         <button
           key={pos}
           type="button"
           onClick={() => onChange(pos)}
-          style={POSITION_STYLE[pos]}
+          style={{ ...POSITION_STYLE[pos], fontSize: `${fonte}px`, lineHeight: 1.2 }}
           className={cn(
-            "absolute rounded px-2 py-1 text-[10px] font-bold whitespace-nowrap",
+            "absolute rounded px-[0.4em] py-[0.2em] font-bold whitespace-nowrap",
             value === pos ? "bg-primary text-primary-foreground" : "bg-white/15 text-white hover:bg-white/25"
           )}
         >{t("ce.parteUm")}</button>
@@ -808,6 +831,27 @@ export function ClipStyleEditorCard() {
             ja causou o bug de "configuracao que nao salva".
             ---------------------------------------------------------------- */}
         <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/20 p-4" data-tour="como-funcionam-cortes">
+          {/* Idioma do áudio. Fica ANTES de tudo porque é a primeira decisão do
+              corte: é ela que escolhe qual trilha vai ser baixada, e todo o
+              resto (transcrição, título, legenda) sai no idioma dessa trilha. */}
+          <Field>
+            <FieldLabel>{t("vs.idiomaDoAudio")}</FieldLabel>
+            <Select
+              value={settings.audioLanguage}
+              onValueChange={(v) => v && save({ ...settings, audioLanguage: v })}
+            >
+              <SelectTrigger className="w-full sm:w-72">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {settings.options.audioLanguages.map((i) => (
+                  <SelectItem key={i.codigo} value={i.codigo}>{i.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{t("vs.idiomaDoAudioTexto")}</p>
+          </Field>
+
           <Field>
             <FieldLabel>{t("vs.comoEscolher")}</FieldLabel>
             <ToggleGroup
@@ -1349,13 +1393,23 @@ export function ClipStyleEditorCard() {
               <p className="-mt-3 text-xs text-muted-foreground">{t("ce.numeracaoObrigatoria")}</p>
             )}
             {(settings.showPartLabel || settings.clipMode === "full_parts") && (
-              <Field>
-                <FieldLabel>{t("ce.ondeMostrarNumeracao")}</FieldLabel>
-                <PartLabelPositionPicker
-                  value={settings.partLabelPosition}
-                  onChange={(v) => save({ ...settings, partLabelPosition: v })}
+              <>
+                <Field>
+                  <FieldLabel>{t("ce.ondeMostrarNumeracao")}</FieldLabel>
+                  <PartLabelPositionPicker
+                    value={settings.partLabelPosition}
+                    onChange={(v) => save({ ...settings, partLabelPosition: v })}
+                    tamanhoPercent={settings.partLabelSizePercent}
+                  />
+                </Field>
+                <AlturaSlider
+                  label={t("ce.tamanhoDaNumeracao")}
+                  valor={settings.partLabelSizePercent}
+                  min={settings.options.partLabelMinSize}
+                  max={settings.options.partLabelMaxSize}
+                  onChange={(v) => save({ ...settings, partLabelSizePercent: v })}
                 />
-              </Field>
+              </>
             )}
           </>
         )}

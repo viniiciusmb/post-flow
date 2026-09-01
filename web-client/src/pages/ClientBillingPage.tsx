@@ -128,7 +128,7 @@ function plural(qtd: number | null, umSo: string, varios: string, semLimite: str
 // promocional E o cliente ainda não tiver usado a dele. Fora daqui, mostrar o
 // desconto seria prometer um preço que não vai acontecer.
 function descontoPercentual(plan: { priceCents: number; firstMonthPriceCents?: number | null }) {
-  if (!plan.firstMonthPriceCents) return 0
+  if (!plan.firstMonthPriceCents || plan.firstMonthPriceCents >= plan.priceCents) return 0
   return Math.round((1 - plan.firstMonthPriceCents / plan.priceCents) * 100)
 }
 
@@ -414,8 +414,14 @@ export function ClientBillingPage() {
   }
 
   // Só anuncia o desconto se o cliente ainda tiver direito a ele.
-  function promoVale(plan: { firstMonthPriceCents?: number | null }) {
-    return Boolean(plan.firstMonthPriceCents) && Boolean(data?.subscription.promoDisponivel)
+  //
+  // `promoDisponivel` vem do servidor e é a regra inteira: desconto de estreia,
+  // só para quem nunca teve plano nenhum. Cliente com plano ativo — inclusive
+  // um atribuído na mão pelo admin, que é como todo mundo é ativado hoje — não
+  // vê mais "1º mês por R$59,90".
+  function promoVale(plan: { priceCents: number; firstMonthPriceCents?: number | null }) {
+    if (!plan.firstMonthPriceCents || plan.firstMonthPriceCents >= plan.priceCents) return false
+    return Boolean(data?.subscription.promoDisponivel)
   }
 
   // Qual cartão mostrar. O do Asaas é o atual; os da Stripe só existem para

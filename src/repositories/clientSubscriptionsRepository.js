@@ -44,14 +44,21 @@ async function listAllWithPlan() {
 // semanal (ver creditWeeklyResetJob) - e por isso que essa funcao nao mexe
 // em client_credits sozinha, quem decide se aplica a cota na hora e o
 // creditsService (so ele sabe se e primeira ativacao ou troca).
+//
+// Carimba `first_plan_at` na PRIMEIRA vez que este cliente ganha um plano,
+// por qualquer caminho (admin, checkout, webhook) - todos passam por aqui.
+// O COALESCE e o que faz o carimbo ser escrito uma vez so: uma troca de plano
+// no ano que vem nao adianta a data, senao ela viraria "ultimo plano" e a
+// promocao de estreia voltaria a valer pra quem ja e cliente ha meses.
 async function setPlan(clientUserId, planId) {
   const { rows } = await pool.query(
-    `INSERT INTO client_subscriptions (client_user_id, plan_id, status, cycle_anchor_dow)
-     VALUES ($1, $2, 'ativo', EXTRACT(DOW FROM now())::smallint)
+    `INSERT INTO client_subscriptions (client_user_id, plan_id, status, cycle_anchor_dow, first_plan_at)
+     VALUES ($1, $2, 'ativo', EXTRACT(DOW FROM now())::smallint, now())
      ON CONFLICT (client_user_id) DO UPDATE SET
        plan_id = EXCLUDED.plan_id,
        status = 'ativo',
        cycle_anchor_dow = COALESCE(client_subscriptions.cycle_anchor_dow, EXCLUDED.cycle_anchor_dow),
+       first_plan_at = COALESCE(client_subscriptions.first_plan_at, now()),
        updated_at = now()
      RETURNING *`,
     [clientUserId, planId]

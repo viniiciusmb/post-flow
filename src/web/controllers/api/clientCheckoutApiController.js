@@ -18,6 +18,7 @@ const clientSubscriptionsRepository = require('../../../repositories/clientSubsc
 const usersRepository = require('../../../repositories/usersRepository');
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
+const { promocaoDisponivel } = require('../../../lib/promocaoDePrimeiroMes');
 const planLimitsService = require('../../../services/planLimitsService');
 const creditsService = require('../../../services/creditsService');
 const cpfCnpj = require('../../../lib/cpfCnpj');
@@ -80,9 +81,11 @@ async function contexto(req, res) {
       planKey: subscription.plan_key || null,
       planName: subscription.plan_name || null,
       status: subscription.status,
-      // Já usou a promoção de primeiro mês? A tela precisa saber para não
-      // anunciar um desconto que não vai acontecer.
-      promoDisponivel: !subscription.first_month_used_at,
+      // Tem direito à promoção de estreia? A tela precisa saber para não
+      // anunciar um desconto que não vai acontecer. Mesma função que
+      // checkoutService usa para CALCULAR o valor cobrado — se as duas
+      // pudessem discordar, a tela mostraria um preço e o cartão veria outro.
+      promoDisponivel: promocaoDisponivel(subscription),
       extraSlots: Number(subscription.extra_slots) || 0,
       extraSlotPriceCents: subscription.extra_slot_price_cents || null,
       limites: { canais: limites.canais, contas: limites.contas },

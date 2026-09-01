@@ -11,6 +11,7 @@
 
 const path = require('path');
 const config = require('../config');
+const idiomaDoAudio = require('./idiomaDoAudio');
 
 const NOME_PASTA = '_compartilhado';
 
@@ -18,13 +19,24 @@ function dir() {
   return path.join(config.videoProcessing.workDir, NOME_PASTA);
 }
 
-// Nome pelo ID do vídeo do YouTube (não pelo ID do source_video): a
-// identidade do arquivo é o vídeo, não quem o pediu primeiro.
-function pathFor(youtubeVideoId, ext = '.mp4') {
+// Nome pelo ID do vídeo do YouTube MAIS o idioma do áudio (não pelo ID do
+// source_video): a identidade do arquivo é "este vídeo, nesta trilha", não
+// quem o pediu primeiro.
+//
+// O idioma entra no NOME, e não só na linha do banco, porque é o disco que
+// guarda a diferença: o mesmo vídeo dublado em português e em inglês são dois
+// arquivos, e um nome só faria o segundo download sobrescrever o primeiro —
+// entregando o idioma errado a quem já estava usando o arquivo.
+//
+// 'original' fica sem sufixo, para que os arquivos que já estão em disco
+// continuem sendo encontrados exatamente onde estão.
+function pathFor(youtubeVideoId, ext = '.mp4', audioLanguage = idiomaDoAudio.ORIGINAL) {
   // O ID do YouTube é [a-zA-Z0-9_-]{11}, mas isso vem de fora - sanitiza
   // mesmo assim para nunca montar caminho com '..' ou barra.
   const seguro = String(youtubeVideoId).replace(/[^a-zA-Z0-9_-]/g, '');
-  return path.join(dir(), `${seguro}${ext}`);
+  const codigo = idiomaDoAudio.normalizar(audioLanguage);
+  const sufixo = codigo === idiomaDoAudio.ORIGINAL ? '' : `.${codigo}`;
+  return path.join(dir(), `${seguro}${sufixo}${ext}`);
 }
 
 function isShared(filePath) {
