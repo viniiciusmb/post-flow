@@ -225,15 +225,26 @@ async function run(sourceVideoId) {
   const sourceVideo = await sourceVideosRepository.findById(sourceVideoId);
   if (!sourceVideo) return;
 
-  // Protecao contra job redelivered pelo pg-boss (ex: o worker caiu/foi
-  // reiniciado no meio do processamento, e o pg-boss reenfileira o mesmo
-  // job pra tentar de novo). "detected" comeca do zero, "paused" retoma de
-  // onde parou (ver logica de pular etapas ja feitas abaixo). Qualquer outro
-  // status aqui significa que esse video ja esta em andamento (ou ja
-  // terminou) numa execucao anterior - continuar duplicaria os cortes.
-  if (!['detected', 'paused'].includes(sourceVideo.status)) {
+  // Toma posse do video, de forma ATOMICA.
+  //
+  // "detected" comeca do zero, "paused" retoma de onde parou (ver logica de
+  // pular etapas ja feitas abaixo). Qualquer outro status significa que esse
+  // video ja esta em andamento (ou ja terminou) numa execucao anterior -
+  // continuar duplicaria os cortes.
+  //
+  // Antes isto era em DOIS passos: ler o status e depois decidir. Dois jobs que
+  // comecam no mesmo segundo passam os dois pela checagem, porque os dois leem
+  // "detected" antes de qualquer um escrever. Aconteceu de verdade em
+  // 01/09/2026 com o video #1965: o retry automatico e a varredura de "preso em
+  // detected" enfileiraram o mesmo video na mesma volta, os dois processaram
+  // juntos, e um apagou o audio.mp3 que o outro estava usando (ENOENT).
+  //
+  // A causa daquele dia esta corrigida em findStuckDetected, mas a trava fica:
+  // qualquer caminho futuro que enfileire duas vezes esbarra aqui.
+  const posse = await sourceVideosRepository.claimForProcessing(sourceVideoId);
+  if (!posse) {
     logger.info(
-      `Video-fonte ${sourceVideo.id} recebeu um job redelivered pelo pg-boss mas ja esta em status "${sourceVideo.status}" - ignorando pra nao duplicar.`
+      `Video-fonte ${sourceVideo.id} ja esta sendo processado (ou nao esta pronto pra comecar, status "${sourceVideo.status}") - ignorando pra nao duplicar.`
     );
     return;
   }

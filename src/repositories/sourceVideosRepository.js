@@ -301,11 +301,52 @@ async function findTransientErrorsForAutoRetry() {
 
 // Videos detectados que nunca chegaram a comecar (protecao pro caso raro do
 // enfileiramento falhar silenciosamente entre a deteccao e o processamento).
+//
+// A idade e medida por `updated_at`, NAO por `created_at`.
+//
+// Com `created_at` a conta respondia a pergunta errada: um video cadastrado
+// semanas atras que acabou de VOLTAR pra "detected" contava como parado ha
+// semanas. Foi assim que o video #1965 rodou duas vezes ao mesmo tempo em
+// 01/09/2026: o retry automatico o devolveu pra "detected" e, tres linhas
+// depois, esta mesma varredura o pegou de novo e enfileirou um segundo job -
+// os dois processaram juntos e um apagou o audio.mp3 que o outro estava usando.
+//
+// `updated_at` responde o que a varredura quer saber: ha quanto tempo ele esta
+// parado NESTE estado.
 async function findStuckDetected() {
   const { rows } = await pool.query(
-    `SELECT * FROM source_videos WHERE status = 'detected' AND created_at < now() - interval '30 minutes'`
+    `SELECT * FROM source_videos WHERE status = 'detected' AND updated_at < now() - interval '30 minutes'`
   );
   return rows;
+}
+
+// Toma posse do video pra processar, de forma ATOMICA.
+//
+// Devolve a linha so pra quem conseguiu mudar o status; qualquer outro job que
+// chegue depois recebe null e desiste. E o `WHERE status IN (...)` na mesma
+// instrucao do `UPDATE` que garante isso: dois jobs simultaneos nao conseguem
+// os dois ver "detected" e seguir em frente, porque o segundo so enxerga a
+// linha ja mudada.
+//
+// A checagem que existia antes era em DOIS passos (ler o status, depois
+// decidir), e dois jobs que comecam no mesmo segundo passam os dois por ela.
+// Foi o que aconteceu com o video #1965.
+//
+// 'paused' entra na lista porque retomar e um comeco legitimo; 'detected' e o
+// caso normal. Qualquer outro status significa que ja tem alguem cuidando.
+async function claimForProcessing(id) {
+  const { rows } = await pool.query(
+    `UPDATE source_videos
+        SET status = CASE WHEN status = 'paused' THEN 'paused' ELSE 'detected' END,
+            processing_heartbeat_at = now(),
+            updated_at = now()
+      WHERE id = $1
+        AND status IN ('detected', 'paused')
+        AND (processing_heartbeat_at IS NULL OR processing_heartbeat_at < now() - interval '2 minutes')
+      RETURNING *`,
+    [id]
+  );
+  return rows[0] || null;
 }
 
 // billingBlockReason so faz sentido junto de 'aguardando_creditos'. Qualquer
@@ -665,6 +706,7 @@ module.exports = {
   resumeByIdOwnedByClient,
   findTransientErrorsForAutoRetry,
   findStuckDetected,
+  claimForProcessing,
   touchProcessingHeartbeat,
   findStuckProcessing,
   markRecoveredFromStuck,
