@@ -12,6 +12,7 @@ const queueService = require('../../../services/queueService');
 const queuePriorityService = require('../../../services/queuePriorityService');
 const clientVideoSettingsRepository = require('../../../repositories/clientVideoSettingsRepository');
 const idiomaDoAudio = require('../../../lib/idiomaDoAudio');
+const { podeBaixarAgora, ehPublico } = require('../../../lib/disponibilidadeDoVideo');
 const locales = require('../../../config/locales');
 const driveExportFolderService = require('../../../services/driveExportFolderService');
 const logger = require('../../../lib/logger');
@@ -150,6 +151,26 @@ async function create(req, res) {
         audioLanguageSuggestion: idiomaDoAudio.ORIGINAL,
       };
       Object.assign(latestVideo, await trilhasDoVideo(video.videoId, req));
+
+      // ANCORA O MARCO D'AGUA JA, no video mais recente de agora.
+      //
+      // Sem isto o canal nasce sem marco e fica esperando a primeira checagem
+      // periodica ancorar - e essa checagem pode demorar HORAS, porque o freio
+      // de engarrafamento a devolve enquanto a fila de postagem estiver cheia.
+      // Foi assim que um video se perdeu em 04/09/2026 no canal "Davy Jones
+      // GTA 6": entre o cadastro e a ancoragem o canal publicou um video novo,
+      // e a ancoragem tardia fixou o marco em cima dele.
+      //
+      // Ancorando aqui, o intervalo em que um video pode escapar deixa de
+      // existir: qualquer coisa publicada depois deste instante e novidade.
+      //
+      // Estreia e video de membros nao servem de ancora - o marco passaria por
+      // cima e eles se perderiam quando ficassem disponiveis. Nesse caso o
+      // marco continua nulo e a checagem periodica ancora, ja com essa mesma
+      // regra.
+      if (podeBaixarAgora(video.liveStatus) && ehPublico(video.availability)) {
+        await youtubeChannelsRepository.updatePollState(channel.id, { lastVideoId: video.videoId });
+      }
     }
   } catch (err) {
     logger.error(`Falha ao buscar o video mais recente do canal recem-cadastrado ${channel.id}:`, err);

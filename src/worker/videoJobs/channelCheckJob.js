@@ -142,6 +142,45 @@ async function run(boss) {
         continue;
       }
 
+      // ANCORAGEM INICIAL - vem ANTES do freio, de proposito.
+      //
+      // Canal sem marco d'agua ainda (recem-cadastrado, ou recem-retomado
+      // depois de pausado) nao processa historico: ele so fixa o marco no video
+      // mais recente de AGORA, e passa a pegar o que for publicado dali pra
+      // frente. Ancorar nao custa nada - a listagem ja esta em maos, nao ha
+      // download nem chamada de IA - entao o freio, que existe pra nao PEGAR
+      // video novo, nao tem motivo pra segurar isto.
+      //
+      // Segurar custou um video de verdade em 04/09/2026, no canal "Davy Jones
+      // GTA 6": o canal foi cadastrado, o video mais recente foi processado
+      // pelo pop-up e gerou 15 cortes, e a fila daquela conta do TikTok ficou
+      // cheia por mais de um dia. Durante todo esse tempo o freio devolvia o
+      // marco como NULL a cada 20 minutos, mantendo o canal em "primeira
+      // checagem". Quando a fila finalmente esvaziou, a ancoragem rodou e fixou
+      // o marco no video que o canal tinha publicado no meio do caminho -
+      // engolindo ele sem nunca cadastrar. Nenhuma tela mostrava isso: o canal
+      // simplesmente parou de trazer video.
+      //
+      // Video que ainda nao virou arquivo (estreia) ou que nao e nosso pra
+      // baixar (exclusivo de membros) NAO serve de ancora - o marco passaria
+      // por cima dele e ele se perderia quando abrisse. Sem nenhum candidato,
+      // o marco continua nulo e a proxima checagem tenta de novo.
+      if (!channel.last_video_id) {
+        const ancora = videos.find((v) => podeBaixarAgora(v.liveStatus) && ehPublico(v.availability));
+        await youtubeChannelsRepository.updatePollState(channel.id, {
+          lastVideoId: ancora ? ancora.videoId : null,
+        });
+        await errorReportService.clear(errorReportService.OPERACOES.CHANNEL_CHECK, 'youtube_channel', channel.id);
+        logger.info(
+          ancora
+            ? `Canal "${channel.channel_name}": marco d'agua ancorado em "${ancora.title}". ` +
+                `Video publicado a partir de agora entra na fila.`
+            : `Canal "${channel.channel_name}": nenhum video disponivel pra ancorar o marco d'agua ` +
+                `(so estreia/exclusivo de membros) - tento de novo na proxima checagem.`
+        );
+        continue;
+      }
+
       // Freio de engarrafamento. Vem ANTES de cadastrar qualquer video: o
       // marco d'agua (last_video_id) fica onde esta, entao o video continua
       // "novo" e sera pego numa checagem futura, quando a fila tiver baixado.
@@ -157,13 +196,10 @@ async function run(boss) {
         continue;
       }
 
+      // A partir daqui o canal SEMPRE tem marco d'agua: o caso "primeira
+      // checagem" foi resolvido la em cima, antes do freio.
       let newVideos;
-      if (!channel.last_video_id) {
-        // Primeira checagem desse canal (ou acabou de ser retomado depois
-        // de pausado): so estabelece o marco d'agua no video mais recente
-        // de agora - nao enfileira nada do historico/acumulado da pausa.
-        newVideos = [];
-      } else {
+      {
         const knownIndex = videos.findIndex((v) => v.videoId === channel.last_video_id);
 
         if (knownIndex === -1) {
@@ -342,12 +378,10 @@ async function run(boss) {
       // adiado e o marco certo. Se TODOS foram adiados, lastVideoId nulo
       // preserva o marco atual (e ainda registra que a checagem aconteceu).
       //
-      // As duas condicoes de disponibilidade cobrem a PRIMEIRA checagem do
-      // canal, que nao passa pelo loop acima (ela so estabelece o marco, sem
-      // enfileirar nada do historico): sem elas, um canal cadastrado enquanto o
-      // video mais recente e uma estreia - ou e exclusivo de membros - nasceria
-      // com o marco em cima dele, e o primeiro video que esse cliente veria
-      // seria o SEGUNDO do canal.
+      // As duas condicoes de disponibilidade valem aqui pelo mesmo motivo da
+      // ancoragem inicial: estreia e video de membros nao servem de marco. O
+      // marco passaria por cima deles e, quando abrissem, ja estariam "abaixo"
+      // e ninguem mais olharia.
       const marco = videos.find(
         (v) => !seguramOMarco.has(v.videoId) && podeBaixarAgora(v.liveStatus) && ehPublico(v.availability)
       );
