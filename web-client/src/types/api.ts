@@ -790,21 +790,51 @@ export interface SystemErrorsResponse {
 export type PixKeyType = "cpf" | "cnpj" | "email" | "telefone" | "aleatoria"
 export type WithdrawalStatus = "pendente" | "pago" | "recusado"
 
+/** "primeira" = a assinatura nova (a venda em si). "recorrencia" = as
+ *  mensalidades seguintes do mesmo indicado. Percentuais diferentes, e por
+ *  isso nunca somados num cartão só. */
+export type CommissionKind = "primeira" | "recorrencia"
+
 export interface CommissionEntry {
   id: number
-  referredEmail: string
+  referredEmail: string | null
   referredBusinessName: string | null
   amountPaidCents: number
   commissionPercent: number
+  commissionCents: number
+  kind: CommissionKind
+  createdAt: string
+}
+
+/** Um link de divulgação do afiliado (bio do TikTok, YouTube, grupo...).
+ *  O código é gerado pelo servidor; o afiliado escolhe só o rótulo. */
+export interface AffiliateLink {
+  id: number
+  code: string
+  url: string
+  label: string | null
+  isDefault: boolean
+  /** Arquivado some da lista principal, mas continua contando clique e
+   *  atribuindo venda — um link some da bio e ainda é clicado por semanas. */
+  archivedAt: string | null
+  clicksTotal: number
+  clicksPeriod: number
+  visitorsPeriod: number
+  referralCount: number
+  activeCount: number
   commissionCents: number
   createdAt: string
 }
 
 export interface ReferralEntry {
   id: number
-  email: string
+  email: string | null
   businessName: string | null
   subscriptionStatus: SubscriptionStatus | null
+  planName: string | null
+  /** Rótulo do link que trouxe esta indicação (null quando veio do principal). */
+  linkLabel: string | null
+  linkCode: string | null
   createdAt: string
 }
 
@@ -818,10 +848,34 @@ export interface WithdrawalEntry {
 
 export interface ClientCommissionsOverviewResponse {
   range: RangeInfo
+  /** O link principal, o que todo afiliado sempre tem. */
   link: { code: string; url: string }
+  links: AffiliateLink[]
   balance: { availableCents: number; reservedCents: number; totalEarnedCents: number }
+  /** O que este afiliado ganha hoje, já resolvido (override individual ou padrão). */
+  percent: { first: number; recurring: number }
+  clicks: {
+    period: number
+    visitorsPeriod: number
+    total: number
+    byDay: { dia: string; clicks: number }[]
+  }
   referralCount: number
   periodReferralCount: number
+  subscriptions: {
+    active: number
+    canceled: number
+    overdue: number
+    withoutPlan: number
+    /** Soma das mensalidades ativas dos indicados (o que ELES pagam). */
+    mrrBaseCents: number
+    /** O que o afiliado recebe por mês se ninguém cancelar. */
+    mrrCents: number
+  }
+  /** Assinaturas NOVAS no período. */
+  sales: { count: number; commissionCents: number; paidCents: number }
+  /** Mensalidades de quem já era cliente, no período. */
+  recurring: { count: number; commissionCents: number; paidCents: number }
   activeSubscriptionCount: number
   periodTotalCents: number
   minWithdrawCents: number
@@ -835,6 +889,10 @@ export interface AdminCommissionsOverviewResponse {
   range: RangeInfo
   periodCommissionCents: number
   periodCommissionCount: number
+  periodFirstSaleCount: number
+  periodFirstSaleCommissionCents: number
+  periodRecurringCount: number
+  periodRecurringCommissionCents: number
   lifetimeCommissionCents: number
   affiliateCount: number
   totalReferrals: number
@@ -847,6 +905,7 @@ export interface AdminAffiliate {
   email: string
   businessName: string | null
   commissionPercentOverride: number | null
+  commissionRecurringPercentOverride: number | null
   referralCount: number
   activeSubscriptionCount: number
   totalEarnedCents: number
@@ -855,6 +914,8 @@ export interface AdminAffiliate {
 }
 
 export interface AdminAffiliatesResponse {
+  /** Percentuais globais, para mostrar no campo vazio o que o afiliado usa de fato. */
+  defaults: { percentDefault: number; recurringPercentDefault: number }
   affiliates: AdminAffiliate[]
 }
 
@@ -877,7 +938,10 @@ export interface AdminWithdrawalsResponse {
 }
 
 export interface AffiliateSettings {
+  /** Percentual da primeira venda (a assinatura nova). */
   percentDefault: number
+  /** Percentual das mensalidades seguintes do mesmo indicado. */
+  recurringPercentDefault: number
   minWithdrawCents: number
   maxMonths: number
 }
@@ -889,6 +953,8 @@ export interface AdminAffiliateLink {
    *  é configuração, não o endereço de onde a tela por acaso foi aberta. */
   url: string
   label: string | null
+  clicksTotal: number
+  clicksPeriod: number
   referralCount: number
   activeCount: number
   createdAt: string

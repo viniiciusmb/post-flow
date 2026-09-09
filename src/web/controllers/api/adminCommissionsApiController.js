@@ -18,9 +18,10 @@ const CODE_PATTERN = /^[a-zA-Z0-9_-]{3,32}$/;
 async function overview(req, res) {
   const { range, since, until } = resolveRange(req.query.range);
 
-  const [periodSummary, lifetimeSummary, affiliates] = await Promise.all([
+  const [periodSummary, lifetimeSummary, porTipo, affiliates] = await Promise.all([
     commissionEntriesRepository.sumTotal({ from: since, to: until }),
     commissionEntriesRepository.sumTotal({}),
+    commissionEntriesRepository.summaryTotal({ from: since, to: until }),
     affiliatesRepository.listAllWithStats({}),
   ]);
 
@@ -32,6 +33,10 @@ async function overview(req, res) {
     range: { key: range, since, until },
     periodCommissionCents: periodSummary.total_cents,
     periodCommissionCount: periodSummary.n,
+    periodFirstSaleCount: porTipo.primeira.n,
+    periodFirstSaleCommissionCents: porTipo.primeira.commissionCents,
+    periodRecurringCount: porTipo.recorrencia.n,
+    periodRecurringCommissionCents: porTipo.recorrencia.commissionCents,
     lifetimeCommissionCents: lifetimeSummary.total_cents,
     affiliateCount: affiliates.length,
     totalReferrals,
@@ -41,13 +46,22 @@ async function overview(req, res) {
 }
 
 async function listAffiliates(req, res) {
-  const affiliates = await affiliatesRepository.listAllWithStats({});
+  const [affiliates, settings] = await Promise.all([
+    affiliatesRepository.listAllWithStats({}),
+    affiliateService.getSettings(),
+  ]);
   res.json({
+    // Os padrões vão junto para a tela poder mostrar, no campo VAZIO de cada
+    // afiliado, qual percentual ele está usando de fato. Sem isso, "20% na
+    // primeira e nada na recorrência" pareceria "20% em tudo".
+    defaults: { percentDefault: settings.percentDefault, recurringPercentDefault: settings.recurringPercentDefault },
     affiliates: affiliates.map((a) => ({
-      userId: a.user_id,
+      userId: Number(a.user_id),
       email: a.email,
       businessName: a.business_name,
       commissionPercentOverride: a.commission_percent_override !== null ? Number(a.commission_percent_override) : null,
+      commissionRecurringPercentOverride:
+        a.commission_recurring_percent_override !== null ? Number(a.commission_recurring_percent_override) : null,
       referralCount: a.referral_count,
       activeSubscriptionCount: a.active_subscription_count,
       totalEarnedCents: a.total_earned_cents,
@@ -57,18 +71,38 @@ async function listAffiliates(req, res) {
   });
 }
 
+function percentualValido(valor) {
+  return valor === null || (typeof valor === 'number' && !Number.isNaN(valor) && valor >= 0 && valor <= 100);
+}
+
+// Percentual individual, um para a PRIMEIRA venda e outro para a RECORRÊNCIA.
+// Cada um é gravado só se veio no corpo: a tela salva um campo por vez (no
+// onBlur), e mandar o outro como undefined não pode apagá-lo.
 async function setAffiliatePercent(req, res) {
   const userId = Number(req.params.userId);
-  const { percent } = req.body;
+  const { percent, recurringPercent } = req.body;
 
-  if (percent !== null && (typeof percent !== 'number' || Number.isNaN(percent) || percent < 0 || percent > 100)) {
+  if (percent !== undefined && !percentualValido(percent)) {
+    return res.status(400).json({ error: res.locals.t('erros.percentualInvalido') });
+  }
+  if (recurringPercent !== undefined && !percentualValido(recurringPercent)) {
     return res.status(400).json({ error: res.locals.t('erros.percentualInvalido') });
   }
 
-  const affiliate = await affiliatesRepository.setPercentOverride(userId, percent);
+  let affiliate = await affiliatesRepository.getOrCreate(userId);
+  if (percent !== undefined) affiliate = await affiliatesRepository.setPercentOverride(userId, percent);
+  if (recurringPercent !== undefined) {
+    affiliate = await affiliatesRepository.setRecurringPercentOverride(userId, recurringPercent);
+  }
+
   res.json({
     userId,
-    commissionPercentOverride: affiliate.commission_percent_override !== null ? Number(affiliate.commission_percent_override) : null,
+    commissionPercentOverride:
+      affiliate.commission_percent_override !== null ? Number(affiliate.commission_percent_override) : null,
+    commissionRecurringPercentOverride:
+      affiliate.commission_recurring_percent_override !== null
+        ? Number(affiliate.commission_recurring_percent_override)
+        : null,
   });
 }
 
@@ -78,9 +112,12 @@ async function getSettings(req, res) {
 }
 
 async function putSettings(req, res) {
-  const { percentDefault, minWithdrawCents, maxMonths } = req.body;
+  const { percentDefault, recurringPercentDefault, minWithdrawCents, maxMonths } = req.body;
 
-  if (percentDefault !== undefined && (typeof percentDefault !== 'number' || percentDefault < 0 || percentDefault > 100)) {
+  if (percentDefault !== undefined && !percentualValido(percentDefault)) {
+    return res.status(400).json({ error: res.locals.t('erros.percentualInvalido') });
+  }
+  if (recurringPercentDefault !== undefined && !percentualValido(recurringPercentDefault)) {
     return res.status(400).json({ error: res.locals.t('erros.percentualInvalido') });
   }
   if (minWithdrawCents !== undefined && (typeof minWithdrawCents !== 'number' || minWithdrawCents < 0)) {
@@ -90,7 +127,12 @@ async function putSettings(req, res) {
     return res.status(400).json({ error: res.locals.t('erros.valorInvalido') });
   }
 
-  const settings = await affiliateService.setSettings({ percentDefault, minWithdrawCents, maxMonths });
+  const settings = await affiliateService.setSettings({
+    percentDefault,
+    recurringPercentDefault,
+    minWithdrawCents,
+    maxMonths,
+  });
   res.json(settings);
 }
 
@@ -159,17 +201,23 @@ function urlDoLink(code) {
 
 async function listLinks(req, res) {
   const adminId = req.session.user.id;
-  const links = await affiliateLinksRepository.listCustomWithStats(adminId);
+  const { since, until } = resolveRange(req.query.range);
+  // Mesma consulta do painel do afiliado (com cliques), filtrando o link
+  // padrão: a tela do admin lista só as campanhas que ele criou.
+  const todos = await affiliateLinksRepository.listByOwnerWithStats(adminId, { from: since, to: until });
+  const links = todos.filter((l) => !l.is_default);
   res.json({
     // Vai junto mesmo sem nenhum link criado: e com ela que a tela mostra a
     // previa do endereco enquanto o admin digita o codigo - justamente o
     // momento em que ainda nao existe link nenhum pra tirar a base.
     baseUrl: CONTACT.siteUrl,
     links: links.map((l) => ({
-      id: l.id,
+      id: Number(l.id),
       code: l.code,
       url: urlDoLink(l.code),
       label: l.label,
+      clicksTotal: l.clicks_total,
+      clicksPeriod: l.clicks_period,
       referralCount: l.referral_count,
       activeCount: l.active_count,
       createdAt: l.created_at,
@@ -194,7 +242,7 @@ async function createLink(req, res) {
     code,
     label: typeof label === 'string' ? label.trim().slice(0, 100) : null,
   });
-  res.json({ link: { id: link.id, code: link.code, url: urlDoLink(link.code), label: link.label } });
+  res.json({ link: { id: Number(link.id), code: link.code, url: urlDoLink(link.code), label: link.label } });
 }
 
 module.exports = {

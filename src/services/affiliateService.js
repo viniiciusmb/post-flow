@@ -17,9 +17,14 @@ const logger = require('../lib/logger');
 
 const SETTINGS_KEYS = {
   percentDefault: 'affiliate_commission_percent_default',
+  recurringPercentDefault: 'affiliate_commission_recurring_percent_default',
   minWithdrawCents: 'affiliate_min_withdraw_cents',
   maxMonths: 'affiliate_commission_max_months',
 };
+
+// Primeiro argumento do advisory lock: um número qualquer, fixo, que separa
+// este uso de qualquer outro lock por id que venha a existir no projeto.
+const LOCK_COMISSAO = 79001;
 
 const DEFAULTS = {
   percentDefault: 10,
@@ -27,20 +32,54 @@ const DEFAULTS = {
   maxMonths: 6,
 };
 
+// São DOIS percentuais desde a migration 079: o da primeira venda (a
+// assinatura nova) e o da recorrência (as mensalidades seguintes do mesmo
+// indicado). O da recorrência nasce valendo o mesmo que o outro - foi assim
+// que a migration o criou -, então ligar a separação não mudou o quanto
+// ninguém recebe até o admin decidir mexer.
 async function getSettings() {
   const [percentDefault, minWithdrawCents, maxMonths] = await Promise.all([
     settingsRepository.getValue(SETTINGS_KEYS.percentDefault, DEFAULTS.percentDefault),
     settingsRepository.getValue(SETTINGS_KEYS.minWithdrawCents, DEFAULTS.minWithdrawCents),
     settingsRepository.getValue(SETTINGS_KEYS.maxMonths, DEFAULTS.maxMonths),
   ]);
-  return { percentDefault, minWithdrawCents, maxMonths };
+  // O fallback da recorrência é o percentual da primeira venda, e não a
+  // constante 10: numa base onde o admin já tinha configurado 15% e a linha da
+  // recorrência ainda não existe, cair na constante daria um corte silencioso
+  // no que o afiliado recebe.
+  const recurringPercentDefault = await settingsRepository.getValue(
+    SETTINGS_KEYS.recurringPercentDefault,
+    percentDefault
+  );
+  return { percentDefault, recurringPercentDefault, minWithdrawCents, maxMonths };
 }
 
-async function setSettings({ percentDefault, minWithdrawCents, maxMonths }) {
+async function setSettings({ percentDefault, recurringPercentDefault, minWithdrawCents, maxMonths }) {
   if (percentDefault !== undefined) await settingsRepository.setValue(SETTINGS_KEYS.percentDefault, percentDefault);
+  if (recurringPercentDefault !== undefined) {
+    await settingsRepository.setValue(SETTINGS_KEYS.recurringPercentDefault, recurringPercentDefault);
+  }
   if (minWithdrawCents !== undefined) await settingsRepository.setValue(SETTINGS_KEYS.minWithdrawCents, minWithdrawCents);
   if (maxMonths !== undefined) await settingsRepository.setValue(SETTINGS_KEYS.maxMonths, maxMonths);
   return getSettings();
+}
+
+// O percentual que vale para um afiliado, por tipo de pagamento. Override
+// individual manda; sem ele, o padrão global daquele tipo.
+//
+// Os dois são independentes de propósito: um afiliado com 20% de override na
+// primeira venda e nada na recorrência continua na recorrência PADRÃO. A tela
+// do admin mostra o padrão como texto de fundo no campo vazio, senão essa
+// combinação pareceria "20% em tudo".
+function percentualPara(affiliate, settings, kind) {
+  if (kind === 'primeira') {
+    const override = affiliate && affiliate.commission_percent_override;
+    return override !== null && override !== undefined ? Number(override) : Number(settings.percentDefault);
+  }
+  const override = affiliate && affiliate.commission_recurring_percent_override;
+  return override !== null && override !== undefined
+    ? Number(override)
+    : Number(settings.recurringPercentDefault);
 }
 
 // Chamado logo depois de criar um usuario novo (cadastro normal ou primeira
@@ -108,23 +147,33 @@ async function recordCommissionForPayment({ clientUserId, provider, externalPaym
   const ownerUser = await usersRepository.findById(affiliateUserId);
   if (!ownerUser || ownerUser.role === 'admin') return { skipped: 'donoDoLinkEhAdmin' };
 
-  const { maxMonths, percentDefault } = await getSettings();
-  if (maxMonths && maxMonths > 0) {
-    const already = await commissionEntriesRepository.countByReferredUser(referredUserId);
-    if (already >= maxMonths) return { skipped: 'tetoDeMesesAtingido' };
-  }
-
+  const settings = await getSettings();
   const affiliate = await affiliatesRepository.getOrCreate(affiliateUserId);
-  const percent = affiliate.commission_percent_override !== null && affiliate.commission_percent_override !== undefined
-    ? Number(affiliate.commission_percent_override)
-    : Number(percentDefault);
-
-  const commissionCents = Math.round((Number(amountPaidCents) * percent) / 100);
-  if (commissionCents <= 0) return { skipped: 'valorZerado' };
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Serializa por INDICADO: sem isto, dois pagamentos do mesmo cliente
+    // chegando junto contariam os dois "nenhuma comissão ainda" e nasceriam
+    // duas primeiras vendas, cada uma com o percentual de entrada. O lock é da
+    // transação e cai sozinho no COMMIT/ROLLBACK.
+    await client.query('SELECT pg_advisory_xact_lock($1, $2)', [LOCK_COMISSAO, Number(referredUserId)]);
+
+    const already = await commissionEntriesRepository.countByReferredUserInTx(client, referredUserId);
+    if (settings.maxMonths && settings.maxMonths > 0 && already >= settings.maxMonths) {
+      await client.query('ROLLBACK');
+      return { skipped: 'tetoDeMesesAtingido' };
+    }
+
+    const kind = already === 0 ? 'primeira' : 'recorrencia';
+    const percent = percentualPara(affiliate, settings, kind);
+    const commissionCents = Math.round((Number(amountPaidCents) * percent) / 100);
+    if (commissionCents <= 0) {
+      await client.query('ROLLBACK');
+      return { skipped: 'valorZerado' };
+    }
+
     const entry = await commissionEntriesRepository.insertIfNotExists(client, {
       affiliateUserId,
       referredUserId,
@@ -133,6 +182,7 @@ async function recordCommissionForPayment({ clientUserId, provider, externalPaym
       amountPaidCents: Number(amountPaidCents),
       commissionPercent: percent,
       commissionCents,
+      kind,
     });
     if (!entry) {
       // Pagamento ja processado antes (reenvio de aviso) - nada a fazer.
@@ -142,9 +192,9 @@ async function recordCommissionForPayment({ clientUserId, provider, externalPaym
     await affiliatesRepository.credit(client, affiliateUserId, commissionCents);
     await client.query('COMMIT');
     logger.info(
-      `Comissao de ${commissionCents} centavos creditada ao afiliado ${affiliateUserId} (${provider} ${externalPaymentId}).`
+      `Comissao ${kind} de ${commissionCents} centavos (${percent}%) creditada ao afiliado ${affiliateUserId} (${provider} ${externalPaymentId}).`
     );
-    return { credited: commissionCents, affiliateUserId };
+    return { credited: commissionCents, affiliateUserId, kind, percent };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -156,6 +206,7 @@ async function recordCommissionForPayment({ clientUserId, provider, externalPaym
 module.exports = {
   getSettings,
   setSettings,
+  percentualPara,
   captureAttribution,
   recordCommissionForInvoice,
   recordCommissionForPayment,

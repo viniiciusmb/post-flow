@@ -13,10 +13,25 @@ async function getOrCreate(userId) {
   return rows[0];
 }
 
+// Percentual individual da PRIMEIRA venda. NULL devolve o afiliado ao padrão
+// global.
 async function setPercentOverride(userId, percent) {
   await getOrCreate(userId);
   const { rows } = await pool.query(
     `UPDATE affiliates SET commission_percent_override = $2, updated_at = now() WHERE user_id = $1 RETURNING *`,
+    [userId, percent]
+  );
+  return rows[0];
+}
+
+// Percentual individual da RECORRÊNCIA (mensalidades seguintes do mesmo
+// indicado). Independente do da primeira venda: um afiliado pode ganhar 20% na
+// entrada e 5% por mês depois, que é o arranjo mais comum em programa de
+// indicação.
+async function setRecurringPercentOverride(userId, percent) {
+  await getOrCreate(userId);
+  const { rows } = await pool.query(
+    `UPDATE affiliates SET commission_recurring_percent_override = $2, updated_at = now() WHERE user_id = $1 RETURNING *`,
     [userId, percent]
   );
   return rows[0];
@@ -107,7 +122,8 @@ async function listAllWithStats({ from, to } = {}) {
      LEFT JOIN affiliates a ON a.user_id = u.id
      LEFT JOIN commission_entries ce ON ce.affiliate_user_id = u.id
      WHERE u.role = 'client'
-     GROUP BY u.id, a.commission_percent_override, a.pix_key, a.pix_key_type,
+     GROUP BY u.id, a.commission_percent_override, a.commission_recurring_percent_override,
+              a.pix_key, a.pix_key_type,
               a.balance_available_cents, a.balance_reserved_cents, a.total_earned_cents
      HAVING count(DISTINCT r.id) > 0 OR coalesce(a.total_earned_cents, 0) > 0
      ORDER BY coalesce(a.total_earned_cents, 0) DESC, u.email`,
@@ -119,6 +135,7 @@ async function listAllWithStats({ from, to } = {}) {
 module.exports = {
   getOrCreate,
   setPercentOverride,
+  setRecurringPercentOverride,
   setPixKey,
   credit,
   reserveForWithdrawal,

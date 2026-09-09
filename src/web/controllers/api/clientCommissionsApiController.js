@@ -1,89 +1,102 @@
 'use strict';
 
-// Painel "Comissões" do cliente: link de afiliado, saldo, indicações,
-// assinaturas ativas na base dele, extrato e pedido de saque via Pix.
+// Painel "Comissões" do cliente: os links dele (um por lugar onde divulga),
+// cliques, indicações, assinaturas ativas/canceladas, MRR previsto, vendas e
+// recorrência do período, extrato e saque via Pix.
 const affiliateLinksRepository = require('../../../repositories/affiliateLinksRepository');
 const affiliatesRepository = require('../../../repositories/affiliatesRepository');
-const referralsRepository = require('../../../repositories/referralsRepository');
-const commissionEntriesRepository = require('../../../repositories/commissionEntriesRepository');
 const affiliateWithdrawalsRepository = require('../../../repositories/affiliateWithdrawalsRepository');
+const settingsRepository = require('../../../repositories/settingsRepository');
 const affiliateService = require('../../../services/affiliateService');
-const { CONTACT } = require('../../../config/constants');
+const afiliadoDashboardService = require('../../../services/afiliadoDashboardService');
+const demonstracao = require('../../../lib/demonstracaoDeAfiliado');
 // Mesmo filtro de periodo (hoje/ontem/7 dias/mes atual/mes passado) ja usado
 // nos outros dashboards - ver DateRangeFilter.tsx no frontend.
 const { resolveRange } = require('../../../lib/dateRanges');
 
 const PIX_KEY_TYPES = ['cpf', 'cnpj', 'email', 'telefone', 'aleatoria'];
 
+// Teto de links por afiliado. Não é medo de tabela grande: é que uma lista de
+// cem links não responde mais "de onde vêm minhas vendas", que é a pergunta
+// que a tela existe para responder.
+const MAX_LINKS = 20;
+
 async function overview(req, res) {
   const userId = req.session.user.id;
-  const { range, since, until } = resolveRange(req.query.range);
+  const { range, since, until } = resolveRange(req.query.range, { since: req.query.since, until: req.query.until });
 
-  const [
-    link,
-    affiliate,
-    referralCount,
-    periodReferralCount,
-    activeCount,
-    periodEntries,
-    recentReferrals,
-    settings,
-    withdrawals,
-  ] = await Promise.all([
-    affiliateLinksRepository.getOrCreateDefault(userId),
-    affiliatesRepository.getOrCreate(userId),
-    referralsRepository.countByReferrer(userId, {}),
-    referralsRepository.countByReferrer(userId, { from: since, to: until }),
-    referralsRepository.countActiveSubscriptionsByReferrer(userId),
-    commissionEntriesRepository.listRecentByAffiliate(userId, { from: since, to: until, limit: 30 }),
-    referralsRepository.listRecentByReferrer(userId, 20),
-    affiliateService.getSettings(),
-    affiliateWithdrawalsRepository.listByAffiliate(userId, 10),
-  ]);
+  const painel = await afiliadoDashboardService.montar({ userId, since, until, rangeKey: range });
 
-  const periodTotalCents = periodEntries.reduce((sum, e) => sum + e.commission_cents, 0);
+  if (await demonstracao.ehDemo(settingsRepository, userId)) {
+    const { maxMonths } = await affiliateService.getSettings();
+    return res.json(demonstracao.aplicar(painel, { userId, since, until, maxMonths }));
+  }
 
+  res.json(painel);
+}
+
+function limparRotulo(label) {
+  if (typeof label !== 'string') return null;
+  const limpo = label.trim().slice(0, 60);
+  return limpo.length ? limpo : null;
+}
+
+// O afiliado escolhe o RÓTULO; o código do link é sempre gerado por nós (ver
+// affiliateLinksRepository.createForOwner).
+async function createLink(req, res) {
+  const userId = req.session.user.id;
+  const label = limparRotulo(req.body.label);
+  if (!label) return res.status(400).json({ error: res.locals.t('erros.rotuloDoLinkObrigatorio') });
+
+  const total = await affiliateLinksRepository.countByOwner(userId);
+  if (total >= MAX_LINKS) {
+    return res.status(400).json({ error: res.locals.t('erros.limiteDeLinks', { max: MAX_LINKS }) });
+  }
+
+  const link = await affiliateLinksRepository.createForOwner(userId, { label });
   res.json({
-    range: { key: range, since, until },
     link: {
+      id: Number(link.id),
       code: link.code,
-      url: `${CONTACT.siteUrl}/?ref=${link.code}`,
+      url: afiliadoDashboardService.urlDoLink(link.code),
+      label: link.label,
+      isDefault: false,
+      archivedAt: null,
+      clicksTotal: 0,
+      clicksPeriod: 0,
+      visitorsPeriod: 0,
+      referralCount: 0,
+      activeCount: 0,
+      commissionCents: 0,
+      createdAt: link.created_at,
     },
-    balance: {
-      availableCents: affiliate.balance_available_cents,
-      reservedCents: affiliate.balance_reserved_cents,
-      totalEarnedCents: affiliate.total_earned_cents,
-    },
-    referralCount,
-    periodReferralCount,
-    activeSubscriptionCount: activeCount,
-    periodTotalCents,
-    minWithdrawCents: settings.minWithdrawCents,
-    pix: { key: affiliate.pix_key, type: affiliate.pix_key_type },
-    recentCommissions: periodEntries.map((e) => ({
-      id: e.id,
-      referredEmail: e.referred_email,
-      referredBusinessName: e.referred_business_name,
-      amountPaidCents: e.amount_paid_cents,
-      commissionPercent: Number(e.commission_percent),
-      commissionCents: e.commission_cents,
-      createdAt: e.created_at,
-    })),
-    recentReferrals: recentReferrals.map((r) => ({
-      id: r.id,
-      email: r.email,
-      businessName: r.business_name,
-      subscriptionStatus: r.subscription_status,
-      createdAt: r.created_at,
-    })),
-    recentWithdrawals: withdrawals.map((w) => ({
-      id: w.id,
-      amountCents: w.amount_cents,
-      status: w.status,
-      requestedAt: w.requested_at,
-      resolvedAt: w.resolved_at,
-    })),
   });
+}
+
+async function renameLink(req, res) {
+  const userId = req.session.user.id;
+  const id = Number(req.params.id);
+  const label = limparRotulo(req.body.label);
+  if (!label) return res.status(400).json({ error: res.locals.t('erros.rotuloDoLinkObrigatorio') });
+
+  // O rótulo do link padrão também pode ser trocado: ele nasce sem rótulo
+  // nenhum, e "Geral" ou "Meu link principal" é escolha de quem usa.
+  const link = await affiliateLinksRepository.setLabel(id, userId, label);
+  if (!link) return res.status(404).json({ error: res.locals.t('erros.linkNaoEncontrado') });
+  res.json({ link: { id: Number(link.id), label: link.label } });
+}
+
+// Arquivar é só tirar da lista principal - o link continua contando clique e
+// continua atribuindo venda (ver migration 079). Por isso não há confirmação
+// dramática: nada se perde.
+async function archiveLink(req, res) {
+  const userId = req.session.user.id;
+  const id = Number(req.params.id);
+  const arquivar = req.body.archived !== false;
+
+  const link = await affiliateLinksRepository.setArchived(id, userId, arquivar);
+  if (!link) return res.status(400).json({ error: res.locals.t('erros.linkNaoPodeSerArquivado') });
+  res.json({ link: { id: Number(link.id), archivedAt: link.archived_at } });
 }
 
 async function updatePixKey(req, res) {
@@ -106,6 +119,14 @@ async function updatePixKey(req, res) {
 // do corpo da requisicao, sempre lido do banco na hora.
 async function requestWithdrawal(req, res) {
   const userId = req.session.user.id;
+
+  // Numa conta em demonstração o saldo da tela não existe no banco. Gravar um
+  // pedido de saque a partir dele mandaria o admin transferir dinheiro por uma
+  // comissão que ninguém gerou - então aqui a ação responde e não grava nada.
+  if (await demonstracao.ehDemo(settingsRepository, userId)) {
+    return res.json({ withdrawal: { id: -1, amountCents: 0, status: 'pendente' } });
+  }
+
   const affiliate = await affiliatesRepository.getOrCreate(userId);
 
   if (!affiliate.pix_key || !affiliate.pix_key_type) {
@@ -130,7 +151,7 @@ async function requestWithdrawal(req, res) {
     pixKeyType: affiliate.pix_key_type,
   });
 
-  res.json({ withdrawal: { id: withdrawal.id, amountCents: withdrawal.amount_cents, status: withdrawal.status } });
+  res.json({ withdrawal: { id: Number(withdrawal.id), amountCents: withdrawal.amount_cents, status: withdrawal.status } });
 }
 
-module.exports = { overview, updatePixKey, requestWithdrawal };
+module.exports = { overview, createLink, renameLink, archiveLink, updatePixKey, requestWithdrawal, MAX_LINKS };

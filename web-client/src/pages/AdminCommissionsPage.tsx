@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { IconCoins, IconCopy, IconUsers, IconUserCheck, IconWallet, IconGift } from "@tabler/icons-react"
+import { IconCoins, IconCopy, IconUsers, IconUserCheck, IconWallet, IconGift, IconShoppingBag, IconRepeat, IconPointer } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { StatCard } from "@/components/dashboard/StatCard"
@@ -68,7 +68,19 @@ function OverviewTab() {
             <StatCard label={t("com.totalIndicacoes")} value={overview.totalReferrals} icon={<IconUsers />} />
             <StatCard label={t("com.totalAssinaturasAtivas")} value={overview.totalActiveSubscriptions} icon={<IconUserCheck />} />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Venda nova e recorrência têm percentuais diferentes, então
+                somá-las num total só esconde o que está crescendo. */}
+            <StatCard
+              label={`${t("com.vendasNovasNoPeriodo")} · ${overview.periodFirstSaleCount}`}
+              value={formatCents(overview.periodFirstSaleCommissionCents)}
+              icon={<IconShoppingBag />}
+            />
+            <StatCard
+              label={`${t("com.recorrenciasNoPeriodo")} · ${overview.periodRecurringCount}`}
+              value={formatCents(overview.periodRecurringCommissionCents)}
+              icon={<IconRepeat />}
+            />
             <StatCard label={t("com.totalAfiliados")} value={overview.affiliateCount} icon={<IconGift />} />
             <StatCard label={t("com.pendenteDeSaque")} value={formatCents(overview.totalPendingWithdrawalCents)} icon={<IconWallet />} />
           </div>
@@ -78,32 +90,46 @@ function OverviewTab() {
   )
 }
 
+type CampoPercentual = "primeira" | "recorrencia"
+
 function AffiliatesTab() {
   const t = useT()
   const [affiliates, setAffiliates] = useState<AdminAffiliate[] | null>(null)
-  const [drafts, setDrafts] = useState<Record<number, string>>({})
+  const [defaults, setDefaults] = useState<{ percentDefault: number; recurringPercentDefault: number } | null>(null)
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [savingId, setSavingId] = useState<number | null>(null)
 
   async function load() {
     const res = await api.get<AdminAffiliatesResponse>("/api/admin/commissions/affiliates")
     setAffiliates(res.affiliates)
+    setDefaults(res.defaults)
   }
 
   useEffect(() => {
     load()
   }, [])
 
-  function draftFor(a: AdminAffiliate) {
-    return drafts[a.userId] ?? (a.commissionPercentOverride !== null ? String(a.commissionPercentOverride) : "")
+  function valorAtual(a: AdminAffiliate, campo: CampoPercentual) {
+    const override = campo === "primeira" ? a.commissionPercentOverride : a.commissionRecurringPercentOverride
+    return override !== null ? String(override) : ""
   }
 
-  async function savePercent(a: AdminAffiliate) {
-    const raw = draftFor(a).trim()
+  function draftFor(a: AdminAffiliate, campo: CampoPercentual) {
+    return drafts[`${a.userId}-${campo}`] ?? valorAtual(a, campo)
+  }
+
+  // Salva UM campo por vez, no onBlur. O outro nem viaja: o servidor só grava
+  // o que veio no corpo, então mandar os dois juntos faria um campo em branco
+  // apagar o percentual do outro sem ninguém ter mexido nele.
+  async function savePercent(a: AdminAffiliate, campo: CampoPercentual) {
+    const raw = draftFor(a, campo).trim()
+    if (raw === valorAtual(a, campo)) return
     const percent = raw === "" ? null : Number(raw)
     if (percent !== null && (Number.isNaN(percent) || percent < 0 || percent > 100)) return
     setSavingId(a.userId)
     try {
-      await api.put(`/api/admin/commissions/affiliates/${a.userId}/percent`, { percent })
+      const corpo = campo === "primeira" ? { percent } : { recurringPercent: percent }
+      await api.put(`/api/admin/commissions/affiliates/${a.userId}/percent`, corpo)
       await load()
     } finally {
       setSavingId(null)
@@ -126,7 +152,8 @@ function AffiliatesTab() {
                 <TableHead>{t("com.assinaturasAtivas")}</TableHead>
                 <TableHead>{t("com.comissaoTotal")}</TableHead>
                 <TableHead>{t("com.saldoDisponivel")}</TableHead>
-                <TableHead>{t("com.percentualIndividual")}</TableHead>
+                <TableHead className="whitespace-nowrap">{t("com.percentualPrimeiraCurto")}</TableHead>
+                <TableHead className="whitespace-nowrap">{t("com.percentualRecorrenciaCurto")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -137,18 +164,37 @@ function AffiliatesTab() {
                   <TableCell>{a.activeSubscriptionCount}</TableCell>
                   <TableCell className="tabular-nums">{formatCents(a.totalEarnedCents)}</TableCell>
                   <TableCell className="tabular-nums">{formatCents(a.balanceAvailableCents)}</TableCell>
+                  {/* Campo vazio mostra o padrão global como texto de fundo:
+                      sem isso, "20% na primeira e nada na recorrência"
+                      pareceria "20% em tudo". */}
                   <TableCell>
                     <Input
                       type="number"
                       min={0}
                       max={100}
                       step={0.5}
-                      placeholder={t("com.usaPadrao")}
-                      value={draftFor(a)}
+                      aria-label={t("com.percentualPrimeiraLabel")}
+                      placeholder={defaults ? `${defaults.percentDefault}` : t("com.usaPadrao")}
+                      value={draftFor(a, "primeira")}
                       disabled={savingId === a.userId}
-                      onChange={(e) => setDrafts((d) => ({ ...d, [a.userId]: e.target.value }))}
-                      onBlur={() => savePercent(a)}
-                      className="w-24"
+                      onChange={(e) => setDrafts((d) => ({ ...d, [`${a.userId}-primeira`]: e.target.value }))}
+                      onBlur={() => savePercent(a, "primeira")}
+                      className="w-20"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      aria-label={t("com.percentualRecorrenciaLabel")}
+                      placeholder={defaults ? `${defaults.recurringPercentDefault}` : t("com.usaPadrao")}
+                      value={draftFor(a, "recorrencia")}
+                      disabled={savingId === a.userId}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [`${a.userId}-recorrencia`]: e.target.value }))}
+                      onBlur={() => savePercent(a, "recorrencia")}
+                      className="w-20"
                     />
                   </TableCell>
                 </TableRow>
@@ -366,6 +412,7 @@ function LinksTab() {
             <TableRow className="hover:bg-transparent">
               <TableHead>{t("com.rotuloDoLink")}</TableHead>
               <TableHead>Link completo</TableHead>
+              <TableHead>{t("com.cliques")}</TableHead>
               <TableHead>{t("com.indicacoes")}</TableHead>
               <TableHead>{t("com.assinaturasAtivas")}</TableHead>
             </TableRow>
@@ -379,6 +426,12 @@ function LinksTab() {
                     <code className="max-w-[60vw] truncate font-mono text-xs sm:max-w-[22rem]">{l.url}</code>
                     <CopiarUrl url={l.url} />
                   </div>
+                </TableCell>
+                <TableCell className="tabular-nums">
+                  <span className="inline-flex items-center gap-1">
+                    <IconPointer className="size-3.5 text-muted-foreground/60" />
+                    {l.clicksTotal}
+                  </span>
                 </TableCell>
                 <TableCell>{l.referralCount}</TableCell>
                 <TableCell>{l.activeCount}</TableCell>
@@ -395,6 +448,7 @@ function SettingsTab() {
   const t = useT()
   const [settings, setSettings] = useState<AffiliateSettings | null>(null)
   const [percentDraft, setPercentDraft] = useState("")
+  const [recurringPercentDraft, setRecurringPercentDraft] = useState("")
   const [minWithdrawDraft, setMinWithdrawDraft] = useState("")
   const [maxMonthsDraft, setMaxMonthsDraft] = useState("")
   const [busy, setBusy] = useState(false)
@@ -404,6 +458,7 @@ function SettingsTab() {
     api.get<AffiliateSettings>("/api/admin/commissions/settings").then((s) => {
       setSettings(s)
       setPercentDraft(String(s.percentDefault))
+      setRecurringPercentDraft(String(s.recurringPercentDefault))
       setMinWithdrawDraft((s.minWithdrawCents / 100).toFixed(2))
       setMaxMonthsDraft(String(s.maxMonths))
     })
@@ -415,10 +470,13 @@ function SettingsTab() {
     try {
       const res = await api.put<AffiliateSettings>("/api/admin/commissions/settings", {
         percentDefault: Number(percentDraft),
+        recurringPercentDefault: Number(recurringPercentDraft),
         minWithdrawCents: Math.round(Number(minWithdrawDraft) * 100),
         maxMonths: Number(maxMonthsDraft),
       })
       setSettings(res)
+      setPercentDraft(String(res.percentDefault))
+      setRecurringPercentDraft(String(res.recurringPercentDefault))
       setSaved(true)
     } finally {
       setBusy(false)
@@ -431,20 +489,39 @@ function SettingsTab() {
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
         {saved && <p className="text-sm text-status-posted">{t("com.configuracoesSalvas")}</p>}
-        <Field>
-          <FieldLabel htmlFor="percentDefault">{t("com.configPercentualPadrao")}</FieldLabel>
-          <Input
-            id="percentDefault"
-            type="number"
-            min={0}
-            max={100}
-            step={0.5}
-            className="w-32"
-            value={percentDraft}
-            onChange={(e) => setPercentDraft(e.target.value)}
-          />
-          <FieldDescription>{t("com.configPercentualPadraoDescricao")}</FieldDescription>
-        </Field>
+        {/* Dois percentuais padrão: um para a assinatura nova e outro para as
+            mensalidades seguintes. Cada afiliado pode ter os dele na aba
+            Afiliados; estes valem para quem não tem. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="percentDefault">{t("com.percentualPadraoPrimeira")}</FieldLabel>
+            <Input
+              id="percentDefault"
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              className="w-32"
+              value={percentDraft}
+              onChange={(e) => setPercentDraft(e.target.value)}
+            />
+            <FieldDescription>{t("com.vendasNoMesDica")}</FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="recurringPercentDefault">{t("com.percentualPadraoRecorrencia")}</FieldLabel>
+            <Input
+              id="recurringPercentDefault"
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              className="w-32"
+              value={recurringPercentDraft}
+              onChange={(e) => setRecurringPercentDraft(e.target.value)}
+            />
+            <FieldDescription>{t("com.configPercentualPadraoDescricao")}</FieldDescription>
+          </Field>
+        </div>
         <Field>
           <FieldLabel htmlFor="minWithdraw">{t("com.configSaqueMinimo")}</FieldLabel>
           <Input

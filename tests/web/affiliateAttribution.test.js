@@ -130,7 +130,10 @@ test('admin ve o afiliado na lista depois de uma indicacao', async () => {
 
   const r = await agenteAdmin.get('/api/admin/commissions/affiliates');
   assert.equal(r.status, 200);
-  const encontrado = r.body.affiliates.find((a) => a.userId === referente.id);
+  // A API devolve o id como NÚMERO (o Postgres entrega BIGINT como string, e
+  // o controller converte). Comparar com o id cru do banco compararia número
+  // com texto — o mesmo tropeço de BIGINT que já apareceu no tunnelTestJob.
+  const encontrado = r.body.affiliates.find((a) => a.userId === Number(referente.id));
   assert.ok(encontrado, 'o afiliado com indicacao nova precisa aparecer na lista do admin');
   assert.ok(encontrado.referralCount >= 1);
 });

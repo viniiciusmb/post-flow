@@ -5,6 +5,11 @@
 // Precisa vir DEPOIS da sessao/CSRF (usa req.session) e ANTES das rotas
 // publicas - qualquer uma delas pode receber o parametro, nao so a landing
 // (alguem pode compartilhar um link direto pra /termos, por exemplo).
+const affiliateLinksRepository = require('../../repositories/affiliateLinksRepository');
+const affiliateLinkClicksRepository = require('../../repositories/affiliateLinkClicksRepository');
+const { pareceRobo, contaAgora } = require('../../lib/rastreioDeCliques');
+const logger = require('../../lib/logger');
+
 const REF_PATTERN = /^[a-zA-Z0-9_-]{1,32}$/;
 
 // Plano escolhido na landing, guardado ate a conta existir - so depois de
@@ -44,7 +49,33 @@ function affiliateAttribution(req, res, next) {
     req.session.affiliateAttribution.landingPath = req.path;
   }
 
+  if (typeof ref === 'string' && REF_PATTERN.test(ref)) registrarClique(req, ref);
+
   next();
+}
+
+// Conta a visita como um clique naquele link. Roda SOLTO de propósito (sem
+// await): quem abriu a landing não pode esperar duas idas ao banco para ver a
+// página, e um erro aqui é estatística perdida, nunca uma página que não abre.
+function registrarClique(req, code) {
+  if (pareceRobo(req.get('user-agent'))) return;
+  if (!contaAgora(req.session, code)) return;
+
+  const ip = req.ip;
+  const userAgent = req.get('user-agent');
+  const landingPath = req.path;
+  const utmSource = typeof req.query.utm_source === 'string' ? req.query.utm_source.slice(0, 200) : null;
+
+  (async () => {
+    const link = await affiliateLinksRepository.findByCode(code);
+    if (!link) return;
+    await affiliateLinkClicksRepository.record({
+      affiliateLinkId: link.id,
+      visitorHash: affiliateLinkClicksRepository.visitorHash(ip, userAgent),
+      landingPath,
+      utmSource,
+    });
+  })().catch((err) => logger.error('Falha ao registrar clique de afiliado:', err.message));
 }
 
 module.exports = affiliateAttribution;

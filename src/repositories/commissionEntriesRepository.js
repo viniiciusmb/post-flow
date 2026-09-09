@@ -18,17 +18,33 @@ async function insertIfNotExists(client, {
   amountPaidCents,
   commissionPercent,
   commissionCents,
+  kind,
 }) {
   const { rows } = await client.query(
     `INSERT INTO commission_entries
        (affiliate_user_id, referred_user_id, external_payment_id, provider,
-        amount_paid_cents, commission_percent, commission_cents)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+        amount_paid_cents, commission_percent, commission_cents, kind)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (external_payment_id) DO NOTHING
      RETURNING *`,
-    [affiliateUserId, referredUserId, externalPaymentId, provider, amountPaidCents, commissionPercent, commissionCents]
+    [affiliateUserId, referredUserId, externalPaymentId, provider, amountPaidCents, commissionPercent, commissionCents, kind]
   );
   return rows[0] || null;
+}
+
+// Este indicado já gerou alguma comissão? É o que decide se o pagamento que
+// está chegando é a PRIMEIRA VENDA ou uma RECORRÊNCIA.
+//
+// Recebe o `client` da transação de propósito: a decisão precisa acontecer
+// dentro do mesmo bloco que insere o lançamento, senão dois pagamentos do
+// mesmo cliente chegando junto leriam "nenhuma comissão ainda" os dois e
+// nasceriam duas "primeiras vendas".
+async function countByReferredUserInTx(client, referredUserId) {
+  const { rows } = await client.query(
+    'SELECT count(*)::int AS n FROM commission_entries WHERE referred_user_id = $1',
+    [referredUserId]
+  );
+  return rows[0].n;
 }
 
 async function countByReferredUser(referredUserId) {
@@ -65,9 +81,53 @@ async function listRecentByAffiliate(affiliateUserId, { from, to, limit = 20 } =
   return rows;
 }
 
+// Totais do período separados por tipo. É o que alimenta os dois cartões que
+// não podem ser somados num só: "vendas no mês" (assinatura nova) e
+// "recorrência do mês" (mensalidade de quem já era cliente).
+async function summaryByAffiliate(affiliateUserId, { from, to } = {}) {
+  const { rows } = await pool.query(
+    `SELECT kind,
+            count(*)::int AS n,
+            coalesce(sum(commission_cents), 0)::int AS commission_cents,
+            coalesce(sum(amount_paid_cents), 0)::int AS paid_cents
+     FROM commission_entries
+     WHERE affiliate_user_id = $1
+       AND ($2::timestamptz IS NULL OR created_at >= $2)
+       AND ($3::timestamptz IS NULL OR created_at <= $3)
+     GROUP BY kind`,
+    [affiliateUserId, from || null, to || null]
+  );
+  const vazio = { n: 0, commissionCents: 0, paidCents: 0 };
+  const resumo = { primeira: { ...vazio }, recorrencia: { ...vazio } };
+  for (const r of rows) {
+    resumo[r.kind] = { n: r.n, commissionCents: r.commission_cents, paidCents: r.paid_cents };
+  }
+  return resumo;
+}
+
+// Mesma separação, mas global (painel do admin).
+async function summaryTotal({ from, to } = {}) {
+  const { rows } = await pool.query(
+    `SELECT kind,
+            count(*)::int AS n,
+            coalesce(sum(commission_cents), 0)::int AS commission_cents
+     FROM commission_entries
+     WHERE ($1::timestamptz IS NULL OR created_at >= $1)
+       AND ($2::timestamptz IS NULL OR created_at <= $2)
+     GROUP BY kind`,
+    [from || null, to || null]
+  );
+  const resumo = { primeira: { n: 0, commissionCents: 0 }, recorrencia: { n: 0, commissionCents: 0 } };
+  for (const r of rows) resumo[r.kind] = { n: r.n, commissionCents: r.commission_cents };
+  return resumo;
+}
+
 module.exports = {
   insertIfNotExists,
   countByReferredUser,
+  countByReferredUserInTx,
   sumTotal,
+  summaryByAffiliate,
+  summaryTotal,
   listRecentByAffiliate,
 };
