@@ -75,12 +75,16 @@ const LINKS_DEMO = [
 // criaram conta) é o retrato normal de um programa de indicação rodando há uns
 // meses - não um cenário perfeito onde todo cadastro vira cliente.
 const INDICADOS_DEMO = [
-  { nome: 'Cortes do Léo', plano: 'pro', precoCents: 15990, status: 'ativo', meses: 5, dias: 2, link: 1 },
+  // `dias: 0` faz a mensalidade dele cair HOJE. Sem pelo menos um assim, o
+  // painel abre (o padrão é "hoje") com todos os cartões de dinheiro zerados,
+  // e quem olha conclui que não há nada acontecendo.
+  { nome: 'Cortes do Léo', plano: 'pro', precoCents: 15990, status: 'ativo', meses: 5, dias: 0, link: 1 },
   { nome: 'Studio Vertical', plano: 'max', precoCents: 22990, status: 'ativo', meses: 4, dias: 4, link: 2 },
   { nome: 'Canal Sem Roteiro', plano: 'pro', precoCents: 15990, status: 'ativo', meses: 3, dias: 6, link: 1 },
   { nome: 'Aline Podcasts', plano: 'starter', precoCents: 9990, status: 'ativo', meses: 2, dias: 11, link: 3 },
   { nome: 'Mateus Gameplay', plano: 'pro', precoCents: 15990, status: 'ativo', meses: 1, dias: 19, link: 1 },
-  { nome: 'Doce Rotina', plano: 'starter', precoCents: 9990, status: 'ativo', meses: 0, dias: 3, link: 2 },
+  // Assinou hoje: é a "venda nova" que aparece no filtro do dia.
+  { nome: 'Doce Rotina', plano: 'starter', precoCents: 9990, status: 'ativo', meses: 0, dias: 0, link: 2 },
   { nome: 'Bruno Fitness', plano: 'starter', precoCents: 9990, status: 'cancelado', meses: 5, dias: 9, mesesPagos: 3, link: 1 },
   { nome: 'Rota 77 Viagens', plano: 'pro', precoCents: 15990, status: 'cancelado', meses: 4, dias: 16, mesesPagos: 2, link: 3 },
   { nome: 'Papo de Obra', plano: 'starter', precoCents: 9990, status: 'inadimplente', meses: 2, dias: 23, mesesPagos: 2, link: 2 },

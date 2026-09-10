@@ -174,3 +174,23 @@ test('conta que nao esta na lista de demonstracao nunca ve numero inventado', as
     await settingsRepository.setValue(demonstracao.CHAVE, []);
   }
 });
+
+test('a conta em demonstracao tem movimento no filtro do DIA, nao so no acumulado', async () => {
+  // O padrão dos dashboards é "hoje". Sem uma venda e uma recorrência caindo
+  // hoje, o painel abre com todos os cartões de dinheiro zerados e a tela
+  // parece um sistema parado - o oposto do que a demonstração existe pra
+  // mostrar.
+  const dono = await createLoginableClient();
+  const agente = createAgent(baseUrl);
+  await agente.login(dono.email, dono.password);
+  await settingsRepository.setValue(demonstracao.CHAVE, [Number(dono.id)]);
+  try {
+    const { body } = await agente.get('/api/client/commissions/overview?range=today');
+    assert.ok(body.sales.count > 0, 'tem venda nova hoje');
+    assert.ok(body.recurring.count > 0, 'tem recorrencia hoje');
+    assert.ok(body.periodTotalCents > 0);
+    assert.ok(body.clicks.period > 0, 'e cliques hoje');
+  } finally {
+    await settingsRepository.setValue(demonstracao.CHAVE, []);
+  }
+});
