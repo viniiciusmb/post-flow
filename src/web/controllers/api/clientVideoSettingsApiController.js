@@ -10,6 +10,7 @@ const clientVideoSettingsRepository = require('../../../repositories/clientVideo
 const videoEditingService = require('../../../services/videoEditingService');
 const idiomaDoAudio = require('../../../lib/idiomaDoAudio');
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
+const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 
 const CAPTION_STYLES = [...Object.keys(videoEditingService.CAPTION_STYLES), 'none'];
 const TITLE_STYLES = Object.keys(videoEditingService.TITLE_STYLES);
@@ -104,6 +105,21 @@ function toApiWithOptions(settings) {
 // (?channelId ausente) ou um canal específico. Devolve erro pronto quando o
 // canal não é do cliente - é o mesmo cuidado de posse do resto do sistema:
 // nunca confiar no id que veio da URL.
+// Aceita os tres alvos possiveis: o padrao do cliente (nada), um canal
+// (?channelId=), ou um video avulso (?sourceVideoId=). Video e canal sao
+// mutuamente exclusivos - o banco tambem recusa (CHECK da migration 081).
+async function resolverAlvoDeVideo(req) {
+  const bruto = req.query.sourceVideoId ?? req.body?.sourceVideoId;
+  if (bruto === undefined || bruto === null || bruto === '') return { sourceVideoId: null };
+  const id = Number(bruto);
+  if (!Number.isInteger(id) || id <= 0) return { erro: 'videoInvalido' };
+  // Posse conferida aqui: sem isto, um cliente configuraria o estilo do video
+  // de outro so mandando o id.
+  const video = await sourceVideosRepository.findByIdOwnedByClient(id, req.session.user.id);
+  if (!video) return { erro: 'videoInvalido' };
+  return { sourceVideoId: id };
+}
+
 async function resolverAlvo(req) {
   const bruto = req.query.channelId ?? req.body?.channelId;
   if (bruto === undefined || bruto === null || bruto === '' || bruto === 'all') {
@@ -119,6 +135,51 @@ async function resolverAlvo(req) {
 }
 
 async function get(req, res) {
+  const alvoVideo = await resolverAlvoDeVideo(req);
+  if (alvoVideo.erro) return res.status(400).json({ error: res.locals.t('erros.videoNaoEncontrado') });
+  if (alvoVideo.sourceVideoId) {
+    const doVideo = await clientVideoSettingsRepository.findVideoOverride(
+      req.session.user.id,
+      alvoVideo.sourceVideoId
+    );
+    // Sem estilo próprio ainda: mostra o padrão do cliente como ponto de
+    // partida, marcado como "ainda não é deste vídeo" - é o mesmo que a tela
+    // de canal já faz.
+    const [base, canais, comEstiloProprio] = await Promise.all([
+      doVideo
+        ? Promise.resolve(doVideo)
+        : clientVideoSettingsRepository.findByClientId(req.session.user.id),
+      youtubeChannelsRepository.listByClientId(req.session.user.id),
+      clientVideoSettingsRepository.listChannelOverrides(req.session.user.id),
+    ]);
+    // O idioma mostrado é o que REALMENTE vale para este vídeo. A escolha
+    // feita no envio vence a configuração, então exibir a configuração aqui
+    // faria a tela dizer "original" logo depois de o cliente ter escolhido
+    // português no pop-up - e ele salvaria por cima achando que corrigia.
+    const escolhido = await sourceVideosRepository.findByIdOwnedByClient(
+      alvoVideo.sourceVideoId,
+      req.session.user.id
+    );
+    const comIdiomaReal = {
+      ...base,
+      audio_language: idiomaDoAudio.idiomaParaOVideo(escolhido, base),
+    };
+    return res.json({
+      ...toApiWithOptions(comIdiomaReal),
+      channelId: null,
+      sourceVideoId: alvoVideo.sourceVideoId,
+      usesDefault: !doVideo,
+      channels: canais.map((c) => ({
+        id: Number(c.id),
+        name: c.channel_name || c.youtube_channel_id,
+        hasOwnStyle: comEstiloProprio.includes(Number(c.id)),
+      })),
+    });
+  }
+  return getPorCanal(req, res);
+}
+
+async function getPorCanal(req, res) {
   const alvo = await resolverAlvo(req);
   if (alvo.erro) return res.status(404).json({ error: alvo.erro });
 
@@ -154,6 +215,8 @@ async function get(req, res) {
 }
 
 async function update(req, res) {
+  const alvoVideo = await resolverAlvoDeVideo(req);
+  if (alvoVideo.erro) return res.status(400).json({ error: res.locals.t('erros.videoNaoEncontrado') });
   const {
     captionStyle,
     clipLength,
@@ -191,10 +254,16 @@ async function update(req, res) {
   // O caminho do template nao vem do cliente: e preservado daqui e so muda
   // pelas rotas de upload/remocao. Aceitar caminho de arquivo vindo do
   // navegador seria deixar o cliente apontar pra qualquer arquivo do servidor.
-  const atual = alvo.channelId
-    ? (await clientVideoSettingsRepository.findChannelOverride(req.session.user.id, alvo.channelId)) ||
+  // A base do que já está salvo, no alvo pedido. Campo ausente no corpo
+  // preserva o valor daqui, então pegar a base errada apagaria configuração
+  // que ninguém mandou mudar.
+  const atual = alvoVideo.sourceVideoId
+    ? (await clientVideoSettingsRepository.findVideoOverride(req.session.user.id, alvoVideo.sourceVideoId)) ||
       (await clientVideoSettingsRepository.findByClientId(req.session.user.id))
-    : await clientVideoSettingsRepository.findByClientId(req.session.user.id);
+    : alvo.channelId
+      ? (await clientVideoSettingsRepository.findChannelOverride(req.session.user.id, alvo.channelId)) ||
+        (await clientVideoSettingsRepository.findByClientId(req.session.user.id))
+      : await clientVideoSettingsRepository.findByClientId(req.session.user.id);
 
   // ---------------------------------------------------------------------
   // Campo AUSENTE preserva o que ja estava salvo; campo PRESENTE e invalido
@@ -399,7 +468,18 @@ async function update(req, res) {
     partLabelSizePercent: tamanhoNumeracao,
     audioLanguage: idioma,
     titleStyle: estiloTitulo,
-  }, alvo.channelId);
+  }, alvoVideo.sourceVideoId
+    ? { sourceVideoId: alvoVideo.sourceVideoId }
+    : { youtubeChannelId: alvo.channelId });
+
+  // Editar o idioma dentro do editor de um vídeo grava na MESMA coluna que a
+  // escolha do envio usa. Sem isto haveria duas fontes e a do envio venceria:
+  // o cliente trocaria o idioma aqui, a tela mostraria o novo, e o corte
+  // sairia no antigo.
+  if (alvoVideo.sourceVideoId) {
+    await sourceVideosRepository.setChosenAudioLanguage(alvoVideo.sourceVideoId, idioma);
+  }
+
   res.json(toApiWithOptions(saved));
 }
 

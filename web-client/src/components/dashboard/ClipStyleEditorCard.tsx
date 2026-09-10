@@ -690,7 +690,12 @@ function PartLabelPositionPicker({
   )
 }
 
-export function ClipStyleEditorCard() {
+/**
+ * `sourceVideoId` trava o editor no estilo de UM vídeo avulso: some o seletor
+ * de canal (não faz sentido escolher canal aqui) e tudo que é salvo vale só
+ * para aquele vídeo, sem tocar no padrão do cliente nem nos canais dele.
+ */
+export function ClipStyleEditorCard({ sourceVideoId }: { sourceVideoId?: number } = {}) {
   const t = useT()
   const { idioma } = useI18n()
   const [settings, setSettings] = useState<ClientVideoSettingsResponse | null>(null)
@@ -709,7 +714,11 @@ export function ClipStyleEditorCard() {
   const [enviandoTemplate, setEnviandoTemplate] = useState(false)
   const [erroTemplate, setErroTemplate] = useState<string | null>(null)
 
-  const queryAlvo = alvo === "all" ? "" : `?channelId=${alvo}`
+  const queryAlvo = sourceVideoId
+    ? `?sourceVideoId=${sourceVideoId}`
+    : alvo === "all"
+      ? ""
+      : `?channelId=${alvo}`
 
   useEffect(() => {
     api.get<ClientVideoSettingsResponse>(`/api/client/video-settings${queryAlvo}`).then((data) => {
@@ -725,7 +734,11 @@ export function ClipStyleEditorCard() {
     setSaving(true)
     setSavedFlash(false)
     try {
-      const corpo = alvo === "all" ? next : { ...next, channelId: Number(alvo) }
+      const corpo = sourceVideoId
+        ? { ...next, sourceVideoId }
+        : alvo === "all"
+          ? next
+          : { ...next, channelId: Number(alvo) }
       const updated = await api.put<ClientVideoSettingsResponse>("/api/client/video-settings", corpo)
       // O PUT devolve só o que foi salvo; a lista de canais e o alvo vêm do
       // GET, então preservamos pra tela não perder o seletor depois de salvar.
@@ -792,7 +805,12 @@ export function ClipStyleEditorCard() {
       <CardContent className="flex flex-col gap-6">
         {/* Onde este estilo se aplica. Fica no topo porque muda o significado
             de tudo que vem abaixo: sem isso a pessoa edita achando que mexe em
-            um canal e na verdade mexe em todos. */}
+            um canal e na verdade mexe em todos.
+
+            Some quando o editor está travado num vídeo avulso: ali o alvo já
+            está decidido, e oferecer "todos os canais" faria o cliente mudar o
+            padrão dele achando que ajustava só aquele vídeo. */}
+        {!sourceVideoId && (
         <Field>
           <FieldLabel>{t("ce.aplicarEm")}</FieldLabel>
           <div className="flex flex-wrap items-center gap-2">
@@ -822,6 +840,12 @@ export function ClipStyleEditorCard() {
                 : t("ce.canalTemProprio")}
           </p>
         </Field>
+        )}
+        {sourceVideoId && (
+          <p className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+            {t("ce.valeSoParaEsteVideo")}
+          </p>
+        )}
 
         {/* ----------------------------------------------------------------
             COMO FUNCIONAM OS CORTES

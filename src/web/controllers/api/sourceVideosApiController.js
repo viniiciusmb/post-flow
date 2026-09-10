@@ -2,6 +2,8 @@
 
 const fs = require('fs');
 const path = require('path');
+const clientVideoSettingsRepository = require('../../../repositories/clientVideoSettingsRepository');
+const idiomaDoAudio = require('../../../lib/idiomaDoAudio');
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 const sourceVideoTiktokTargetsRepository = require('../../../repositories/sourceVideoTiktokTargetsRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
@@ -10,6 +12,7 @@ const driveFoldersRepository = require('../../../repositories/driveFoldersReposi
 const driveConnectionsRepository = require('../../../repositories/driveConnectionsRepository');
 const googleService = require('../../../services/googleService');
 const ytDlpService = require('../../../services/ytDlpService');
+const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const {
   podeBaixarAgora,
   motivoDaEspera,
@@ -138,6 +141,118 @@ async function clipThumbnail(req, res) {
 // Cliente cola o link de um video avulso do YouTube - sem depender de ter um
 // canal cadastrado. Busca os metadados na hora (rapido, nao baixa o video) e
 // ja manda pra fila de processamento, igual a um video vindo de canal.
+
+// As três escolhas que o envio de vídeo avulso passou a aceitar: em que idioma
+// cortar, de onde vem o estilo, e (quando vem de um canal) de qual canal.
+//
+// Tudo opcional: quem manda um envio sem nada — inclusive quem usa a API
+// direto, ou uma tela antiga em cache — cai exatamente no comportamento de
+// antes (padrão do cliente, sem idioma escolhido).
+function lerEscolhasDoEnvio(req) {
+  const bruto = req.body || {};
+  const styleSource = ['client', 'channel', 'manual'].includes(bruto.styleSource)
+    ? bruto.styleSource
+    : 'client';
+
+  // O idioma é validado no valor CRU, antes de normalizar: normalizar corta no
+  // hífen, então "nao-e-idioma" viraria "nao" e passaria por um código de 3
+  // letras válido — o filtro deixaria entrar justamente o lixo que existe para
+  // barrar. (Mesma armadilha já documentada na escolha de idioma do canal.)
+  const idiomaCru = typeof bruto.audioLanguage === 'string' ? bruto.audioLanguage.trim() : '';
+  const audioLanguage = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$|^original$/.test(idiomaCru)
+    ? idiomaDoAudio.normalizar(idiomaCru)
+    : null;
+
+  const canal = Number(bruto.styleFromChannelId);
+  return {
+    audioLanguage,
+    styleSource,
+    styleFromChannelId: Number.isInteger(canal) && canal > 0 ? canal : null,
+  };
+}
+
+// Dá ao vídeo o estilo que o cliente escolheu, quando ele não quis o padrão.
+//
+// 'client' não grava nada de propósito: sem linha própria, o vídeo segue o
+// padrão do cliente e continua acompanhando mudanças futuras dele. Gravar uma
+// cópia congelaria o estilo daquele vídeo sem ninguém ter pedido.
+async function aplicarEstiloEscolhido(req, sourceVideoId, escolha) {
+  if (escolha.styleSource === 'client') return null;
+
+  let deCanalId = null;
+  if (escolha.styleSource === 'channel' && escolha.styleFromChannelId) {
+    const canal = await youtubeChannelsRepository.findById(escolha.styleFromChannelId);
+    // Canal de outro cliente é ignorado em silêncio (cai no padrão) em vez de
+    // recusar o envio: o vídeo é legítimo, e o pior que acontece é ele sair no
+    // estilo padrão de quem enviou.
+    if (canal && String(canal.client_user_id) === String(req.session.user.id)) {
+      deCanalId = escolha.styleFromChannelId;
+    }
+  }
+
+  return clientVideoSettingsRepository.copiarEstiloParaVideo(req.session.user.id, sourceVideoId, {
+    deCanalId,
+  });
+}
+
+// Lê o vídeo do link SEM cadastrar nada: título, duração, capa e — o que
+// motivou isto — as trilhas de áudio que ele realmente tem.
+//
+// Existe separado do envio porque a escolha de idioma só é possível DEPOIS de
+// saber o que aquele vídeo oferece. Antes disto, colar um link mandava o vídeo
+// direto para a fila e ele era baixado na trilha original: quem colava um
+// vídeo gringo dublado recebia os cortes em outra língua sem nunca ter sido
+// perguntado. É a mesma pergunta que o cadastro de canal já faz.
+//
+// Só de leitura, então não cria, não enfileira e não gasta cota — mas custa uma
+// consulta ao YouTube, por isso fica atrás de login e do limitador de taxa.
+async function previewManual(req, res) {
+  const url = String(req.body.url || '').trim();
+  const videoId = ytDlpService.extractVideoId(url);
+  if (!videoId) {
+    return res.status(400).json({ error: res.locals.t('erros.linkYoutubeInvalido') });
+  }
+
+  let metadata;
+  try {
+    metadata = await ytDlpService.getVideoMetadata(`https://www.youtube.com/watch?v=${videoId}`);
+  } catch (err) {
+    logger.error(`Falha ao ler o video ${videoId} pro cliente ${req.session.user.id}:`, err);
+    return res.status(502).json({ error: `Nao foi possivel ler os dados desse video: ${err.message}` });
+  }
+
+  // As mesmas recusas do envio, aqui na frente: melhor dizer agora do que
+  // aceitar e o vídeo virar "erro" minutos depois.
+  if (!ehPublico(metadata.availability)) {
+    return res.status(409).json({
+      error: `${res.locals.t('erros.videoAindaNaoDisponivel')} (${motivoDeNaoSerPublico(metadata.availability)}).`,
+    });
+  }
+  if (!podeBaixarAgora(metadata.liveStatus)) {
+    return res.status(409).json({
+      error: `${res.locals.t('erros.videoAindaNaoDisponivel')} (${motivoDaEspera(metadata.liveStatus, metadata.releaseAt)}).`,
+    });
+  }
+
+  const existing = await sourceVideosRepository.findByYoutubeVideoIdForOwner(videoId, req.session.user.id);
+  const padrao = await clientVideoSettingsRepository.findByClientId(req.session.user.id);
+
+  res.json({
+    videoId: metadata.videoId,
+    title: metadata.title,
+    thumbnailUrl: metadata.thumbnailUrl,
+    durationSeconds: metadata.durationSeconds,
+    // Lista vazia quer dizer "uma trilha só" - a tela usa isso pra esconder o
+    // seletor, porque um seletor de uma opção é ruído.
+    audioLanguages: metadata.audioLanguages || [],
+    // O idioma que o cliente já usa por padrão, pra vir marcado.
+    audioLanguageDefault: padrao.audio_language || 'original',
+    // Vídeo que ele já tinha enviado antes: a tela avisa em vez de deixar
+    // preencher tudo e descobrir no fim.
+    alreadyExists: existing ? { id: Number(existing.id), status: existing.status } : null,
+  });
+}
+
 async function createManual(req, res) {
   const url = String(req.body.url || '').trim();
   const videoId = ytDlpService.extractVideoId(url);
@@ -206,6 +321,8 @@ async function createManual(req, res) {
     });
   }
 
+  const escolha = lerEscolhasDoEnvio(req);
+
   const sourceVideo = await sourceVideosRepository.createManual({
     clientUserId: req.session.user.id,
     youtubeVideoId: metadata.videoId,
@@ -213,6 +330,7 @@ async function createManual(req, res) {
     thumbnailUrl: metadata.thumbnailUrl,
     publishedAt: metadata.publishedAt,
     durationSeconds: metadata.durationSeconds,
+    chosenAudioLanguage: escolha.audioLanguage,
   });
   if (!sourceVideo) {
     return res.status(409).json({ error: res.locals.t('erros.videoJaAdicionado') });
@@ -222,11 +340,28 @@ async function createManual(req, res) {
     await sourceVideoTiktokTargetsRepository.setTargets(sourceVideo.id, targets.tiktokAccountIds);
   }
 
+  const estilo = await aplicarEstiloEscolhido(req, sourceVideo.id, escolha);
+
+  // Quando o cliente vai ajustar o estilo à mão, o vídeo NÃO entra na fila
+  // agora: ele fica esperando o "Começar a cortar" da própria tela do editor.
+  // Enfileirar antes faria o download começar enquanto ele ainda escolhe o
+  // enquadramento — e o corte sairia com o estilo que ele estava justamente
+  // trocando.
+  if (escolha.styleSource === 'manual') {
+    return res.status(201).json({
+      id: Number(sourceVideo.id),
+      title: sourceVideo.title,
+      status: sourceVideo.status,
+      awaitingStyle: true,
+      styleSettings: estilo,
+    });
+  }
+
   const boss = await queueService.getBoss();
   const priority = await queuePriorityService.resolveQueuePriorityForClient(req.session.user.id);
   await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: sourceVideo.id }, { priority });
 
-  res.status(201).json({ id: sourceVideo.id, title: sourceVideo.title, status: sourceVideo.status });
+  res.status(201).json({ id: Number(sourceVideo.id), title: sourceVideo.title, status: sourceVideo.status });
 }
 
 // Cliente envia o arquivo de video direto do computador/celular - sem passar
@@ -264,11 +399,26 @@ async function uploadVideo(req, res) {
     await sourceVideoTiktokTargetsRepository.setTargets(sourceVideo.id, targets.tiktokAccountIds);
   }
 
+  // Arquivo enviado não tem trilha de áudio para escolher (é o áudio que veio
+  // dentro dele), mas a escolha de ESTILO vale igual.
+  const escolha = lerEscolhasDoEnvio(req);
+  const estilo = await aplicarEstiloEscolhido(req, sourceVideo.id, escolha);
+
+  if (escolha.styleSource === 'manual') {
+    return res.status(201).json({
+      id: Number(sourceVideo.id),
+      title: sourceVideo.title,
+      status: sourceVideo.status,
+      awaitingStyle: true,
+      styleSettings: estilo,
+    });
+  }
+
   const boss = await queueService.getBoss();
   const priority = await queuePriorityService.resolveQueuePriorityForClient(req.session.user.id);
   await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: sourceVideo.id }, { priority });
 
-  res.status(201).json({ id: sourceVideo.id, title: sourceVideo.title, status: sourceVideo.status });
+  res.status(201).json({ id: Number(sourceVideo.id), title: sourceVideo.title, status: sourceVideo.status });
 }
 
 // Reinicia um video que ficou em erro - ex: video que falhou por causa do
@@ -518,6 +668,7 @@ async function bulkRemove(req, res) {
 }
 
 module.exports = {
+  previewManual,
   enqueue,
   list,
   listClips,

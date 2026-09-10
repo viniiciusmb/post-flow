@@ -1,7 +1,8 @@
 import { data } from "@/lib/formatoLocal"
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent, type ReactNode } from "react"
 import {
   IconChevronDown,
+  IconMovie,
   IconChevronRight,
   IconLink,
   IconClock,
@@ -23,6 +24,14 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TonePill } from "@/components/ui/tone-pill"
 import { ClipStyleEditorCard } from "@/components/dashboard/ClipStyleEditorCard"
@@ -30,8 +39,18 @@ import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError, csrfToken } from "@/lib/api"
 import { CLIP_STATUS_TONE, SOURCE_VIDEO_STATUS_TONE } from "@/lib/statusTones"
 import { ACTIVE_STATUSES, computeVideoProgress, formatEta } from "@/lib/videoProgress"
-import type { Clip, SourceVideo, SourceVideoStatus, TikTokAccountSummary, YoutubeChannel } from "@/types/api"
-import { useT } from "@/i18n"
+import type {
+  Clip,
+  ClientVideoSettingsResponse,
+  EstiloDoEnvio,
+  ManualVideoPreview,
+  SourceVideo,
+  SourceVideoStatus,
+  TikTokAccountSummary,
+  YoutubeChannel,
+} from "@/types/api"
+import { useT, useI18n } from "@/i18n"
+import { nomeDeIdioma } from "@/lib/nomeDeIdioma"
 
 // So aparece quando o cliente tem 2+ contas TikTok - com 0 ou 1, o backend
 // resolve sozinho (ver resolveTiktokAccountIds no sourceVideosApiController).
@@ -601,26 +620,84 @@ function VideoRow({
   )
 }
 
-function AddManualVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tiktokAccounts: TikTokAccountSummary[] }) {
+function AddManualVideoCard({
+  onAdded,
+  tiktokAccounts,
+  onConfigurarEstilo,
+}: {
+  onAdded: () => void
+  tiktokAccounts: TikTokAccountSummary[]
+  onConfigurarEstilo: (video: { id: number; title: string }) => void
+}) {
   const t = useT()
+  const { idioma } = useI18n()
   const [url, setUrl] = useState("")
   const [selectedAccounts, setSelectedAccounts] = useState<number[]>([])
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [lendo, setLendo] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // O vídeo lido do link, ainda não cadastrado. É o que abre o pop-up de
+  // escolhas: sem ler antes, não dá pra saber em que idiomas ele existe.
+  const [previa, setPrevia] = useState<ManualVideoPreview | null>(null)
+  const [idiomaEscolhido, setIdiomaEscolhido] = useState("original")
+  const [estilo, setEstilo] = useState<EstiloDoEnvio>("client")
+  const [canalDoEstilo, setCanalDoEstilo] = useState<string>("")
+  const [canais, setCanais] = useState<{ id: number; name: string; hasOwnStyle: boolean }[]>([])
 
-  async function handleSubmit(event: FormEvent) {
+  // A lista de canais vem da mesma resposta que a tela de estilo usa, então
+  // "copiar o estilo de um canal" só aparece quando existe canal com estilo.
+  useEffect(() => {
+    api
+      .get<ClientVideoSettingsResponse>("/api/client/video-settings")
+      .then((d) => setCanais(d.channels || []))
+      .catch(() => setCanais([]))
+  }, [])
+
+  async function lerVideo(event: FormEvent) {
     event.preventDefault()
     setError(null)
     setSuccess(null)
+    setLendo(true)
+    try {
+      const dados = await api.post<ManualVideoPreview>("/api/client/source-videos/manual/preview", { url })
+      setPrevia(dados)
+      setIdiomaEscolhido(dados.audioLanguageDefault || "original")
+      setEstilo("client")
+      setCanalDoEstilo("")
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("cortes.naoFoiPossivelCortar"))
+    } finally {
+      setLendo(false)
+    }
+  }
+
+  async function enviar() {
+    setError(null)
     setSubmitting(true)
     try {
-      const created = await api.post<{ id: number; title: string; message?: string }>("/api/client/source-videos/manual", {
+      const created = await api.post<{
+        id: number
+        title: string
+        message?: string
+        awaitingStyle?: boolean
+      }>("/api/client/source-videos/manual", {
         url,
         tiktokAccountIds: selectedAccounts,
+        // Só manda o idioma quando havia escolha a fazer. Mandar "original"
+        // num vídeo de uma trilha só gravaria uma escolha que ninguém fez.
+        audioLanguage: previa && previa.audioLanguages.length > 1 ? idiomaEscolhido : undefined,
+        styleSource: estilo,
+        styleFromChannelId: estilo === "channel" && canalDoEstilo ? Number(canalDoEstilo) : undefined,
       })
       setUrl("")
       setSelectedAccounts([])
+      setPrevia(null)
+      if (created.awaitingStyle) {
+        onAdded()
+        onConfigurarEstilo({ id: created.id, title: created.title })
+        return
+      }
       setSuccess(created.message || `"${created.title}" entrou na fila. Acompanhe o progresso na lista abaixo.`)
       onAdded()
     } catch (err) {
@@ -637,7 +714,7 @@ function AddManualVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; 
           <IconLink className="size-4 text-muted-foreground" />{t("cortes.cortarPorLink")}</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={lerVideo}>
           <FieldGroup>
             {error && (
               <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -659,16 +736,186 @@ function AddManualVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; 
                   onChange={(e) => setUrl(e.target.value)}
                   required
                 />
-                <Button type="submit" disabled={submitting}>
-                  {submitting ? t("cortes.cortando") : t("cortes.cortar")}
+                <Button type="submit" disabled={lendo}>
+                  {lendo ? t("cortes.lendoVideo") : t("cortes.continuar")}
                 </Button>
               </div>
             </Field>
-            <TiktokAccountPicker accounts={tiktokAccounts} selected={selectedAccounts} onChange={setSelectedAccounts} />
           </FieldGroup>
         </form>
       </CardContent>
+
+      {/* As escolhas do envio, no mesmo momento em que o cadastro de canal já
+          pergunta. Antes, colar um link mandava o vídeo direto pra fila: ele
+          era baixado na trilha original (vídeo dublado saía no idioma errado) e
+          cortado com a configuração padrão, sem ninguém ter sido perguntado. */}
+      <Dialog open={previa !== null} onOpenChange={(aberto) => !aberto && setPrevia(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("cortes.comoCortar")}</DialogTitle>
+          </DialogHeader>
+
+          {previa && (
+            <div className="flex flex-col gap-4">
+              <div className="flex gap-3">
+                <div className="h-16 w-28 shrink-0 overflow-hidden rounded-md bg-muted">
+                  {previa.thumbnailUrl ? (
+                    <img src={previa.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <IconMovie className="size-5 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 text-sm font-medium">{previa.title}</p>
+                  {formatDuration(previa.durationSeconds) && (
+                    <p className="mt-1 text-xs text-muted-foreground">{formatDuration(previa.durationSeconds)}</p>
+                  )}
+                </div>
+              </div>
+
+              {previa.alreadyExists && (
+                <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                  {t("cortes.videoJaExiste", { status: previa.alreadyExists.status })}
+                </p>
+              )}
+
+              {/* Vídeo dublado: um seletor de uma opção só seria ruído, então
+                  ele só existe quando há de fato mais de uma trilha. */}
+              {previa.audioLanguages.length > 1 && (
+                <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3">
+                  <p className="text-sm font-medium">{t("cortes.idiomaDoVideo")}</p>
+                  <p className="text-xs text-muted-foreground">{t("cortes.idiomaDoVideoTexto")}</p>
+                  <Select value={idiomaEscolhido} onValueChange={(v) => v && setIdiomaEscolhido(v)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="original">{t("cortes.idiomaOriginal")}</SelectItem>
+                      {previa.audioLanguages.map((codigo) => (
+                        <SelectItem key={codigo} value={codigo}>
+                          {nomeDeIdioma(codigo, idioma)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <TiktokAccountPicker
+                accounts={tiktokAccounts}
+                selected={selectedAccounts}
+                onChange={setSelectedAccounts}
+              />
+
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium">{t("cortes.estiloDoCorte")}</p>
+                <EscolhaDeEstilo
+                  valor="client"
+                  atual={estilo}
+                  onChange={setEstilo}
+                  titulo={t("cortes.estiloPadrao")}
+                  texto={t("cortes.estiloPadraoTexto")}
+                />
+                {canais.length > 0 && (
+                  <EscolhaDeEstilo
+                    valor="channel"
+                    atual={estilo}
+                    // Já marca o primeiro canal ao escolher esta opção: sem
+                    // isso o botão de enviar nasce desabilitado e nada na tela
+                    // diz o porquê.
+                    onChange={(v) => {
+                      setEstilo(v)
+                      if (v === "channel" && !canalDoEstilo && canais[0]) setCanalDoEstilo(String(canais[0].id))
+                    }}
+                    titulo={t("cortes.estiloDeCanal")}
+                    texto={t("cortes.estiloDeCanalTexto")}
+                  >
+                    <Select value={canalDoEstilo} onValueChange={setCanalDoEstilo}>
+                      <SelectTrigger size="sm" className="mt-2 w-full">
+                        <SelectValue placeholder={t("cortes.escolhaOCanal")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {canais.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </EscolhaDeEstilo>
+                )}
+                <EscolhaDeEstilo
+                  valor="manual"
+                  atual={estilo}
+                  onChange={setEstilo}
+                  titulo={t("cortes.estiloManual")}
+                  texto={t("cortes.estiloManualTexto")}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPrevia(null)} disabled={submitting}>
+              {t("comum.cancelar")}
+            </Button>
+            <Button
+              onClick={enviar}
+              disabled={submitting || (estilo === "channel" && !canalDoEstilo)}
+            >
+              {submitting ? t("cortes.cortando") : t("cortes.mandarCortar")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
+  )
+}
+
+// Uma das três origens do estilo. Cartão clicável inteiro em vez de um radio
+// solto: o alvo de toque no celular passa a ser a explicação também, e é ela
+// que diz o que cada opção faz.
+function EscolhaDeEstilo({
+  valor,
+  atual,
+  onChange,
+  titulo,
+  texto,
+  children,
+}: {
+  valor: EstiloDoEnvio
+  atual: EstiloDoEnvio
+  onChange: (v: EstiloDoEnvio) => void
+  titulo: string
+  texto: string
+  children?: ReactNode
+}) {
+  const escolhido = atual === valor
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(valor)}
+      className={`rounded-lg border p-3 text-left transition-colors ${
+        escolhido ? "border-primary bg-primary/[0.06]" : "border-border hover:bg-muted/40"
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        <span
+          className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border ${
+            escolhido ? "border-primary" : "border-muted-foreground/40"
+          }`}
+        >
+          {escolhido && <span className="size-2 rounded-full bg-primary" />}
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{titulo}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{texto}</p>
+          {escolhido && children}
+        </div>
+      </div>
+    </button>
   )
 }
 
@@ -802,6 +1049,12 @@ export function VideosClipsPage() {
   // banco - separar as decisoes obrigava a abrir os dois pra montar uma
   // configuracao unica.
   const [showStyleEditor, setShowStyleEditor] = useState(false)
+  // Vídeo avulso recém-enviado cujo estilo o cliente escolheu ajustar à mão.
+  // Enquanto ele está aqui, o vídeo NÃO está na fila: ele espera o
+  // "Começar a cortar" - senão o download começaria enquanto o cliente ainda
+  // está escolhendo o enquadramento, e o corte sairia com o estilo antigo.
+  const [ajustando, setAjustando] = useState<{ id: number; title: string } | null>(null)
+  const [comecando, setComecando] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [, setTick] = useState(0)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -888,7 +1141,38 @@ export function VideosClipsPage() {
         title={t("cortes.titulo")}
         description={t("cortes.descricao")}
       />
-      <AddManualVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} />
+      <AddManualVideoCard onAdded={load} tiktokAccounts={tiktokAccounts} onConfigurarEstilo={setAjustando} />
+
+      {ajustando && (
+        <Card className="border-primary/30">
+          <CardHeader>
+            <CardTitle className="text-base">
+              {t("cortes.configurandoEstilo", { titulo: ajustando.title })}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">{t("cortes.ajusteEComece")}</p>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <ClipStyleEditorCard sourceVideoId={ajustando.id} />
+            <div className="flex justify-end">
+              <Button
+                disabled={comecando}
+                onClick={async () => {
+                  setComecando(true)
+                  try {
+                    await api.post(`/api/client/source-videos/${ajustando.id}/enqueue`, {})
+                    setAjustando(null)
+                    await load()
+                  } finally {
+                    setComecando(false)
+                  }
+                }}
+              >
+                {comecando ? t("cortes.comecando") : t("cortes.comecarACortar")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={() => setShowUpload((v) => !v)} className="gap-2">

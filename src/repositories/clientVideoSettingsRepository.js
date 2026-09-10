@@ -120,7 +120,8 @@ function doCamelParaColuna(entrada) {
 // Configuracao "de todos os canais" (a linha com youtube_channel_id NULL).
 async function findByClientId(clientUserId) {
   const { rows } = await pool.query(
-    'SELECT * FROM client_video_settings WHERE client_user_id = $1 AND youtube_channel_id IS NULL',
+    `SELECT * FROM client_video_settings
+      WHERE client_user_id = $1 AND youtube_channel_id IS NULL AND source_video_id IS NULL`,
     [clientUserId]
   );
   return rows[0] ? { ...DEFAULTS, ...rows[0] } : { client_user_id: clientUserId, youtube_channel_id: null, ...DEFAULTS };
@@ -136,10 +137,27 @@ async function findChannelOverride(clientUserId, youtubeChannelId) {
   return rows[0] ? { ...DEFAULTS, ...rows[0] } : null;
 }
 
-// O que o pipeline usa de verdade na hora de cortar: excecao do canal se
-// existir, senao o padrao do cliente, senao DEFAULTS. Video avulso (upload ou
-// link colado) nao tem canal, entao cai direto no padrao.
-async function resolveForVideo(clientUserId, youtubeChannelId = null) {
+// Estilo escolhido para UM video avulso, sem herdar nada. Null quando aquele
+// video nao tem estilo proprio.
+async function findVideoOverride(clientUserId, sourceVideoId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM client_video_settings WHERE client_user_id = $1 AND source_video_id = $2',
+    [clientUserId, sourceVideoId]
+  );
+  return rows[0] ? { ...DEFAULTS, ...rows[0] } : null;
+}
+
+// O que o pipeline usa de verdade na hora de cortar, do mais especifico para o
+// mais geral: estilo daquele VIDEO, senao do CANAL, senao o padrao do cliente,
+// senao DEFAULTS.
+//
+// O video vem primeiro porque e a escolha mais recente e mais explicita que
+// existe: alguem enviou aquele video e disse como queria o corte DELE.
+async function resolveForVideo(clientUserId, youtubeChannelId = null, sourceVideoId = null) {
+  if (sourceVideoId) {
+    const doVideo = await findVideoOverride(clientUserId, sourceVideoId);
+    if (doVideo) return doVideo;
+  }
   if (youtubeChannelId) {
     const doCanal = await findChannelOverride(clientUserId, youtubeChannelId);
     if (doCanal) return doCanal;
@@ -155,33 +173,73 @@ async function listChannelOverrides(clientUserId) {
   return rows.map((r) => Number(r.youtube_channel_id));
 }
 
-// youtubeChannelId null grava o padrao; com id, grava a excecao do canal.
+// Grava o padrao do cliente, a excecao de um canal, ou a excecao de um video
+// avulso - o alvo decide. Aceita a forma antiga (um numero = canal) para nao
+// quebrar quem ja chamava assim.
 //
 // ATENCAO: a tabela nao tem mais UNIQUE simples, e sim dois indices unicos
 // PARCIAIS (ver migration 047). Por isso cada ON CONFLICT abaixo repete o
 // predicado do indice correspondente. Sem o predicado, o Postgres nao encontra
 // o indice e o INSERT falha ("no unique or exclusion constraint matching").
-async function upsert(clientUserId, entrada, youtubeChannelId = null) {
+async function upsert(clientUserId, entrada, alvo = null) {
+  const { youtubeChannelId, sourceVideoId } =
+    alvo && typeof alvo === 'object' ? alvo : { youtubeChannelId: alvo, sourceVideoId: null };
+
   const valores = doCamelParaColuna(entrada);
   const listaColunas = COLUNAS.join(', ');
-  // $1 = cliente, $2 = canal, e as colunas comecam em $3.
-  const placeholders = COLUNAS.map((_, i) => `$${i + 3}`).join(', ');
-  const atualizacoes = COLUNAS.map((c, i) => `${c} = $${i + 3}`).join(', ');
-  const parametros = [clientUserId, youtubeChannelId, ...COLUNAS.map((c) => valores[c])];
+  // $1 = cliente, $2 = canal, $3 = video, e as colunas comecam em $4.
+  const placeholders = COLUNAS.map((_, i) => `$${i + 4}`).join(', ');
+  const atualizacoes = COLUNAS.map((c, i) => `${c} = $${i + 4}`).join(', ');
+  const parametros = [
+    clientUserId,
+    youtubeChannelId || null,
+    sourceVideoId || null,
+    ...COLUNAS.map((c) => valores[c]),
+  ];
 
-  const alvoDoConflito =
-    youtubeChannelId === null
-      ? '(client_user_id) WHERE youtube_channel_id IS NULL'
-      : '(client_user_id, youtube_channel_id) WHERE youtube_channel_id IS NOT NULL';
+  // Cada ON CONFLICT repete o predicado do indice parcial correspondente. Sem
+  // isso o Postgres nao encontra o indice e o INSERT falha - ver o comentario
+  // das migrations 047 e 081.
+  let alvoDoConflito;
+  if (sourceVideoId) {
+    alvoDoConflito = '(client_user_id, source_video_id) WHERE source_video_id IS NOT NULL';
+  } else if (youtubeChannelId) {
+    alvoDoConflito = '(client_user_id, youtube_channel_id) WHERE youtube_channel_id IS NOT NULL';
+  } else {
+    alvoDoConflito = '(client_user_id) WHERE youtube_channel_id IS NULL AND source_video_id IS NULL';
+  }
 
   const { rows } = await pool.query(
-    `INSERT INTO client_video_settings (client_user_id, youtube_channel_id, ${listaColunas})
-     VALUES ($1, $2, ${placeholders})
+    `INSERT INTO client_video_settings (client_user_id, youtube_channel_id, source_video_id, ${listaColunas})
+     VALUES ($1, $2, $3, ${placeholders})
      ON CONFLICT ${alvoDoConflito} DO UPDATE SET ${atualizacoes}, updated_at = now()
      RETURNING *`,
     parametros
   );
   return rows[0];
+}
+
+// Dá a um vídeo avulso um estilo próprio, copiado de onde o cliente escolheu:
+// de um canal que ele já configurou, ou do padrão dele.
+//
+// COPIA os valores em vez de apontar para a linha de origem, e isso é
+// deliberado: se o cliente mudar depois o estilo daquele canal, o vídeo que
+// ele já mandou cortar não pode mudar junto - ele já viu como ia ficar.
+async function copiarEstiloParaVideo(clientUserId, sourceVideoId, { deCanalId = null } = {}) {
+  const origem = deCanalId
+    ? (await findChannelOverride(clientUserId, deCanalId)) || (await findByClientId(clientUserId))
+    : await findByClientId(clientUserId);
+
+  return upsert(clientUserId, doColunaParaCamel(origem), { sourceVideoId });
+}
+
+// Muda só o idioma do áudio de um vídeo avulso, preservando o resto - mesmo
+// motivo do setChannelAudioLanguage: quem chama (a tela de envio) não tem o
+// estilo em mãos e gravaria a linha inteira em branco.
+async function setVideoAudioLanguage(clientUserId, sourceVideoId, audioLanguage) {
+  const existente = await findVideoOverride(clientUserId, sourceVideoId);
+  const base = existente || (await findByClientId(clientUserId));
+  return upsert(clientUserId, { ...doColunaParaCamel(base), audioLanguage }, { sourceVideoId });
 }
 
 // Apaga a excecao de um canal: ele volta a seguir o padrao do cliente.
@@ -217,7 +275,7 @@ async function setChannelAudioLanguage(clientUserId, youtubeChannelId, audioLang
   }
 
   const padrao = await findByClientId(clientUserId);
-  return upsert(clientUserId, { ...doColunaParaCamel(padrao), audioLanguage }, youtubeChannelId);
+  return upsert(clientUserId, { ...doColunaParaCamel(padrao), audioLanguage }, { youtubeChannelId });
 }
 
 // Volta de coluna pra camelCase, que é o formato que o upsert espera. Escrito
@@ -233,6 +291,9 @@ function doColunaParaCamel(linha) {
 }
 
 module.exports = {
+  findVideoOverride,
+  copiarEstiloParaVideo,
+  setVideoAudioLanguage,
   setChannelAudioLanguage,
   DEFAULTS,
   findByClientId,

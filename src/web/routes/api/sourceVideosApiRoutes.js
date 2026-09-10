@@ -35,6 +35,9 @@ const upload = multer({
 });
 
 router.get('/', asyncHandler(controller.list));
+// Lê o vídeo do link (título, duração, trilhas de áudio) sem cadastrar nada -
+// é o que permite perguntar o idioma antes de mandar cortar.
+router.post('/manual/preview', asyncHandler(controller.previewManual));
 router.post('/manual', asyncHandler(controller.createManual));
 router.post('/upload', upload.single('video'), asyncHandler(controller.uploadVideo));
 router.get('/:id/clips', asyncHandler(controller.listClips));

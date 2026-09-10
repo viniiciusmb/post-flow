@@ -81,13 +81,33 @@ async function liberarDeSomenteMembros(id, { title } = {}) {
 
 // Video colado manualmente pelo cliente (input_type = 'manual') - nao tem
 // canal, pertence direto ao cliente que colou o link (tambem o dono).
-async function createManual({ clientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds }) {
+async function createManual({
+  clientUserId,
+  youtubeVideoId,
+  title,
+  thumbnailUrl,
+  publishedAt,
+  durationSeconds,
+  // Idioma escolhido na hora do envio. NULL = nao escolheu (vale a
+  // configuracao do cliente), que e diferente de 'original'.
+  chosenAudioLanguage = null,
+}) {
   const { rows } = await pool.query(
-    `INSERT INTO source_videos (client_user_id, owner_client_user_id, input_type, youtube_video_id, title, thumbnail_url, published_at, duration_seconds)
-     VALUES ($1, $1, 'manual', $2, $3, $4, $5, $6)
+    `INSERT INTO source_videos (client_user_id, owner_client_user_id, input_type, youtube_video_id, title, thumbnail_url, published_at, duration_seconds, chosen_audio_language)
+     VALUES ($1, $1, 'manual', $2, $3, $4, $5, $6, $7)
      ON CONFLICT (youtube_video_id, owner_client_user_id) WHERE youtube_video_id IS NOT NULL DO NOTHING
      RETURNING *`,
-    [clientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds]
+    [clientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds, chosenAudioLanguage]
+  );
+  return rows[0] || null;
+}
+
+// Troca o idioma escolhido de um video que ja existe - usado quando o cliente
+// reenvia um video que estava com erro e aproveita pra mudar a trilha.
+async function setChosenAudioLanguage(id, chosenAudioLanguage) {
+  const { rows } = await pool.query(
+    'UPDATE source_videos SET chosen_audio_language = $2, updated_at = now() WHERE id = $1 RETURNING *',
+    [id, chosenAudioLanguage]
   );
   return rows[0] || null;
 }
@@ -694,6 +714,7 @@ module.exports = {
   countMembersOnlyByChannelIds,
   liberarDeSomenteMembros,
   createManual,
+  setChosenAudioLanguage,
   createUpload,
   findByYoutubeVideoIdForOwner,
   findById,

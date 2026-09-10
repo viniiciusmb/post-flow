@@ -413,6 +413,23 @@ export interface ClientVideoSettingsResponse extends ClientVideoSettings {
 
 export type DriveExportMode = "auto" | "manual"
 
+/** Resposta de POST /api/client/source-videos/manual/preview: o que o vídeo do
+ *  link é, antes de cadastrar qualquer coisa. */
+export interface ManualVideoPreview {
+  videoId: string
+  title: string
+  thumbnailUrl: string | null
+  durationSeconds: number | null
+  /** Trilhas dubladas que o vídeo tem. Vazio = uma trilha só (sem escolha a fazer). */
+  audioLanguages: string[]
+  /** O que o cliente já usa por padrão, para vir marcado. */
+  audioLanguageDefault: string
+  alreadyExists: { id: number; status: SourceVideoStatus } | null
+}
+
+/** De onde sai o estilo do corte de um vídeo avulso. */
+export type EstiloDoEnvio = "client" | "channel" | "manual"
+
 export interface YoutubeChannel {
   id: number
   channelName: string | null

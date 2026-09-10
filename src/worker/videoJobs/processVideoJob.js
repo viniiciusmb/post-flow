@@ -257,12 +257,13 @@ async function run(sourceVideoId) {
   const clientUserId = sourceVideo.youtube_channel_id
     ? (await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id)).client_user_id
     : sourceVideo.client_user_id;
-  // Estilo do corte: a excecao do canal manda, se o canal tiver uma; senao vale
-  // o padrao do cliente. Video avulso (upload ou link colado) nao tem canal,
-  // entao sempre cai no padrao.
+  // Estilo do corte, do mais especifico pro mais geral: o estilo escolhido
+  // para ESTE video (video avulso configurado na hora do envio), senao a
+  // excecao do canal, senao o padrao do cliente.
   let settings = await clientVideoSettingsRepository.resolveForVideo(
     clientUserId,
-    sourceVideo.youtube_channel_id
+    sourceVideo.youtube_channel_id,
+    sourceVideo.id
   );
   // Em que idioma este video vai ser cortado. Vem da configuracao do canal (ou
   // do padrao do cliente) e vale pra escolha da TRILHA DE AUDIO no download -
@@ -270,7 +271,12 @@ async function run(sourceVideoId) {
   // o audio que recebeu e o Claude ja escreve no idioma da transcricao.
   //
   // 'original' = a trilha padrao do YouTube, que e o que sempre aconteceu.
-  const idiomaPedido = idiomaDoAudio.normalizar(settings.audio_language);
+  //
+  // A escolha feita NO ENVIO daquele video avulso vem antes de tudo: ela e a
+  // mais recente e a mais explicita que existe (alguem colou o link e disse em
+  // que idioma queria). NULL na coluna significa "nao escolheu" - diferente de
+  // 'original', que e uma escolha.
+  const idiomaPedido = idiomaDoAudio.idiomaParaOVideo(sourceVideo, settings);
 
   const checkCancelled = () => isCancelRequested(sourceVideo.id);
   const heartbeat = startProcessingHeartbeat(sourceVideo.id);
@@ -706,7 +712,8 @@ async function run(sourceVideoId) {
     // "escolhi uma legenda e saiu outra parecida, com cor errada".
     settings = await clientVideoSettingsRepository.resolveForVideo(
       clientUserId,
-      sourceVideo.youtube_channel_id
+      sourceVideo.youtube_channel_id,
+      sourceVideo.id
     );
 
     // Canal do YouTube posta numa unica conta (a vinculada a ele); video

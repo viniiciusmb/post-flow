@@ -129,7 +129,25 @@ function nomeDoIdioma(codigo) {
   return conhecido ? conhecido.nome : String(codigo || '').toUpperCase();
 }
 
+// Em que idioma ESTE vídeo vai ser cortado, considerando as duas fontes que
+// existem e a ordem entre elas.
+//
+// A escolha feita no ENVIO do vídeo avulso vem primeiro: é a mais recente e a
+// mais explícita que existe - alguém colou aquele link e disse em que idioma
+// queria os cortes DELE. A configuração (do vídeo, do canal ou o padrão do
+// cliente) é o que vale quando ninguém escolheu nada no envio.
+//
+// NULL em chosen_audio_language significa "não escolheu", que é diferente de
+// 'original' - esta é a escolha de quem viu o seletor e decidiu ficar com a
+// trilha do canal.
+function idiomaParaOVideo(sourceVideo, settings) {
+  const escolhidoNoEnvio = sourceVideo && sourceVideo.chosen_audio_language;
+  const daConfiguracao = settings && settings.audio_language;
+  return normalizar(escolhidoNoEnvio || daConfiguracao);
+}
+
 module.exports = {
+  idiomaParaOVideo,
   ORIGINAL,
   IDIOMAS,
   CODIGOS,
