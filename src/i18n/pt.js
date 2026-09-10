@@ -389,6 +389,7 @@ module.exports = {
     videoAindaNaoDisponivel: "Esse vídeo ainda não está disponível para download.",
     videoJaAdicionado: "Esse vídeo já foi adicionado antes.",
     videoJaProcessado: "Você já processou esse vídeo antes.",
+    videoJaNoSistema: "Esse vídeo já está no sistema (situação: {status}). Veja em Vídeos & Cortes.",
     videoNaoComErro: "Esse vídeo não está com erro nem cancelado no momento.",
     videoNaoEncontrado: "Vídeo não encontrado.",
     videoNaoNaFila: "Esse vídeo não está esperando na fila.",

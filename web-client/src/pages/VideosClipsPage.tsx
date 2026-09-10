@@ -547,6 +547,19 @@ function VideoRow({
         </div>
       )}
 
+      {/* Vídeo que ficou de fora por passar do limite de duração do canal.
+          Diferente do "somente membros", aqui NÃO há impossibilidade nenhuma:
+          o cliente configurou o limite e este vídeo passou dele. Por isso a
+          explicação vem junto do botão de processar, que continua valendo. */}
+      {video.autoSkippedReason === "duracao" && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-2">
+          <TonePill tone="neutral" dot={false}>
+            {t("cortes.acimaDoLimite")}
+          </TonePill>
+          <p className="min-w-0 text-xs text-muted-foreground">{t("cortes.acimaDoLimiteTexto")}</p>
+        </div>
+      )}
+
       {/* Explicação de vídeo parado esperando o computador do cliente. Some
           inteira quando o admin desliga a exibição do túnel — o pedido foi que
           NADA sobre a internet do cliente aparecesse, e este texto é sobre

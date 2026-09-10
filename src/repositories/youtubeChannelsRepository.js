@@ -72,6 +72,17 @@ async function remove(id, clientUserId) {
 // escolhe corte a corte em Videos & Cortes.
 // tiktokAccountId pode ser null (desvincula - cortes ficam prontos mas nao
 // viram postagem ate o cliente escolher uma conta de novo).
+// Limite de duracao para processar automaticamente (null = sem limite).
+async function setMaxVideoMinutes(id, clientUserId, minutos) {
+  const { rows } = await pool.query(
+    // Sem updated_at: esta tabela não tem essa coluna.
+    `UPDATE youtube_channels SET max_video_minutes = $3
+      WHERE id = $1 AND client_user_id = $2 RETURNING *`,
+    [id, clientUserId, minutos]
+  );
+  return rows[0] || null;
+}
+
 async function setTiktokAccount(id, clientUserId, tiktokAccountId) {
   const { rows } = await pool.query(
     'UPDATE youtube_channels SET tiktok_account_id = $3 WHERE id = $1 AND client_user_id = $2 RETURNING *',
@@ -143,4 +154,5 @@ module.exports = {
   updatePollState,
   setDriveExportMode,
   setTiktokAccount,
+  setMaxVideoMinutes,
 };

@@ -455,6 +455,10 @@ export interface YoutubeChannel {
    * eles entram na fila sozinhos se o canal abrir para todo mundo.
    */
   membersOnlyCount: number
+  /** "Não processar vídeos acima de N minutos". null = sem limite. */
+  maxVideoMinutes: number | null
+  /** Quantos vídeos deste canal ficaram parados por passar do limite. */
+  skippedByDurationCount: number
 }
 
 /** Por que um vídeo está parado esperando cobrança. Só vem preenchido junto de `aguardando_creditos`. */
@@ -486,6 +490,10 @@ export interface SourceVideo {
   status: SourceVideoStatus
   errorMessage: string | null
   billingBlockReason: BillingBlockReason | null
+  /** Preenchido quando o vídeo foi detectado mas NÃO entrou na fila sozinho
+   *  ('duracao' = passou do limite configurado no canal). O botão de processar
+   *  continua valendo: foi escolha do cliente, não impossibilidade. */
+  autoSkippedReason: "duracao" | null
   clipCount: number
   readyClipCount: number
   processingStartedAt: string | null
@@ -757,6 +765,12 @@ export interface AdminBillingPlansResponse {
 }
 
 export interface LatestChannelVideo {
+  /** Só vem na consulta sob demanda (GET /latest-video): se dá pra cortar
+   *  agora. Estreia marcada, live e vídeo de membros existem mas não têm
+   *  arquivo ainda. */
+  disponivel?: boolean
+  /** Idem: o vídeo já cadastrado deste cliente, se houver. */
+  jaNoSistema?: { id: number; status: string } | null
   videoId: string
   title: string
   thumbnailUrl: string | null

@@ -1,6 +1,6 @@
 import { dataHora } from "@/lib/formatoLocal"
 import { useEffect, useState, type FormEvent } from "react"
-import { IconTrash, IconArrowRight, IconMovie, IconBrandGoogleDrive, IconBrandTiktok, IconAlertTriangle } from "@tabler/icons-react"
+import { IconTrash, IconArrowRight, IconMovie, IconBrandGoogleDrive, IconBrandTiktok, IconAlertTriangle, IconScissors, IconClockPause } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -78,6 +78,8 @@ function ChannelCard({
   onSetTiktokAccount,
   onSetExportFolder,
   onSetDriveExportMode,
+  onCortarUltimoVideo,
+  onLimiteSalvo,
   onRemove,
 }: {
   channel: YoutubeChannel
@@ -88,6 +90,8 @@ function ChannelCard({
   onSetTiktokAccount: (tiktokAccountId: number | null) => Promise<void>
   onSetExportFolder: (autoMode: boolean) => Promise<void>
   onSetDriveExportMode: (mode: "auto" | "manual") => Promise<void>
+  onCortarUltimoVideo: () => Promise<void>
+  onLimiteSalvo: () => Promise<void>
   onRemove: () => void
 }) {
   const t = useT()
@@ -100,6 +104,31 @@ function ChannelCard({
   const [error, setError] = useState<string | null>(null)
   const [autoModeOnCreate, setAutoModeOnCreate] = useState(false)
   const [savingExportFolder, setSavingExportFolder] = useState(false)
+  const [buscandoUltimo, setBuscandoUltimo] = useState(false)
+  // Rascunho local do limite: o campo salva no onBlur, então o que está
+  // digitado não pode depender de a resposta do servidor ter voltado.
+  const [limiteRascunho, setLimiteRascunho] = useState(
+    channel.maxVideoMinutes === null ? "" : String(channel.maxVideoMinutes),
+  )
+  const [salvandoLimite, setSalvandoLimite] = useState(false)
+
+  async function salvarLimite(valor?: string) {
+    const bruto = typeof valor === "string" ? valor : limiteRascunho
+    const minutos = bruto.trim() === "" ? null : Number(bruto)
+    if (minutos !== null && (!Number.isFinite(minutos) || minutos <= 0)) return
+    if (minutos === channel.maxVideoMinutes) return
+    setSalvandoLimite(true)
+    setError(null)
+    try {
+      await api.put(`/api/client/youtube-channels/${channel.id}/max-video-minutes`, { maxVideoMinutes: minutos })
+      setLimiteRascunho(minutos === null ? "" : String(minutos))
+      await onLimiteSalvo()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("comum.erroGenerico"))
+    } finally {
+      setSalvandoLimite(false)
+    }
+  }
   const [exportError, setExportError] = useState<string | null>(null)
   const [savingExportMode, setSavingExportMode] = useState(false)
 
@@ -210,6 +239,17 @@ function ChannelCard({
             {/* Vídeo exclusivo de membros esperando abrir. Fica no CANAL porque
                 é aqui que mora a dúvida: "por que esse canal parou de trazer
                 vídeo novo?". Não é aviso de erro — é o canal funcionando. */}
+            {/* Vídeo que ficou de fora por passar do limite de duração. Mesmo
+                lugar e mesmo espírito do aviso de "somente membros": é aqui
+                que nasce a dúvida "por que esse vídeo não virou corte?". */}
+            {channel.skippedByDurationCount > 0 && (
+              <p className="mt-1 flex items-start gap-1.5 text-xs text-muted-foreground">
+                <IconClockPause className="mt-px size-3.5 shrink-0" />
+                <span className="min-w-0">
+                  {t("canais.videosAcimaDoLimite", { n: channel.skippedByDurationCount })}
+                </span>
+              </p>
+            )}
             {channel.membersOnlyCount > 0 && (
               <p className="mt-1 flex items-start gap-1.5 text-xs text-tone-success-ink">
                 <svg viewBox="0 0 24 24" className="mt-px size-3.5 shrink-0" fill="currentColor" aria-hidden="true">
@@ -221,9 +261,33 @@ function ChannelCard({
               </p>
             )}
           </div>
-          <Button variant="ghost" size="icon-sm" onClick={onRemove} title={t("canais.removerCanal")}>
-            <IconTrash />
-          </Button>
+          {/* Cortar o vídeo mais recente A QUALQUER MOMENTO. O pop-up de
+              cadastro só aparecia no instante em que o canal era conectado, e
+              quem recusava perdia a opção — justamente quem faz o caminho
+              natural: conectar, ir configurar o estilo do corte, e só então
+              querer aquele vídeo. */}
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={buscandoUltimo}
+              onClick={async () => {
+                setBuscandoUltimo(true)
+                try {
+                  await onCortarUltimoVideo()
+                } finally {
+                  setBuscandoUltimo(false)
+                }
+              }}
+            >
+              <IconScissors className="size-4" />
+              {buscandoUltimo ? t("canais.buscandoUltimoVideo") : t("canais.cortarUltimoVideo")}
+            </Button>
+            <Button variant="ghost" size="icon-sm" onClick={onRemove} title={t("canais.removerCanal")}>
+              <IconTrash />
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 px-3 py-3">
@@ -270,6 +334,71 @@ function ChannelCard({
               </span>
             </span>
           </label>
+
+          {/* Limite de duração: fica junto do freio de fila porque é a mesma
+              família de decisão — o que este canal traz sozinho. Um canal que
+              publica cortes de 2 minutos e lives de 3 horas fazia o sistema
+              baixar a live inteira e gerar dezenas de cortes que ninguém pediu. */}
+          <div className="-mt-1 flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-medium">{t("canais.limiteDeDuracao")}</span>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  inputMode="numeric"
+                  // Placeholder curto: "sem limite" não cabe num campo
+                  // numérico estreito e aparecia cortado ("sem limi"). O que a
+                  // ausência de valor significa está escrito por extenso logo
+                  // abaixo do controle.
+                  placeholder="—"
+                  className="h-8 w-20 text-center"
+                  value={limiteRascunho}
+                  disabled={salvandoLimite}
+                  onChange={(e) => setLimiteRascunho(e.target.value)}
+                  // Salva no onBlur, não a cada tecla: digitar "120" mandaria
+                  // três requisições (1, 12, 120) e a mais lenta poderia
+                  // vencer com o valor pela metade.
+                  onBlur={() => salvarLimite()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur()
+                  }}
+                />
+                <span className="text-xs text-muted-foreground">{t("canais.minutos")}</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {[10, 20, 30, 45, 60, 90, 120].map((m) => (
+                <Button
+                  key={m}
+                  variant={channel.maxVideoMinutes === m ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  disabled={salvandoLimite}
+                  onClick={() => salvarLimite(String(m))}
+                >
+                  {m} min
+                </Button>
+              ))}
+              {channel.maxVideoMinutes !== null && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  disabled={salvandoLimite}
+                  onClick={() => salvarLimite("")}
+                >
+                  {t("canais.tirarLimite")}
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {channel.maxVideoMinutes
+                ? t("canais.limiteDeDuracaoAtivo", { n: channel.maxVideoMinutes })
+                : t("canais.limiteDeDuracaoTexto")}
+            </p>
+          </div>
 
           <div className="flex flex-col gap-2 border-t border-border pt-3">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -520,6 +649,25 @@ export function YouTubeChannelsPage() {
     }
   }
 
+  // Busca o vídeo mais recente do canal e abre o mesmo pop-up do cadastro.
+  // Reaproveitar o pop-up (em vez de criar outro) mantém a escolha de idioma
+  // no mesmo lugar nos dois caminhos — e é ela que decide em que língua o
+  // corte sai.
+  async function cortarUltimoVideo(channel: YoutubeChannel) {
+    setError(null)
+    setSuccess(null)
+    setLatestVideoError(null)
+    try {
+      const { video } = await api.get<{ video: LatestChannelVideo }>(
+        `/api/client/youtube-channels/${channel.id}/latest-video`,
+      )
+      setLatestVideoPrompt({ channelId: channel.id, video })
+      setIdiomaEscolhido(video.audioLanguageSuggestion || "original")
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("canais.naoFoiPossivelProcessar"))
+    }
+  }
+
   async function toggleActive(channel: YoutubeChannel, checked: boolean) {
     await api.post(`/api/client/youtube-channels/${channel.id}/active`, { isActive: checked })
     await load()
@@ -617,6 +765,8 @@ export function YouTubeChannelsPage() {
                 onSetTiktokAccount={(tiktokAccountId) => setTiktokAccount(channel, tiktokAccountId)}
                 onSetExportFolder={(autoMode) => setExportFolder(channel, autoMode)}
                 onSetDriveExportMode={(mode) => setDriveExportMode(channel, mode)}
+                onCortarUltimoVideo={() => cortarUltimoVideo(channel)}
+                onLimiteSalvo={load}
                 onRemove={() => removeChannel(channel)}
               />
             ))}
@@ -694,6 +844,19 @@ export function YouTubeChannelsPage() {
               </Select>
             </div>
           )}
+          {/* Vídeo que não pode ser cortado agora, ou que o cliente já tem.
+              Dizer aqui é melhor do que deixar clicar e receber um erro — o
+              vídeo não tem defeito nenhum nos dois casos. */}
+          {latestVideoPrompt && latestVideoPrompt.video.disponivel === false && (
+            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              {t("canais.videoIndisponivelAgora")}
+            </p>
+          )}
+          {latestVideoPrompt && latestVideoPrompt.video.jaNoSistema && (
+            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              {t("canais.videoJaEstaNoSistema", { status: latestVideoPrompt.video.jaNoSistema.status })}
+            </p>
+          )}
           <DialogFooter>
             <Button
               variant="outline"
@@ -709,7 +872,10 @@ export function YouTubeChannelsPage() {
             >
               {latestVideoError ? t("comum.fechar2") : t("canais.naoSoApartirDeAgora")}
             </Button>
-            <Button onClick={acceptLatestVideo} disabled={processingLatest}>
+            <Button
+              onClick={acceptLatestVideo}
+              disabled={processingLatest || latestVideoPrompt?.video.disponivel === false}
+            >
               {processingLatest ? "Enviando..." : latestVideoError ? t("canais.tentarDeNovo") : t("canais.simProcessar")}
             </Button>
           </DialogFooter>

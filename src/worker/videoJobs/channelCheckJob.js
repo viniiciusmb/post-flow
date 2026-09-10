@@ -3,6 +3,7 @@
 'use strict';
 
 const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRepository');
+const { passaDoLimite } = require('../../lib/limiteDeDuracao');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
 const ytDlpService = require('../../services/ytDlpService');
 const queuePriorityService = require('../../services/queuePriorityService');
@@ -339,12 +340,26 @@ async function run(boss) {
           continue;
         }
 
+        // "Não processar vídeos acima de N minutos" (configurado no canal).
+        //
+        // A duração da consulta individual vem primeiro: a listagem do canal às
+        // vezes não traz esse campo, e é a única que o freio teria em mãos.
+        //
+        // O vídeo é CADASTRADO com o motivo, não descartado: descartar faria o
+        // canal simplesmente parar de trazer vídeo, sem nada em tela dizendo por
+        // quê - o mesmo problema que o selo de "somente membros" resolveu. E o
+        // marco d'água avança normalmente, porque este vídeo FOI tratado: ele
+        // está na lista, visível, com botão de processar.
+        const duracao = (original && original.durationSeconds) || video.durationSeconds;
+        const acimaDoLimite = passaDoLimite(duracao, channel.max_video_minutes);
+
         const created = await sourceVideosRepository.createIfNotExists({
           youtubeChannelId: channel.id,
           ownerClientUserId: channel.client_user_id,
           youtubeVideoId: video.videoId,
           title: (original && original.title) || video.title,
           thumbnailUrl: video.thumbnailUrl,
+          autoSkippedReason: acimaDoLimite ? 'duracao' : null,
           // A listagem flat (video.publishedAt) vem sempre null - so a consulta
           // individual do video (original.publishedAt) traz a data de verdade.
           // Ate agora essa data ja vinha buscada aqui em cima so pro titulo, e
@@ -355,6 +370,15 @@ async function run(boss) {
         });
 
         if (!created) continue; // ja conhecido, nada a fazer
+
+        if (acimaDoLimite) {
+          logger.info(
+            `Canal "${channel.channel_name}": "${created.title}" tem ${Math.round(Number(duracao) / 60)} min e o ` +
+              `limite do canal e ${channel.max_video_minutes} - cadastrado sem entrar na fila. ` +
+              `O cliente pode mandar processar do jeito que esta.`
+          );
+          continue;
+        }
 
         logger.info(`Novo video detectado: "${created.title}" (canal ${channel.channel_name}).`);
         await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: created.id }, { priority });

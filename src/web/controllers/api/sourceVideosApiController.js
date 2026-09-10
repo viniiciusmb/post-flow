@@ -81,6 +81,9 @@ async function list(req, res) {
       status: v.status,
       errorMessage: v.error_message,
       billingBlockReason: v.billing_block_reason,
+      // Por que ele foi detectado e NAO entrou na fila sozinho ('duracao').
+      // A tela mostra o aviso e o botao de processar assim mesmo.
+      autoSkippedReason: v.auto_skipped_reason,
       clipCount: v.clip_count,
       readyClipCount: v.ready_clip_count,
       processingStartedAt: v.processing_started_at,
@@ -446,6 +449,11 @@ async function enqueue(req, res) {
   if (sourceVideo.status === 'paused') {
     await sourceVideosRepository.resumeByIdOwnedByClient(id, req.session.user.id);
   }
+
+  // O aviso de "ficou de fora por causa da duracao" explica por que ele NAO
+  // entrou - e a partir daqui ele entrou. Deixar o aviso na tela depois disso
+  // faria o cliente achar que o pedido dele foi ignorado.
+  if (sourceVideo.auto_skipped_reason) await sourceVideosRepository.clearAutoSkippedReason(id);
 
   const boss = await queueService.getBoss();
   const priority = await queuePriorityService.resolveQueuePriorityForClient(req.session.user.id);

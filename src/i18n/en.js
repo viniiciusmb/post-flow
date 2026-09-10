@@ -380,6 +380,7 @@ module.exports = {
     videoAindaNaoDisponivel: "That video is not available for download yet.",
     videoJaAdicionado: "That video has already been added.",
     videoJaProcessado: "You have already processed that video.",
+    videoJaNoSistema: "This video is already in the system (status: {status}). See it under Videos & Clips.",
     videoNaoComErro: "That video is not in error or cancelled right now.",
     videoNaoEncontrado: "Video not found.",
     videoNaoNaFila: "That video is not waiting in the queue.",

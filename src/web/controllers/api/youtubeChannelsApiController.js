@@ -1,5 +1,6 @@
 'use strict';
 
+const { normalizarLimite } = require('../../../lib/limiteDeDuracao');
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const youtubeChannelService = require('../../../services/youtubeChannelService');
 const driveConnectionsRepository = require('../../../repositories/driveConnectionsRepository');
@@ -32,6 +33,10 @@ async function list(req, res) {
   // por que ele parou de trazer video novo - quem esta olhando o canal e quem
   // esta com essa duvida.
   const somenteMembrosPorCanal = await sourceVideosRepository.countMembersOnlyByChannelIds(channels.map((c) => c.id));
+  // Mesma ideia para os vídeos que ficaram de fora por passar do limite de
+  // duração: a dúvida ("por que esse vídeo não virou corte?") nasce olhando o
+  // canal, então a resposta fica aqui.
+  const acimaDoLimitePorCanal = await sourceVideosRepository.countAutoSkippedByChannelIds(channels.map((c) => c.id));
 
   res.json({
     channels: channels.map((c) => {
@@ -54,6 +59,8 @@ async function list(req, res) {
         tiktokAccountId: c.tiktok_account_id,
         tiktokAccountName: tiktokAccount ? tiktokAccount.display_name || tiktokAccount.tiktok_open_id : null,
         membersOnlyCount: somenteMembrosPorCanal.get(Number(c.id)) || 0,
+        maxVideoMinutes: c.max_video_minutes,
+        skippedByDurationCount: acimaDoLimitePorCanal.get(Number(c.id)) || 0,
       };
     }),
   });
@@ -193,10 +200,63 @@ async function create(req, res) {
       processOnlyWhenQueueClear: channel.process_only_when_queue_clear,
       tiktokAccountId: channel.tiktok_account_id,
       tiktokAccountName: tiktokAccounts.length === 1 ? tiktokAccounts[0].display_name || tiktokAccounts[0].tiktok_open_id : null,
-      // Canal recem-cadastrado nunca tem video com selo ainda.
+      // Canal recem-cadastrado nunca tem video com selo nem video barrado.
       membersOnlyCount: 0,
+      maxVideoMinutes: channel.max_video_minutes,
+      skippedByDurationCount: 0,
     },
     latestVideo,
+  });
+}
+
+// O vídeo mais recente do canal, para o cliente decidir se quer cortá-lo -
+// SEM cadastrar nada. É a mesma pergunta que o cadastro já faz no pop-up, mas
+// disponível a qualquer momento.
+//
+// Por que isso passou a existir: o pop-up só aparecia no instante do cadastro,
+// e quem recusava (ou fechava) perdia o vídeo para sempre. E o caminho natural
+// é justamente recusar: conectar o canal, ir configurar o estilo do corte, e
+// só então querer cortar aquele vídeo - que a essa altura já não era mais
+// oferecido em lugar nenhum.
+//
+// Custa uma consulta ao YouTube (as trilhas de áudio exigem extração
+// completa), por isso é sob demanda, num clique, e não algo que a tela de
+// Canais faça sozinha para cada canal da lista.
+async function latestVideo(req, res) {
+  const channel = await youtubeChannelsRepository.findById(Number(req.params.id));
+  if (!channel || channel.client_user_id !== req.session.user.id) {
+    return res.status(404).json({ error: res.locals.t('erros.canalNaoEncontrado') });
+  }
+
+  let video;
+  try {
+    [video] = await ytDlpService.listChannelVideos(channel.channel_url, { limit: 1 });
+  } catch (err) {
+    logger.error(`Falha ao buscar o video mais recente do canal ${channel.id}:`, err);
+    return res.status(502).json({ error: `Nao foi possivel ler os dados do canal: ${err.message}` });
+  }
+  if (!video) return res.status(404).json({ error: res.locals.t('erros.canalSemVideo') });
+
+  const jaExiste = await sourceVideosRepository.findByYoutubeVideoIdForOwner(video.videoId, req.session.user.id);
+
+  res.json({
+    video: {
+      videoId: video.videoId,
+      title: video.title,
+      thumbnailUrl: video.thumbnailUrl,
+      durationSeconds: video.durationSeconds,
+      publishedAt: video.publishedAt,
+      audioLanguages: [],
+      audioLanguageSuggestion: idiomaDoAudio.ORIGINAL,
+      ...(await trilhasDoVideo(video.videoId, req)),
+      // Estreia e vídeo de membros não podem ser cortados agora - a tela
+      // explica em vez de deixar o cliente mandar processar e o vídeo virar
+      // erro minutos depois.
+      disponivel: podeBaixarAgora(video.liveStatus) && ehPublico(video.availability),
+      // Vídeo que o cliente já tem: a tela mostra o estado em vez de oferecer
+      // um botão que responderia "já existe".
+      jaNoSistema: jaExiste ? { id: Number(jaExiste.id), status: jaExiste.status } : null,
+    },
   });
 }
 
@@ -222,7 +282,7 @@ async function processLatestVideo(req, res) {
     return res.status(404).json({ error: res.locals.t('erros.canalSemVideo') });
   }
 
-  const sourceVideo = await sourceVideosRepository.createIfNotExists({
+  let sourceVideo = await sourceVideosRepository.createIfNotExists({
     youtubeChannelId: channel.id,
     ownerClientUserId: req.session.user.id,
     youtubeVideoId: video.videoId,
@@ -231,15 +291,46 @@ async function processLatestVideo(req, res) {
     publishedAt: video.publishedAt,
     durationSeconds: video.durationSeconds,
   });
+
+  // Vídeo que JÁ estava cadastrado. Antes isto era sempre 409 "já
+  // processado", o que é falso quando ele está apenas PARADO: detectado e
+  // esperando, ou com erro. É o caso mais comum agora que o cliente pode
+  // pedir isto a qualquer momento - a checagem periódica pode ter cadastrado
+  // o vídeo no meio-tempo e o freio de engarrafamento tê-lo deixado parado.
   if (!sourceVideo) {
-    return res.status(409).json({ error: res.locals.t('erros.videoJaProcessado') });
+    const existente = await sourceVideosRepository.findByYoutubeVideoIdForOwner(
+      video.videoId,
+      req.session.user.id
+    );
+    if (!existente) return res.status(409).json({ error: res.locals.t('erros.videoJaProcessado') });
+    if (!['detected', 'error', 'cancelled', 'paused'].includes(existente.status)) {
+      return res.status(409).json({
+        error: res.locals.t('erros.videoJaNoSistema', { status: existente.status }),
+      });
+    }
+    if (existente.status === 'paused') {
+      await sourceVideosRepository.resumeByIdOwnedByClient(existente.id, req.session.user.id);
+    }
+    sourceVideo = existente;
   }
 
   const boss = await queueService.getBoss();
   const priority = await queuePriorityService.resolveQueuePriorityForClient(req.session.user.id);
   await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: sourceVideo.id }, { priority });
 
-  res.status(201).json({ id: sourceVideo.id, title: sourceVideo.title, status: sourceVideo.status });
+  res.status(201).json({ id: Number(sourceVideo.id), title: sourceVideo.title, status: sourceVideo.status });
+}
+
+// "Nao processar videos acima de N minutos" deste canal. null limpa o limite.
+async function setMaxVideoMinutes(req, res) {
+  const channel = await youtubeChannelsRepository.findById(Number(req.params.id));
+  if (!channel || channel.client_user_id !== req.session.user.id) {
+    return res.status(404).json({ error: res.locals.t('erros.canalNaoEncontrado') });
+  }
+
+  const minutos = normalizarLimite(req.body.maxVideoMinutes);
+  const atualizado = await youtubeChannelsRepository.setMaxVideoMinutes(channel.id, req.session.user.id, minutos);
+  res.json({ id: Number(atualizado.id), maxVideoMinutes: atualizado.max_video_minutes });
 }
 
 async function setTiktokAccount(req, res) {
@@ -385,6 +476,8 @@ async function setAudioLanguage(req, res) {
 }
 
 module.exports = {
+  latestVideo,
+  setMaxVideoMinutes,
   list,
   create,
   setActive,

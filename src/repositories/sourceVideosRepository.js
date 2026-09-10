@@ -22,15 +22,41 @@ async function createIfNotExists({
   publishedAt,
   durationSeconds,
   status = 'detected',
+  // Por que este video NAO entrou na fila sozinho (hoje so 'duracao'). Fica
+  // gravado porque o limite do canal pode mudar depois: deduzir o motivo a
+  // partir do limite ATUAL responderia errado assim que alguem mexesse nele.
+  autoSkippedReason = null,
 }) {
   const { rows } = await pool.query(
-    `INSERT INTO source_videos (youtube_channel_id, owner_client_user_id, youtube_video_id, title, thumbnail_url, published_at, duration_seconds, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO source_videos (youtube_channel_id, owner_client_user_id, youtube_video_id, title, thumbnail_url, published_at, duration_seconds, status, auto_skipped_reason)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (youtube_video_id, owner_client_user_id) WHERE youtube_video_id IS NOT NULL DO NOTHING
      RETURNING *`,
-    [youtubeChannelId, ownerClientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds, status]
+    [youtubeChannelId, ownerClientUserId, youtubeVideoId, title, thumbnailUrl, publishedAt, durationSeconds, status, autoSkippedReason]
   );
   return rows[0] || null;
+}
+
+// Quantos videos de cada canal ficaram parados por passar do limite de
+// duracao. Uma consulta so pra lista inteira, pelo mesmo motivo da contagem de
+// "somente membros".
+async function countAutoSkippedByChannelIds(youtubeChannelIds) {
+  if (!youtubeChannelIds || !youtubeChannelIds.length) return new Map();
+  const { rows } = await pool.query(
+    `SELECT youtube_channel_id, count(*)::int AS n
+       FROM source_videos
+      WHERE youtube_channel_id = ANY($1::bigint[]) AND auto_skipped_reason IS NOT NULL
+      GROUP BY youtube_channel_id`,
+    [youtubeChannelIds]
+  );
+  return new Map(rows.map((r) => [Number(r.youtube_channel_id), r.n]));
+}
+
+// Mandar processar apaga o motivo: ele explica por que o video NAO entrou, e a
+// partir daqui ele entrou. Deixar o aviso na tela depois disso faria o cliente
+// achar que o pedido dele foi ignorado.
+async function clearAutoSkippedReason(id) {
+  await pool.query('UPDATE source_videos SET auto_skipped_reason = NULL, updated_at = now() WHERE id = $1', [id]);
 }
 
 // Quantos videos com selo de "somente membros" cada canal tem.
@@ -712,6 +738,8 @@ module.exports = {
   createIfNotExists,
   listMembersOnlyByChannel,
   countMembersOnlyByChannelIds,
+  countAutoSkippedByChannelIds,
+  clearAutoSkippedReason,
   liberarDeSomenteMembros,
   createManual,
   setChosenAudioLanguage,

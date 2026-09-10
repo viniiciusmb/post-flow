@@ -627,4 +627,31 @@ Agora o link abre um pop-up com as três escolhas: **idioma dos cortes** (só ap
 743 testes (eram 730). Seis mutações validadas: o `ON CONFLICT` do padrão sem o predicado novo (derruba 4 testes), o pipeline ignorando o estilo do vídeo, copiar sem congelar, o pipeline ignorando o idioma do envio, o editor não gravando o idioma onde ele é lido, e a checagem de posse removida (IDOR).
 
 
+**Cortar o vídeo mais recente a qualquer momento, e limite de duração por canal (2026-09-10, migration `082`).** Dois pedidos do fundador na mesma tela.
+
+**1. O pop-up "quer processar o vídeo mais recente?" só existia no instante do cadastro.** Quem recusava perdia a opção para sempre — e recusar é o caminho NATURAL: conectar o canal, ir configurar o estilo do corte, e só então querer aquele vídeo. A essa altura ele não era oferecido em lugar nenhum, e o canal só pegaria o PRÓXIMO vídeo publicado.
+
+- Botão **"Cortar último vídeo"** no cartão de cada canal → `GET /:id/latest-video` mostra qual é (sem cadastrar nada) e abre o MESMO pop-up do cadastro. Reaproveitar o pop-up mantém a escolha de idioma no mesmo lugar nos dois caminhos — é ela que decide em que língua o corte sai.
+- **Consultar não cadastra**: só o "sim" do cliente cadastra. Travado por teste, porque um `GET` que cria linha é o tipo de efeito colateral que ninguém espera.
+- **Vídeo que já estava PARADO agora é enfileirado, não recusado.** Antes era sempre 409 "você já processou esse vídeo", o que é falso quando ele está `detected`/`error`/`paused` — e esse virou o caso comum, já que a checagem periódica pode ter cadastrado o vídeo e o freio de engarrafamento o deixado parado. Vídeo pausado tem a marca de pausa limpa junto, senão o worker pararia de novo no primeiro checkpoint. Vídeo já PRONTO continua sendo recusado, com o status na mensagem.
+- **O marco d'água NÃO é movido por este caminho** — ele é do job de checagem. Movê-lo aqui faria o sistema pular tudo publicado entre ele e este vídeo, que é a família de defeitos que já custou vídeo perdido quatro vezes. Travado por teste.
+- Estreia, live e vídeo de membros vêm marcados como indisponíveis e o botão fica desabilitado, com o motivo escrito: o vídeo não tem defeito nenhum, só não existe como arquivo ainda.
+
+**2. "Não processar vídeos acima de N minutos", por canal** (`youtube_channels.max_video_minutes`). Um canal que publica cortes de 2 minutos e lives de 3 horas fazia o sistema baixar a live inteira, mandar para o Whisper e gerar dezenas de cortes que ninguém pediu.
+
+- **O vídeo barrado é CADASTRADO como `detected` com o motivo gravado** (`source_videos.auto_skipped_reason`), nunca descartado. Descartar faria o canal simplesmente parar de trazer vídeo, sem nada em tela explicando — o mesmo problema que o selo de "somente membros" resolveu. A tela de Cortes mostra a pílula "Acima do limite de duração" ao lado do botão **Processar agora**, e o cartão do canal diz quantos estão esperando.
+- **Status continua `detected`, não um status novo** — diferente de `somente_membros`, aqui não há impossibilidade nenhuma: o vídeo PODE ser cortado, foi barrado por escolha do cliente. Como `detected` já tem botão de processar, não foi preciso ensinar nenhuma tela um estado novo (a lição do `aguardando_creditos`, que quebrou a tela por falta de mapeamento no front).
+- **O motivo é GRAVADO, não deduzido.** O limite do canal pode mudar depois: reconstituir "por que este vídeo não entrou?" a partir do limite ATUAL responderia errado assim que alguém mexesse na configuração. É a mesma lição de "nunca reconstituir a natureza de um erro lendo texto de volta do banco", agora aplicada a uma decisão.
+- **O marco d'água AVANÇA por cima dele** — ao contrário da estreia e do vídeo de membros. Aqui o vídeo FOI tratado: está cadastrado, visível, com botão. Segurar o marco o reapresentaria a cada 20 minutos para sempre.
+- **Vídeo exatamente no limite passa** ("não processar acima de 20 min" quer dizer que 20 ainda serve) e **duração desconhecida NÃO é barrada** (a listagem às vezes vem sem ela; barrar por falta de informação faria o canal parar por um motivo que o cliente não configurou). Os dois travados por teste e validados por mutação.
+- **Mandar processar apaga o aviso**: ele explica por que o vídeo NÃO entrou, e a partir dali ele entrou. O campo salva no `onBlur`, não a cada tecla — digitar "120" mandaria três requisições (1, 12, 120) e a mais lenta poderia vencer com o valor pela metade.
+
+**Duas armadilhas de teste desta rodada:**
+- **Um teste meu chamava o repositório em vez do endpoint** e continuava passando com a linha removida do controller. Só a mutação mostrou. Virou teste HTTP contra `POST /:id/enqueue`.
+- **O arquivo de teste passava nos 10 testes e falhava como ARQUIVO**, levando 152 segundos: mandar cortar enfileira de verdade, e o pg-boss abre conexões e um agendador próprios que mantêm o processo vivo. `queueService.stopBoss()` no `test.after` resolveu (0,5s). **Regra: teste que aciona rota com fila precisa encerrar o pg-boss.**
+- E o cenário do job precisou do marco d'água DENTRO da listagem: sem ele, a proteção contra a rajada de 14 vídeos entra em ação e o teste mede aquela proteção, não o que ele diz medir.
+
+774 testes (eram 746). Seis mutações validadas: vídeo no limite passando a ser barrado, duração desconhecida barrada, o job ignorando o limite, processar sem apagar o aviso, o limite aceito cru do corpo da requisição, e a checagem de posse removida.
+
+
 Para o histórico completo de decisões e "porquês", ver a memória do projeto (arquivos em `~/.claude/projects/.../memory/`, carregados automaticamente) — especialmente `post-flow-architecture`, `post-flow-deployment`, `post-flow-project-status`, `post-flow-tiktok-oauth`, `post-flow-google-drive`, `feedback-run-migrations-immediately`.
