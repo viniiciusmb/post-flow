@@ -101,12 +101,16 @@ test('modo demonstracao preenche o painel sem gravar NADA no banco', async () =>
       d.periodTotalCents,
       'venda nova + recorrencia = total do periodo'
     );
-    assert.equal(
-      d.recentCommissions.reduce((s, c) => s + c.commissionCents, 0),
-      d.periodTotalCents,
-      'o extrato soma o total do periodo'
-    );
-    assert.equal(d.recentReferrals.length, d.referralCount, 'a lista de indicados bate com a contagem');
+    // O extrato mostra os 30 lançamentos mais recentes (igual à consulta
+    // real), então a soma dele nunca PASSA do total do período - e quando
+    // cabe tudo, é exatamente igual.
+    const somaDoExtrato = d.recentCommissions.reduce((s, c) => s + c.commissionCents, 0);
+    assert.ok(somaDoExtrato <= d.periodTotalCents);
+    if (d.recentCommissions.length < 30) assert.equal(somaDoExtrato, d.periodTotalCents);
+    // A lista mostra os 20 mais recentes, igual à consulta real - então ela é
+    // um recorte da contagem, nunca maior que ela.
+    assert.ok(d.recentReferrals.length <= d.referralCount);
+    assert.ok(d.recentReferrals.length > 0);
     assert.equal(
       d.subscriptions.active + d.subscriptions.canceled + d.subscriptions.overdue + d.subscriptions.withoutPlan,
       d.referralCount,
@@ -190,6 +194,84 @@ test('a conta em demonstracao tem movimento no filtro do DIA, nao so no acumulad
     assert.ok(body.recurring.count > 0, 'tem recorrencia hoje');
     assert.ok(body.periodTotalCents > 0);
     assert.ok(body.clicks.period > 0, 'e cliques hoje');
+  } finally {
+    await settingsRepository.setValue(demonstracao.CHAVE, []);
+  }
+});
+
+test('a base de demonstracao respeita as taxas que a geram', async () => {
+  // Os números não são escritos à mão: os cliques viram cadastros, parte dos
+  // cadastros vira assinatura e o churn cancela algumas ao longo dos meses. Se
+  // alguém mexer numa taxa, os números da tela têm que acompanhar - e se
+  // alguém voltar a escrever números soltos, este teste cai.
+  const { indicados, totalCliques } = demonstracao.simularBase(17 * 7919 + 13, new Date());
+  const comPlano = indicados.filter((i) => i.plano);
+
+  const taxaCadastro = indicados.length / totalCliques;
+  const taxaAssinatura = comPlano.length / totalCliques;
+
+  assert.ok(
+    Math.abs(taxaCadastro - demonstracao.CLIQUE_VIRA_CADASTRO) < 0.005,
+    `cadastro por clique deu ${(taxaCadastro * 100).toFixed(1)}%`
+  );
+  assert.ok(
+    Math.abs(taxaAssinatura - demonstracao.CLIQUE_VIRA_ASSINATURA) < 0.005,
+    `assinatura por clique deu ${(taxaAssinatura * 100).toFixed(1)}%`
+  );
+
+  // Todo indicado está em exatamente um estado, e quem tem plano nunca fica
+  // como "só criou conta".
+  for (const ind of indicados) {
+    assert.ok(['ativo', 'cancelado', 'inadimplente', 'sem_plano'].includes(ind.status));
+    assert.equal(ind.plano === null, ind.status === 'sem_plano');
+  }
+
+  // Com 7% ao mês sobre uma base de vários meses, algumas assinaturas TÊM que
+  // ter caído - uma demonstração sem nenhum cancelamento não é crível.
+  const cancelados = indicados.filter((i) => i.status === 'cancelado').length;
+  assert.ok(cancelados > 0, 'o churn precisa aparecer');
+  assert.ok(cancelados < comPlano.length / 2, 'mas nao pode derrubar metade da base');
+});
+
+test('a taxa de atraso fica perto do configurado, medida em varias contas', async () => {
+  // Medido na MÉDIA de 12 contas, e não em uma: numa base de ~30 assinantes,
+  // 6% são menos de dois casos, então uma conta sozinha oscila entre zero e
+  // seis sem nada estar errado. Foi o que me fez suspeitar de um viés que não
+  // existia - a medição em várias contas mostrou que era ruído de amostra.
+  let assinantes = 0;
+  let atrasados = 0;
+  for (let conta = 1; conta <= 12; conta++) {
+    const { indicados } = demonstracao.simularBase(conta * 7919 + 13, new Date());
+    const comPlano = indicados.filter((i) => i.plano);
+    assinantes += comPlano.length;
+    atrasados += indicados.filter((i) => i.status === 'inadimplente').length;
+  }
+  const taxa = atrasados / assinantes;
+  assert.ok(
+    taxa > 0.01 && taxa < 0.14,
+    `atraso medido em ${(taxa * 100).toFixed(1)}% quando o configurado e 6%`
+  );
+});
+
+test('a demonstracao usa DOIS links e distribui tudo entre eles', async () => {
+  const dono = await createLoginableClient();
+  const agente = createAgent(baseUrl);
+  await agente.login(dono.email, dono.password);
+  await settingsRepository.setValue(demonstracao.CHAVE, [Number(dono.id)]);
+  try {
+    const { body: d } = await agente.get('/api/client/commissions/overview?range=all');
+
+    assert.equal(d.links.length, 2, 'link da bio e link da pagina de vendas');
+    assert.ok(d.links.every((l) => l.label), 'os dois tem nome - link sem nome nao diz de onde veio a venda');
+
+    // Cada total da tela é a soma do que os links mostram. Sem isso, a pessoa
+    // soma as duas linhas na mão e encontra um número diferente do cartão.
+    assert.equal(d.links.reduce((s, l) => s + l.referralCount, 0), d.referralCount);
+    assert.equal(d.links.reduce((s, l) => s + l.activeCount, 0), d.subscriptions.active);
+    assert.equal(d.links.reduce((s, l) => s + l.commissionCents, 0), d.balance.totalEarnedCents);
+    assert.equal(d.links.reduce((s, l) => s + l.clicksTotal, 0), d.clicks.total);
+
+    assert.ok(d.links.every((l) => l.commissionCents > 0), 'os dois links precisam ter gerado comissao');
   } finally {
     await settingsRepository.setValue(demonstracao.CHAVE, []);
   }

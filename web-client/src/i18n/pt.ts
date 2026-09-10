@@ -945,6 +945,7 @@ export const pt = {
   "com.ultimasIndicacoes": "Últimas indicações",
   "com.nenhumaIndicacaoAinda": "Ninguém se cadastrou pelo seu link ainda.",
   "com.extratoComissoes": "Extrato de comissões",
+  "com.extratoRecorte": "Mostrando os {n} lançamentos mais recentes do período.",
   "com.nenhumaComissaoNoPeriodo": "Nenhuma comissão nesse período.",
   "com.pixTipoCpf": "CPF",
   "com.pixTipoCnpj": "CNPJ",

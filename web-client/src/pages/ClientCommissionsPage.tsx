@@ -467,6 +467,14 @@ export function ClientCommissionsPage() {
                       </div>
                     ))
                   )}
+                  {/* O extrato mostra um recorte. Sem dizer isso, quem somar as
+                      linhas encontra menos que o cartão do período e conclui
+                      que um dos dois está errado. */}
+                  {dados.recentCommissions.length >= 30 && (
+                    <p className="pt-1 text-xs text-muted-foreground">
+                      {t("com.extratoRecorte", { n: dados.recentCommissions.length })}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

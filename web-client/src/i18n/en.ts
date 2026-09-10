@@ -939,6 +939,7 @@ export const en: Dicionario = {
   "com.ultimasIndicacoes": "Recent referrals",
   "com.nenhumaIndicacaoAinda": "No one has signed up through your link yet.",
   "com.extratoComissoes": "Commission statement",
+  "com.extratoRecorte": "Showing the {n} most recent entries in the period.",
   "com.nenhumaComissaoNoPeriodo": "No commissions in this period.",
   "com.pixTipoCpf": "CPF",
   "com.pixTipoCnpj": "CNPJ",

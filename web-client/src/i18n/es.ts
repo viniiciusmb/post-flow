@@ -939,6 +939,7 @@ export const es: Dicionario = {
   "com.ultimasIndicacoes": "Últimos referidos",
   "com.nenhumaIndicacaoAinda": "Todavía nadie se registró con tu enlace.",
   "com.extratoComissoes": "Extracto de comisiones",
+  "com.extratoRecorte": "Mostrando los {n} movimientos más recientes del período.",
   "com.nenhumaComissaoNoPeriodo": "Ninguna comisión en este período.",
   "com.pixTipoCpf": "CPF",
   "com.pixTipoCnpj": "CNPJ",
