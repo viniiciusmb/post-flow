@@ -156,6 +156,28 @@ async function addExtra(clientUserId, bucket, minutes) {
   return rows[0];
 }
 
+// Tira do saldo avulso o que ainda não foi usado, quando a compra é estornada.
+//
+// GREATEST(... , 0) porque o cliente pode ter gasto parte dos minutos antes do
+// estorno: o serviço já foi prestado e não há como desfazer, então o prejuízo
+// daquele consumo é inevitável - o que dá para recuperar é o saldo que sobrou.
+// Sem esse piso, o saldo ficaria negativo e o cliente ficaria travado por uma
+// dívida de minutos que ele não pode pagar (diferente do saldo do afiliado,
+// que é dinheiro e se acerta na comissão seguinte).
+//
+// Devolve quantos minutos foram efetivamente retirados.
+async function removeExtra(clientUserId, bucket, minutes) {
+  const { extra } = columnsFor(bucket);
+  const { rows } = await pool.query(
+    `UPDATE client_credits
+     SET ${extra} = GREATEST(${extra} - $2, 0), updated_at = now()
+     WHERE client_user_id = $1
+     RETURNING ${extra} AS restante`,
+    [clientUserId, minutes]
+  );
+  return rows[0] ? rows[0].restante : null;
+}
+
 // Reset semanal (job) - so mexe nos clientes com assinatura ativa cujo
 // ciclo ja completou 7 dias. Zera used_* (cota nao acumula sobra) e aplica a
 // cota do plano ATUAL (pode ter mudado no meio do ciclo anterior); extra_*
@@ -205,6 +227,7 @@ module.exports = {
   release,
   forceDebitUsed,
   addExtra,
+  removeExtra,
   resetDueCycles,
   applyPlanQuotaNow,
 };

@@ -47,6 +47,43 @@ async function countByReferredUserInTx(client, referredUserId) {
   return rows[0].n;
 }
 
+// Marca a comissão de um pagamento como estornada. O UPDATE só pega quem
+// ainda não está marcado, e é isso que torna a operação idempotente: o Asaas
+// reenvia aviso, e reenvio não pode debitar o afiliado duas vezes.
+//
+// Recebe o `client` da transação porque o débito no saldo tem que acontecer
+// junto - marcar sem debitar deixaria a tela mostrando um saldo que não
+// existe mais.
+async function markReversed(client, externalPaymentId, motivo) {
+  const { rows } = await client.query(
+    `UPDATE commission_entries
+     SET reversed_at = now(), reversal_reason = $2
+     WHERE external_payment_id = $1 AND reversed_at IS NULL
+     RETURNING *`,
+    [externalPaymentId, motivo || null]
+  );
+  return rows[0] || null;
+}
+
+// O caminho de volta: contestação que a gente ganhou, ou estorno negado. Só
+// desmarca quem está marcado, pela mesma razão de idempotência.
+async function markRestored(client, externalPaymentId) {
+  const { rows } = await client.query(
+    `UPDATE commission_entries
+     SET reversed_at = NULL, reversal_reason = NULL
+     WHERE external_payment_id = $1 AND reversed_at IS NOT NULL
+     RETURNING *`,
+    [externalPaymentId]
+  );
+  return rows[0] || null;
+}
+
+// Conta TODAS as comissões daquele indicado, estornadas inclusive - e isso é
+// deliberado. Este número decide duas coisas: se o próximo pagamento é a
+// primeira venda ou recorrência, e se o teto de meses já foi atingido.
+// Ignorando as estornadas, um cliente que pagasse, estornasse e pagasse de
+// novo geraria uma segunda "primeira venda", com o percentual de entrada, pelo
+// mesmo cliente - transformando estorno numa forma de ganhar comissão.
 async function countByReferredUser(referredUserId) {
   const { rows } = await pool.query(
     'SELECT count(*)::int AS n FROM commission_entries WHERE referred_user_id = $1',
@@ -59,7 +96,8 @@ async function sumTotal({ from, to } = {}) {
   const { rows } = await pool.query(
     `SELECT coalesce(sum(commission_cents), 0)::int AS total_cents, count(*)::int AS n
      FROM commission_entries
-     WHERE ($1::timestamptz IS NULL OR created_at >= $1)
+     WHERE reversed_at IS NULL
+       AND ($1::timestamptz IS NULL OR created_at >= $1)
        AND ($2::timestamptz IS NULL OR created_at <= $2)`,
     [from || null, to || null]
   );
@@ -92,6 +130,7 @@ async function summaryByAffiliate(affiliateUserId, { from, to } = {}) {
             coalesce(sum(amount_paid_cents), 0)::int AS paid_cents
      FROM commission_entries
      WHERE affiliate_user_id = $1
+       AND reversed_at IS NULL
        AND ($2::timestamptz IS NULL OR created_at >= $2)
        AND ($3::timestamptz IS NULL OR created_at <= $3)
      GROUP BY kind`,
@@ -112,7 +151,8 @@ async function summaryTotal({ from, to } = {}) {
             count(*)::int AS n,
             coalesce(sum(commission_cents), 0)::int AS commission_cents
      FROM commission_entries
-     WHERE ($1::timestamptz IS NULL OR created_at >= $1)
+     WHERE reversed_at IS NULL
+       AND ($1::timestamptz IS NULL OR created_at >= $1)
        AND ($2::timestamptz IS NULL OR created_at <= $2)
      GROUP BY kind`,
     [from || null, to || null]
@@ -124,6 +164,8 @@ async function summaryTotal({ from, to } = {}) {
 
 module.exports = {
   insertIfNotExists,
+  markReversed,
+  markRestored,
   countByReferredUser,
   countByReferredUserInTx,
   sumTotal,

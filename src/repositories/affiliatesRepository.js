@@ -63,6 +63,29 @@ async function credit(client, userId, cents) {
   );
 }
 
+// Tira do saldo uma comissão que foi estornada. Roda dentro da mesma
+// transação que marca a entrada como revertida.
+//
+// O saldo PODE ficar negativo, e isso é proposital: se o afiliado já sacou
+// aquele dinheiro, a alternativa seria engolir o prejuízo - e quem sacasse
+// rápido nunca devolveria nada. Saldo negativo é uma dívida que as próximas
+// comissões quitam sozinhas, e enquanto ele existir o pedido de saque não
+// passa (reserveForWithdrawal exige saldo suficiente).
+//
+// total_earned_cents cai junto porque é o que a tela chama de "Comissão
+// total": manter ali um valor que inclui comissão devolvida seria mostrar ao
+// afiliado um ganho que ele não teve.
+async function debit(client, userId, cents) {
+  await client.query(
+    `UPDATE affiliates
+     SET balance_available_cents = balance_available_cents - $2,
+         total_earned_cents = GREATEST(total_earned_cents - $2, 0),
+         updated_at = now()
+     WHERE user_id = $1`,
+    [userId, cents]
+  );
+}
+
 // Reserva atomicamente o valor do saque (mesmo padrao CTE + FOR UPDATE de
 // clientCreditsRepository.reserve) - so aplica se houver saldo disponivel
 // suficiente, tudo numa unica query. Devolve null se o saldo nao bastar.
@@ -112,7 +135,8 @@ async function listAllWithStats({ from, to } = {}) {
             count(DISTINCT r.id)::int AS referral_count,
             count(DISTINCT r.id) FILTER (WHERE cs.status = 'ativo')::int AS active_subscription_count,
             coalesce(sum(ce.commission_cents) FILTER (
-              WHERE ($1::timestamptz IS NULL OR ce.created_at >= $1)
+              WHERE ce.reversed_at IS NULL
+                AND ($1::timestamptz IS NULL OR ce.created_at >= $1)
                 AND ($2::timestamptz IS NULL OR ce.created_at <= $2)
             ), 0)::int AS period_commission_cents
      FROM users u
@@ -138,6 +162,7 @@ module.exports = {
   setRecurringPercentOverride,
   setPixKey,
   credit,
+  debit,
   reserveForWithdrawal,
   releaseReserved,
   confirmWithdrawn,

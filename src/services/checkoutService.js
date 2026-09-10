@@ -780,6 +780,101 @@ async function aplicarPagamentoConfirmado(registro) {
   });
 }
 
+// O espelho de aplicarPagamentoConfirmado: traduz "esta cobrança foi
+// estornada" na consequência certa para a finalidade dela.
+//
+// Fica ao lado da outra de propósito. São a mesma tabela de decisões lida nos
+// dois sentidos, e separá-las em arquivos diferentes seria garantir que um dia
+// alguém acrescenta uma finalidade nova só de um lado - e aí um tipo de compra
+// passa a ser estornável sem devolver nada.
+//
+// markRefundedOnce é o que torna tudo idempotente: só a primeira passagem por
+// um pagamento que estava PAGO faz efeito.
+async function aplicarEstorno(registro, motivo) {
+  const marcado = await asaasPaymentsRepository.markRefundedOnce(registro.asaas_payment_id);
+  if (!marcado) return false;
+
+  const clientUserId = Number(registro.client_user_id);
+
+  // A comissão do afiliado sai em qualquer finalidade. Hoje só mensalidade
+  // gera comissão, mas se um dia outra passar a gerar, esquecer aqui devolve o
+  // buraco do prejuízo em dobro.
+  try {
+    await affiliateService.reverseCommissionForPayment({
+      externalPaymentId: registro.asaas_payment_id,
+      motivo,
+    });
+  } catch (err) {
+    logger.error(`Falha ao estornar a comissao do pagamento ${registro.asaas_payment_id}:`, err);
+  }
+
+  if (registro.purpose === 'credit_package') {
+    const compra = registro.credit_purchase_id
+      ? await creditPurchasesRepository.findById(Number(registro.credit_purchase_id))
+      : null;
+    if (compra) {
+      await creditPurchasesRepository.markRefundedById(compra.id);
+      const restante = await clientCreditsRepository.removeExtra(clientUserId, compra.bucket, Number(compra.minutes));
+      logger.warn(
+        `Estorno: ${compra.minutes} min avulsos retirados do cliente ${clientUserId} (sobrou ${restante} no bolso ${compra.bucket}).`
+      );
+    }
+    return true;
+  }
+
+  if (registro.purpose === 'extra_slots') {
+    // Devolve o limite ao que era antes desta compra. Nada é apagado: canal e
+    // conta que já existem continuam funcionando, o limite só volta a barrar
+    // novos - a mesma regra do não-pagamento da recorrência dos extras.
+    const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
+    const canais = Math.max(Number(subscription.extra_channels) - (Number(registro.extra_channels) || 0), 0);
+    const contas = Math.max(
+      Number(subscription.extra_tiktok_accounts) - (Number(registro.extra_tiktok_accounts) || 0),
+      0
+    );
+    await clientSubscriptionsRepository.setExtras(clientUserId, { canais, contas });
+    try {
+      await sincronizarAssinaturaDeExtras(clientUserId);
+    } catch (err) {
+      logger.error(`Estorno: falha ao ajustar a recorrencia de extras do cliente ${clientUserId}:`, err);
+    }
+    logger.warn(`Estorno: conexoes extras do cliente ${clientUserId} voltaram para ${canais} canal(is) e ${contas} conta(s).`);
+    return true;
+  }
+
+  // Mensalidade estornada: o mesmo estado de quem não pagou. Inadimplente
+  // trava processamento novo sem apagar nada - se for engano, volta com um
+  // pagamento. Cancelar de imediato seria destruir a conta de um cliente que
+  // pode ter contestado por engano.
+  await clientSubscriptionsRepository.setStatus(clientUserId, 'inadimplente');
+  logger.warn(`Estorno: mensalidade ${registro.asaas_payment_id} devolvida - cliente ${clientUserId} marcado inadimplente.`);
+  return true;
+}
+
+// Contestação ganha / estorno negado: desfaz o desfazimento.
+//
+// Só a comissão e o status do pagamento voltam automaticamente. Crédito
+// avulso e conexões extras NÃO são recolocados aqui de propósito: recolocar
+// exigiria saber se o cliente ainda tem o mesmo saldo, e errar para o lado de
+// dar minutos a mais é o único erro que custa dinheiro de novo. Esses dois
+// casos aparecem no log para resolver à mão, e são raríssimos.
+async function reverterEstorno(registro) {
+  const marcado = await asaasPaymentsRepository.markPaidAgainAfterRefund(registro.asaas_payment_id);
+  if (!marcado) return false;
+
+  await affiliateService.restoreCommissionForPayment({ externalPaymentId: registro.asaas_payment_id });
+
+  if (registro.purpose === 'subscription') {
+    await clientSubscriptionsRepository.setStatus(Number(registro.client_user_id), 'ativo');
+    await creditsUnlockService.unlockAwaitingCreditsForClient(Number(registro.client_user_id));
+  } else {
+    logger.warn(
+      `Estorno revertido no pagamento ${registro.asaas_payment_id} (${registro.purpose}): confira a mao se o cliente ${registro.client_user_id} precisa receber de volta o que foi retirado.`
+    );
+  }
+  return true;
+}
+
 module.exports = {
   DadosInvalidosError,
   AsaasError,
@@ -797,6 +892,8 @@ module.exports = {
   sincronizarAssinaturaDeExtras,
   conferirPagamentoPendente,
   aplicarPagamentoConfirmado,
+  aplicarEstorno,
+  reverterEstorno,
   ativarAssinaturaPaga,
   liberarCreditoPago,
   liberarExtrasPagos,

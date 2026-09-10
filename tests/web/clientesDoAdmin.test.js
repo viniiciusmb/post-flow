@@ -173,7 +173,10 @@ test('período personalizado usa as datas enviadas', async () => {
     `UPDATE source_videos SET created_at = now() - interval '10 days' WHERE owner_client_user_id = $1`,
     [cliente.id]
   );
-  const dia = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  // No fuso de Brasília, que é o que o filtro usa. Com toISOString() (UTC) o
+  // dia calculado aqui e o dia entendido pelo servidor divergem à noite.
+  const dia = (n) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(Date.now() - n * 86400000));
   const agente = await agenteAdmin();
 
   const dentro = achar((await agente.get(`/api/admin/clients?range=custom&since=${dia(12)}&until=${dia(8)}`)).body, cliente.id);

@@ -152,6 +152,14 @@ async function retrieveSetupIntent(setupIntentId) {
 // feitas do lado da Stripe, e dado de cartao desatualizado na tela e pior do
 // que nenhum. O unico id que guardamos e o do cartao padrao, pro job de
 // excedente conseguir cobrar sem consultar a Stripe.
+// Uma cobrança pelo id. Usada no tratamento de contestação: o evento
+// charge.dispute.* traz só o ID da cobrança, e é dentro dela que está a fatura
+// à qual a comissão do afiliado ficou amarrada.
+async function retrieveCharge(chargeId) {
+  const stripe = getClient();
+  return stripe.charges.retrieve(chargeId);
+}
+
 async function listPaymentMethods(customerId) {
   const stripe = getClient();
   const [{ data: methods }, customer] = await Promise.all([
@@ -323,6 +331,7 @@ module.exports = {
   createCheckoutSessionForPackage,
   createSetupSessionForOverageCard,
   retrieveSetupIntent,
+  retrieveCharge,
   listPaymentMethods,
   listCharges,
   paymentMethodBelongsToCustomer,

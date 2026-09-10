@@ -136,6 +136,9 @@ async function montar({ userId, since, until, rangeKey }) {
       commissionPercent: Number(e.commission_percent),
       commissionCents: e.commission_cents,
       kind: e.kind,
+      // O lançamento estornado continua no extrato, marcado. Sumir deixaria um
+      // buraco inexplicável ("recebi isso mês passado e agora não existe").
+      reversedAt: e.reversed_at,
       createdAt: e.created_at,
     })),
     recentReferrals: indicacoes.map((r) => ({

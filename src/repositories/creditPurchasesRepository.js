@@ -33,6 +33,15 @@ async function markPaidById(id, asaasPaymentId = null) {
 // Compra que nunca vai poder ser paga (o checkout nao chegou a ser criado, ou
 // expirou). Deixa-la 'pendente' faria o historico do cliente mostrar pra
 // sempre uma compra que ele nao fez e nao tem como concluir.
+async function markRefundedById(id) {
+  const { rows } = await pool.query(
+    `UPDATE credit_purchases SET status = 'estornado'
+      WHERE id = $1 AND status = 'pago' RETURNING *`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
 async function markFailedById(id) {
   const { rows } = await pool.query(
     `UPDATE credit_purchases SET status = 'falhou'
@@ -85,6 +94,7 @@ module.exports = {
   create,
   findById,
   markPaidById,
+  markRefundedById,
   markFailedById,
   markPaidByCheckoutSession,
   markExpiredByCheckoutSession,

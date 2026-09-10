@@ -970,6 +970,7 @@ export const es: Dicionario = {
   "com.percentRecorrencia": "{percent}% en cada mensualidad siguiente",
   "com.tipoPrimeira": "Venta nueva",
   "com.tipoRecorrencia": "Recurrencia",
+  "com.comissaoEstornada": "Reembolsada",
   "com.origemDoCadastro": "Vino de",
   "com.plano": "Plan",
   "com.linkCriado": "¡Enlace creado! Cópialo y pégalo donde compartes.",

@@ -976,6 +976,7 @@ export const pt = {
   "com.percentRecorrencia": "{percent}% em cada mensalidade seguinte",
   "com.tipoPrimeira": "Venda nova",
   "com.tipoRecorrencia": "Recorrência",
+  "com.comissaoEstornada": "Estornada",
   "com.origemDoCadastro": "Veio de",
   "com.plano": "Plano",
   "com.linkCriado": "Link criado! Agora é só copiar e colar onde você divulga.",

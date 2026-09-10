@@ -445,11 +445,24 @@ export function ClientCommissionsPage() {
                       <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
                         <span className="text-muted-foreground">{c.referredBusinessName || c.referredEmail}</span>
                         <div className="flex items-center gap-3">
-                          <TonePill tone={c.kind === "primeira" ? "violet" : "cyan"} dot={false}>
-                            {c.kind === "primeira" ? t("com.tipoPrimeira") : t("com.tipoRecorrencia")}
-                          </TonePill>
+                          {/* Estornado ganha a pílula de aviso no lugar do tipo:
+                              o que importa nessa linha deixou de ser "venda ou
+                              recorrência" e passou a ser "esse dinheiro voltou". */}
+                          {c.reversedAt ? (
+                            <TonePill tone="danger" dot={false}>
+                              {t("com.comissaoEstornada")}
+                            </TonePill>
+                          ) : (
+                            <TonePill tone={c.kind === "primeira" ? "violet" : "cyan"} dot={false}>
+                              {c.kind === "primeira" ? t("com.tipoPrimeira") : t("com.tipoRecorrencia")}
+                            </TonePill>
+                          )}
                           <span className="tabular-nums text-muted-foreground">{c.commissionPercent}%</span>
-                          <span className="w-24 text-right tabular-nums font-medium">{formatCents(c.commissionCents)}</span>
+                          <span
+                            className={`w-24 text-right tabular-nums font-medium ${c.reversedAt ? "text-muted-foreground line-through" : ""}`}
+                          >
+                            {formatCents(c.commissionCents)}
+                          </span>
                         </div>
                       </div>
                     ))

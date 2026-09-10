@@ -119,6 +119,58 @@ async function handleInvoicePaid(invoice) {
   logger.info(`Cliente ${existing.client_user_id} pagou a fatura ${invoice.id} - assinatura reativada.`);
 }
 
+// A fatura de uma cobrança, aceitando as três formas que a Stripe usa no
+// mesmo lugar: o objeto expandido, o id em texto, ou nada (aí é preciso ir
+// buscar). O evento de CONTESTAÇÃO é o caso que obriga a busca - ele traz um
+// objeto Dispute cujo campo `charge` é só o id, então ler `charge.invoice`
+// direto devolveria undefined e o estorno passaria batido sem erro nenhum.
+async function faturaDaCobranca(cobranca) {
+  if (!cobranca) return null;
+
+  // Objeto Dispute: desce para a cobrança dele.
+  const alvo = cobranca.object === 'dispute' ? cobranca.charge : cobranca;
+
+  if (typeof alvo === 'string') {
+    try {
+      const charge = await stripeService.retrieveCharge(alvo);
+      return typeof charge.invoice === 'string' ? charge.invoice : (charge.invoice && charge.invoice.id) || null;
+    } catch (err) {
+      logger.error(`Stripe: nao consegui buscar a cobranca ${alvo} para desfazer a comissao:`, err.message);
+      return null;
+    }
+  }
+
+  if (!alvo.invoice) return null;
+  return typeof alvo.invoice === 'string' ? alvo.invoice : alvo.invoice.id || null;
+}
+
+// Estorno ou contestação na Stripe. A comissão nasceu amarrada ao id da
+// FATURA (é ela que representa a mensalidade), mas o evento de estorno chega
+// com a cobrança - por isso a fatura é lida de dentro dela.
+//
+// Uma cobrança sem fatura é pagamento avulso (crédito ou excedente), que não
+// gera comissão: não há o que desfazer.
+async function handleChargeRefunded(charge, motivo) {
+  const invoiceId = await faturaDaCobranca(charge);
+  if (!invoiceId) return;
+
+  await affiliateService.reverseCommissionForPayment({ externalPaymentId: invoiceId, motivo });
+
+  const existing = await clientSubscriptionsRepository.findByStripeCustomerId(charge.customer);
+  if (!existing) return;
+  await clientSubscriptionsRepository.setStatus(existing.client_user_id, 'inadimplente');
+  logger.warn(`Stripe: fatura ${invoiceId} estornada (${motivo}) - cliente ${existing.client_user_id} inadimplente.`);
+}
+
+// A Stripe manda dispute.closed tanto pra disputa ganha quanto perdida. Só a
+// ganha devolve o dinheiro pra nós, e só ela restaura a comissão.
+async function handleDisputeClosed(dispute) {
+  if (dispute.status !== 'won') return;
+  const invoiceId = await faturaDaCobranca(dispute.charge);
+  if (!invoiceId) return;
+  await affiliateService.restoreCommissionForPayment({ externalPaymentId: invoiceId });
+}
+
 async function webhook(req, res) {
   let event;
   try {
@@ -165,6 +217,17 @@ async function webhook(req, res) {
       case 'invoice.paid':
       case 'invoice.payment_succeeded':
         await handleInvoicePaid(event.data.object);
+        break;
+      // Dinheiro devolvido ou retido. Sem estes casos a comissão do afiliado
+      // continuava creditada sobre um pagamento que voltou pro cliente.
+      case 'charge.refunded':
+        await handleChargeRefunded(event.data.object, 'estorno');
+        break;
+      case 'charge.dispute.created':
+        await handleChargeRefunded(event.data.object, 'contestacao no cartao');
+        break;
+      case 'charge.dispute.closed':
+        await handleDisputeClosed(event.data.object);
         break;
       default:
         // Os outros eventos que o endpoint recebe (invoice.created,

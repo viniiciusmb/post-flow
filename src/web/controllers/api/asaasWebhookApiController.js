@@ -253,6 +253,58 @@ async function handlePaymentReceived(payment) {
   logger.info(`Asaas: cliente ${clientUserId} pagou a mensalidade ${payment.id} - assinatura reativada.`);
 }
 
+// ---------- estorno, contestação e cobrança apagada ----------
+
+// Todo evento que significa "o dinheiro saiu da nossa conta ou foi retido"
+// cai aqui. A contestação de cartão (chargeback) entra junto porque o valor é
+// retido no MOMENTO em que ela é aberta, não quando é julgada: esperar o
+// julgamento deixaria a comissão sacável durante semanas, e saque a gente não
+// consegue trazer de volta.
+//
+// O estorno PARCIAL desfaz tudo, e não uma parte proporcional. É o lado seguro
+// do erro: comissão sobre dinheiro devolvido é prejuízo, e o caso não existe
+// hoje (nossas cobranças são mensalidades cheias).
+async function handlePaymentRefunded(payment, motivo) {
+  if (!payment.id) return;
+
+  const registro = await asaasPaymentsRepository.findByAsaasId(payment.id);
+  if (registro) {
+    await checkoutService.aplicarEstorno(registro, motivo);
+    return;
+  }
+
+  // Cobrança que não passou pelo nosso checkout (renovação da assinatura, ou
+  // baixa feita à mão no painel do Asaas). Não há o que devolver de crédito,
+  // mas a comissão e o acesso continuam valendo o mesmo.
+  await affiliateService.reverseCommissionForPayment({ externalPaymentId: payment.id, motivo });
+
+  if (!payment.subscription) return;
+  const assinatura = await clientSubscriptionsRepository.findByAsaasSubscriptionId(payment.subscription);
+  if (!assinatura) return;
+  await clientSubscriptionsRepository.setStatus(assinatura.client_user_id, 'inadimplente');
+  logger.warn(
+    `Asaas: mensalidade ${payment.id} estornada (${motivo}) - cliente ${assinatura.client_user_id} marcado inadimplente.`
+  );
+}
+
+// A contestação foi ganha, ou o estorno foi negado: o dinheiro ficou conosco.
+async function handleRefundReverted(payment) {
+  if (!payment.id) return;
+
+  const registro = await asaasPaymentsRepository.findByAsaasId(payment.id);
+  if (registro) {
+    await checkoutService.reverterEstorno(registro);
+    return;
+  }
+
+  await affiliateService.restoreCommissionForPayment({ externalPaymentId: payment.id });
+  if (!payment.subscription) return;
+  const assinatura = await clientSubscriptionsRepository.findByAsaasSubscriptionId(payment.subscription);
+  if (!assinatura) return;
+  await clientSubscriptionsRepository.setStatus(assinatura.client_user_id, 'ativo');
+  logger.info(`Asaas: estorno de ${payment.id} revertido - cliente ${assinatura.client_user_id} reativado.`);
+}
+
 // Mensalidade venceu sem pagamento. Marca inadimplente na hora, que é o que
 // trava processamento novo - esperar o Asaas cancelar a assinatura sozinho
 // levaria dias de serviço prestado de graça.
@@ -340,6 +392,33 @@ async function webhook(req, res) {
         await handlePaymentOverdue(req.body.payment || {});
         break;
 
+      // Dinheiro devolvido ou retido. Sem estes casos o prejuízo era em
+      // dobro: o valor voltava para o cliente E a comissão do afiliado
+      // continuava creditada e sacável.
+      case 'PAYMENT_REFUNDED':
+      case 'PAYMENT_PARTIALLY_REFUNDED':
+        await handlePaymentRefunded(req.body.payment || {}, 'estorno');
+        break;
+
+      // Contestação no cartão: o valor é retido assim que ela é aberta.
+      case 'PAYMENT_CHARGEBACK_REQUESTED':
+      case 'PAYMENT_CHARGEBACK_DISPUTE':
+      case 'PAYMENT_AWAITING_CHARGEBACK_REVERSAL':
+        await handlePaymentRefunded(req.body.payment || {}, 'contestacao no cartao');
+        break;
+
+      // Cobrança apagada no painel do Asaas depois de paga.
+      case 'PAYMENT_DELETED':
+        await handlePaymentRefunded(req.body.payment || {}, 'cobranca removida');
+        break;
+
+      // Caminho de volta: contestação ganha, estorno negado, ou cobrança
+      // restaurada.
+      case 'PAYMENT_REFUND_DENIED':
+      case 'PAYMENT_RESTORED':
+        await handleRefundReverted(req.body.payment || {});
+        break;
+
       // PIX Automático. O id da autorização vem numa chave própria do corpo,
       // não dentro de payment/checkout.
       case 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED':
@@ -372,6 +451,8 @@ async function webhook(req, res) {
 
 module.exports = {
   webhook,
+  handlePaymentRefunded,
+  handleRefundReverted,
   handleCheckoutPaid,
   handlePaymentReceived,
   handlePaymentOverdue,

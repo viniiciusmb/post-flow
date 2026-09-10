@@ -51,7 +51,17 @@ export function DateRangeFilter({
         className="w-max flex-nowrap"
       >
         {opcoes.map((o) => (
-          <ToggleGroupItem key={o.key} value={o.key} className="shrink-0 text-xs">
+          // O estado "ligado" que vem do componente base é um cinza suave, e
+          // numa fileira de seis botões iguais ele não se distingue: não dava
+          // para saber qual período estava valendo, o que faz qualquer número
+          // da tela virar dúvida. Aqui o selecionado é pintado com a cor de
+          // ação, que é a única que o resto do painel usa para dizer "é este".
+          <ToggleGroupItem
+            key={o.key}
+            value={o.key}
+            aria-label={t(o.label)}
+            className="shrink-0 text-xs data-[state=on]:bg-primary data-[state=on]:font-semibold data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary data-[state=on]:hover:text-primary-foreground"
+          >
             {t(o.label)}
           </ToggleGroupItem>
         ))}

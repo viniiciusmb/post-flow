@@ -203,6 +203,70 @@ async function recordCommissionForPayment({ clientUserId, provider, externalPaym
   }
 }
 
+// Pagamento estornado, contestado no cartão, ou cobrança apagada: a comissão
+// que ele gerou é desfeita.
+//
+// Sem isto o prejuízo era DOBRADO no mesmo evento - o dinheiro voltava para o
+// cliente e a comissão continuava creditada e sacável. Era o buraco mais caro
+// do programa de afiliados, e o único que ninguém percebe olhando a tela: os
+// números continuam plausíveis.
+//
+// Idempotente: o UPDATE só pega a entrada que ainda não está marcada, então
+// reenvio de aviso (que é o normal nos dois provedores) não debita duas vezes.
+async function reverseCommissionForPayment({ externalPaymentId, motivo }) {
+  if (!externalPaymentId) return { skipped: 'semPagamento' };
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const entry = await commissionEntriesRepository.markReversed(client, externalPaymentId, motivo);
+    if (!entry) {
+      await client.query('ROLLBACK');
+      // Nenhuma comissão para aquele pagamento, ou já estornada antes. Não é
+      // erro: a maioria dos pagamentos não tem afiliado por trás.
+      return { skipped: 'semComissaoAtiva' };
+    }
+    await affiliatesRepository.debit(client, entry.affiliate_user_id, entry.commission_cents);
+    await client.query('COMMIT');
+    logger.warn(
+      `Comissao de ${entry.commission_cents} centavos do afiliado ${entry.affiliate_user_id} ESTORNADA (${externalPaymentId}: ${motivo}).`
+    );
+    return { reversed: entry.commission_cents, affiliateUserId: Number(entry.affiliate_user_id) };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// O caminho de volta: a contestação foi ganha, ou o estorno foi negado - o
+// dinheiro ficou com a gente afinal, então a comissão volta a valer.
+async function restoreCommissionForPayment({ externalPaymentId }) {
+  if (!externalPaymentId) return { skipped: 'semPagamento' };
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const entry = await commissionEntriesRepository.markRestored(client, externalPaymentId);
+    if (!entry) {
+      await client.query('ROLLBACK');
+      return { skipped: 'nadaParaRestaurar' };
+    }
+    await affiliatesRepository.credit(client, entry.affiliate_user_id, entry.commission_cents);
+    await client.query('COMMIT');
+    logger.info(
+      `Comissao de ${entry.commission_cents} centavos do afiliado ${entry.affiliate_user_id} restaurada (${externalPaymentId}).`
+    );
+    return { restored: entry.commission_cents, affiliateUserId: Number(entry.affiliate_user_id) };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   getSettings,
   setSettings,
@@ -210,4 +274,6 @@ module.exports = {
   captureAttribution,
   recordCommissionForInvoice,
   recordCommissionForPayment,
+  reverseCommissionForPayment,
+  restoreCommissionForPayment,
 };

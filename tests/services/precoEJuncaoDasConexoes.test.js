@@ -151,7 +151,12 @@ test('sem assinatura de plano no Asaas, cai no padrão de 30 dias', async () => 
 
     const recorrencia = chamadas.find((c) => c.metodo === 'POST' && c.caminho === '/subscriptions');
     assert.ok(recorrencia, 'a recorrência tem que nascer mesmo sem assinatura de plano no Asaas');
-    const daqui30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    // No fuso de Brasília, igual ao produto (dataAsaas). Com toISOString(),
+    // que é UTC, este teste passava o dia inteiro e falhava só entre 21h e
+    // meia-noite - quando o UTC já virou o dia e o Brasil não.
+    const daqui30 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(
+      new Date(Date.now() + 30 * 86400000)
+    );
     assert.equal(recorrencia.corpo.nextDueDate, daqui30);
   });
 });

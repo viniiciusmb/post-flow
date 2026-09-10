@@ -803,6 +803,9 @@ export interface CommissionEntry {
   commissionPercent: number
   commissionCents: number
   kind: CommissionKind
+  /** Preenchido quando o pagamento foi estornado/contestado: o lançamento
+   *  continua visível, marcado, mas já saiu de todos os totais. */
+  reversedAt: string | null
   createdAt: string
 }
 

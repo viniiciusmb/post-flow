@@ -74,6 +74,30 @@ async function markPaidOnce(asaasPaymentId) {
   return rows[0] || null;
 }
 
+// Estorno só faz sentido sobre pagamento que estava PAGO. Condicionado a isso
+// pelo mesmo motivo do markPaidOnce: o aviso vem repetido, e a segunda vez
+// devolve null em vez de desfazer duas vezes o que já foi desfeito.
+async function markRefundedOnce(asaasPaymentId) {
+  const { rows } = await pool.query(
+    `UPDATE asaas_payments SET status = 'estornado', updated_at = now()
+      WHERE asaas_payment_id = $1 AND status = 'pago'
+      RETURNING *`,
+    [asaasPaymentId]
+  );
+  return rows[0] || null;
+}
+
+// Contestação ganha / estorno negado: o dinheiro ficou conosco afinal.
+async function markPaidAgainAfterRefund(asaasPaymentId) {
+  const { rows } = await pool.query(
+    `UPDATE asaas_payments SET status = 'pago', updated_at = now()
+      WHERE asaas_payment_id = $1 AND status = 'estornado'
+      RETURNING *`,
+    [asaasPaymentId]
+  );
+  return rows[0] || null;
+}
+
 async function markStatusIfPending(asaasPaymentId, status) {
   const { rows } = await pool.query(
     `UPDATE asaas_payments SET status = $2, updated_at = now()
@@ -97,6 +121,8 @@ module.exports = {
   create,
   findByAsaasId,
   markPaidOnce,
+  markRefundedOnce,
+  markPaidAgainAfterRefund,
   markStatusIfPending,
   listForClient,
 };

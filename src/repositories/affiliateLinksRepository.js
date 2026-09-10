@@ -162,7 +162,8 @@ async function listByOwnerWithStats(ownerUserId, { from, to } = {}) {
                FROM commission_entries ce
                JOIN referrals r ON r.referred_user_id = ce.referred_user_id
               WHERE r.affiliate_link_id = al.id
-                AND ce.affiliate_user_id = al.owner_user_id) AS commission_cents
+                AND ce.affiliate_user_id = al.owner_user_id
+                AND ce.reversed_at IS NULL) AS commission_cents
      FROM affiliate_links al
      WHERE al.owner_user_id = $1
      ORDER BY al.is_default DESC, (al.archived_at IS NOT NULL), al.created_at DESC`,
