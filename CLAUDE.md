@@ -619,6 +619,8 @@ Agora o link abre um pop-up com as três escolhas: **idioma dos cortes** (só ap
 
 **Um teste meu estava provando a si mesmo, e a mutação denunciou.** O teste do idioma repetia a conta (`video.chosen_audio_language || settings.audio_language`) em vez de chamar o produto: removendo a decisão do `processVideoJob`, ele continuava passando. A decisão virou `idiomaDoAudio.idiomaParaOVideo(video, settings)`, chamada pelos dois. **Regra: teste que recalcula a regra em vez de chamá-la não testa nada** — e só o teste de mutação mostra isso.
 
+**ORDEM DO DEPLOY: implantar PRIMEIRO, migration IMEDIATAMENTE DEPOIS** — como na `076`, ao contrário da `073`. Confirmado contra o backup restaurado: com o schema novo, o `ON CONFLICT (client_user_id) WHERE youtube_channel_id IS NULL` do código ANTIGO falha com "there is no unique or exclusion constraint matching" (o Postgres não infere um índice cujo predicado ganhou mais uma condição). Rodar a migration antes deixaria todo cliente sem conseguir salvar a configuração de corte até o deploy terminar. Há uma janela curta entre o deploy e a migration em que isso falha do outro lado — por isso "imediatamente depois", que é a regra nº 1 deste arquivo.
+
 743 testes (eram 730). Seis mutações validadas: o `ON CONFLICT` do padrão sem o predicado novo (derruba 4 testes), o pipeline ignorando o estilo do vídeo, copiar sem congelar, o pipeline ignorando o idioma do envio, o editor não gravando o idioma onde ele é lido, e a checagem de posse removida (IDOR).
 
 
