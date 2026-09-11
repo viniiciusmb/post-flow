@@ -87,6 +87,80 @@ function arquivoUtilizavel(caminho) {
   }
 }
 
+// Quantos cortes prontos estão fora da fila, e por qual dos dois motivos.
+//
+// A tela precisa dizer o número ANTES de o cliente clicar: um botão que diz só
+// "colocar na fila" obriga a clicar para descobrir se havia algo, e nas vezes
+// em que não há nada ele parece quebrado.
+//
+// Os dois casos são contados SEPARADOS de propósito, e a tela também os separa:
+// corte que nunca entrou em fila nenhuma é conserto (ninguém decidiu deixá-lo
+// de fora), enquanto postagem cancelada foi uma decisão do cliente - trazer as
+// duas coisas de volta no mesmo clique desfaria um cancelamento deliberado sem
+// ele ter pedido.
+async function contarPendencias({ clientUserId, tiktokAccountId }) {
+  const orfaos = await listarCortesOrfaos(clientUserId);
+  const utilizaveis = orfaos.filter((c) => arquivoUtilizavel(c.local_clip_path));
+
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS n
+       FROM postings p
+       JOIN videos v ON v.id = p.video_id
+       JOIN clips c ON c.id = v.clip_id
+      WHERE p.tiktok_account_id = $1
+        AND p.status = 'skipped'
+        AND c.status = 'ready'
+        AND c.local_clip_path IS NOT NULL`,
+    [tiktokAccountId]
+  );
+
+  return { prontosForaDaFila: utilizaveis.length, cancelados: rows[0].n };
+}
+
+// Devolve para a fila as postagens que foram CANCELADAS nesta conta.
+//
+// Ação própria, nunca junto do backfill: cancelar é deliberado, e quem
+// cancelou de propósito não pode ver tudo voltar por ter clicado em "colocar
+// os cortes prontos na fila".
+//
+// Cada uma ganha um horário novo no fim da fila - o horário antigo já passou, e
+// devolvê-lo faria todas saírem de uma vez no próximo ciclo do job.
+async function reenfileirarCancelados({ tiktokAccountId }) {
+  const { rows } = await pool.query(
+    `SELECT p.id, c.local_clip_path
+       FROM postings p
+       JOIN videos v ON v.id = p.video_id
+       JOIN clips c ON c.id = v.clip_id
+      WHERE p.tiktok_account_id = $1
+        AND p.status = 'skipped'
+        AND c.status = 'ready'
+        AND c.local_clip_path IS NOT NULL
+      ORDER BY p.id ASC`,
+    [tiktokAccountId]
+  );
+
+  let devolvidos = 0;
+  let ignorados = 0;
+  for (const linha of rows) {
+    // Mesma checagem do backfill: caminho gravado não é o mesmo que arquivo
+    // existindo. Devolver um corte cujo arquivo a retenção já apagou só encheria
+    // a fila com algo que falha na publicação.
+    if (!arquivoUtilizavel(linha.local_clip_path)) {
+      ignorados++;
+      continue;
+    }
+    // O horário novo é calculado dentro do repositório, onde mora a regra de
+    // agendamento - repeti-la aqui seria uma segunda verdade sobre a fila.
+    const devolvida = await postingsRepository.requeueSkipped(linha.id, tiktokAccountId);
+    if (devolvida) devolvidos++;
+  }
+
+  if (devolvidos > 0) {
+    logger.info(`Conta TikTok ${tiktokAccountId}: ${devolvidos} postagem(ns) cancelada(s) voltaram pra fila.`);
+  }
+  return { devolvidos, ignorados };
+}
+
 async function enfileirarCortesProntos({ clientUserId, tiktokAccountId }) {
   let enfileirados = 0;
   let ignorados = 0;
@@ -122,7 +196,12 @@ async function enfileirarCortesProntos({ clientUserId, tiktokAccountId }) {
       err.message
     );
   }
-  return enfileirados;
+  // Devolve os DOIS números porque agora existe um botão chamando isto: a tela
+  // precisa dizer quantos entraram e quantos ficaram de fora por falta de
+  // arquivo. Antes só o connect chamava, e ninguém lia o retorno.
+  return { enfileirados, ignorados };
 }
 
-module.exports = { enfileirarCortesProntos, listarCortesOrfaos };
+module.exports = {
+  contarPendencias,
+  reenfileirarCancelados, enfileirarCortesProntos, listarCortesOrfaos };

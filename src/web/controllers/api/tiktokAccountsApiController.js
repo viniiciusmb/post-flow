@@ -4,6 +4,7 @@ const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRe
 const postingScheduleSettingsRepository = require('../../../repositories/postingScheduleSettingsRepository');
 const postingsRepository = require('../../../repositories/postingsRepository');
 const tiktokService = require('../../../services/tiktokService');
+const backfillPostingsService = require('../../../services/backfillPostingsService');
 const publishOptions = require('../../../lib/publishOptions');
 const { RETENCAO_CORTE_POSTADO_HORAS } = require('../../../config/constants');
 const logger = require('../../../lib/logger');
@@ -58,7 +59,7 @@ function nextInQueueToApi(row) {
   };
 }
 
-function accountToApi(account, counts, nextInQueue) {
+function accountToApi(account, counts, nextInQueue, foraDaFila = { prontosForaDaFila: 0, cancelados: 0 }) {
   return {
     id: account.id,
     displayName: account.display_name || account.tiktok_open_id,
@@ -81,6 +82,13 @@ function accountToApi(account, counts, nextInQueue) {
     // nao ha nada na fila - some-la faria o cartao "pular de tamanho"
     // conforme a fila esvazia.
     nextInQueue: nextInQueueToApi(nextInQueue),
+    // Cortes prontos que NÃO estão na fila desta conta. Vem junto das
+    // contagens porque é ao lado delas que a dúvida nasce: o cliente vê
+    // "0 na fila" com cortes prontos na outra tela e não tem como saber por
+    // quê nem como corrigir. Escondido atrás de "Configurar postagens" ele
+    // nunca seria encontrado por quem tem justamente esse problema.
+    readyOutOfQueueCount: foraDaFila.prontosForaDaFila,
+    cancelledCount: foraDaFila.cancelados,
   };
 }
 
@@ -99,7 +107,11 @@ async function list(req, res) {
       accountToApi(
         account,
         await postingsRepository.countByStatusForAccount(account.id),
-        proximoPorConta.get(String(account.id)) || null
+        proximoPorConta.get(String(account.id)) || null,
+        await backfillPostingsService.contarPendencias({
+          clientUserId: req.session.user.id,
+          tiktokAccountId: account.id,
+        })
       )
     )
   );

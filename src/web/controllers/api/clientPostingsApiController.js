@@ -6,6 +6,7 @@ const tiktokPostingJob = require('../../../worker/jobs/tiktokPostingJob');
 const tiktokService = require('../../../services/tiktokService');
 const publishOptions = require('../../../lib/publishOptions');
 const logger = require('../../../lib/logger');
+const backfillPostingsService = require('../../../services/backfillPostingsService');
 
 function thumbnailUrl(row) {
   return row.thumbnail_path ? `/api/client/source-videos/clips/${row.clip_id}/thumbnail` : null;
@@ -91,6 +92,56 @@ async function updateCaption(req, res) {
     return res.status(404).json({ error: res.locals.t('erros.postagemNaoNaFila') });
   }
   res.json({ id: updated.id, caption: updated.caption });
+}
+
+// Confere se a conta pertence a quem está pedindo. Devolve null quando não -
+// as rotas abaixo respondem 404, nunca "não autorizado": dizer que a conta
+// existe já é informação sobre a conta de outra pessoa.
+async function contaDoCliente(req) {
+  const id = Number(req.query.accountId ?? req.body?.accountId);
+  if (!Number.isInteger(id) || id <= 0) return null;
+  const contas = await tiktokAccountsRepository.listActiveByClientId(req.session.user.id);
+  return contas.find((c) => Number(c.id) === id) || null;
+}
+
+// Quantos cortes prontos estão FORA da fila desta conta, e por qual motivo.
+//
+// Existe porque o caso aconteceu de verdade: cortes ficaram prontos e nenhum
+// apareceu na fila, sem nada em tela explicando nem nenhum jeito de corrigir
+// sem mexer no banco.
+async function pendencias(req, res) {
+  const conta = await contaDoCliente(req);
+  if (!conta) return res.status(404).json({ error: res.locals.t('erros.contaNaoEncontrada') });
+
+  const contagem = await backfillPostingsService.contarPendencias({
+    clientUserId: req.session.user.id,
+    tiktokAccountId: conta.id,
+  });
+  res.json(contagem);
+}
+
+// "Colocar cortes prontos na fila": pega o que nunca entrou em fila NENHUMA.
+// Não mexe em postagem cancelada - isso é a outra rota, e de propósito.
+async function enfileirarProntos(req, res) {
+  const conta = await contaDoCliente(req);
+  if (!conta) return res.status(404).json({ error: res.locals.t('erros.contaNaoEncontrada') });
+
+  const r = await backfillPostingsService.enfileirarCortesProntos({
+    clientUserId: req.session.user.id,
+    tiktokAccountId: conta.id,
+  });
+  res.json({ enfileirados: r.enfileirados || 0, ignorados: r.ignorados || 0 });
+}
+
+// "Voltar as canceladas para a fila". Ação separada porque cancelar foi uma
+// decisão do cliente: juntá-la ao botão acima desfaria um cancelamento
+// deliberado sem ele ter pedido.
+async function reenfileirarCancelados(req, res) {
+  const conta = await contaDoCliente(req);
+  if (!conta) return res.status(404).json({ error: res.locals.t('erros.contaNaoEncontrada') });
+
+  const r = await backfillPostingsService.reenfileirarCancelados({ tiktokAccountId: conta.id });
+  res.json(r);
 }
 
 async function skip(req, res) {
@@ -199,6 +250,9 @@ async function clearOptions(req, res) {
 }
 
 module.exports = {
+  pendencias,
+  enfileirarProntos,
+  reenfileirarCancelados,
   creatorOptions,
   clearOptions,
   saveOptions, listQueue, listPosted, listErrors, updateCaption, skip, postNow, retry };

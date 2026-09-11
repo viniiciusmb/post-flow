@@ -499,6 +499,27 @@ async function retryOwnedByClient(id, clientUserId) {
   return rows[0] || null;
 }
 
+// Devolve pra fila uma postagem que o cliente tinha CANCELADO.
+//
+// Separado do retryOwnedByClient de proposito: aquele so aceita postagem em
+// erro, e o comentario dele diz explicitamente que evita reenviar "algo que o
+// cliente cancelou" - o que continua certo pro botao dele. Aqui a acao e
+// outra, e o cliente pediu por ela.
+//
+// Ganha horario novo no fim da fila: o horario antigo ja passou, e devolve-lo
+// faria todas sairem de uma vez no proximo ciclo do job.
+async function requeueSkipped(id, tiktokAccountId) {
+  const scheduledFor = await computeNextScheduledFor(tiktokAccountId);
+  const { rows } = await pool.query(
+    `UPDATE postings
+        SET status = 'pending', error_message = NULL, scheduled_for = $2, updated_at = now()
+      WHERE id = $1 AND status = 'skipped'
+      RETURNING *`,
+    [id, scheduledFor]
+  );
+  return rows[0] || null;
+}
+
 // Resumo rapido pra caixa fechada da conta na tela (sem abrir nada) - so 3
 // contagens, sem trazer os itens em si.
 async function countByStatusForAccount(tiktokAccountId) {
@@ -586,6 +607,7 @@ module.exports = {
   listPostedForClient,
   listErrorForClient,
   retryOwnedByClient,
+  requeueSkipped,
   countByStatusForAccount,
   countPendingForClient,
   findById,

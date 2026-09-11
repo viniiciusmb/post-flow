@@ -654,4 +654,26 @@ Agora o link abre um pop-up com as três escolhas: **idioma dos cortes** (só ap
 774 testes (eram 746). Seis mutações validadas: vídeo no limite passando a ser barrado, duração desconhecida barrada, o job ignorando o limite, processar sem apagar o aviso, o limite aceito cru do corpo da requisição, e a checagem de posse removida.
 
 
+**Cortes prontos que ficam FORA da fila de postagem (2026-09-10).** Relato do fundador: mandou processar um vídeo novo, os cortes ficaram prontos e nenhum apareceu na fila daquela conta. Não havia como corrigir sem mexer no banco — nem como saber que havia algo para corrigir.
+
+**Diagnóstico nos dados de produção**: as postagens FORAM criadas certinho pelo pipeline. Todas as 9 (4 do vídeo novo + 5 do anterior) estavam com status `skipped`, e o `updated_at` das nove caía entre 21:47:47 e 21:47:56 — uma por segundo, em ordem crescente de id. **Só existe UM lugar no código que grava `skipped`**: o endpoint do botão "Cancelar postagem" do cliente. Não há job que faça isso. Ou seja, o pipeline funcionou e as postagens foram canceladas depois.
+
+Independentemente de quem clicou, o buraco real era não haver caminho de volta. Agora há dois, e eles são **separados de propósito**:
+
+- **"Colocar na fila"** — cortes prontos que nunca entraram em fila NENHUMA (reaproveita o `backfillPostingsService`, que já existia mas só rodava ao conectar uma conta).
+- **"Voltar pra fila"** — postagens que o cliente CANCELOU.
+
+**Por que dois botões e não um**: cancelar é uma decisão deliberada. Se "colocar os cortes prontos na fila" trouxesse os cancelados junto, quem cancelou de propósito veria tudo voltar por causa de um clique que não era sobre isso. Travado por teste.
+
+- **O aviso fica no CARTÃO da conta, ao lado de "0 na fila"** — e isso foi uma correção da primeira versão, pega na verificação visual: eu tinha posto dentro da aba Fila, que só abre depois de clicar em "Configurar postagens dessa conta". Escondido ali, o aviso nunca seria encontrado por quem tem justamente esse problema (vê "0 na fila" e não sabe por quê). A contagem vem junto das outras em `GET /api/client/tiktok-accounts`, não numa chamada por cartão.
+- **A tela diz o número ANTES de clicar.** Um botão que só diz "colocar na fila" obriga a clicar para descobrir se havia algo — e nas vezes em que não há nada, parece quebrado.
+- **Nenhum dos dois enfileira corte sem arquivo**: caminho gravado no banco não é o mesmo que arquivo existindo em disco (render interrompido deixa 0 byte; a retenção apaga o arquivo sem limpar a coluna). A cancelada é o caso mais provável disso, porque a retenção de 3 dias pode ter passado. A tela informa quantos ficaram de fora e por quê.
+- **Postagem cancelada ganha horário NOVO** no fim da fila: devolver o horário antigo, já vencido, faria todas saírem de uma vez no próximo ciclo do job.
+- `retryOwnedByClient` continua aceitando só `error` — o comentário dele diz que evita reenviar "algo que o cliente cancelou", e isso segue certo para o botão dele. A volta do cancelado é ação própria (`requeueSkipped`), porque agora o cliente pede por ela explicitamente.
+
+**Mudança de contrato**: `enfileirarCortesProntos` devolvia um número e passou a devolver `{ enfileirados, ignorados }` — a tela precisa dos dois. Seis testes existentes comparavam o número e foram atualizados; o outro chamador (o connect) ignora o retorno.
+
+783 testes (eram 774). Duas mutações validadas: o backfill voltando a ressuscitar cancelados, e devolver cancelado sem conferir o arquivo. **A segunda não era pega na primeira tentativa** — faltava o caso do cancelado cujo arquivo a retenção já apagou, que é o mais provável de acontecer de verdade.
+
+
 Para o histórico completo de decisões e "porquês", ver a memória do projeto (arquivos em `~/.claude/projects/.../memory/`, carregados automaticamente) — especialmente `post-flow-architecture`, `post-flow-deployment`, `post-flow-project-status`, `post-flow-tiktok-oauth`, `post-flow-google-drive`, `feedback-run-migrations-immediately`.

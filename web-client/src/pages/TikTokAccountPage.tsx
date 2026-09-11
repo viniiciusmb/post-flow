@@ -1038,7 +1038,33 @@ function AccountBox({
   // A fila abre AQUI DENTRO, não no painel de configurações: quem clica em
   // "ver fila completa" quer ver a fila, não mexer em ajuste nenhum.
   const [mostrandoFila, setMostrandoFila] = useState(false)
+  const [corrigindo, setCorrigindo] = useState<string | null>(null)
+  const [avisoCorrecao, setAvisoCorrecao] = useState<string | null>(null)
   const hasStats = account.followerCount !== null && account.followerCount !== undefined
+
+  // Põe na fila os cortes prontos que ficaram de fora. Duas ações separadas:
+  // "prontos" pega o que nunca entrou em fila nenhuma; "cancelados" devolve o
+  // que o cliente tinha cancelado. Ver o comentário no JSX.
+  async function corrigir(qual: "prontos" | "cancelados") {
+    setCorrigindo(qual)
+    setAvisoCorrecao(null)
+    try {
+      const rota = qual === "prontos" ? "enfileirar-prontos" : "reenfileirar-cancelados"
+      const r = await api.post<{ enfileirados?: number; devolvidos?: number; ignorados?: number }>(
+        `/api/client/postings/${rota}`,
+        { accountId: account.id },
+      )
+      const n = qual === "prontos" ? (r.enfileirados ?? 0) : (r.devolvidos ?? 0)
+      setAvisoCorrecao(
+        r.ignorados ? t("pub.cortesNaFilaComIgnorados", { n, ignorados: r.ignorados }) : t("pub.cortesNaFila", { n }),
+      )
+      await onChanged()
+    } catch (err) {
+      setAvisoCorrecao(err instanceof ApiError ? err.message : t("comum.erroGenerico"))
+    } finally {
+      setCorrigindo(null)
+    }
+  }
 
   async function disconnect() {
     if (
@@ -1204,6 +1230,47 @@ function AccountBox({
             </div>
           )}
         </div>
+
+        {/* Cortes prontos que NÃO estão na fila desta conta.
+            Fica aqui, ao lado de "0 na fila", porque é exatamente aqui que a
+            dúvida nasce: o cliente vê zero na fila com cortes prontos na outra
+            tela. Dentro de "Configurar postagens" o aviso nunca seria
+            encontrado por quem tem justamente esse problema.
+
+            Os dois casos têm botões SEPARADOS: corte que nunca entrou é
+            conserto (ninguém decidiu deixá-lo fora), enquanto postagem
+            cancelada foi decisão do cliente - juntar os dois num clique
+            desfaria um cancelamento deliberado. */}
+        {(account.readyOutOfQueueCount > 0 || account.cancelledCount > 0) && (
+          <div className="mt-3 flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-3">
+            {account.readyOutOfQueueCount > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0 text-xs text-muted-foreground">
+                  {t("pub.prontosForaDaFila", { n: account.readyOutOfQueueCount })}
+                </span>
+                <Button size="xs" variant="outline" disabled={corrigindo !== null} onClick={() => corrigir("prontos")}>
+                  {corrigindo === "prontos" ? t("pub.colocandoNaFila") : t("pub.colocarNaFila")}
+                </Button>
+              </div>
+            )}
+            {account.cancelledCount > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0 text-xs text-muted-foreground">
+                  {t("pub.canceladosForaDaFila", { n: account.cancelledCount })}
+                </span>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={corrigindo !== null}
+                  onClick={() => corrigir("cancelados")}
+                >
+                  {corrigindo === "cancelados" ? t("pub.colocandoNaFila") : t("pub.voltarParaAFila")}
+                </Button>
+              </div>
+            )}
+            {avisoCorrecao && <p className="text-xs text-muted-foreground">{avisoCorrecao}</p>}
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">

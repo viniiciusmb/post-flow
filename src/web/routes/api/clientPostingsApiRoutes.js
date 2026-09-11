@@ -14,6 +14,11 @@ router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]));
 router.get('/queue', asyncHandler(controller.listQueue));
 router.get('/posted', asyncHandler(controller.listPosted));
 router.get('/errors', asyncHandler(controller.listErrors));
+
+// Cortes prontos que ficaram FORA da fila, e os dois jeitos de corrigir.
+router.get('/pendencias', asyncHandler(controller.pendencias));
+router.post('/enfileirar-prontos', asyncHandler(controller.enfileirarProntos));
+router.post('/reenfileirar-cancelados', asyncHandler(controller.reenfileirarCancelados));
 router.put('/:id/caption', asyncHandler(controller.updateCaption));
 router.post('/:id/skip', asyncHandler(controller.skip));
 router.post('/:id/post-now', asyncHandler(controller.postNow));

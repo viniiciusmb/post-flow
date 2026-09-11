@@ -101,9 +101,12 @@ test('corte que ficou pronto antes da conta existir entra na fila', async () => 
   const corte = await corteProntoAvulso(cliente.id);
   const conta = await contaTiktok(cliente.id);
 
-  const n = await backfill.enfileirarCortesProntos({ clientUserId: cliente.id, tiktokAccountId: conta.id });
+  const { enfileirados } = await backfill.enfileirarCortesProntos({
+    clientUserId: cliente.id,
+    tiktokAccountId: conta.id,
+  });
 
-  assert.equal(n, 1);
+  assert.equal(enfileirados, 1);
   const fila = await filaDa(conta.id);
   assert.equal(fila.length, 1);
   assert.equal(Number(fila[0].clip_id), Number(corte.id));
@@ -116,8 +119,11 @@ test('pega tanto corte de vídeo avulso quanto de canal', async () => {
   await corteProntoDeCanal(cliente.id);
   const conta = await contaTiktok(cliente.id);
 
-  const n = await backfill.enfileirarCortesProntos({ clientUserId: cliente.id, tiktokAccountId: conta.id });
-  assert.equal(n, 2, 'um dos dois caminhos de dono ficou de fora');
+  const { enfileirados } = await backfill.enfileirarCortesProntos({
+    clientUserId: cliente.id,
+    tiktokAccountId: conta.id,
+  });
+  assert.equal(enfileirados, 2, 'um dos dois caminhos de dono ficou de fora');
 });
 
 test('não mexe em corte que ainda não está pronto', async () => {
@@ -126,7 +132,8 @@ test('não mexe em corte que ainda não está pronto', async () => {
   await corteProntoAvulso(cliente.id, { status: 'error' });
   const conta = await contaTiktok(cliente.id);
 
-  assert.equal(await backfill.enfileirarCortesProntos({ clientUserId: cliente.id, tiktokAccountId: conta.id }), 0);
+  const r = await backfill.enfileirarCortesProntos({ clientUserId: cliente.id, tiktokAccountId: conta.id });
+  assert.equal(r.enfileirados, 0);
 });
 
 test('não mexe em corte sem arquivo no disco', async () => {
@@ -136,7 +143,8 @@ test('não mexe em corte sem arquivo no disco', async () => {
   await corteProntoAvulso(cliente.id, { comArquivo: false });
   const conta = await contaTiktok(cliente.id);
 
-  assert.equal(await backfill.enfileirarCortesProntos({ clientUserId: cliente.id, tiktokAccountId: conta.id }), 0);
+  const r = await backfill.enfileirarCortesProntos({ clientUserId: cliente.id, tiktokAccountId: conta.id });
+  assert.equal(r.enfileirados, 0);
 });
 
 test('não duplica corte que já está na fila de outra conta', async () => {
@@ -146,9 +154,12 @@ test('não duplica corte que já está na fila de outra conta', async () => {
   await backfill.enfileirarCortesProntos({ clientUserId: cliente.id, tiktokAccountId: primeira.id });
 
   const segunda = await contaTiktok(cliente.id);
-  const n = await backfill.enfileirarCortesProntos({ clientUserId: cliente.id, tiktokAccountId: segunda.id });
+  const { enfileirados } = await backfill.enfileirarCortesProntos({
+    clientUserId: cliente.id,
+    tiktokAccountId: segunda.id,
+  });
 
-  assert.equal(n, 0, 'o mesmo corte foi parar na fila de duas contas');
+  assert.equal(enfileirados, 0, 'o mesmo corte foi parar na fila de duas contas');
 });
 
 test('não ressuscita corte que já foi postado ou cancelado', async () => {
@@ -160,8 +171,11 @@ test('não ressuscita corte que já foi postado ou cancelado', async () => {
   for (const status of ['posted', 'skipped']) {
     await pool.query('UPDATE postings SET status = $2 WHERE tiktok_account_id = $1', [conta.id, status]);
     const outra = await contaTiktok(cliente.id);
-    const n = await backfill.enfileirarCortesProntos({ clientUserId: cliente.id, tiktokAccountId: outra.id });
-    assert.equal(n, 0, `corte com status ${status} voltou pra fila`);
+    const { enfileirados } = await backfill.enfileirarCortesProntos({
+      clientUserId: cliente.id,
+      tiktokAccountId: outra.id,
+    });
+    assert.equal(enfileirados, 0, `corte com status ${status} voltou pra fila`);
   }
 });
 
@@ -173,7 +187,7 @@ test('rodar duas vezes na mesma conta não duplica', async () => {
   await backfill.enfileirarCortesProntos({ clientUserId: cliente.id, tiktokAccountId: conta.id });
   const segundaVez = await backfill.enfileirarCortesProntos({ clientUserId: cliente.id, tiktokAccountId: conta.id });
 
-  assert.equal(segundaVez, 0);
+  assert.equal(segundaVez.enfileirados, 0);
   assert.equal((await filaDa(conta.id)).length, 1);
 });
 
@@ -183,7 +197,8 @@ test('não pega corte de outro cliente', async () => {
   await corteProntoAvulso(outro.id);
   const conta = await contaTiktok(dono.id);
 
-  assert.equal(await backfill.enfileirarCortesProntos({ clientUserId: dono.id, tiktokAccountId: conta.id }), 0);
+  const r = await backfill.enfileirarCortesProntos({ clientUserId: dono.id, tiktokAccountId: conta.id });
+  assert.equal(r.enfileirados, 0);
 });
 
 test('a fila enche mas NADA é publicado sozinho', async () => {
@@ -207,8 +222,8 @@ test('a fila enche mas NADA é publicado sozinho', async () => {
 
 test('falha no meio não derruba a conexão', async () => {
   // Conectar a conta é o que o cliente pediu; o preenchimento da fila é bônus.
-  const n = await backfill.enfileirarCortesProntos({ clientUserId: 999999999, tiktokAccountId: 999999999 });
-  assert.equal(n, 0);
+  const r = await backfill.enfileirarCortesProntos({ clientUserId: 999999999, tiktokAccountId: 999999999 });
+  assert.equal(r.enfileirados, 0);
 });
 
 test('corte marcado como pronto mas com arquivo VAZIO não entra na fila', async () => {

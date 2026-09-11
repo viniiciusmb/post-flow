@@ -186,6 +186,10 @@ export interface TikTokAccountSummary extends TikTokAccountStats {
   publishMode: "inbox" | "direct"
 
   pendingCount: number
+  /** Cortes prontos que NÃO estão na fila desta conta: os que nunca entraram
+   *  em fila nenhuma, e os que o cliente cancelou. */
+  readyOutOfQueueCount: number
+  cancelledCount: number
   postedCount: number
   errorCount: number
   /** true = a conta já tem padrão de publicação definido (libera "postar agora"). */
