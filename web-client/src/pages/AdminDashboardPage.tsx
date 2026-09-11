@@ -1,6 +1,6 @@
 import { useT } from "@/i18n"
 import { useEffect, useState } from "react"
-import { IconUsers, IconListDetails, IconBrandYoutube, IconClockHour4, IconScissors } from "@tabler/icons-react"
+import { IconUsers, IconListDetails, IconBrandYoutube, IconClockHour4, IconScissors, IconCoins, IconCurrencyDollar } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { PostingsTable, type PostingRow } from "@/components/dashboard/PostingsTable"
@@ -98,6 +98,39 @@ export function AdminDashboardPage() {
           </>
         )}
       </div>
+
+      {/* Custo do período, na tela inicial de propósito: custo que só existe
+          em tela própria é custo que ninguém olha — foi assim que 5 canais de
+          teste queimaram US$ 16 em IA sem ninguém notar. Os dois números
+          respondem perguntas diferentes: quanto saiu da conta, e quanto custa
+          cada minuto processado. */}
+      {data && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StatCard
+            label="Custo no período"
+            value={`US$ ${data.custos.totalUsd.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            icon={<IconCoins />}
+            tone="violet"
+            href="/admin/costs"
+            hrefLabel="Ver custos"
+          />
+          <StatCard
+            label="Custo por minuto de vídeo"
+            value={
+              data.custos.usdPorMinutoNovo === null
+                ? "—"
+                : `R$ ${(data.custos.usdPorMinutoNovo * data.custos.cotacaoUsdBrl).toLocaleString("pt-BR", {
+                    minimumFractionDigits: 3,
+                    maximumFractionDigits: 3,
+                  })}`
+            }
+            icon={<IconCurrencyDollar />}
+            tone="success"
+            href="/admin/costs"
+            hrefLabel="Ver margem por plano"
+          />
+        </div>
+      )}
 
       <div>
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t("adm.postagensNoPeriodo")}</h2>

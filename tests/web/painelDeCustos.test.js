@@ -105,3 +105,26 @@ test('cliente comum nao ve o painel de custo', async () => {
 
   assert.ok(r.status === 403 || r.status === 401, `status inesperado: ${r.status}`);
 });
+
+test('a tela INICIAL do admin mostra o custo do periodo', async () => {
+  // Custo que só existe em tela própria é custo que ninguém olha - foi assim
+  // que 5 canais de teste queimaram US$ 16 em IA sem ninguém notar.
+  const { admin, agent } = await adminLogado();
+  await lancamento(admin.id, { diasAtras: 0, whisperUsd: 0.17, segundos: 1200 });
+  await lancamento(admin.id, { diasAtras: 20, whisperUsd: 0.99, segundos: 1200 });
+
+  const hoje = await agent.get('/api/admin/dashboard?range=today');
+
+  assert.equal(hoje.status, 200, hoje.text);
+  assert.ok(hoje.body.custos, 'a tela inicial precisa do custo');
+  assert.ok(hoje.body.custos.totalUsd >= 0.17, `total de hoje: ${hoje.body.custos.totalUsd}`);
+  assert.ok(hoje.body.custos.usdPorMinutoNovo > 0, 'sem custo por minuto o cartao fica vazio');
+
+  // O mesmo filtro de período dos outros cartões da tela - um custo que
+  // ignora o período mostraria o acumulado ao lado de números do dia.
+  const ontem = await agent.get('/api/admin/dashboard?range=yesterday');
+  assert.ok(
+    ontem.body.custos.totalUsd < hoje.body.custos.totalUsd,
+    'o custo da tela inicial tem que respeitar o filtro de periodo'
+  );
+});

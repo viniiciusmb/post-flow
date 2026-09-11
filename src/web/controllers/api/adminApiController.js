@@ -10,30 +10,49 @@ const { ROLES } = require('../../../config/constants');
 const tiktokCapacityService = require('../../../services/tiktokCapacityService');
 const { resolveRange } = require('../../../lib/dateRanges');
 const settingsRepository = require('../../../repositories/settingsRepository');
+const videoCostsRepository = require('../../../repositories/videoCostsRepository');
 
 async function dashboard(req, res) {
   const { range, since, until } = resolveRange(req.query.range);
 
-  const [clients, postings, channels, videosInProgress, clipsInRange, tiktokCapacity] = await Promise.all([
-    usersRepository.listByRole(ROLES.CLIENT),
-    postingsRepository.listAllWithDetails(),
-    youtubeChannelsRepository.listActive(),
-    sourceVideosRepository.countInProgress(),
-    clipsRepository.countCreatedSince(since, until),
-    // Teto de criadores ativos do app no TikTok. Vem junto do dashboard (em
-    // vez de numa chamada propria) porque o aviso precisa aparecer sem
-    // ninguem ir procurar - o risco dele e justamente passar despercebido.
-    tiktokCapacityService.avaliar(),
-  ]);
+  const [clients, postings, channels, videosInProgress, clipsInRange, tiktokCapacity, custos, cotacao] =
+    await Promise.all([
+      usersRepository.listByRole(ROLES.CLIENT),
+      postingsRepository.listAllWithDetails(),
+      youtubeChannelsRepository.listActive(),
+      sourceVideosRepository.countInProgress(),
+      clipsRepository.countCreatedSince(since, until),
+      // Teto de criadores ativos do app no TikTok. Vem junto do dashboard (em
+      // vez de numa chamada propria) porque o aviso precisa aparecer sem
+      // ninguem ir procurar - o risco dele e justamente passar despercebido.
+      tiktokCapacityService.avaliar(),
+      // Quanto a operacao gastou no periodo. Fica na tela INICIAL porque custo
+      // que so aparece em tela propria e custo que ninguem olha - foi assim
+      // que 5 canais de teste queimaram US$ 16 sem ninguem notar.
+      videoCostsRepository.resumo({ since, until }),
+      settingsRepository.getValue('cotacao_usd_brl', 5.4),
+    ]);
 
   const postingsInRange = postings.filter((p) => {
     const t = new Date(p.created_at).getTime();
     return t >= since.getTime() && t <= until.getTime();
   });
 
+  const segundosNovos = Number(custos.segundos_novos) || 0;
+
   res.json({
     range: { key: range, since, until },
     tiktokCapacity,
+    custos: {
+      totalUsd: Number(custos.total_usd) || 0,
+      // O custo do video NOVO, que e o que vale pra decidir preco (a media
+      // com reaproveitamento e sempre menor - ver o painel de Custos).
+      usdPorMinutoNovo: segundosNovos
+        ? (Number(custos.total_novos_usd) || 0) / (segundosNovos / 60)
+        : null,
+      minutosEntregues: (Number(custos.segundos_entregues) || 0) / 60,
+      cotacaoUsdBrl: Number(cotacao) || 5.4,
+    },
     counts: {
       clients: clients.length,
       postings: postings.length,

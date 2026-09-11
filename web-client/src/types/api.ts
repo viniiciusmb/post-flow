@@ -52,6 +52,14 @@ export interface TiktokCapacity {
 }
 
 export interface AdminDashboardResponse {
+  /** Quanto a operação gastou no período escolhido. */
+  custos: {
+    totalUsd: number
+    /** Custo real de processar um minuto de vídeo novo. null quando não houve vídeo novo no período. */
+    usdPorMinutoNovo: number | null
+    minutosEntregues: number
+    cotacaoUsdBrl: number
+  }
   range: RangeInfo
   tiktokCapacity: TiktokCapacity
   counts: {
