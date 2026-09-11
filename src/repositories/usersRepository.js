@@ -106,7 +106,7 @@ const ORDENS = {
   maior_custo: 'custo_usd DESC, u.created_at DESC',
 };
 
-async function listClientsWithStats({ since, until, precoPorGb = 0, ordem = 'recentes' } = {}) {
+async function listClientsWithStats({ since, until, ordem = 'recentes' } = {}) {
   const orderBy = ORDENS[ordem] || ORDENS.recentes;
   // Sem periodo (chamada antiga), pega tudo - assim quem ja usava esta funcao
   // continua vendo o total, e nao um zero silencioso.
@@ -127,16 +127,17 @@ async function listClientsWithStats({ since, until, precoPorGb = 0, ordem = 'rec
             sp.key AS plan_key,
             sp.name AS plan_name,
             cs.status AS subscription_status,
-            (SELECT coalesce(sum(
-                      coalesce(sv.whisper_cost_usd, 0)
-                      + coalesce(sv.claude_cost_usd, 0)
-                      + CASE WHEN sv.download_egress_type = 'proxy'
-                             THEN (coalesce(sv.download_bytes, 0) / 1073741824.0) * $3
-                             ELSE 0 END
-                    ), 0)
-               FROM source_videos sv
-              WHERE sv.owner_client_user_id = u.id
-                AND sv.created_at >= $1 AND sv.created_at <= $2) AS custo_usd,
+            -- Custo do periodo vindo do LIVRO (video_costs), nao mais de
+            -- source_videos: a linha do video some quando ele e apagado, e
+            -- com ela sumia o custo. Em 11/09/2026 isso escondia 91% do
+            -- gasto - uma conta que ja tinha gasto varias vezes isso
+            -- aparecia travada em ~US$ 1 porque so 4 videos seus ainda
+            -- existiam. O valor da banda ja vem calculado no lancamento
+            -- (snapshot da taxa do GB no dia do download).
+            (SELECT coalesce(sum(vc.whisper_usd + vc.ia_usd + vc.banda_usd), 0)
+               FROM video_costs vc
+              WHERE vc.client_user_id = u.id
+                AND vc.occurred_at >= $1 AND vc.occurred_at <= $2) AS custo_usd,
             (SELECT count(*)::int
                FROM postings p
                JOIN tiktok_accounts ta2 ON ta2.id = p.tiktok_account_id
@@ -148,7 +149,7 @@ async function listClientsWithStats({ since, until, precoPorGb = 0, ordem = 'rec
      LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
      WHERE u.role = 'client'
      ORDER BY ${orderBy}`,
-    [de, ate, precoPorGb]
+    [de, ate]
   );
   return rows;
 }

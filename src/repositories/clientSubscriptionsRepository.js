@@ -269,6 +269,18 @@ async function setOverageCard(clientUserId, { enabled, stripeDefaultPaymentMetho
   return rows[0] || null;
 }
 
+// Quantas assinaturas ATIVAS cada plano tem. Usado pelo painel de custo pra
+// mostrar a margem ao lado de quantos clientes ela ja representa.
+async function countActiveByPlan() {
+  const { rows } = await pool.query(
+    `SELECT plan_id, count(*)::int AS n FROM client_subscriptions
+      WHERE status = 'ativo' AND plan_id IS NOT NULL GROUP BY plan_id`
+  );
+  const mapa = new Map();
+  for (const r of rows) mapa.set(Number(r.plan_id), r.n);
+  return mapa;
+}
+
 module.exports = {
   getOrCreate,
   listAllWithPlan,
@@ -289,4 +301,5 @@ module.exports = {
   setExtras,
   clearExtraSlotsSubscription,
   markFirstMonthUsed,
+  countActiveByPlan,
 };

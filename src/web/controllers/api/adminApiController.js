@@ -84,12 +84,11 @@ async function clients(req, res) {
     until: req.query.until,
   });
   const ordem = ORDENS_DE_CLIENTE.includes(req.query.ordem) ? req.query.ordem : 'recentes';
-  // Mesmo preco de banda usado no painel de processamento: uma fonte so, senao
-  // duas telas mostram custos diferentes pro mesmo download.
-  const precoPorGb = Number(await settingsRepository.getValue('custo_banda_por_gb_usd', 0)) || 0;
-
+  // O custo vem do livro (video_costs), onde a banda ja esta convertida em
+  // dolar com a taxa do dia do download - por isso esta tela nao precisa mais
+  // ler o preco do GB.
   const [rows, origins] = await Promise.all([
-    usersRepository.listClientsWithStats({ since, until, precoPorGb, ordem }),
+    usersRepository.listClientsWithStats({ since, until, ordem }),
     referralsRepository.originByUser(),
   ]);
   // Por usuario: nome/e-mail de quem indicou, ou a UTM de campanha, ou nulo

@@ -5,6 +5,7 @@ const adminApiController = require('../../controllers/api/adminApiController');
 const adminQueueApiController = require('../../controllers/api/adminQueueApiController');
 const adminMetricsApiController = require('../../controllers/api/adminMetricsApiController');
 const adminBandwidthApiController = require('../../controllers/api/adminBandwidthApiController');
+const adminCostsApiController = require('../../controllers/api/adminCostsApiController');
 const adminErrorsApiController = require('../../controllers/api/adminErrorsApiController');
 const requireAuthApi = require('../../middleware/requireAuthApi');
 const requireRoleApi = require('../../middleware/requireRoleApi');
@@ -26,6 +27,9 @@ router.post('/queue/:id/retry', asyncHandler(adminQueueApiController.retry));
 router.get('/metrics', asyncHandler(adminMetricsApiController.overview));
 // Quantos videos processar ao mesmo tempo - ver videoConcurrencyService.
 router.post('/metrics/max-simultaneos', asyncHandler(adminMetricsApiController.setMaxSimultaneos));
+router.get('/costs', asyncHandler(adminCostsApiController.overview));
+router.post('/costs/cotacao', asyncHandler(adminCostsApiController.setCotacao));
+router.post('/costs/infra', asyncHandler(adminCostsApiController.setInfra));
 router.get('/bandwidth', asyncHandler(adminBandwidthApiController.overview));
 router.post('/bandwidth/founder-tunnel/toggle', asyncHandler(adminBandwidthApiController.toggleFounderTunnel));
 router.post('/bandwidth/proxy/toggle', asyncHandler(adminBandwidthApiController.toggleProxy));

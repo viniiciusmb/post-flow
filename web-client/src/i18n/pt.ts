@@ -53,6 +53,7 @@ export const pt = {
   "menu.postagens": "Publicações",
   "menu.metricas": "Métricas",
   "menu.banda": "Consumo de banda",
+  "menu.custos": "Custos",
   "menu.faturamento": "Faturamento",
   "menu.erros": "Erros",
   "menu.grupoOperacao": "Operação",

@@ -13,6 +13,7 @@ const logger = require('../../lib/logger');
 const erroDeProcessamento = require('../../lib/erroDeProcessamento');
 const { PausedError, AwaitingCreditsError, ChargeFailedError, WaitingForTunnelError } = require('../../lib/errors');
 const creditsService = require('../../services/creditsService');
+const custoService = require('../../services/custoService');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
 const clipsRepository = require('../../repositories/clipsRepository');
 const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRepository');
@@ -107,6 +108,7 @@ async function titularAsPartes(partes, transcript, sourceVideo) {
       outputTokens: resultado.outputTokens,
       costUsd: resultado.costUsd,
     });
+    await custoService.registrarIa(sourceVideo, { custoUsd: resultado.costUsd });
 
     // A IA devolve "index" comecando em 1, mas nao da pra confiar na ordem
     // nem na quantidade - por isso indexamos em vez de casar por posicao.
@@ -405,6 +407,10 @@ async function run(sourceVideoId) {
           sourceVideo.youtube_video_id,
           reaproveitavel.audio_language
         );
+        // Custo zero, registrado explicitamente: "nao ha lancamento" e
+        // indistinguivel de "o registro falhou", e e justamente o
+        // reaproveitamento que precisa aparecer no painel de custo.
+        await custoService.registrarDownload(sourceVideo, { bytes: 0, egressType: 'reuse' });
         await creditsService.confirmAfterDownload(sourceVideo, clientUserId, reserveOutcome, {
           egressType: 'reuse',
           tunnelId: null,
@@ -461,6 +467,10 @@ async function run(sourceVideoId) {
           tunnelId: downloadResult.tunnelId,
           requestedAudioLanguage: idiomaPedido,
           audioLanguage: idiomaBaixado,
+        });
+        await custoService.registrarDownload(sourceVideo, {
+          bytes: downloadBytes,
+          egressType: downloadResult.egressType,
         });
         if (compartilhou) {
           await sharedVideoAssetsRepository.saveDownload(sourceVideo.youtube_video_id, {
@@ -533,6 +543,7 @@ async function run(sourceVideoId) {
           reused: true,
         });
         await sharedVideoAssetsRepository.registerTranscriptReuse(sourceVideo.youtube_video_id, idiomaDoArquivo);
+        await custoService.registrarTranscricao(sourceVideo, { custoUsd: 0, reused: true });
         logger.info(
           `Video-fonte ${sourceVideo.id}: transcricao reaproveitada de ${sourceVideo.youtube_video_id} - Whisper nao foi chamado.`
         );
@@ -558,6 +569,7 @@ async function run(sourceVideoId) {
           whisperCostUsd: transcript.costUsd,
           language: transcript.language,
         });
+        await custoService.registrarTranscricao(sourceVideo, { custoUsd: transcript.costUsd });
         // Video avulso enviado do computador nao tem youtube_video_id, entao
         // nao ha o que compartilhar (nao existe "o mesmo video" pra outro
         // cliente).
@@ -628,6 +640,7 @@ async function run(sourceVideoId) {
           outputTokens: selection.outputTokens,
           costUsd: selection.costUsd,
         });
+        await custoService.registrarIa(sourceVideo, { custoUsd: selection.costUsd });
         selected = selection.clips;
       }
 

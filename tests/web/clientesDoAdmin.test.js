@@ -12,6 +12,7 @@ const assert = require('node:assert/strict');
 
 const pool = require('../../src/db/pool');
 const settingsRepository = require('../../src/repositories/settingsRepository');
+const custoService = require('../../src/services/custoService');
 const { startServer, stopServer, createLoginableClient, createAgent } = require('../helpers/http');
 
 let baseUrl;
@@ -49,12 +50,17 @@ async function clienteComDados({ whisper = 0, claude = 0, videos = 1, postagens 
   }
 
   for (let i = 0; i < videos; i++) {
-    await pool.query(
+    // O custo vai pro LIVRO (video_costs), que e de onde a tela le desde
+    // 11/09/2026 - gravar so dentro de source_videos testaria uma fonte que o
+    // produto nao consulta mais (e que sumia quando o video era apagado).
+    const { rows: [sv] } = await pool.query(
       `INSERT INTO source_videos (youtube_video_id, title, status, input_type,
          owner_client_user_id, client_user_id, whisper_cost_usd, claude_cost_usd)
-       VALUES ($1, 'v', 'ready', 'upload', $2, $2, $3, $4)`,
+       VALUES ($1, 'v', 'ready', 'upload', $2, $2, $3, $4) RETURNING *`,
       [`v${unico()}`, cliente.id, whisper, claude]
     );
+    await custoService.registrarTranscricao(sv, { custoUsd: whisper });
+    await custoService.registrarIa(sv, { custoUsd: claude });
   }
 
   if (postagens > 0) {
@@ -134,12 +140,13 @@ test('banda só vira dinheiro quando saiu por proxy pago', async () => {
   const cliente = await clienteComDados({ videos: 0 });
   const umGb = 1024 ** 3;
   for (const tipo of ['client_tunnel', 'founder_tunnel', 'reuse', 'proxy']) {
-    await pool.query(
+    const { rows: [sv] } = await pool.query(
       `INSERT INTO source_videos (youtube_video_id, title, status, input_type,
          owner_client_user_id, client_user_id, download_egress_type, download_bytes)
-       VALUES ($1,'v','ready','upload',$2,$2,$3,$4)`,
+       VALUES ($1,'v','ready','upload',$2,$2,$3,$4) RETURNING *`,
       [`v${unico()}`, cliente.id, tipo, umGb]
     );
+    await custoService.registrarDownload(sv, { bytes: umGb, egressType: tipo });
   }
   const agente = await agenteAdmin();
   const { body } = await agente.get('/api/admin/clients?range=all');
@@ -155,7 +162,7 @@ test('banda só vira dinheiro quando saiu por proxy pago', async () => {
 test('o filtro de período muda o custo', async () => {
   const cliente = await clienteComDados({ whisper: 1, claude: 0, videos: 1 });
   await pool.query(
-    `UPDATE source_videos SET created_at = now() - interval '40 days' WHERE owner_client_user_id = $1`,
+    `UPDATE video_costs SET occurred_at = now() - interval '40 days' WHERE client_user_id = $1`,
     [cliente.id]
   );
   const agente = await agenteAdmin();
@@ -170,7 +177,7 @@ test('o filtro de período muda o custo', async () => {
 test('período personalizado usa as datas enviadas', async () => {
   const cliente = await clienteComDados({ whisper: 2, claude: 0, videos: 1 });
   await pool.query(
-    `UPDATE source_videos SET created_at = now() - interval '10 days' WHERE owner_client_user_id = $1`,
+    `UPDATE video_costs SET occurred_at = now() - interval '10 days' WHERE client_user_id = $1`,
     [cliente.id]
   );
   // No fuso de Brasília, que é o que o filtro usa. Com toISOString() (UTC) o

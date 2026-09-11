@@ -573,6 +573,56 @@ export interface BandwidthEconomia {
   whisperUsdEconomizado: number
 }
 
+export interface AdminCostsResponse {
+  range: { key: DateRangeKey; since: string; until: string }
+  cotacaoUsdBrl: number
+  infraMensalUsd: number
+  resumo: {
+    totalUsd: number
+    whisperUsd: number
+    iaUsd: number
+    bandaUsd: number
+    bytes: number
+    videos: number
+    minutosEntregues: number
+    minutosNovos: number
+    minutosReaproveitados: number
+    videosReaproveitados: number
+    /** Custo de vídeos já apagados, recuperado da série histórica — sem cliente. */
+    totalSemDonoUsd: number
+    /** Custo real de processar um vídeo que ninguém tinha baixado ainda. */
+    usdPorMinutoNovo: number | null
+    /** Média de tudo que foi entregue, incluindo o que veio de graça por reaproveitamento. */
+    usdPorMinutoEntregue: number | null
+  }
+  porDia: { dia: string; totalUsd: number; whisperUsd: number; iaUsd: number; bandaUsd: number; minutos: number }[]
+  porCliente: {
+    clientUserId: number
+    nome: string
+    email: string | null
+    totalUsd: number
+    whisperUsd: number
+    iaUsd: number
+    bandaUsd: number
+    videos: number
+    minutos: number
+    usdPorMinuto: number | null
+  }[]
+  margens: {
+    key: string
+    name: string
+    priceCents: number
+    firstMonthPriceCents: number | null
+    weeklyMinutes: number
+    minutosMes: number
+    custoBrl: number | null
+    margemBrl: number | null
+    margemPercent: number | null
+    assinaturasAtivas: number
+    overageCentsNormal: number | null
+  }[]
+}
+
 export interface AdminBandwidthResponse {
   /**
    * Se o cliente enxerga qualquer coisa sobre usar a internet dele. É só

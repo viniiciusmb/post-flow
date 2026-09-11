@@ -47,6 +47,7 @@ export const en: Dicionario = {
   "menu.postagens": "Posts",
   "menu.metricas": "Metrics",
   "menu.banda": "Bandwidth usage",
+  "menu.custos": "Costs",
   "menu.faturamento": "Billing",
   "menu.erros": "Errors",
   "menu.grupoOperacao": "Operations",
