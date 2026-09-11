@@ -676,4 +676,12 @@ Independentemente de quem clicou, o buraco real era não haver caminho de volta.
 783 testes (eram 774). Duas mutações validadas: o backfill voltando a ressuscitar cancelados, e devolver cancelado sem conferir o arquivo. **A segunda não era pega na primeira tentativa** — faltava o caso do cancelado cujo arquivo a retenção já apagou, que é o mais provável de acontecer de verdade.
 
 
+**Contador de renovação da cota semanal (2026-09-11).** Pedido do fundador: "Plano e uso" mostrava quantos minutos sobraram, mas não quando eles voltam — e "5 min disponíveis" tanto pode significar "aguento até amanhã" quanto "acabou a semana".
+
+- A conta mora em `src/lib/cicloDeCredito.js`, não na tela, porque quem renova de verdade é o `creditWeeklyResetJob`: ele exige `cycle_start_at <= now() - 7 days` **e assinatura ATIVA**. Quem não está `ativo` recebe `null` em vez de uma data — um contador que zera e não renova nada é pior do que contador nenhum. O teste que mais importa é o que roda o job de verdade e confere que ele resetou exatamente quem a tela dizia estar vencido.
+- **Os segundos são contados no relógio do SERVIDOR** e o navegador só desconta o tempo que a página ficou aberta. Comparar a data com o relógio local mostraria um prazo errado para quem está com a hora ou o fuso trocados. E o tempo decorrido é remedido a cada tique (em vez de subtrair 30 a cada volta): aba em segundo plano faz o navegador segurar o timer, e um contador que desconta de um em um ficaria para trás sem se corrigir.
+- **Prazo vencido não vira número negativo**: o job roda de hora em hora, então existe uma janela em que o prazo passou e a renovação ainda não veio — ali a tela diz "renova a qualquer momento".
+- O prazo fica ACIMA dos dois cartões de crédito porque os dois bolsos renovam no mesmo instante (mesma linha, mesmo `cycle_start_at`).
+- 788 testes (eram 783). Três mutações validadas: ignorar o status da assinatura, trocar os 7 dias do ciclo, e deixar a contagem ficar negativa — cada uma derruba testes diferentes.
+
 Para o histórico completo de decisões e "porquês", ver a memória do projeto (arquivos em `~/.claude/projects/.../memory/`, carregados automaticamente) — especialmente `post-flow-architecture`, `post-flow-deployment`, `post-flow-project-status`, `post-flow-tiktok-oauth`, `post-flow-google-drive`, `feedback-run-migrations-immediately`.

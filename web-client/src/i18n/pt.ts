@@ -547,6 +547,17 @@ export const pt = {
   "plano.cartaoIndisponivel": "Pagamento por cartão ainda não está disponível — fale com o suporte.",
   "plano.semPlanoAtivo": "Você ainda não tem um plano ativo — escolha um abaixo ou fale com o suporte pra ativar.",
   "plano.ultimaCobrancaFalhou": "Sua última cobrança falhou — atualize o cartão pra manter a assinatura ativa.",
+  // Contador de renovacao da cota semanal. Unidades separadas em singular e
+  // plural porque o t() so troca {n} por um numero - nao ha sistema de plural.
+  "plano.renovaEm": "Sua cota semanal renova em {tempo}",
+  "plano.renovaAgora": "Sua cota semanal renova a qualquer momento",
+  "plano.renovaJuncao": "{a} e {b}",
+  "plano.tempoDia": "{n} dia",
+  "plano.tempoDias": "{n} dias",
+  "plano.tempoHora": "{n} hora",
+  "plano.tempoHoras": "{n} horas",
+  "plano.tempoMinuto": "{n} minuto",
+  "plano.tempoMinutos": "{n} minutos",
   "plano.creditosNormais": "Créditos normais",
   "plano.creditosNormaisTexto": "Cota semanal do seu plano. É a que roda quando o download sai pela nossa internet.",
   "plano.creditosNormaisTextoSozinho": "Cota semanal do seu plano, em minutos de vídeo processado.",

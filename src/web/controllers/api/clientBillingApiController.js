@@ -25,6 +25,7 @@ const asaasPaymentsRepository = require('../../../repositories/asaasPaymentsRepo
 const planLimitsService = require('../../../services/planLimitsService');
 const subscriptionCheckoutService = require('../../../services/subscriptionCheckoutService');
 const checkoutService = require('../../../services/checkoutService');
+const cicloDeCredito = require('../../../lib/cicloDeCredito');
 const { resolveStripeCustomerId } = subscriptionCheckoutService;
 
 // Credito avulso: o cliente escolhe MINUTOS numa barra, e o preco por minuto e
@@ -157,6 +158,15 @@ async function overview(req, res) {
     credits: {
       normal: bucketView(credits, 'normal'),
       bonus: bucketView(credits, 'bonus'),
+      // Quando a cota semanal renova. Os dois bolsos renovam JUNTOS (e a mesma
+      // linha, o mesmo cycle_start_at), por isso o prazo fica aqui em cima e
+      // nao repetido dentro de cada bolso.
+      //
+      // Vao os dois: a data serve pra escrever "quinta, 18/09" e os segundos
+      // sao contados no relogio do SERVIDOR, pra o contador nao depender da
+      // hora do computador do cliente (ver lib/cicloDeCredito).
+      nextResetAt: cicloDeCredito.proximoReset(credits, subscription),
+      secondsToNextReset: cicloDeCredito.segundosAteReset(credits, subscription),
     },
     plans: plans.map((p) => ({
       key: p.key,

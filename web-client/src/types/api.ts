@@ -740,7 +740,18 @@ export interface ClientBillingOverviewResponse {
   }
   /** Cartão tokenizado no Asaas (independente do cartão antigo da Stripe). */
   asaasCard: { brand: string | null; last4: string | null; exp: string | null } | null
-  credits: { normal: CreditBucketView; bonus: CreditBucketView }
+  credits: {
+    normal: CreditBucketView
+    bonus: CreditBucketView
+    /**
+     * Quando a cota semanal renova (os dois bolsos renovam juntos).
+     * null = não há renovação prevista: a assinatura precisa estar ativa para
+     * o reset semanal acontecer (ver lib/cicloDeCredito no servidor).
+     */
+    nextResetAt: string | null
+    /** Segundos que faltam, contados no relógio do SERVIDOR. */
+    secondsToNextReset: number | null
+  }
   /** true = conta do dono do sistema: não gasta crédito nem depende de plano. */
   isExempt: boolean
   plans: BillingPlan[]

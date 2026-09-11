@@ -13,7 +13,7 @@ import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { Bandeira, bandeiraDoAsaas } from "@/components/checkout/BandeirasDeCartao"
-import { dataHora } from "@/lib/formatoLocal"
+import { data as dataCurta, dataHora, hora } from "@/lib/formatoLocal"
 import type {
   ClientBillingOverviewResponse,
   ClientPaymentsResponse,
@@ -44,6 +44,70 @@ function BucketMeter({ label, bucket }: { label: string; bucket: CreditBucketVie
       </div>
     </div>
   )
+}
+
+/**
+ * Quanto tempo falta pra cota semanal renovar.
+ *
+ * Conta a partir dos segundos que o SERVIDOR mandou, somando o tempo que a
+ * página ficou aberta — e não comparando a data com o relógio do computador,
+ * que pode estar com a hora ou o fuso errados e mostraria um prazo que não é
+ * o que o servidor vai cumprir.
+ *
+ * O tempo decorrido é medido de novo a cada tique (em vez de subtrair 30 a
+ * cada volta): aba em segundo plano faz o navegador segurar o timer, e um
+ * contador que desconta de um em um ficaria para trás sem nunca se corrigir.
+ */
+function ContadorDeRenovacao({ segundos, quando }: { segundos: number; quando: string | null }) {
+  const t = useT()
+  const [restante, setRestante] = useState(segundos)
+
+  useEffect(() => {
+    setRestante(segundos)
+    const abertoEm = Date.now()
+    const id = window.setInterval(() => {
+      setRestante(Math.max(0, segundos - Math.round((Date.now() - abertoEm) / 1000)))
+    }, 30_000)
+    return () => window.clearInterval(id)
+  }, [segundos])
+
+  // O job de reset roda de hora em hora, então o prazo vence antes da
+  // renovação acontecer. Nessa janela o contador não pode virar negativo nem
+  // dizer "renova em 0 minutos" — ele diz que está para acontecer.
+  const texto =
+    restante <= 0
+      ? t("plano.renovaAgora")
+      : t("plano.renovaEm", { tempo: tempoRestante(restante, t) })
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm">
+      <IconClock className="size-4 shrink-0 text-muted-foreground" />
+      <span className="font-medium">{texto}</span>
+      {/* Sem os segundos: num prazo de dias eles são ruído, e ainda dariam a
+          impressão de um relógio que não está correndo (a tela atualiza a cada
+          30s). */}
+      {quando && restante > 0 && (
+        <span className="text-xs text-muted-foreground">· {dataCurta(quando)}, {hora(quando)}</span>
+      )}
+    </div>
+  )
+}
+
+/** "3 dias e 4 horas" / "5 horas e 20 minutos" / "12 minutos". */
+function tempoRestante(segundos: number, t: (chave: ChaveDeTraducao, valores?: Record<string, string | number>) => string) {
+  const dias = Math.floor(segundos / 86400)
+  const horas = Math.floor((segundos % 86400) / 3600)
+  // Menos de um minuto ainda é "1 minuto": "0 minutos" leria como já vencido.
+  const minutos = Math.max(1, Math.floor((segundos % 3600) / 60))
+
+  const dia = (n: number) => t(n === 1 ? "plano.tempoDia" : "plano.tempoDias", { n })
+  const hora = (n: number) => t(n === 1 ? "plano.tempoHora" : "plano.tempoHoras", { n })
+  const minuto = (n: number) => t(n === 1 ? "plano.tempoMinuto" : "plano.tempoMinutos", { n })
+  const juntar = (a: string, b: string) => t("plano.renovaJuncao", { a, b })
+
+  if (dias > 0) return horas > 0 ? juntar(dia(dias), hora(horas)) : dia(dias)
+  if (horas > 0) return juntar(hora(horas), minuto(minutos))
+  return minuto(minutos)
 }
 
 function RateBox({
@@ -450,6 +514,17 @@ export function ClientBillingPage() {
           )}
           {data.subscription.status === "inadimplente" && (
             <TonePill tone="danger">{t("plano.ultimaCobrancaFalhou")}</TonePill>
+          )}
+
+          {/* O prazo fica ACIMA dos dois cartões porque os dois bolsos
+              renovam no mesmo instante — repetir dentro de cada um seria a
+              mesma informação duas vezes. Sem plano ativo não há renovação
+              prevista, e aí o servidor manda null em vez de uma data. */}
+          {data.credits.secondsToNextReset !== null && (
+            <ContadorDeRenovacao
+              segundos={data.credits.secondsToNextReset}
+              quando={data.credits.nextResetAt}
+            />
           )}
 
           <div className="grid gap-4 sm:grid-cols-2" data-tour="creditos">
