@@ -17,12 +17,20 @@ import type { Tone } from "@/components/ui/tone-pill"
 export function StatCard({
   label,
   value,
+  hint,
   icon,
   href,
   hrefLabel,
 }: {
   label: string
   value: number | string
+  /**
+   * A conta por trás do número, quando ela existe ("US$ 18,05 ÷ 2.215 min").
+   * Num cartão de média, o resultado sozinho não dá para conferir nem para
+   * saber sobre quanta coisa ele foi calculado - R$ 0,05 por minuto medido em
+   * 10 minutos e em 10.000 minutos são confianças bem diferentes.
+   */
+  hint?: string
   icon?: ReactNode
   /** Mantido por compatibilidade com as chamadas existentes; não pinta mais nada. */
   tone?: Tone
@@ -38,6 +46,7 @@ export function StatCard({
               {value}
             </CardTitle>
             <CardDescription className="mt-1">{label}</CardDescription>
+            {hint && <div className="mt-1 text-xs tabular-nums text-muted-foreground/70">{hint}</div>}
           </div>
           {icon && <div className="mt-1 text-muted-foreground/50 [&_svg]:size-4">{icon}</div>}
         </div>

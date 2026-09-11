@@ -94,6 +94,9 @@ async function overview(req, res) {
       totalSemDonoUsd: Number(resumo.total_sem_dono_usd) || 0,
       usdPorMinutoNovo,
       usdPorMinutoEntregue,
+      // Numerador da conta do "video novo". Vai junto pra tela poder mostrar a
+      // divisao inteira em vez de so o resultado.
+      totalNovosUsd,
     },
     porDia: porDia.map((d) => ({
       dia: d.dia,

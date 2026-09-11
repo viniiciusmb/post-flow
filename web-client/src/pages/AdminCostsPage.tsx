@@ -18,9 +18,14 @@ function usd(v: number | null | undefined, casas = 2) {
   return `US$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas })}`
 }
 
-function brl(v: number | null | undefined) {
+function brl(v: number | null | undefined, casas = 2) {
   if (v === null || v === undefined) return "—"
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+  return v.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: casas,
+    maximumFractionDigits: casas,
+  })
 }
 
 function min(v: number) {
@@ -145,18 +150,34 @@ export function AdminCostsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-6 sm:grid-cols-2">
+              {/* A conta aparece inteira, não só o resultado: uma média sozinha
+                  não dá para conferir nem diz sobre quanta coisa foi calculada
+                  — R$ 0,05 por minuto medido em 10 minutos e em 10.000 minutos
+                  são confianças bem diferentes. */}
               <Metric
                 destaque
                 label="Vídeo novo (custo real de processar)"
                 value={usd(r.usdPorMinutoNovo, 4)}
-                sub={`${min(r.minutosNovos)} processados do zero · ${brl(
-                  r.usdPorMinutoNovo === null ? null : r.usdPorMinutoNovo * data.cotacaoUsdBrl,
-                )} por minuto`}
+                sub={
+                  r.usdPorMinutoNovo === null
+                    ? "nenhum vídeo novo neste período"
+                    : `${usd(r.totalNovosUsd, 2)} ÷ ${min(r.minutosNovos)} processados = ${brl(
+                        r.usdPorMinutoNovo * data.cotacaoUsdBrl,
+                        3,
+                      )}/min`
+                }
               />
               <Metric
                 label="Entregue (média, com reaproveitamento)"
                 value={usd(r.usdPorMinutoEntregue, 4)}
-                sub={`${min(r.minutosEntregues)} entregues no total`}
+                sub={
+                  r.usdPorMinutoEntregue === null
+                    ? "nenhum minuto entregue neste período"
+                    : `${usd(r.totalUsd, 2)} ÷ ${min(r.minutosEntregues)} entregues = ${brl(
+                        r.usdPorMinutoEntregue * data.cotacaoUsdBrl,
+                        3,
+                      )}/min`
+                }
               />
             </CardContent>
           </Card>

@@ -12,6 +12,10 @@ import { api } from "@/lib/api"
 import type { AdminDashboardResponse } from "@/types/api"
 import { TiktokLimitAlert } from "@/components/dashboard/TiktokLimitAlert"
 
+function num(v: number, casas: number) {
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas })
+}
+
 export function AdminDashboardPage() {
   const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
@@ -108,7 +112,8 @@ export function AdminDashboardPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <StatCard
             label="Custo no período"
-            value={`US$ ${data.custos.totalUsd.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            value={`US$ ${num(data.custos.totalUsd, 2)}`}
+            hint={`${data.custos.videos} ${data.custos.videos === 1 ? "vídeo" : "vídeos"} · ${num(data.custos.minutosEntregues, 0)} min entregues`}
             icon={<IconCoins />}
             tone="violet"
             href="/admin/costs"
@@ -119,10 +124,17 @@ export function AdminDashboardPage() {
             value={
               data.custos.usdPorMinutoNovo === null
                 ? "—"
-                : `R$ ${(data.custos.usdPorMinutoNovo * data.custos.cotacaoUsdBrl).toLocaleString("pt-BR", {
-                    minimumFractionDigits: 3,
-                    maximumFractionDigits: 3,
-                  })}`
+                : `R$ ${num(data.custos.usdPorMinutoNovo * data.custos.cotacaoUsdBrl, 3)}`
+            }
+            /* A conta inteira, não só o resultado: dá pra conferir de cabeça e
+               mostra sobre quanta coisa a média foi calculada. */
+            hint={
+              data.custos.usdPorMinutoNovo === null
+                ? "nenhum vídeo novo neste período"
+                : `US$ ${num(data.custos.totalNovosUsd, 2)} ÷ ${num(data.custos.minutosNovos, 0)} min = US$ ${num(
+                    data.custos.usdPorMinutoNovo,
+                    4,
+                  )}/min`
             }
             icon={<IconCurrencyDollar />}
             tone="success"

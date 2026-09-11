@@ -57,7 +57,11 @@ export interface AdminDashboardResponse {
     totalUsd: number
     /** Custo real de processar um minuto de vídeo novo. null quando não houve vídeo novo no período. */
     usdPorMinutoNovo: number | null
+    /** Os dois lados da divisão, para a tela poder mostrar a conta. */
+    totalNovosUsd: number
+    minutosNovos: number
     minutosEntregues: number
+    videos: number
     cotacaoUsdBrl: number
   }
   range: RangeInfo
@@ -600,6 +604,8 @@ export interface AdminCostsResponse {
     totalSemDonoUsd: number
     /** Custo real de processar um vídeo que ninguém tinha baixado ainda. */
     usdPorMinutoNovo: number | null
+    /** Numerador da conta acima, para a tela poder mostrá-la por inteiro. */
+    totalNovosUsd: number
     /** Média de tudo que foi entregue, incluindo o que veio de graça por reaproveitamento. */
     usdPorMinutoEntregue: number | null
   }

@@ -50,7 +50,14 @@ async function dashboard(req, res) {
       usdPorMinutoNovo: segundosNovos
         ? (Number(custos.total_novos_usd) || 0) / (segundosNovos / 60)
         : null,
+      // Os dois lados da divisao vao junto pra tela poder MOSTRAR a conta.
+      // Uma media sozinha nao da pra conferir nem diz sobre quanta coisa foi
+      // calculada: R$ 0,05 por minuto medido em 10 minutos e em 10.000
+      // minutos sao confiancas bem diferentes.
+      totalNovosUsd: Number(custos.total_novos_usd) || 0,
+      minutosNovos: segundosNovos / 60,
       minutosEntregues: (Number(custos.segundos_entregues) || 0) / 60,
+      videos: Number(custos.videos) || 0,
       cotacaoUsdBrl: Number(cotacao) || 5.4,
     },
     counts: {

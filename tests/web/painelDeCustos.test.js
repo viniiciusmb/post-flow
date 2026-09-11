@@ -128,3 +128,26 @@ test('a tela INICIAL do admin mostra o custo do periodo', async () => {
     'o custo da tela inicial tem que respeitar o filtro de periodo'
   );
 });
+
+test('a conta do custo por minuto vai inteira, nao so o resultado', async () => {
+  // Uma média sozinha não dá para conferir nem diz sobre quanta coisa foi
+  // calculada: R$ 0,05/min medido em 10 min e em 10.000 min são confianças
+  // bem diferentes. Por isso os dois lados da divisão viajam junto.
+  const { admin, agent } = await adminLogado();
+  await lancamento(admin.id, { whisperUsd: 0.24, segundos: 2400 });
+
+  const painel = (await agent.get('/api/admin/costs?range=today')).body.resumo;
+  const inicial = (await agent.get('/api/admin/dashboard?range=today')).body.custos;
+
+  for (const [onde, numerador, minutos, porMinuto] of [
+    ['painel', painel.totalNovosUsd, painel.minutosNovos, painel.usdPorMinutoNovo],
+    ['tela inicial', inicial.totalNovosUsd, inicial.minutosNovos, inicial.usdPorMinutoNovo],
+  ]) {
+    assert.ok(numerador > 0, `${onde}: faltou o numerador da conta`);
+    assert.ok(minutos > 0, `${onde}: faltou o denominador da conta`);
+    assert.ok(
+      Math.abs(numerador / minutos - porMinuto) < 0.000001,
+      `${onde}: a conta mostrada nao bate com o resultado (${numerador} / ${minutos} != ${porMinuto})`
+    );
+  }
+});
