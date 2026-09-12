@@ -67,6 +67,8 @@ function duracao(segundos: number | null) {
   if (!segundos) return "—"
   const m = Math.floor(segundos / 60)
   const s = Math.round(segundos % 60)
+  // Abaixo de um minuto, "0min 22s" só atrapalha a leitura.
+  if (m === 0) return `${s}s`
   return `${m}min ${String(s).padStart(2, "0")}s`
 }
 
@@ -279,19 +281,25 @@ export function AdminNarratedPage() {
               variant="outline"
               className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2"
             >
-              <ToggleGroupItem value="economico" className="h-auto flex-col items-start gap-1 px-4 py-3 text-left">
+              <ToggleGroupItem
+                value="economico"
+                className="h-auto min-w-0 flex-col items-start gap-1 whitespace-normal px-4 py-3 text-left"
+              >
                 <span className="flex items-center gap-1.5 font-medium">
                   <IconPhoto className="size-4" /> Econômico
                 </span>
-                <span className="text-xs font-normal opacity-80">
+                <span className="whitespace-normal text-xs font-normal opacity-80">
                   Acervo real primeiro. Só desenha por IA quando a busca não acha nada.
                 </span>
               </ToggleGroupItem>
-              <ToggleGroupItem value="qualidade" className="h-auto flex-col items-start gap-1 px-4 py-3 text-left">
+              <ToggleGroupItem
+                value="qualidade"
+                className="h-auto min-w-0 flex-col items-start gap-1 whitespace-normal px-4 py-3 text-left"
+              >
                 <span className="flex items-center gap-1.5 font-medium">
                   <IconSparkles className="size-4" /> Qualidade
                 </span>
-                <span className="text-xs font-normal opacity-80">
+                <span className="whitespace-normal text-xs font-normal opacity-80">
                   A IA decide cena a cena o que fica melhor. Custa cerca do dobro.
                 </span>
               </ToggleGroupItem>
@@ -361,7 +369,9 @@ export function AdminNarratedPage() {
                   </div>
                   <div className="text-right">
                     <div className="font-heading text-lg font-semibold tabular-nums">{usd(v.custoUsd)}</div>
-                    <div className="text-xs text-muted-foreground">custo real</div>
+                    <div className="text-xs text-muted-foreground">
+                      {v.custoUsd === null ? "ainda sem medição" : "custo real"}
+                    </div>
                   </div>
                 </div>
 

@@ -44,10 +44,10 @@ function paraApi(v) {
     errorTransient: v.error_transient,
     attempts: v.attempts,
     createdAt: v.created_at,
-    custoUsd: v.custo_usd === undefined ? null : Number(v.custo_usd || 0),
+    custoUsd: v.custo_usd === undefined || v.custo_usd === null ? null : Number(v.custo_usd),
     totalCenas: v.total_cenas === undefined ? null : Number(v.total_cenas),
     cenasIa: v.cenas_ia === undefined ? null : Number(v.cenas_ia),
-    temArquivo: Boolean(v.video_path),
+    temArquivo: Boolean(v.video_path) && fs.existsSync(v.video_path),
   };
 }
 
