@@ -11,6 +11,8 @@ const driveExportJob = require('./jobs/driveExportJob');
 const tunnelTestJob = require('./jobs/tunnelTestJob');
 const creditWeeklyResetJob = require('./jobs/creditWeeklyResetJob');
 const overageBillingJob = require('./jobs/overageBillingJob');
+const narratedVideoJob = require('./videoJobs/narratedVideoJob');
+const narratedVideosRepository = require('../repositories/narratedVideosRepository');
 const videoConcurrencyService = require('../services/videoConcurrencyService');
 const logger = require('../lib/logger');
 
@@ -26,6 +28,8 @@ const QUEUE_TUNNEL_TEST_ONE = 'tunnel-test-one';
 const QUEUE_TUNNEL_TEST_ALL = 'tunnel-test-all';
 const QUEUE_CREDIT_WEEKLY_RESET = 'credit-weekly-reset';
 const QUEUE_OVERAGE_BILLING = 'overage-billing';
+const QUEUE_NARRATED_VIDEO = 'narrated-video';
+const QUEUE_NARRATED_RECOVERY = 'narrated-video-recovery';
 
 async function start(boss) {
   await boss.createQueue(QUEUE_CHANNEL_CHECK);
@@ -40,6 +44,8 @@ async function start(boss) {
   await boss.createQueue(QUEUE_TUNNEL_TEST_ALL);
   await boss.createQueue(QUEUE_CREDIT_WEEKLY_RESET);
   await boss.createQueue(QUEUE_OVERAGE_BILLING);
+  await boss.createQueue(QUEUE_NARRATED_VIDEO);
+  await boss.createQueue(QUEUE_NARRATED_RECOVERY);
 
   await boss.schedule(QUEUE_CHANNEL_CHECK, '*/20 * * * *');
   logger.info('Checagem de canais do YouTube agendada a cada 20 minutos.');
@@ -88,6 +94,9 @@ async function start(boss) {
   await boss.schedule(QUEUE_OVERAGE_BILLING, '20 * * * *');
   logger.info('Faturamento de excedente agendado de hora em hora.');
 
+  await boss.schedule(QUEUE_NARRATED_RECOVERY, '*/10 * * * *');
+  logger.info('Recuperacao de video narrado travado agendada a cada 10 minutos.');
+
   await boss.work(QUEUE_CHANNEL_CHECK, async () => {
     logger.info('Checando canais do YouTube...');
     await channelCheckJob.run(boss);
@@ -124,6 +133,30 @@ async function start(boss) {
 
   await boss.work(QUEUE_OVERAGE_BILLING, async () => {
     await overageBillingJob.run();
+  });
+
+  // Video narrado: UM trabalhador fixo, de proposito fora do
+  // videoConcurrencyService.
+  //
+  // A VPS tem 2 nucleos e o teto medido do pipeline de cortes ja e 2 videos
+  // simultaneos. Um video narrado de 10 minutos ocupa ~17 minutos de um nucleo
+  // inteiro (render medido a 1,67x o tempo real) - deixa-lo disputar a
+  // configuracao de concorrencia faria o recurso em modo de TESTE competir com
+  // o pipeline que gera receita. Um de cada vez, sempre.
+  await boss.work(QUEUE_NARRATED_VIDEO, { batchSize: 1 }, async ([job]) => {
+    logger.info(`Gerando video narrado #${job.data.narratedVideoId}...`);
+    await narratedVideoJob.run(job.data.narratedVideoId);
+  });
+
+  // Video cuja geracao morreu no meio (deploy, crash). Devolve pra fila; o
+  // proprio job recomeca do roteiro, e desiste depois de 3 tentativas.
+  await boss.work(QUEUE_NARRATED_RECOVERY, async () => {
+    const travados = await narratedVideosRepository.findStuck({ silencioMinutos: 15 });
+    for (const v of travados) {
+      logger.info(`Video narrado #${v.id} sem sinal de vida - devolvendo pra fila.`);
+      await narratedVideosRepository.setStatus(v.id, 'na_fila', { progressPercent: 0 });
+      await boss.send(QUEUE_NARRATED_VIDEO, { narratedVideoId: Number(v.id) });
+    }
   });
 
   // Sem agendamento - so roda quando o usuario clica "Testar conexao" na

@@ -93,25 +93,41 @@ async function resumo({ since, until } = {}) {
   const ate = until || new Date();
   const { rows } = await pool.query(
     `SELECT
-       coalesce(sum(whisper_usd), 0)::float8 AS whisper_usd,
-       coalesce(sum(ia_usd), 0)::float8 AS ia_usd,
-       coalesce(sum(banda_usd), 0)::float8 AS banda_usd,
-       coalesce(sum(whisper_usd + ia_usd + banda_usd), 0)::float8 AS total_usd,
-       coalesce(sum(download_bytes), 0)::float8 AS bytes,
+       coalesce(sum(whisper_usd) FILTER (WHERE origem <> 'narrado'), 0)::float8 AS whisper_usd,
+       coalesce(sum(ia_usd) FILTER (WHERE origem <> 'narrado'), 0)::float8 AS ia_usd,
+       coalesce(sum(banda_usd) FILTER (WHERE origem <> 'narrado'), 0)::float8 AS banda_usd,
+       coalesce(sum(whisper_usd + ia_usd + banda_usd) FILTER (WHERE origem <> 'narrado'), 0)::float8 AS total_usd,
+       coalesce(sum(download_bytes) FILTER (WHERE origem <> 'narrado'), 0)::float8 AS bytes,
        count(*) FILTER (WHERE origem = 'pipeline')::int AS videos,
-       coalesce(sum(video_seconds), 0)::float8 AS segundos_entregues,
-       coalesce(sum(video_seconds) FILTER (WHERE NOT transcript_reused AND NOT download_reused), 0)::float8
+       coalesce(sum(video_seconds) FILTER (WHERE origem <> 'narrado'), 0)::float8 AS segundos_entregues,
+       coalesce(sum(video_seconds)
+                FILTER (WHERE origem <> 'narrado' AND NOT transcript_reused AND NOT download_reused), 0)::float8
          AS segundos_novos,
        coalesce(sum(whisper_usd + ia_usd + banda_usd)
-                FILTER (WHERE NOT transcript_reused AND NOT download_reused), 0)::float8 AS total_novos_usd,
-       count(*) FILTER (WHERE transcript_reused OR download_reused)::int AS videos_reaproveitados,
-       coalesce(sum(video_seconds) FILTER (WHERE transcript_reused OR download_reused), 0)::float8
+                FILTER (WHERE origem <> 'narrado' AND NOT transcript_reused AND NOT download_reused), 0)::float8
+         AS total_novos_usd,
+       count(*) FILTER (WHERE origem <> 'narrado' AND (transcript_reused OR download_reused))::int
+         AS videos_reaproveitados,
+       coalesce(sum(video_seconds)
+                FILTER (WHERE origem <> 'narrado' AND (transcript_reused OR download_reused)), 0)::float8
          AS segundos_reaproveitados,
        -- Custo que existe mas nao tem dono: veio da serie historica, de
        -- videos apagados antes de este livro existir. Fica separado pra
        -- ninguem confundir "sem cliente" com "cliente zerado".
        coalesce(sum(whisper_usd + ia_usd + banda_usd) FILTER (WHERE origem = 'historico'), 0)::float8
-         AS total_sem_dono_usd
+         AS total_sem_dono_usd,
+       -- Video narrado vive FORA de todas as contas acima, e nao por
+       -- organizacao: resumo() alimenta o "custo por minuto" que decide preco
+       -- de plano, e um minuto de video narrado nao tem nada a ver com um
+       -- minuto de corte do YouTube. Somar os dois inflaria o denominador e a
+       -- tela passaria a dizer que cortar ficou mais barato - mesmo erro ja
+       -- corrigido uma vez em stageTimingsSince.
+       count(*) FILTER (WHERE origem = 'narrado')::int AS videos_narrados,
+       coalesce(sum(video_seconds) FILTER (WHERE origem = 'narrado'), 0)::float8 AS segundos_narrados,
+       coalesce(sum(tts_usd), 0)::float8 AS tts_usd,
+       coalesce(sum(imagem_usd), 0)::float8 AS imagem_usd,
+       coalesce(sum(whisper_usd + ia_usd + tts_usd + imagem_usd) FILTER (WHERE origem = 'narrado'), 0)::float8
+         AS total_narrado_usd
      FROM video_costs
      WHERE occurred_at >= $1 AND occurred_at <= $2`,
     [de, ate]
@@ -132,7 +148,7 @@ async function porDia({ since, until } = {}) {
             sum(whisper_usd + ia_usd + banda_usd)::float8 AS total_usd,
             sum(video_seconds)::float8 AS segundos
      FROM video_costs
-     WHERE occurred_at >= $1 AND occurred_at <= $2
+     WHERE occurred_at >= $1 AND occurred_at <= $2 AND origem <> 'narrado'
      GROUP BY 1 ORDER BY 1`,
     [de, ate]
   );
@@ -154,6 +170,7 @@ async function porCliente({ since, until } = {}) {
             count(*) FILTER (WHERE origem = 'pipeline')::int AS videos
      FROM video_costs
      WHERE occurred_at >= $1 AND occurred_at <= $2 AND client_user_id IS NOT NULL
+       AND origem <> 'narrado'
      GROUP BY 1`,
     [de, ate]
   );
@@ -168,4 +185,58 @@ async function totalPorClienteMap({ since, until } = {}) {
   return mapa;
 }
 
-module.exports = { registrar, resumo, porDia, porCliente, totalPorClienteMap };
+// Lancamento do video narrado. Mesma mecanica de registrar(): acumula etapa
+// por etapa, porque custo que ja saiu da conta nao pode depender de o video
+// terminar bem - um roteiro que paga a narracao inteira e falha na montagem
+// custou dinheiro de verdade.
+//
+// O ON CONFLICT repete o predicado do indice parcial de proposito: sem ele o
+// Postgres nao reconhece o indice (armadilha que ja quebrou a deteccao de
+// video novo neste projeto).
+async function registrarNarrado(narratedVideoId, clientUserId, campos = {}) {
+  const {
+    videoSeconds = 0,
+    whisperUsd = 0,
+    iaUsd = 0,
+    ttsUsd = 0,
+    imagemUsd = 0,
+  } = campos;
+
+  const { rows } = await pool.query(
+    `INSERT INTO video_costs
+       (client_user_id, narrated_video_id, video_seconds,
+        whisper_usd, ia_usd, tts_usd, imagem_usd, origem)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'narrado')
+     ON CONFLICT (narrated_video_id) WHERE narrated_video_id IS NOT NULL
+     DO UPDATE SET
+       whisper_usd = video_costs.whisper_usd + EXCLUDED.whisper_usd,
+       ia_usd      = video_costs.ia_usd      + EXCLUDED.ia_usd,
+       tts_usd     = video_costs.tts_usd     + EXCLUDED.tts_usd,
+       imagem_usd  = video_costs.imagem_usd  + EXCLUDED.imagem_usd,
+       -- Nao acumula: e a duracao do mesmo video, repetida a cada etapa.
+       video_seconds = GREATEST(video_costs.video_seconds, EXCLUDED.video_seconds)
+     RETURNING *`,
+    [clientUserId || null, narratedVideoId, Math.round(videoSeconds || 0), whisperUsd, iaUsd, ttsUsd, imagemUsd]
+  );
+  return rows[0];
+}
+
+// Custo de UM video narrado - a tela mostra ao lado do modo de imagem usado,
+// que e o que torna a comparacao entre "economico" e "qualidade" possivel.
+async function doNarrado(narratedVideoId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM video_costs WHERE narrated_video_id = $1',
+    [narratedVideoId]
+  );
+  return rows[0] || null;
+}
+
+module.exports = {
+  registrar,
+  registrarNarrado,
+  doNarrado,
+  resumo,
+  porDia,
+  porCliente,
+  totalPorClienteMap,
+};

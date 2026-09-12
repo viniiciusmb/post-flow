@@ -80,4 +80,30 @@ async function registrarIa(sourceVideo, { custoUsd = 0 } = {}) {
   );
 }
 
-module.exports = { registrarDownload, registrarTranscricao, registrarIa, ehPago, BYTES_POR_GB };
+// ---------------------------------------------------------------------------
+// Video narrado (gerado a partir de um roteiro)
+// ---------------------------------------------------------------------------
+
+// Mesma disciplina do pipeline de cortes: cada etapa lanca o que gastou no
+// momento em que gastou. Aqui isso importa ainda mais, porque a narracao e
+// paga ANTES de existir qualquer imagem - um roteiro que falha na montagem ja
+// custou a voz inteira.
+//
+// O dono do lancamento e o admin que pediu o video. Ele nao e cobrado (o
+// recurso esta em modo de teste, sem tocar na cota), mas o custo precisa
+// aparecer no painel: foi exatamente assim que US$ 16 em IA queimaram sem
+// ninguem notar nesta VPS.
+async function registrarNarrado(narratedVideo, campos = {}) {
+  return seguro(`video narrado ${narratedVideo.id}`, () =>
+    videoCostsRepository.registrarNarrado(narratedVideo.id, narratedVideo.admin_user_id, campos)
+  );
+}
+
+module.exports = {
+  registrarDownload,
+  registrarTranscricao,
+  registrarIa,
+  registrarNarrado,
+  ehPago,
+  BYTES_POR_GB,
+};

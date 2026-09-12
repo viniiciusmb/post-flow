@@ -1165,6 +1165,12 @@ async function renderClip({
 // (entra configuracao, sai a string do filtro) e e onde mora a regra que ja
 // quebrou uma vez - o video precisa PREENCHER a caixa, nao caber dentro dela.
 module.exports = {
+  // Executores de ffmpeg. Exportados para o video narrado reaproveitar em vez
+  // de repetir: runFfmpegWithProgress ja mata o GRUPO de processos (ffmpeg
+  // gera filhos), tem teto de tempo e detecta renderizacao travada - tres
+  // coisas que ja custaram incidente neste projeto.
+  runFfmpeg,
+  runFfmpegWithProgress,
   buildBackgroundFilter,
   // Exportado pro teste: e o filtro que garante o encaixe exato entre a faixa
   // da capa e o video (sem essa garantia, aparece faixa branca no corte).

@@ -48,6 +48,7 @@ export const en: Dicionario = {
   "menu.metricas": "Metrics",
   "menu.banda": "Bandwidth usage",
   "menu.custos": "Costs",
+  "menu.narrado": "Narrated video",
   "menu.faturamento": "Billing",
   "menu.erros": "Errors",
   "menu.grupoOperacao": "Operations",

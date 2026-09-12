@@ -13,6 +13,7 @@ import {
   IconRouter,
   IconReceipt2,
   IconAlertTriangle,
+  IconMicrophone,
   IconGift,
   IconBook,
 } from "@tabler/icons-react"
@@ -59,6 +60,7 @@ const ADMIN_GROUPS: Grupo[] = [
       { title: "menu.assinaturas", url: "/admin/billing", icon: IconReceipt2 },
       { title: "menu.comissoes", url: "/admin/commissions", icon: IconGift },
       { title: "menu.erros", url: "/admin/errors", icon: IconAlertTriangle },
+      { title: "menu.narrado", url: "/admin/narrated", icon: IconMicrophone },
     ],
   },
   {

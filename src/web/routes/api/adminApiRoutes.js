@@ -7,6 +7,7 @@ const adminMetricsApiController = require('../../controllers/api/adminMetricsApi
 const adminBandwidthApiController = require('../../controllers/api/adminBandwidthApiController');
 const adminCostsApiController = require('../../controllers/api/adminCostsApiController');
 const adminErrorsApiController = require('../../controllers/api/adminErrorsApiController');
+const adminNarratedApiController = require('../../controllers/api/adminNarratedApiController');
 const requireAuthApi = require('../../middleware/requireAuthApi');
 const requireRoleApi = require('../../middleware/requireRoleApi');
 const asyncHandler = require('../../lib/asyncHandler');
@@ -30,6 +31,17 @@ router.post('/metrics/max-simultaneos', asyncHandler(adminMetricsApiController.s
 router.get('/costs', asyncHandler(adminCostsApiController.overview));
 router.post('/costs/cotacao', asyncHandler(adminCostsApiController.setCotacao));
 router.post('/costs/infra', asyncHandler(adminCostsApiController.setInfra));
+// Video narrado a partir de um roteiro - MODO DE TESTE, so admin. Fica atras
+// do requireRoleApi(ADMIN) montado no topo deste arquivo: e o mesmo guarda que
+// protege o resto do painel, e e ele que mantem o recurso invisivel pros
+// clientes enquanto esta em teste.
+router.get('/narrated', asyncHandler(adminNarratedApiController.list));
+router.post('/narrated/preview', asyncHandler(adminNarratedApiController.preview));
+router.post('/narrated', asyncHandler(adminNarratedApiController.create));
+router.get('/narrated/:id', asyncHandler(adminNarratedApiController.detail));
+router.get('/narrated/:id/download', asyncHandler(adminNarratedApiController.download));
+router.delete('/narrated/:id', asyncHandler(adminNarratedApiController.remove));
+
 router.get('/bandwidth', asyncHandler(adminBandwidthApiController.overview));
 router.post('/bandwidth/founder-tunnel/toggle', asyncHandler(adminBandwidthApiController.toggleFounderTunnel));
 router.post('/bandwidth/proxy/toggle', asyncHandler(adminBandwidthApiController.toggleProxy));

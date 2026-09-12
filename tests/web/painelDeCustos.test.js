@@ -33,14 +33,24 @@ async function adminLogado() {
 // Lançamento com data escolhida, pra poder cair em "ontem" ou "hoje" de
 // propósito. O carimbo é montado no fuso de Brasília (o mesmo que o filtro
 // usa) - calcular em UTC faria o teste falhar só entre 21h e meia-noite.
+//
+// A âncora é o MEIO-DIA do dia alvo, e não "agora menos N dias menos um
+// punhado de horas". A versão anterior fazia
+// `now() - N days - interval '3 hours'`, o que funcionava o dia inteiro e
+// caía um dia a mais entre meia-noite e 3h da manhã: às 02:16, "ontem" virava
+// anteontem e o teste falhava sozinho, sem nada ter mudado no produto.
+// Terceira vez que esta armadilha aparece no projeto - a regra é ancorar num
+// instante do dia que nenhum deslocamento de horas consiga atravessar.
 async function lancamento(clientUserId, { diasAtras = 0, whisperUsd = 0.1, segundos = 600 } = {}) {
   const video = await createSourceVideo(clientUserId, { durationSeconds: segundos });
   await custoService.registrarTranscricao({ ...video, owner_client_user_id: clientUserId }, { custoUsd: whisperUsd });
   if (diasAtras > 0) {
     await pool.query(
-      `UPDATE video_costs SET occurred_at = (now() AT TIME ZONE 'America/Sao_Paulo' - ($2 || ' days')::interval - interval '3 hours')
-         AT TIME ZONE 'America/Sao_Paulo'
-       WHERE source_video_id = $1`,
+      `UPDATE video_costs
+          SET occurred_at = (date_trunc('day', now() AT TIME ZONE 'America/Sao_Paulo')
+                             - ($2 || ' days')::interval
+                             + interval '12 hours') AT TIME ZONE 'America/Sao_Paulo'
+        WHERE source_video_id = $1`,
       [video.id, diasAtras]
     );
   }

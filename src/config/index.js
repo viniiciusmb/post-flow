@@ -42,6 +42,21 @@ const config = {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
   },
 
+  // Voz do video narrado. Vazio = so a voz da OpenAI fica disponivel, que e o
+  // padrao e ja funciona; a ElevenLabs e a opcao de qualidade superior, ligada
+  // quando a chave chegar, sem mudanca de codigo.
+  elevenlabs: {
+    apiKey: process.env.ELEVENLABS_API_KEY || '',
+  },
+
+  // Banco de fotos para o video narrado. Opcional de proposito: o Wikimedia
+  // Commons e o Openverse (que nao pedem chave nenhuma) ja cobrem tema
+  // historico e factual, que e onde o acervo real e imbativel. O Pexels entra
+  // para melhorar FOTO MODERNA, onde os dois primeiros sao fracos.
+  pexels: {
+    apiKey: process.env.PEXELS_API_KEY || '',
+  },
+
   youtube: {
     // Conteudo do cookies.txt (exportado de uma conta logada) em base64.
     // Sem isso o YouTube bloqueia listagem/download vindos da VPS.
