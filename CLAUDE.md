@@ -742,4 +742,18 @@ Independentemente de quem clicou, o buraco real era não haver caminho de volta.
 
 871 testes (eram 856). Duas mutações validadas: o destino voltando a ser "qualquer conta do cliente", e os horários do Padrão voltando a se amontoar.
 
+**Horário sugerido de 2 em 2 horas, e cancelar conserta a fila (2026-09-13, mesmo dia).** Dois pedidos do fundador depois de ver o agendamento funcionando.
+
+- **"Adicionar horário" sugere 8h no primeiro e sempre +2h no último** (08:00 → 10:00 → 12:00 → 14:00). O botão antes punha sempre "12:00", e três cliques davam três publicações no mesmo minuto. **Repetir virou impossível por construção**: se o horário de 2h depois já estiver na lista, ou passar da meia-noite, cai na primeira hora cheia livre do dia. Verificado clicando de verdade com Playwright, não só lendo o código.
+- **Cancelar uma postagem recalcula o horário das outras.** Cancelar deixava um buraco: os cortes seguintes continuavam marcados para os horários de depois do que saiu, e o horário vago ficava sem dono — o cliente cancelava o primeiro da fila e o próximo, que podia sair às 8h, só saía às 12h. A conta já existia (`reflowScheduledFor`, a mesma do botão "Corrigir horários de posts"); o que faltava era ela **rodar sozinha**, porque ninguém descobre que precisa clicar num botão depois de cancelar. Falha no recálculo **não desfaz o cancelamento** (ele já aconteceu e é o que o cliente pediu); no pior caso a fila fica como antes, e o erro vai pro log.
+- A postagem cancelada **não** ganha horário novo: ela saiu da fila, e remarcá-la daria a entender que ainda vai sair. Travado por teste.
+
+**Dois defeitos achados na verificação de tela desta rodada, os dois na troca de modo:**
+- **Clicar em "Eu escolho os horários" numa conta nova dava erro vermelho.** O padrão de fábrica é `mode='auto'` com `manual_times` VAZIO, e o servidor recusa modo manual sem nenhum horário (400 "informe um horário") — ou seja, acontecia em **toda conta recém-conectada**. A tela salvava otimista, então o cliente via a lista vazia E o erro ao mesmo tempo, e só saía disso adicionando horário na mão. Agora a troca **começa dos horários que o Padrão já estava usando**: além de não errar, é o que a pessoa espera, porque ela quer AJUSTAR o horário e não recomeçar do zero.
+- **A sugestão caía na madrugada quando o dia enchia.** Passando das 22h, a busca por hora livre varria a partir de 00:00 e sugeria "00:00" para quem tinha 08/10/.../22 configurados — em vez do 09:00 que estava livre no meio. Agora preenche os buracos do dia primeiro.
+
+**Varredura de celular** (320px e 390px, claro e escuro, nas 4 telas mexidas): zero rolagem horizontal da página, zero elemento estourando a largura, zero erro de JS. **Armadilha do próprio teste**, anotada porque custou duas rodadas: logar a cada largura estoura o limitador de força bruta do `/login` e a varredura falha por um motivo que não tem nada a ver com a tela — o jeito certo é logar UMA vez por usuário e reaproveitar a sessão (`storageState`). E o estado do banco sobrevive entre rodadas: uma conta que a rodada anterior deixou em modo manual com 10 horários faz a rodada seguinte medir outra coisa (e trava, porque o botão de adicionar some no teto).
+
+875 testes (eram 871). Mutação validada: tirar o recálculo do cancelamento derruba o teste do remanejamento.
+
 Para o histórico completo de decisões e "porquês", ver a memória do projeto (arquivos em `~/.claude/projects/.../memory/`, carregados automaticamente) — especialmente `post-flow-architecture`, `post-flow-deployment`, `post-flow-project-status`, `post-flow-tiktok-oauth`, `post-flow-google-drive`, `feedback-run-migrations-immediately`.

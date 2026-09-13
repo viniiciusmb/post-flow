@@ -149,6 +149,24 @@ async function skip(req, res) {
   if (!updated) {
     return res.status(404).json({ error: res.locals.t('erros.postagemNaoNaFila') });
   }
+
+  // Cancelar deixa um buraco no meio da fila: os cortes seguintes continuam
+  // marcados pros horarios de depois do que saiu, e o horario vago fica sem
+  // dono. Na pratica o cliente cancela o primeiro da fila e o proximo, que
+  // podia sair as 8h, so sai as 12h - sem nada explicando.
+  //
+  // E exatamente a conta que o botao "Corrigir horarios de posts" ja fazia;
+  // ela passa a rodar sozinha, porque ninguem descobre sozinho que precisa
+  // clicar num botao depois de cancelar.
+  //
+  // Falhar aqui nao pode desfazer o cancelamento, que ja aconteceu e e o que o
+  // cliente pediu - no pior caso a fila fica com o buraco, como antes.
+  try {
+    await postingsRepository.reflowScheduledFor(updated.tiktok_account_id);
+  } catch (err) {
+    logger.error(`Nao consegui recalcular os horarios da conta ${updated.tiktok_account_id} apos um cancelamento:`, err.message);
+  }
+
   res.status(204).end();
 }
 

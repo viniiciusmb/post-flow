@@ -308,22 +308,58 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
     }
   }
 
-  // O botao antes adicionava sempre "12:00". Quem clicava tres vezes ficava com
-  // tres publicacoes no mesmo minuto sem perceber - foi exatamente o que
-  // aconteceu com um cliente de verdade (13/09/2026), que terminou com
-  // 08:10, 12:00, 12:00, 12:00, 21:10. Agora sugere a proxima hora cheia
-  // ainda livre, dentro da janela em que faz sentido publicar.
-  function proximoHorarioLivre(usados: string[]) {
-    for (let h = 8; h <= 22; h++) {
-      const hhmm = `${String(h).padStart(2, "0")}:00`
-      if (!usados.includes(hhmm)) return hhmm
+  // O horário sugerido ao clicar em "adicionar": 8h da manhã no primeiro, e
+  // depois sempre 2h depois do último.
+  //
+  // O botão antes punha SEMPRE "12:00". Quem clicava três vezes ficava com três
+  // publicações no mesmo minuto sem perceber - foi o que aconteceu com um
+  // cliente de verdade (13/09/2026), que terminou com 08:10, 12:00, 12:00,
+  // 12:00, 21:10. Espaçar de 2 em 2 dá uma fila que já nasce distribuída pelo
+  // dia, e o cliente ajusta o que quiser depois.
+  //
+  // Repetir é impossível por construção: se o horário de 2h depois já estiver
+  // na lista (ou passar da meia-noite), cai na primeira hora cheia livre do
+  // dia. Dois horários iguais são duas publicações disputando o mesmo minuto.
+  function proximoHorarioSugerido(usados: string[]) {
+    const emMinutos = usados.map((h) => Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5)))
+    const hhmm = (minutos: number) =>
+      `${String(Math.floor(minutos / 60)).padStart(2, "0")}:${String(minutos % 60).padStart(2, "0")}`
+
+    if (emMinutos.length === 0) return "08:00"
+
+    const proximo = Math.max(...emMinutos) + 120
+    if (proximo <= 23 * 60 && !usados.includes(hhmm(proximo))) return hhmm(proximo)
+
+    // Sobrou da janela do dia (passou das 22h, ou o horário de 2h depois já
+    // estava lá): preenche os buracos do DIA primeiro, e só depois cai na
+    // madrugada. Varrer a partir da meia-noite sugeriria "00:00" para quem já
+    // tem 8h/10h/.../22h configurados - um horário que quase ninguém quer, no
+    // lugar de um 09:00 que estava livre ali no meio.
+    for (const h of [...Array(16).keys()].map((i) => i + 8).concat([...Array(8).keys()])) {
+      const candidato = `${String(h).padStart(2, "0")}:00`
+      if (!usados.includes(candidato)) return candidato
     }
-    return "12:00"
+    return "08:00"
+  }
+
+  // Trocar pra "Eu escolho os horários" começa dos horários que o Padrão já
+  // estava usando, em vez de uma lista vazia.
+  //
+  // Vazia, o servidor recusava a troca com 400 ("informe um horário") e o
+  // cliente via um erro vermelho no instante em que clicava no modo - em toda
+  // conta nova, porque o padrão de fábrica é justamente auto com a lista
+  // vazia. E começar do que já estava valendo é o que a pessoa espera: ela
+  // quer AJUSTAR o horário, não recomeçar do zero.
+  function trocarModoDeHorario(modo: "auto" | "manual") {
+    if (!settings) return
+    const horarios =
+      modo === "manual" && settings.manualTimes.length === 0 ? settings.defaultTimes : settings.manualTimes
+    save({ ...settings, mode: modo, manualTimes: horarios })
   }
 
   function addManualTime() {
     if (!settings) return
-    const novo = proximoHorarioLivre(settings.manualTimes)
+    const novo = proximoHorarioSugerido(settings.manualTimes)
     save({ ...settings, manualTimes: [...settings.manualTimes, novo].sort() })
   }
 
@@ -368,7 +404,7 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
             type="single"
             variant="outline"
             value={settings.mode}
-            onValueChange={(next) => next && save({ ...settings, mode: next as "auto" | "manual" })}
+            onValueChange={(next) => next && trocarModoDeHorario(next as "auto" | "manual")}
           >
             <ToggleGroupItem value="auto" className="text-xs">{t("pub.automatico")}</ToggleGroupItem>
             <ToggleGroupItem value="manual" className="text-xs">{t("pub.euEscolho")}</ToggleGroupItem>
