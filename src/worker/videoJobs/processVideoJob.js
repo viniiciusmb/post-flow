@@ -20,6 +20,7 @@ const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRep
 const videosRepository = require('../../repositories/videosRepository');
 const postingsRepository = require('../../repositories/postingsRepository');
 const tiktokAccountsRepository = require('../../repositories/tiktokAccountsRepository');
+const destinoDoVideoService = require('../../services/destinoDoVideoService');
 const sourceVideoTiktokTargetsRepository = require('../../repositories/sourceVideoTiktokTargetsRepository');
 const clientVideoSettingsRepository = require('../../repositories/clientVideoSettingsRepository');
 const sharedVideoAssetsRepository = require('../../repositories/sharedVideoAssetsRepository');
@@ -741,17 +742,10 @@ async function run(sourceVideoId) {
     // aconteceu com um cliente de verdade, que conectou a conta 90 segundos
     // depois de mandar cortar. E a mesma razao pela qual `settings` passou a
     // ser relido: o que vale e a escolha mais recente, nao a do inicio do job.
-    const contasDeDestino = async () => {
-      if (sourceVideo.youtube_channel_id) {
-        const channel = await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id);
-        const account = channel && channel.tiktok_account_id
-          ? await tiktokAccountsRepository.findById(channel.tiktok_account_id)
-          : null;
-        return account ? [account] : [];
-      }
-      const accountIds = await sourceVideoTiktokTargetsRepository.listBySourceVideoId(sourceVideo.id);
-      return (await Promise.all(accountIds.map((id) => tiktokAccountsRepository.findById(id)))).filter(Boolean);
-    };
+    // A regra de para onde o corte vai mora em destinoDoVideoService: os botoes
+    // "enviar pra fila" da tela de Cortes usam a MESMA, senao o botao mandaria
+    // o corte pra um perfil diferente daquele em que ele sairia sozinho.
+    const contasDeDestino = () => destinoDoVideoService.contasDoVideo(sourceVideo);
 
     // Capa do video pro estilo "thumbnail como template". Baixada UMA vez pro
     // video inteiro, nao por corte: e o mesmo arquivo pros N cortes, e baixar

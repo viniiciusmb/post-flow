@@ -522,6 +522,39 @@ async function requeueSkipped(id, tiktokAccountId) {
 
 // Resumo rapido pra caixa fechada da conta na tela (sem abrir nada) - so 3
 // contagens, sem trazer os itens em si.
+// Em que pé de publicação está cada corte de uma lista.
+//
+// A tela de Cortes precisa disto para decidir o que oferecer: corte que nunca
+// foi pra fila ganha o botão de enviar, corte que já está na fila (ou já foi
+// publicado) mostra só o estado. Sem isso o botão apareceria em cima de um
+// corte já publicado, e clicar nele não faria nada visível.
+//
+// Um corte pode ter postagem em MAIS DE UMA conta (vídeo avulso mandado pra
+// várias). Vale o estado mais adiantado: publicado > na fila > erro/cancelado.
+const ORDEM_DE_ADIANTAMENTO = ['skipped', 'error', 'pending', 'queued', 'processing', 'posted'];
+
+async function statusByClipIds(clipIds) {
+  const mapa = new Map();
+  if (!clipIds || clipIds.length === 0) return mapa;
+
+  const { rows } = await pool.query(
+    `SELECT v.clip_id, p.status
+       FROM postings p
+       JOIN videos v ON v.id = p.video_id
+      WHERE v.clip_id = ANY($1::bigint[])`,
+    [clipIds]
+  );
+
+  for (const row of rows) {
+    const chave = String(row.clip_id);
+    const atual = mapa.get(chave);
+    if (!atual || ORDEM_DE_ADIANTAMENTO.indexOf(row.status) > ORDEM_DE_ADIANTAMENTO.indexOf(atual)) {
+      mapa.set(chave, row.status);
+    }
+  }
+  return mapa;
+}
+
 async function countByStatusForAccount(tiktokAccountId) {
   const { rows } = await pool.query(
     `SELECT status, count(*)::int AS count
@@ -586,6 +619,7 @@ async function findById(id) {
 }
 
 module.exports = {
+  statusByClipIds,
   createIfNotExists,
   listForClient,
   listAllWithDetails,

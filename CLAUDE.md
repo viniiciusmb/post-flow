@@ -724,4 +724,22 @@ Independentemente de quem clicou, o buraco real era não haver caminho de volta.
 
 856 testes (eram 799 no último registro). Quatro mutações validadas: a fila por pedido removida, o aviso de pagamento ignorando a trava de repetição, o vínculo deixando de enfileirar, e o backfill do vínculo voltando a pegar o cliente inteiro.
 
+**Agendamento "Padrão" e os botões de mandar corte pra fila (2026-09-13, mesmo dia).** Três pedidos do fundador depois de olhar a conta do primeiro cliente pagante.
+
+**1. O modo automático virou "Padrão", com horários redondos.** A fórmula antiga espaçava por minuto exato dentro de uma janela de 8h–22h e produzia `08:00, 10:48, 13:36, 16:24, 19:12`. Horário quebrado parece defeito, e empurrava o cliente pro modo manual — onde o botão "adicionar horário" punha **sempre 12:00**. Foi exatamente assim que uma conta real terminou com `08:10, 12:00, 12:00, 12:00, 21:10`: três publicações disputando o mesmo minuto, sem ninguém ter escolhido isso.
+  - `horariosPadrao(n)` em `postingSchedule.js`: espalha entre **8h e 20h, sempre em hora cheia**. Com 4 por dia dá exatamente `08:00 12:00 16:00 20:00`. Um por dia sai **ao meio-dia**, não às 8h — quem posta uma vez está escolhendo o melhor horário do dia.
+  - **`projectAuto` passou a chamar `projectManual` com esses horários**, em vez de ter conta própria. É isso que garante que o horário mostrado na tela é o horário usado — o defeito de 24/08/2026, em que `scheduled_for` era calculado e ninguém lia, veio de ter duas contas para a mesma coisa.
+  - **O modo Padrão agora MOSTRA os horários** (vindos do servidor, campo `defaultTimes`). Antes não mostrava nada: o cliente não tinha como saber quando o corte sairia, e ia pro manual só para enxergar alguma coisa. Recalcular no navegador seria criar a segunda fonte de novo.
+  - O botão de adicionar horário manual sugere a **próxima hora cheia livre**, nunca um horário repetido.
+  - O rótulo virou "Padrão" só na tela; o valor gravado continua `auto` (trocar exigiria migration e mexer no CHECK, sem ganho nenhum).
+
+**2. Botões de mandar corte pra fila, na tela de Cortes.** O corte só entra em fila sozinho no instante em que termina de renderizar; quem vincula a conta depois ficava sem caminho de volta.
+  - **No vídeo**: "Enviar cortes pra fila de postagem", visível só quando **nenhum** corte daquele vídeo entrou em fila. É uma decisão sobre o vídeo inteiro, e um botão resolve.
+  - **No corte**: "Mandar pra fila de postagem", visível nos que ficaram de fora **depois que algum irmão já foi**. Aí a pergunta mudou: é sobre cada um que sobrou. Os dois são excludentes de propósito.
+  - Corte já na fila ou já publicado mostra o **estado**, não um botão que não faria nada visível. Vem de `postingsRepository.statusByClipIds`, que resolve o caso de um corte ter postagem em mais de uma conta ficando com o estado mais adiantado.
+  - **`destinoDoVideoService` passou a ser a fonte única de "pra onde vai o corte"**, usada pelo pipeline e pelos botões. Se cada um tivesse a própria regra, o botão mandaria o corte pra um perfil diferente daquele em que ele sairia sozinho — e o cliente só descobriria com o vídeo já publicado.
+  - Sem conta vinculada o pedido é **recusado com explicação** (400), em vez de responder "pronto" sem ter feito nada.
+
+871 testes (eram 856). Duas mutações validadas: o destino voltando a ser "qualquer conta do cliente", e os horários do Padrão voltando a se amontoar.
+
 Para o histórico completo de decisões e "porquês", ver a memória do projeto (arquivos em `~/.claude/projects/.../memory/`, carregados automaticamente) — especialmente `post-flow-architecture`, `post-flow-deployment`, `post-flow-project-status`, `post-flow-tiktok-oauth`, `post-flow-google-drive`, `feedback-run-migrations-immediately`.

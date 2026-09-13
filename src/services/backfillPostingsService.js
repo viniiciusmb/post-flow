@@ -20,6 +20,8 @@
 const fs = require('fs');
 const pool = require('../db/pool');
 const postingsRepository = require('../repositories/postingsRepository');
+const clipsRepository = require('../repositories/clipsRepository');
+const destinoDoVideoService = require('./destinoDoVideoService');
 const logger = require('../lib/logger');
 
 // Cortes prontos, com arquivo em disco, do cliente, que nunca viraram postagem.
@@ -251,6 +253,52 @@ async function enfileirarCortesProntos({ clientUserId, tiktokAccountId, youtubeC
   return { enfileirados, ignorados };
 }
 
+// Manda pra fila os cortes JA PRONTOS de um vídeo, por pedido explícito do
+// cliente (os botões da tela de Cortes).
+//
+// É diferente do backfill acima em uma coisa importante: aqui o cliente está
+// apontando para um vídeo, não pedindo "recolha o que sobrou". Por isso o
+// destino é a conta DAQUELE vídeo (a mesma para onde o pipeline mandaria),
+// nunca a conta que o cliente estivesse olhando.
+//
+// `clipId` restringe a um corte só - é o botão que aparece nos cortes que
+// ficaram de fora quando os irmãos já foram.
+async function enfileirarCortesDoVideo({ sourceVideo, clipId = null }) {
+  const contas = await destinoDoVideoService.contasDoVideo(sourceVideo);
+  if (contas.length === 0) return { enfileirados: 0, ignorados: 0, semConta: true };
+
+  const todos = await clipsRepository.listBySourceVideoId(sourceVideo.id);
+  const cortes = todos.filter(
+    (c) => c.status === 'ready' && c.local_clip_path && (clipId === null || Number(c.id) === Number(clipId))
+  );
+
+  let enfileirados = 0;
+  let ignorados = 0;
+  for (const clip of cortes) {
+    if (!arquivoUtilizavel(clip.local_clip_path)) {
+      ignorados++;
+      continue;
+    }
+    const videoId = await garantirVideo(clip);
+    for (const conta of contas) {
+      const criado = await postingsRepository.createIfNotExists({
+        videoId,
+        tiktokAccountId: conta.id,
+        caption: clip.description,
+      });
+      if (criado) enfileirados++;
+    }
+  }
+
+  if (ignorados > 0) {
+    logger.warn(
+      `Video ${sourceVideo.id}: ${ignorados} corte(s) marcados como prontos ficaram de fora - o arquivo nao existe mais ou esta vazio.`
+    );
+  }
+  return { enfileirados, ignorados, semConta: false };
+}
+
 module.exports = {
+  enfileirarCortesDoVideo,
   contarPendencias,
   reenfileirarCancelados, enfileirarCortesProntos, listarCortesOrfaos, listarCortesOrfaosDoCanal };

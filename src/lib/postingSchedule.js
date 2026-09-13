@@ -8,8 +8,44 @@
 // 00:00 podia sair as 23:40.
 'use strict';
 
+// Janela do modo PADRAO. Termina as 20h, nao as 22h: o corte precisa ser
+// publicado quando ainda ha gente vendo, e a diferenca entre 19:12 e 20:00 nao
+// justifica espremer mais um horario na madrugada de ninguem.
 const AUTO_WINDOW_START_HOUR = 8;
-const AUTO_WINDOW_END_HOUR = 22;
+const AUTO_WINDOW_END_HOUR = 20;
+
+// Horario unico: meio-dia, nao 8h. Quem posta uma vez por dia esta escolhendo
+// o melhor horario do dia, e 8h da manha nao e ele.
+const HORARIO_UNICO = '12:00';
+
+// Os horarios do modo PADRAO: espalhados por igual entre 8h e 20h, sempre em
+// hora cheia.
+//
+// Hora cheia e o ponto: a formula antiga espacava por minuto exato e produzia
+// "10:48, 13:36, 16:24" - horarios que ninguem escolheria e que fazem a tela
+// parecer quebrada. Isso empurrava o cliente pro modo manual, onde ele acabava
+// com tres horarios iguais (o botao de adicionar sempre punha 12:00).
+//
+// Com 4 por dia isto da exatamente 08:00, 12:00, 16:00 e 20:00.
+function horariosPadrao(videosPerDay) {
+  const n = Math.max(1, Number(videosPerDay) || 1);
+  if (n === 1) return [HORARIO_UNICO];
+
+  const primeira = AUTO_WINDOW_START_HOUR;
+  const ultima = AUTO_WINDOW_END_HOUR;
+  const horas = [];
+  for (let i = 0; i < n; i++) {
+    horas.push(Math.round(primeira + (i * (ultima - primeira)) / (n - 1)));
+  }
+  // Arredondar pode fazer dois caírem na mesma hora (acontece acima de 12 por
+  // dia, quando nao ha hora cheia suficiente na janela). Empurrar o repetido
+  // pra hora seguinte mantem a promessa de "um horario por publicacao" - dois
+  // cortes no mesmo minuto seriam duas publicacoes disputando o mesmo slot.
+  for (let i = 1; i < horas.length; i++) {
+    if (horas[i] <= horas[i - 1]) horas[i] = horas[i - 1] + 1;
+  }
+  return horas.map((h) => `${String(Math.min(h, 23)).padStart(2, '0')}:00`);
+}
 
 function nowInTimezone(timezone) {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -71,19 +107,16 @@ function projectManual({ manualTimes, videosPerDay, timezone, postedToday, count
   });
 }
 
+// O modo PADRAO e o mesmo percurso do manual, so que com horarios que o
+// sistema escolhe. Passar pela MESMA funcao (em vez de ter uma conta propria
+// aqui) e o que garante que o horario mostrado na tela e o horario usado.
 function projectAuto({ videosPerDay, timezone, postedToday, count }) {
-  const windowMinutes = (AUTO_WINDOW_END_HOUR - AUTO_WINDOW_START_HOUR) * 60;
-  const minGap = Math.max(20, Math.floor(windowMinutes / videosPerDay));
-  return nextFutureSlots({
+  return projectManual({
+    manualTimes: horariosPadrao(videosPerDay),
+    videosPerDay,
+    timezone,
+    postedToday,
     count,
-    startIndex: postedToday,
-    slotForIndex: (globalIndex) => {
-      const dayOffset = Math.floor(globalIndex / videosPerDay);
-      const slotWithinDay = globalIndex % videosPerDay;
-      const minutesFromStart = slotWithinDay * minGap;
-      const hhmm = `${String(AUTO_WINDOW_START_HOUR + Math.floor(minutesFromStart / 60)).padStart(2, '0')}:${String(minutesFromStart % 60).padStart(2, '0')}`;
-      return projectedTimestamp(hhmm, dayOffset, timezone);
-    },
   });
 }
 
@@ -97,4 +130,4 @@ function projectQueueTimes({ mode, manualTimes, videosPerDay, timezone, postedTo
   return projectAuto({ videosPerDay, timezone, postedToday, count });
 }
 
-module.exports = { projectQueueTimes };
+module.exports = { projectQueueTimes, horariosPadrao };

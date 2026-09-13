@@ -310,6 +310,7 @@ module.exports = {
     conecteDriveConfig: "Conecte o Google Drive primeiro, em Configurações.",
     configurePasta: "Configure uma pasta de destino pra esse canal primeiro (na tela Canais).",
     clienteNaoEncontrado: "Cliente não encontrado.",
+    semContaDePostagem: "Este vídeo não tem conta do TikTok pra onde enviar. Vincule uma conta ao canal (ou escolha uma no envio) antes.",
     contaNaoEncontrada: "Conta não encontrada.",
     contaTiktokInvalida: "Conta TikTok inválida.",
     contaTiktokNaoEncontrada: "Conta TikTok não encontrada.",

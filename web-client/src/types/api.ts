@@ -269,6 +269,8 @@ export interface PostingScheduleResponse {
   mode: PostingScheduleMode
   videosPerDay: number
   manualTimes: string[]
+  /** Horários do modo Padrão, calculados pelo servidor a partir de videosPerDay. */
+  defaultTimes: string[]
   timezone: string
   paused: boolean
   // retentionHours é informativo: o prazo é fixo no sistema (3 dias), o
@@ -572,6 +574,8 @@ export interface Clip {
   renderProgressPercent: number
   thumbnailUrl: string | null
   exportedToDrive: boolean
+  /** Estado na fila de postagem; null = nunca foi pra fila de conta nenhuma. */
+  postingStatus: "pending" | "queued" | "processing" | "posted" | "error" | "skipped" | null
 }
 
 export interface TunnelTestResult {

@@ -8,6 +8,7 @@ const backfillPostingsService = require('../../../services/backfillPostingsServi
 const publishOptions = require('../../../lib/publishOptions');
 const { RETENCAO_CORTE_POSTADO_HORAS } = require('../../../config/constants');
 const logger = require('../../../lib/logger');
+const { horariosPadrao } = require('../../../lib/postingSchedule');
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 // Teto de publicacoes por dia, por conta. Vale pros DOIS modos: no automatico
@@ -218,6 +219,13 @@ function scheduleToApi(settings) {
     mode: settings.mode,
     videosPerDay: settings.videos_per_day,
     manualTimes: settings.manual_times,
+    // Os horarios do modo Padrao, vindos de quem DECIDE o horario de verdade
+    // (postingSchedule). Antes o modo padrao nao mostrava horario nenhum na
+    // tela: o cliente nao tinha como saber quando o corte ia sair, e ia pro
+    // manual so pra enxergar alguma coisa. Recalcular isso no navegador seria
+    // criar uma segunda fonte pro mesmo numero - e o dia em que as duas
+    // divergissem, a tela mostraria um horario e o post sairia em outro.
+    defaultTimes: horariosPadrao(settings.videos_per_day),
     timezone: settings.timezone,
     paused: settings.paused,
     // A retencao deixou de ser configuravel (ver constants.js e migration

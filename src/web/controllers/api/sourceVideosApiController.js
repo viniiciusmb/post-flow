@@ -8,6 +8,9 @@ const sourceVideosRepository = require('../../../repositories/sourceVideosReposi
 const sourceVideoTiktokTargetsRepository = require('../../../repositories/sourceVideoTiktokTargetsRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
 const clipsRepository = require('../../../repositories/clipsRepository');
+const postingsRepository = require('../../../repositories/postingsRepository');
+const destinoDoVideoService = require('../../../services/destinoDoVideoService');
+const backfillPostingsService = require('../../../services/backfillPostingsService');
 const driveFoldersRepository = require('../../../repositories/driveFoldersRepository');
 const driveConnectionsRepository = require('../../../repositories/driveConnectionsRepository');
 const googleService = require('../../../services/googleService');
@@ -97,7 +100,16 @@ async function listClips(req, res) {
   if (!sourceVideo) return res.status(404).json({ error: res.locals.t('erros.videoNaoEncontrado') });
 
   const clips = await clipsRepository.listBySourceVideoId(sourceVideo.id);
+  // Em que pe de publicacao cada corte esta, e se existe conta pra onde
+  // mandar. E isso que decide qual botao a tela oferece: sem conta nenhuma
+  // vinculada, um botao de "enviar pra fila" so poderia dar erro.
+  const [statusPorCorte, contasDeDestino] = await Promise.all([
+    postingsRepository.statusByClipIds(clips.map((c) => c.id)),
+    destinoDoVideoService.contasDoVideo(sourceVideo),
+  ]);
+
   res.json({
+    temDestinoDePostagem: contasDeDestino.length > 0,
     clips: clips.map((c) => ({
       id: c.id,
       title: c.title,
@@ -109,8 +121,43 @@ async function listClips(req, res) {
       renderProgressPercent: c.render_progress_percent,
       thumbnailUrl: c.thumbnail_path ? `/api/client/source-videos/clips/${c.id}/thumbnail` : null,
       exportedToDrive: Boolean(c.exported_to_drive_at),
+      // null = nunca foi pra fila de conta nenhuma.
+      postingStatus: statusPorCorte.get(String(c.id)) || null,
     })),
   });
+}
+
+// "Enviar cortes pra fila": manda os cortes ja prontos deste video pra fila da
+// conta do TikTok dele.
+//
+// Existe porque o corte so entra em fila sozinho no instante em que termina de
+// renderizar. Quem conecta (ou vincula) a conta depois disso ficava com os
+// cortes prontos e invisiveis, sem nada na tela explicando - foi o que
+// aconteceu com o primeiro cliente pagante, em 13/09/2026.
+async function enqueueClips(req, res) {
+  const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(Number(req.params.id), req.session.user.id);
+  if (!sourceVideo) return res.status(404).json({ error: res.locals.t('erros.videoNaoEncontrado') });
+
+  const r = await backfillPostingsService.enfileirarCortesDoVideo({ sourceVideo });
+  if (r.semConta) return res.status(400).json({ error: res.locals.t('erros.semContaDePostagem') });
+  res.json({ enfileirados: r.enfileirados, ignorados: r.ignorados });
+}
+
+// O mesmo, para UM corte - o botao que aparece nos cortes que ficaram de fora
+// quando os irmaos deles ja foram pra fila.
+async function enqueueClip(req, res) {
+  const clip = await clipsRepository.findByIdOwnedByClient(Number(req.params.id), req.session.user.id);
+  if (!clip) return res.status(404).json({ error: res.locals.t('erros.corteNaoPronto') });
+
+  const sourceVideo = await sourceVideosRepository.findByIdOwnedByClient(
+    Number(clip.source_video_id),
+    req.session.user.id
+  );
+  if (!sourceVideo) return res.status(404).json({ error: res.locals.t('erros.videoNaoEncontrado') });
+
+  const r = await backfillPostingsService.enfileirarCortesDoVideo({ sourceVideo, clipId: clip.id });
+  if (r.semConta) return res.status(400).json({ error: res.locals.t('erros.semContaDePostagem') });
+  res.json({ enfileirados: r.enfileirados, ignorados: r.ignorados });
 }
 
 // Serve o arquivo do corte pronto pra preview (<video>) ou download - o
@@ -676,6 +723,8 @@ async function bulkRemove(req, res) {
 }
 
 module.exports = {
+  enqueueClips,
+  enqueueClip,
   previewManual,
   enqueue,
   list,

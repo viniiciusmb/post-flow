@@ -15,6 +15,7 @@ import {
   IconUpload,
   IconBrandGoogleDrive,
   IconBrandTiktok,
+  IconSend,
 } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
@@ -95,15 +96,36 @@ function formatDuration(seconds: number | null) {
 function ClipCard({
   clip,
   channel,
+  mostrarFila,
   onExported,
+  onEnqueued,
   onFolderSet,
 }: {
   clip: Clip
   channel: YoutubeChannel | null
+  /** Só quando há conta pra onde mandar E algum irmão já foi pra fila. */
+  mostrarFila: boolean
   onExported: () => void
+  onEnqueued: () => void
   onFolderSet: () => void
 }) {
   const t = useT()
+  const [enqueuing, setEnqueuing] = useState(false)
+  const [enqueueError, setEnqueueError] = useState<string | null>(null)
+
+  async function handleEnqueue() {
+    setEnqueuing(true)
+    setEnqueueError(null)
+    try {
+      await api.post(`/api/client/source-videos/clips/${clip.id}/enqueue`, {})
+      onEnqueued()
+    } catch (err) {
+      setEnqueueError(err instanceof ApiError ? err.message : t("cortes.falhaEnviarFila"))
+    } finally {
+      setEnqueuing(false)
+    }
+  }
+
   const [playing, setPlaying] = useState(false)
   const [showPasteFolder, setShowPasteFolder] = useState(false)
   const [autoMode, setAutoMode] = useState(false)
@@ -194,6 +216,36 @@ function ClipCard({
           )}
         </div>
 
+        {/* Fila de postagem. Corte que já está na fila (ou já saiu) mostra só o
+            estado; corte que ficou de fora ganha o botão - é o caso de quem
+            tem irmãos já publicados e este não. */}
+        {clip.status === "ready" && mostrarFila && (
+          <div className="mt-2 border-t border-border pt-2">
+            {clip.postingStatus === "posted" ? (
+              <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <IconSend className="size-3" />
+                {t("cortes.jaPostado")}
+              </p>
+            ) : clip.postingStatus ? (
+              <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <IconSend className="size-3" />
+                {t("cortes.jaNaFila")}
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={handleEnqueue}
+                disabled={enqueuing}
+                className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline disabled:opacity-50"
+              >
+                <IconSend className="size-3" />
+                {enqueuing ? t("cortes.enviandoParaFila") : t("cortes.mandarParaFila")}
+              </button>
+            )}
+            {enqueueError && <p className="mt-1 text-[11px] text-destructive">{enqueueError}</p>}
+          </div>
+        )}
+
         {clip.status === "ready" && channel && (
           <div className="mt-2 border-t border-border pt-2">
             {clip.exportedToDrive ? (
@@ -239,6 +291,48 @@ function ClipCard({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// "Enviar cortes pra fila de postagem", no nível do vídeo.
+//
+// Aparece só quando NENHUM corte deste vídeo entrou em fila nenhuma - é o
+// estado de quem vinculou a conta do TikTok depois de os cortes ficarem
+// prontos, e que antes não tinha caminho de volta: a fila mostrava zero, os
+// cortes estavam prontos, e nada na tela ligava as duas coisas.
+function EnqueueAllClipsButton({ videoId, onEnqueued }: { videoId: number; onEnqueued: () => void }) {
+  const t = useT()
+  const [sending, setSending] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleClick() {
+    setSending(true)
+    setError(null)
+    setResult(null)
+    try {
+      const data = await api.post<{ enfileirados: number; ignorados: number }>(
+        `/api/client/source-videos/${videoId}/enqueue-clips`,
+        {},
+      )
+      setResult(t("cortes.enviadosParaFila", { n: String(data.enfileirados) }))
+      onEnqueued()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("cortes.falhaEnviarFila"))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button type="button" variant="outline" size="sm" onClick={handleClick} disabled={sending} className="gap-1.5">
+        <IconSend className="size-3.5" />
+        {sending ? t("cortes.enviandoParaFila") : t("cortes.enviarParaFila")}
+      </Button>
+      {result && <span className="text-xs text-muted-foreground">{result}</span>}
+      {error && <span className="text-xs text-destructive">{error}</span>}
     </div>
   )
 }
@@ -290,10 +384,17 @@ function ExportAllToDriveButton({ videoId, onExported }: { videoId: number; onEx
 // precisar reabrir o card.
 function useClipsPolling(videoId: number, open: boolean, videoStatus: SourceVideoStatus) {
   const [clips, setClips] = useState<Clip[] | null>(null)
+  // Sem conta vinculada não adianta oferecer "enviar pra fila": o botão só
+  // poderia dar erro. Quem sabe disso é o servidor (a conta vem do canal, ou
+  // da escolha feita no envio), então ele responde junto com os cortes.
+  const [temDestino, setTemDestino] = useState(false)
 
   async function load() {
-    const data = await api.get<{ clips: Clip[] }>(`/api/client/source-videos/${videoId}/clips`)
+    const data = await api.get<{ clips: Clip[]; temDestinoDePostagem: boolean }>(
+      `/api/client/source-videos/${videoId}/clips`,
+    )
     setClips(data.clips)
+    setTemDestino(data.temDestinoDePostagem)
   }
 
   useEffect(() => {
@@ -305,7 +406,7 @@ function useClipsPolling(videoId: number, open: boolean, videoStatus: SourceVide
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, videoStatus])
 
-  return { clips, reload: load }
+  return { clips, temDestino, reload: load }
 }
 
 // O selo "Somente membros" do YouTube: estrela dentro de um círculo, em verde.
@@ -358,7 +459,7 @@ function VideoRow({
   const [pauseRequested, setPauseRequested] = useState(false)
   const [resumeRequested, setResumeRequested] = useState(false)
   const [enqueueing, setEnqueueing] = useState(false)
-  const { clips, reload: reloadClips } = useClipsPolling(video.id, open, video.status)
+  const { clips, temDestino, reload: reloadClips } = useClipsPolling(video.id, open, video.status)
 
   const isActive = ACTIVE_STATUSES.includes(video.status)
   const isPaused = video.status === "paused"
@@ -606,6 +707,16 @@ function VideoRow({
             <p className="text-sm text-muted-foreground">{t("cortes.nenhumCorteGerado")}</p>
           ) : (
             <>
+              {/* Os dois botões são excludentes de propósito. Enquanto NENHUM
+                  corte foi pra fila, a decisão é sobre o vídeo inteiro e um
+                  botão só resolve. Assim que algum foi, a pergunta muda: é
+                  sobre os que ficaram de fora, um a um - e aí o botão vai no
+                  cartão de cada um deles. */}
+              {temDestino && clips.some((c) => c.status === "ready") && !clips.some((c) => c.postingStatus) && (
+                <div className="mb-3">
+                  <EnqueueAllClipsButton videoId={video.id} onEnqueued={reloadClips} />
+                </div>
+              )}
               {channel?.exportFolder && clips.some((c) => c.status === "ready" && !c.exportedToDrive) && (
                 <div className="mb-3">
                   <ExportAllToDriveButton videoId={video.id} onExported={reloadClips} />
@@ -617,7 +728,9 @@ function VideoRow({
                     key={clip.id}
                     clip={clip}
                     channel={channel}
+                    mostrarFila={temDestino && clips.some((c) => c.postingStatus !== null)}
                     onExported={reloadClips}
+                    onEnqueued={reloadClips}
                     onFolderSet={() => {
                       reloadClips()
                       onChanged()

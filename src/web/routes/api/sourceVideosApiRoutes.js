@@ -51,5 +51,9 @@ router.get('/clips/:id/download', asyncHandler(controller.downloadClip));
 router.get('/clips/:id/thumbnail', asyncHandler(controller.clipThumbnail));
 router.post('/clips/:id/export-to-drive', asyncHandler(controller.exportClipToDrive));
 router.post('/:id/export-all-to-drive', asyncHandler(controller.exportAllClipsToDrive));
+// Cortes prontos que ainda nao entraram na fila de postagem - o video inteiro,
+// ou um corte so. Ver enqueueClips/enqueueClip.
+router.post('/:id/enqueue-clips', asyncHandler(controller.enqueueClips));
+router.post('/clips/:id/enqueue', asyncHandler(controller.enqueueClip));
 
 module.exports = router;

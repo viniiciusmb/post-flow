@@ -308,9 +308,23 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
     }
   }
 
+  // O botao antes adicionava sempre "12:00". Quem clicava tres vezes ficava com
+  // tres publicacoes no mesmo minuto sem perceber - foi exatamente o que
+  // aconteceu com um cliente de verdade (13/09/2026), que terminou com
+  // 08:10, 12:00, 12:00, 12:00, 21:10. Agora sugere a proxima hora cheia
+  // ainda livre, dentro da janela em que faz sentido publicar.
+  function proximoHorarioLivre(usados: string[]) {
+    for (let h = 8; h <= 22; h++) {
+      const hhmm = `${String(h).padStart(2, "0")}:00`
+      if (!usados.includes(hhmm)) return hhmm
+    }
+    return "12:00"
+  }
+
   function addManualTime() {
     if (!settings) return
-    save({ ...settings, manualTimes: [...settings.manualTimes, "12:00"].sort() })
+    const novo = proximoHorarioLivre(settings.manualTimes)
+    save({ ...settings, manualTimes: [...settings.manualTimes, novo].sort() })
   }
 
   function removeManualTime(index: number) {
@@ -376,6 +390,27 @@ function ScheduleCard({ accountId, publishMode }: { accountId: number; publishMo
             }}
           />
         </Field>
+
+        {settings.mode === "auto" && (
+          <Field>
+            {/* Antes o modo Padrao nao mostrava horario nenhum: o cliente nao
+                tinha como saber quando o corte sairia, e trocava pro manual so
+                pra enxergar alguma coisa. Os horarios vem do servidor, de quem
+                decide o horario de verdade. */}
+            <FieldLabel>{t("pub.horariosDoPadrao")}</FieldLabel>
+            <div className="flex flex-wrap gap-1.5">
+              {settings.defaultTimes.map((hora) => (
+                <span
+                  key={hora}
+                  className="rounded-md border border-border bg-muted/50 px-2 py-1 font-mono text-xs tabular-nums"
+                >
+                  {hora}
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">{t("pub.horariosDoPadraoAjuda")}</p>
+          </Field>
+        )}
 
         {settings.mode === "manual" && (
           <Field>
