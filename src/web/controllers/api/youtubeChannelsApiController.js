@@ -6,6 +6,7 @@ const youtubeChannelService = require('../../../services/youtubeChannelService')
 const driveConnectionsRepository = require('../../../repositories/driveConnectionsRepository');
 const driveFoldersRepository = require('../../../repositories/driveFoldersRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
+const backfillPostingsService = require('../../../services/backfillPostingsService');
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
 const planLimitsService = require('../../../services/planLimitsService');
 const ytDlpService = require('../../../services/ytDlpService');
@@ -352,7 +353,31 @@ async function setTiktokAccount(req, res) {
   }
 
   const updated = await youtubeChannelsRepository.setTiktokAccount(channel.id, req.session.user.id, account.id);
-  res.json({ tiktokAccountId: updated.tiktok_account_id, tiktokAccountName: account.display_name || account.tiktok_open_id });
+
+  // Cortes deste canal que ficaram prontos ANTES do vínculo existir entram na
+  // fila agora.
+  //
+  // Sem isto eles ficavam invisíveis para sempre: o pipeline só cria a postagem
+  // no instante em que o corte termina de renderizar, e naquele momento o canal
+  // não tinha conta nenhuma. É a ordem natural de quem está começando - cadastra
+  // o canal, manda cortar, conecta o TikTok e vincula depois -, e aconteceu com
+  // um cliente de verdade: 7 cortes prontos, "0 na fila", e nenhuma explicação
+  // na tela. O backfill que já existia só rodava ao CONECTAR a conta, e naquele
+  // instante os cortes ainda estavam renderizando.
+  //
+  // Escopo é o CANAL, nunca o cliente inteiro: os cortes dos outros canais dele
+  // pertencem às contas deles, e publicá-los no perfil errado não tem desfazer.
+  const backfill = await backfillPostingsService.enfileirarCortesProntos({
+    clientUserId: req.session.user.id,
+    tiktokAccountId: account.id,
+    youtubeChannelId: channel.id,
+  });
+
+  res.json({
+    tiktokAccountId: updated.tiktok_account_id,
+    tiktokAccountName: account.display_name || account.tiktok_open_id,
+    enfileirados: backfill.enfileirados,
+  });
 }
 
 async function setActive(req, res) {

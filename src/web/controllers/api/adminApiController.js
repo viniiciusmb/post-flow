@@ -11,6 +11,8 @@ const tiktokCapacityService = require('../../../services/tiktokCapacityService')
 const { resolveRange } = require('../../../lib/dateRanges');
 const settingsRepository = require('../../../repositories/settingsRepository');
 const videoCostsRepository = require('../../../repositories/videoCostsRepository');
+const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
+const backfillPostingsService = require('../../../services/backfillPostingsService');
 
 async function dashboard(req, res) {
   const { range, since, until } = resolveRange(req.query.range);
@@ -160,6 +162,81 @@ async function clients(req, res) {
   });
 }
 
+// O que o cliente tem conectado: canais que ele acompanha e contas do TikTok
+// que ele vinculou.
+//
+// A lista de clientes mostra só CONTAGENS ("3 canais", "3 contas"), e contagem
+// não responde a pergunta que aparece quando um cliente escreve dizendo que
+// algo não funciona - QUAIS canais, ligados a QUAL conta, e se a fila daquela
+// conta está andando. Sem isto a única forma de descobrir era abrir o banco.
+//
+// Traz junto os "cortes prontos fora da fila" de cada conta (o mesmo número
+// que o cliente vê no cartão dela): é o estado que faz o cliente dizer "gerou
+// os cortes e não postou nada", e ele não aparece em nenhuma contagem.
+async function clientConnections(req, res) {
+  const clientUserId = Number(req.params.id);
+  if (!Number.isInteger(clientUserId) || clientUserId <= 0) {
+    return res.status(400).json({ error: res.locals.t('erros.valorInvalido') });
+  }
+
+  const cliente = await usersRepository.findById(clientUserId);
+  if (!cliente || cliente.role !== ROLES.CLIENT) {
+    return res.status(404).json({ error: res.locals.t('erros.clienteNaoEncontrado') });
+  }
+
+  const [canais, contas] = await Promise.all([
+    youtubeChannelsRepository.listByClientId(clientUserId),
+    tiktokAccountsRepository.listActiveByClientId(clientUserId),
+  ]);
+
+  // O canal guarda só o id da conta vinculada. Sem o nome aqui, a tela
+  // mostraria "conta 33", que não diz nada a quem está investigando.
+  const nomePorConta = new Map(contas.map((c) => [String(c.id), c.display_name || c.tiktok_open_id]));
+
+  const contasComFila = await Promise.all(
+    contas.map(async (conta) => {
+      const [contagens, foraDaFila] = await Promise.all([
+        postingsRepository.countByStatusForAccount(conta.id),
+        backfillPostingsService.contarPendencias({ clientUserId, tiktokAccountId: conta.id }),
+      ]);
+      return {
+        id: conta.id,
+        displayName: conta.display_name || conta.tiktok_open_id,
+        autoPostEnabled: conta.auto_post_enabled,
+        followerCount: conta.follower_count,
+        createdAt: conta.created_at,
+        pendingCount: contagens.pending,
+        postedCount: contagens.posted,
+        errorCount: contagens.error,
+        readyOutOfQueueCount: foraDaFila.prontosForaDaFila,
+        cancelledCount: foraDaFila.cancelados,
+        // Canais que publicam nesta conta - o vínculo lido do outro lado, que
+        // é como a pergunta costuma chegar ("essa conta posta o quê?").
+        channelNames: canais.filter((c) => String(c.tiktok_account_id) === String(conta.id)).map((c) => c.channel_name),
+      };
+    })
+  );
+
+  res.json({
+    clientId: clientUserId,
+    channels: canais.map((c) => ({
+      id: c.id,
+      name: c.channel_name,
+      url: c.channel_url,
+      avatarUrl: c.avatar_url,
+      isActive: c.is_active,
+      tiktokAccountId: c.tiktok_account_id,
+      tiktokAccountName: c.tiktok_account_id ? nomePorConta.get(String(c.tiktok_account_id)) || null : null,
+      lastCheckAt: c.last_check_at,
+      lastCheckOk: c.last_check_ok,
+      lastCheckError: c.last_check_error,
+      maxVideoMinutes: c.max_video_minutes,
+      createdAt: c.created_at,
+    })),
+    tiktokAccounts: contasComFila,
+  });
+}
+
 // O fundador informa o teto que o TikTok concedeu na auditoria. Sem isso o
 // sistema trabalha com um chute conservador, que erra nos dois sentidos:
 // avisa cedo demais (irrita) ou tarde demais (deixa cliente sem publicar).
@@ -177,5 +254,6 @@ async function snoozeTiktokLimit(req, res) {
 }
 
 module.exports = {
+  clientConnections,
   setTiktokLimit,
   snoozeTiktokLimit, dashboard, postings, clients };

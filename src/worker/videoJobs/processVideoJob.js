@@ -732,15 +732,26 @@ async function run(sourceVideoId) {
     // Canal do YouTube posta numa unica conta (a vinculada a ele); video
     // avulso (upload/link colado) pode ir pra varias, escolhidas pelo
     // cliente no momento do envio (source_video_tiktok_targets).
-    let tiktokAccounts;
-    if (sourceVideo.youtube_channel_id) {
-      const channel = await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id);
-      const account = channel.tiktok_account_id ? await tiktokAccountsRepository.findById(channel.tiktok_account_id) : null;
-      tiktokAccounts = account ? [account] : [];
-    } else {
+    //
+    // Lido a CADA corte, nao uma vez so antes do laco: renderizar um video
+    // inteiro leva de minutos a dezenas de minutos, e o cliente que conecta a
+    // conta (ou vincula ela ao canal) nesse meio tempo estaria decidindo sobre
+    // cortes que ainda nem existem. Com a leitura antiga, feita uma vez antes,
+    // a lista ficava vazia pra sempre e os cortes nasciam sem fila nenhuma -
+    // aconteceu com um cliente de verdade, que conectou a conta 90 segundos
+    // depois de mandar cortar. E a mesma razao pela qual `settings` passou a
+    // ser relido: o que vale e a escolha mais recente, nao a do inicio do job.
+    const contasDeDestino = async () => {
+      if (sourceVideo.youtube_channel_id) {
+        const channel = await youtubeChannelsRepository.findById(sourceVideo.youtube_channel_id);
+        const account = channel && channel.tiktok_account_id
+          ? await tiktokAccountsRepository.findById(channel.tiktok_account_id)
+          : null;
+        return account ? [account] : [];
+      }
       const accountIds = await sourceVideoTiktokTargetsRepository.listBySourceVideoId(sourceVideo.id);
-      tiktokAccounts = (await Promise.all(accountIds.map((id) => tiktokAccountsRepository.findById(id)))).filter(Boolean);
-    }
+      return (await Promise.all(accountIds.map((id) => tiktokAccountsRepository.findById(id)))).filter(Boolean);
+    };
 
     // Capa do video pro estilo "thumbnail como template". Baixada UMA vez pro
     // video inteiro, nao por corte: e o mesmo arquivo pros N cortes, e baixar
@@ -792,6 +803,7 @@ async function run(sourceVideoId) {
         // "video" postavel. Com 1+ contas vinculadas, sempre vira video -
         // mas so entra na fila de postagem de cada conta que tiver "postar
         // automaticamente" ligado (auto_post_enabled, desligado por padrao).
+        const tiktokAccounts = await contasDeDestino();
         if (tiktokAccounts.length > 0) {
           const video = await videosRepository.createFromClip({
             clipId: clip.id,

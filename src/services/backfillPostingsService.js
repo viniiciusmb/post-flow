@@ -34,7 +34,51 @@ const logger = require('../lib/logger');
 //
 // Exige local_clip_path porque enfileirar um corte cujo arquivo a retenção já
 // apagou só encheria a fila de postagem que vai falhar.
-async function listarCortesOrfaos(clientUserId) {
+async function listarCortesOrfaos(clientUserId, tiktokAccountId) {
+  const { rows } = await pool.query(
+    `SELECT c.id, c.title, c.description, c.local_clip_path
+       FROM clips c
+       JOIN source_videos sv ON sv.id = c.source_video_id
+       LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+       LEFT JOIN videos v ON v.clip_id = c.id
+      WHERE c.status = 'ready'
+        AND c.local_clip_path IS NOT NULL
+        AND sv.owner_client_user_id = $1
+        AND NOT EXISTS (SELECT 1 FROM postings p WHERE p.video_id = v.id)
+        -- O corte só é oferecido à conta A QUE ELE PERTENCE.
+        --
+        -- Sem isto, um cliente com mais de uma conta via o MESMO número de
+        -- "cortes prontos fora da fila" em todos os cartões, e clicar no
+        -- cartão errado publicava no perfil errado - o que não tem desfazer,
+        -- o vídeo já saiu. Visto na tela durante a verificação de 13/09/2026,
+        -- num cliente com 3 contas.
+        --
+        -- Vídeo de canal pertence à conta vinculada ao canal; vídeo avulso, às
+        -- contas escolhidas no envio. Quando não há vínculo nem escolha, o
+        -- corte não pertence a ninguém ainda e continua sendo oferecido a
+        -- qualquer conta - é o caso de quem cortou antes de conectar o TikTok,
+        -- que é justamente o que este serviço existe para resolver.
+        AND (
+          CASE WHEN sv.youtube_channel_id IS NOT NULL
+            THEN yc.tiktok_account_id IS NULL OR yc.tiktok_account_id = $2
+            ELSE NOT EXISTS (SELECT 1 FROM source_video_tiktok_targets t WHERE t.source_video_id = sv.id)
+                 OR EXISTS (SELECT 1 FROM source_video_tiktok_targets t
+                             WHERE t.source_video_id = sv.id AND t.tiktok_account_id = $2)
+          END
+        )
+      ORDER BY c.id ASC`,
+    [clientUserId, tiktokAccountId]
+  );
+  return rows;
+}
+
+// Os mesmos órfãos, mas só os de UM canal.
+//
+// Existe separado de propósito. Vincular um canal a uma conta não pode arrastar
+// para ela os cortes prontos de OUTRO canal do mesmo cliente - esses pertencem
+// à conta do canal deles, e publicá-los no perfil errado é estrago que não tem
+// desfazer (o vídeo já saiu). Por isso aqui o filtro é o canal, e não o dono.
+async function listarCortesOrfaosDoCanal(youtubeChannelId) {
   const { rows } = await pool.query(
     `SELECT c.id, c.title, c.description, c.local_clip_path
        FROM clips c
@@ -42,10 +86,10 @@ async function listarCortesOrfaos(clientUserId) {
        LEFT JOIN videos v ON v.clip_id = c.id
       WHERE c.status = 'ready'
         AND c.local_clip_path IS NOT NULL
-        AND sv.owner_client_user_id = $1
+        AND sv.youtube_channel_id = $1
         AND NOT EXISTS (SELECT 1 FROM postings p WHERE p.video_id = v.id)
       ORDER BY c.id ASC`,
-    [clientUserId]
+    [youtubeChannelId]
   );
   return rows;
 }
@@ -99,7 +143,7 @@ function arquivoUtilizavel(caminho) {
 // duas coisas de volta no mesmo clique desfaria um cancelamento deliberado sem
 // ele ter pedido.
 async function contarPendencias({ clientUserId, tiktokAccountId }) {
-  const orfaos = await listarCortesOrfaos(clientUserId);
+  const orfaos = await listarCortesOrfaos(clientUserId, tiktokAccountId);
   const utilizaveis = orfaos.filter((c) => arquivoUtilizavel(c.local_clip_path));
 
   const { rows } = await pool.query(
@@ -161,11 +205,16 @@ async function reenfileirarCancelados({ tiktokAccountId }) {
   return { devolvidos, ignorados };
 }
 
-async function enfileirarCortesProntos({ clientUserId, tiktokAccountId }) {
+async function enfileirarCortesProntos({ clientUserId, tiktokAccountId, youtubeChannelId = null }) {
   let enfileirados = 0;
   let ignorados = 0;
   try {
-    const cortes = await listarCortesOrfaos(clientUserId);
+    // Com canal, só os cortes DELE (o caminho de "vinculei este canal a esta
+    // conta"). Sem canal, tudo o que o cliente tem solto - o caminho de
+    // "conectei uma conta" e o do botão "Colocar na fila".
+    const cortes = youtubeChannelId
+      ? await listarCortesOrfaosDoCanal(youtubeChannelId)
+      : await listarCortesOrfaos(clientUserId, tiktokAccountId);
     for (const clip of cortes) {
       if (!arquivoUtilizavel(clip.local_clip_path)) {
         ignorados++;
@@ -204,4 +253,4 @@ async function enfileirarCortesProntos({ clientUserId, tiktokAccountId }) {
 
 module.exports = {
   contarPendencias,
-  reenfileirarCancelados, enfileirarCortesProntos, listarCortesOrfaos };
+  reenfileirarCancelados, enfileirarCortesProntos, listarCortesOrfaos, listarCortesOrfaosDoCanal };

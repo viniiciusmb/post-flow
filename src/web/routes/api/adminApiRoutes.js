@@ -19,6 +19,8 @@ router.use(requireAuthApi, requireRoleApi(ROLES.ADMIN));
 
 router.get('/dashboard', asyncHandler(adminApiController.dashboard));
 router.get('/clients', asyncHandler(adminApiController.clients));
+// Canais do YouTube e contas do TikTok de UM cliente - ver clientConnections.
+router.get('/clients/:id/connections', asyncHandler(adminApiController.clientConnections));
 // Teto de criadores ativos do app no TikTok - ver tiktokCapacityService.
 router.post('/tiktok-limit', asyncHandler(adminApiController.setTiktokLimit));
 router.post('/tiktok-limit/snooze', asyncHandler(adminApiController.snoozeTiktokLimit));

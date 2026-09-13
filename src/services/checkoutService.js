@@ -33,6 +33,7 @@ const subscriptionPlansRepository = require('../repositories/subscriptionPlansRe
 const usersRepository = require('../repositories/usersRepository');
 const creditsUnlockService = require('./creditsUnlockService');
 const affiliateService = require('./affiliateService');
+const utmifyService = require('./utmifyService');
 const cpfCnpj = require('../lib/cpfCnpj');
 const precosDasConexoes = require('../lib/precoDasConexoesExtras');
 const { aplicaPromocao } = require('../lib/promocaoDePrimeiroMes');
@@ -314,7 +315,7 @@ async function assinarComCartaoSalvo({ clientUserId, plan, remoteIp }) {
     throw err;
   }
 
-  await asaasPaymentsRepository.create({
+  const registroDaVenda = await asaasPaymentsRepository.create({
     asaasPaymentId: cobranca.id,
     clientUserId,
     purpose: 'subscription',
@@ -324,6 +325,9 @@ async function assinarComCartaoSalvo({ clientUserId, plan, remoteIp }) {
     cardBrand: subscription.asaas_card_brand,
     cardLast4: subscription.asaas_card_last4,
   });
+  // Venda nasce pendente no painel da Utmify. No cartao ela vira "paga"
+  // segundos depois; no PIX fica aqui ate o cliente pagar no banco.
+  utmifyService.vendaPendente(registroDaVenda, { remoteIp });
 
   await clientSubscriptionsRepository.setAsaasSubscription(clientUserId, {
     customerId,
@@ -361,6 +365,11 @@ async function cancelarAssinaturaAnterior(clientUserId, subscription) {
 async function ativarAssinaturaPaga({ clientUserId, plan, asaasPaymentId, amountCents }) {
   const marcado = await asaasPaymentsRepository.markPaidOnce(asaasPaymentId);
   if (!marcado) return false;
+
+  // Venda aprovada no painel da Utmify. Vem logo depois do markPaidOnce, que
+  // so deixa passar a PRIMEIRA confirmacao - entao o aviso repetido do Asaas
+  // (caminho sincrono + webhook) nunca vira duas vendas la.
+  utmifyService.vendaPaga(marcado);
 
   const antes = await clientSubscriptionsRepository.getOrCreate(clientUserId);
   const primeiraAtivacao = antes.status === 'sem_plano' || !antes.plan_id;
@@ -435,7 +444,7 @@ async function comprarCreditoComCartao({ clientUserId, minutes, bucket, priceCen
     throw err;
   }
 
-  await asaasPaymentsRepository.create({
+  const registroDaVenda = await asaasPaymentsRepository.create({
     asaasPaymentId: cobranca.id,
     clientUserId,
     purpose: 'credit_package',
@@ -445,6 +454,9 @@ async function comprarCreditoComCartao({ clientUserId, minutes, bucket, priceCen
     cardBrand: subscription.asaas_card_brand,
     cardLast4: subscription.asaas_card_last4,
   });
+  // Venda nasce pendente no painel da Utmify. No cartao ela vira "paga"
+  // segundos depois; no PIX fica aqui ate o cliente pagar no banco.
+  utmifyService.vendaPendente(registroDaVenda, { remoteIp });
 
   if (!pagamentoAprovado(cobranca)) return { pago: false, status: cobranca.status, paymentId: cobranca.id };
 
@@ -488,7 +500,7 @@ async function comprarCreditoComPix({ clientUserId, minutes, bucket, priceCents,
     throw err;
   }
 
-  await asaasPaymentsRepository.create({
+  const registroDaVenda = await asaasPaymentsRepository.create({
     asaasPaymentId: cobranca.id,
     clientUserId,
     purpose: 'credit_package',
@@ -496,6 +508,9 @@ async function comprarCreditoComPix({ clientUserId, minutes, bucket, priceCents,
     amountCents: priceCents,
     creditPurchaseId: compra.id,
   });
+  // Venda nasce pendente no painel da Utmify. No cartao ela vira "paga"
+  // segundos depois; no PIX fica aqui ate o cliente pagar no banco.
+  utmifyService.vendaPendente(registroDaVenda);
 
   const qr = await asaasService.getPixQrCode(cobranca.id);
   return {
@@ -512,6 +527,11 @@ async function comprarCreditoComPix({ clientUserId, minutes, bucket, priceCents,
 async function liberarCreditoPago({ asaasPaymentId, clientUserId, creditPurchaseId }) {
   const marcado = await asaasPaymentsRepository.markPaidOnce(asaasPaymentId);
   if (!marcado) return false;
+
+  // Venda aprovada no painel da Utmify. Vem logo depois do markPaidOnce, que
+  // so deixa passar a PRIMEIRA confirmacao - entao o aviso repetido do Asaas
+  // (caminho sincrono + webhook) nunca vira duas vendas la.
+  utmifyService.vendaPaga(marcado);
 
   const compra = await creditPurchasesRepository.markPaidById(Number(creditPurchaseId), asaasPaymentId);
   if (!compra) {
@@ -577,7 +597,7 @@ async function comprarExtras({ clientUserId, canais = 0, contas = 0, remoteIp })
     remoteIp,
   });
 
-  await asaasPaymentsRepository.create({
+  const registroDaVenda = await asaasPaymentsRepository.create({
     asaasPaymentId: cobranca.id,
     clientUserId,
     purpose: 'extra_slots',
@@ -589,6 +609,9 @@ async function comprarExtras({ clientUserId, canais = 0, contas = 0, remoteIp })
     cardBrand: subscription.asaas_card_brand,
     cardLast4: subscription.asaas_card_last4,
   });
+  // Venda nasce pendente no painel da Utmify. No cartao ela vira "paga"
+  // segundos depois; no PIX fica aqui ate o cliente pagar no banco.
+  utmifyService.vendaPendente(registroDaVenda, { remoteIp });
 
   if (!pagamentoAprovado(cobranca)) return { pago: false, status: cobranca.status, paymentId: cobranca.id };
 
@@ -614,6 +637,11 @@ function descricaoDosExtras({ canais, contas }) {
 async function liberarExtrasPagos({ asaasPaymentId, clientUserId, pedido }) {
   const marcado = await asaasPaymentsRepository.markPaidOnce(asaasPaymentId);
   if (!marcado) return null;
+
+  // Venda aprovada no painel da Utmify. Vem logo depois do markPaidOnce, que
+  // so deixa passar a PRIMEIRA confirmacao - entao o aviso repetido do Asaas
+  // (caminho sincrono + webhook) nunca vira duas vendas la.
+  utmifyService.vendaPaga(marcado);
 
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
   const canais = Number(subscription.extra_channels) + Number(pedido.canais);
@@ -790,9 +818,18 @@ async function aplicarPagamentoConfirmado(registro) {
 //
 // markRefundedOnce é o que torna tudo idempotente: só a primeira passagem por
 // um pagamento que estava PAGO faz efeito.
+// Os motivos que a Utmify conta como CONTESTACAO (chargedback), nao como
+// estorno comum. Sao os textos que o webhook passa - ver handlePaymentRefunded
+// no asaasWebhookApiController e o caminho de disputa da Stripe.
+const MOTIVOS_DE_CONTESTACAO = ['contestacao no cartao', 'chargeback'];
+
 async function aplicarEstorno(registro, motivo) {
   const marcado = await asaasPaymentsRepository.markRefundedOnce(registro.asaas_payment_id);
   if (!marcado) return false;
+
+  // Contestacao de cartao e estorno comum sao linhas diferentes no painel:
+  // uma e disputa, a outra e devolucao combinada.
+  utmifyService.vendaEstornada(marcado, { chargeback: MOTIVOS_DE_CONTESTACAO.includes(motivo) });
 
   const clientUserId = Number(registro.client_user_id);
 

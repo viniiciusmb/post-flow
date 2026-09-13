@@ -300,6 +300,7 @@ module.exports = {
     conecteDrive: "Connect Google Drive first.",
     conecteDriveConfig: "Connect Google Drive first, in Settings.",
     configurePasta: "Set a destination folder for this channel first (on the Channels screen).",
+    clienteNaoEncontrado: "Client not found.",
     contaNaoEncontrada: "Account not found.",
     contaTiktokInvalida: "Invalid TikTok account.",
     contaTiktokNaoEncontrada: "TikTok account not found.",

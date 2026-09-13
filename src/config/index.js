@@ -129,6 +129,20 @@ const config = {
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
   },
 
+  // Utmify: painel de acompanhamento de vendas (quanto veio de cada anuncio).
+  // Sem o token a integracao simplesmente nao existe - nenhuma venda deixa de
+  // acontecer por causa disso, so o painel deixa de ser avisado.
+  utmify: {
+    // Gerado na Utmify em Integracoes > Webhook / Credencial de API.
+    apiToken: process.env.UTMIFY_API_TOKEN || '',
+
+    // So pros testes apontarem pra uma Utmify de mentira na propria maquina.
+    // Restrito a localhost pelo mesmo motivo do ASAAS_BASE_URL: sem a trava,
+    // uma variavel errada mandaria os dados de venda dos clientes pro servidor
+    // de outra pessoa, e tudo continuaria parecendo funcionar.
+    baseUrlOverride: process.env.UTMIFY_BASE_URL || '',
+  },
+
   // Asaas: assinatura mensal e compra de credito avulso (PIX e cartao).
   // A cobranca automatica de excedente continua na Stripe por enquanto -
   // depende da tokenizacao de cartao, que so o gerente da conta Asaas libera.

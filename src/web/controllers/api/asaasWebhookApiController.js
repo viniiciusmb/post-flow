@@ -30,6 +30,7 @@ const creditsUnlockService = require('../../../services/creditsUnlockService');
 const asaasPaymentsRepository = require('../../../repositories/asaasPaymentsRepository');
 const checkoutService = require('../../../services/checkoutService');
 const affiliateService = require('../../../services/affiliateService');
+const utmifyService = require('../../../services/utmifyService');
 const logger = require('../../../lib/logger');
 
 // ---------- checkout pago ----------
@@ -194,10 +195,11 @@ async function handlePaymentReceived(payment) {
   // síncrona e este aviso não faz nada (markPaidOnce recusa a segunda vez) -
   // ele existe para o PIX, para o cartão que ficou em análise, e para o caso
   // de a resposta síncrona ter se perdido no meio do caminho.
-  if (payment.id) {
-    const registro = await asaasPaymentsRepository.findByAsaasId(payment.id);
-    if (registro) await checkoutService.aplicarPagamentoConfirmado(registro);
-  }
+  // Guardado numa variavel da funcao inteira (e nao so deste if) porque mais
+  // abaixo ele decide se a renovacao mensal precisa ser avisada a Utmify: sem
+  // essa guarda, a primeira mensalidade seria contada duas vezes la.
+  const registroLocal = payment.id ? await asaasPaymentsRepository.findByAsaasId(payment.id) : null;
+  if (registroLocal) await checkoutService.aplicarPagamentoConfirmado(registroLocal);
 
   // Rede de segurança: a cobrança gerada por um checkout nosso carrega o id
   // dele em checkoutSession. Se o CHECKOUT_PAID não chegar, chegar fora de
@@ -226,12 +228,21 @@ async function handlePaymentReceived(payment) {
     const extras = await clientSubscriptionsRepository.findByAsaasExtraSlotsSubscriptionId(payment.subscription);
     if (extras) {
       logger.info(`Asaas: renovacao das conexoes extras do cliente ${extras.client_user_id} paga (${payment.id}).`);
+      if (!registroLocal) avisarUtmifyDaRenovacao(payment, extras.client_user_id, { purpose: 'extra_slots' });
       return;
     }
     logger.warn(`Asaas: pagamento ${payment.id} de uma assinatura desconhecida (${payment.subscription}).`);
     return;
   }
   const clientUserId = assinatura.client_user_id;
+
+  // Mensalidade do 2o mes em diante. Ela NAO passa pelo nosso checkout (quem
+  // cobra e a assinatura recorrente do Asaas), entao nao existe linha em
+  // asaas_payments e o aviso a Utmify precisa sair daqui - senao o painel
+  // mostraria a venda de estreia de cada cliente e mais nenhuma depois.
+  if (!registroLocal) {
+    avisarUtmifyDaRenovacao(payment, clientUserId, { purpose: 'subscription', planId: assinatura.plan_id });
+  }
 
   // Comissão roda pra TODA mensalidade paga, não só pras que reativam - por
   // isso vem antes do return abaixo. O serviço já é idempotente e filtra
@@ -251,6 +262,23 @@ async function handlePaymentReceived(payment) {
   await clientSubscriptionsRepository.setStatus(clientUserId, 'ativo');
   await creditsUnlockService.unlockAwaitingCreditsForClient(clientUserId);
   logger.info(`Asaas: cliente ${clientUserId} pagou a mensalidade ${payment.id} - assinatura reativada.`);
+}
+
+// A renovacao vira um "pedido" com a mesma cara dos que nascem no nosso
+// checkout, montado a partir do aviso do Asaas. O id do pedido continua sendo
+// o id da cobranca, que e o que impede a venda de aparecer duplicada caso a
+// integracao nativa do Asaas com a Utmify tambem entregue a mesma cobranca.
+function avisarUtmifyDaRenovacao(payment, clientUserId, { purpose, planId = null }) {
+  utmifyService.vendaPaga({
+    asaas_payment_id: payment.id,
+    client_user_id: clientUserId,
+    purpose,
+    plan_id: planId,
+    billing_type: payment.billingType || 'CREDIT_CARD',
+    amount_cents: Math.round(Number(payment.value) * 100),
+    created_at: payment.dateCreated || null,
+    paid_at: payment.paymentDate || null,
+  });
 }
 
 // ---------- estorno, contestação e cobrança apagada ----------
@@ -313,7 +341,12 @@ async function handlePaymentOverdue(payment) {
   // ninguém pagou, tipicamente). Sem isso ela ficaria "pendente" para sempre
   // no histórico do cliente - o pior estado possível numa tela de pagamento,
   // porque não dá para saber se pagou.
-  if (payment.id) await asaasPaymentsRepository.markStatusIfPending(payment.id, 'falhou');
+  if (payment.id) {
+    const recusado = await asaasPaymentsRepository.markStatusIfPending(payment.id, 'falhou');
+    // So avisa se ELE estava mesmo pendente ate agora: o markStatusIfPending
+    // devolve null no aviso repetido, e ai nao ha mudanca nenhuma a contar.
+    if (recusado) utmifyService.vendaRecusada(recusado);
+  }
 
   if (!payment.subscription) return;
 

@@ -111,6 +111,44 @@ export interface AdminClientsResponse {
   clients: AdminClient[]
 }
 
+/** Um canal do YouTube que o cliente acompanha, visto pelo admin. */
+export interface AdminClientChannel {
+  id: number
+  name: string
+  url: string | null
+  avatarUrl: string | null
+  isActive: boolean
+  tiktokAccountId: number | null
+  tiktokAccountName: string | null
+  lastCheckAt: string | null
+  lastCheckOk: boolean | null
+  lastCheckError: string | null
+  maxVideoMinutes: number | null
+  createdAt: string
+}
+
+/** Uma conta do TikTok que o cliente vinculou, com o estado da fila dela. */
+export interface AdminClientTiktokAccount {
+  id: number
+  displayName: string
+  autoPostEnabled: boolean
+  followerCount: number | null
+  createdAt: string
+  pendingCount: number
+  postedCount: number
+  errorCount: number
+  /** Cortes prontos que nunca entraram em fila nenhuma - ver backfillPostingsService. */
+  readyOutOfQueueCount: number
+  cancelledCount: number
+  channelNames: string[]
+}
+
+export interface AdminClientConnectionsResponse {
+  clientId: number
+  channels: AdminClientChannel[]
+  tiktokAccounts: AdminClientTiktokAccount[]
+}
+
 export interface ClientPosting {
   id: number
   filename: string
