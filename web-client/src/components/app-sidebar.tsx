@@ -16,6 +16,7 @@ import {
   IconMicrophone,
   IconGift,
   IconBook,
+  IconTrendingUp,
 } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
@@ -56,6 +57,7 @@ const ADMIN_GROUPS: Grupo[] = [
       { title: "menu.processamento", url: "/admin/queue", icon: IconListCheck },
       { title: "menu.metricas", url: "/admin/metrics", icon: IconChartBar },
       { title: "menu.banda", url: "/admin/bandwidth", icon: IconGauge },
+      { title: "menu.receita", url: "/admin/revenue", icon: IconTrendingUp },
       { title: "menu.custos", url: "/admin/costs", icon: IconCoins },
       { title: "menu.assinaturas", url: "/admin/billing", icon: IconReceipt2 },
       { title: "menu.comissoes", url: "/admin/commissions", icon: IconGift },

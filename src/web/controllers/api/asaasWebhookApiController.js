@@ -32,6 +32,7 @@ const checkoutService = require('../../../services/checkoutService');
 const affiliateService = require('../../../services/affiliateService');
 const utmifyService = require('../../../services/utmifyService');
 const logger = require('../../../lib/logger');
+const receitaService = require('../../../services/receitaService');
 
 // ---------- checkout pago ----------
 
@@ -72,6 +73,15 @@ async function liberarCreditoAvulso(registro, clientUserId, paymentId = null) {
     );
     return;
   }
+  await receitaService.registrar({
+    clientUserId,
+    kind: 'credito_avulso',
+    provider: 'asaas',
+    // Checkout hospedado: o aviso de checkout nao traz o id da cobranca, entao
+    // o id do proprio checkout e o que torna o registro unico.
+    externalId: `checkout:${registro.asaas_checkout_id}`,
+    amountCents: compra.amount_cents,
+  });
   await clientCreditsRepository.addExtra(clientUserId, compra.bucket, compra.minutes);
   // Vídeo que estava parado por falta de crédito volta pra fila sozinho -
   // sem isso o cliente pagaria e continuaria olhando pra um vídeo travado.
@@ -90,6 +100,13 @@ async function ativarAssinatura(registro, clientUserId, checkout) {
   const primeiraAtivacao = antes.status === 'sem_plano' || !antes.plan_id;
 
   await clientSubscriptionsRepository.setPlan(clientUserId, plan.id);
+  await receitaService.registrarMensalidade({
+    clientUserId,
+    provider: 'asaas',
+    externalId: `checkout:${registro.asaas_checkout_id}`,
+    planId: plan.id,
+    amountCents: registro.amount_cents,
+  });
 
   // O aviso traz o cliente, mas não a assinatura que acabou de nascer.
   // Buscamos pelo cliente para guardar o id — é ele que permite trocar de
@@ -228,7 +245,17 @@ async function handlePaymentReceived(payment) {
     const extras = await clientSubscriptionsRepository.findByAsaasExtraSlotsSubscriptionId(payment.subscription);
     if (extras) {
       logger.info(`Asaas: renovacao das conexoes extras do cliente ${extras.client_user_id} paga (${payment.id}).`);
-      if (!registroLocal) avisarUtmifyDaRenovacao(payment, extras.client_user_id, { purpose: 'extra_slots' });
+      if (!registroLocal) {
+        avisarUtmifyDaRenovacao(payment, extras.client_user_id, { purpose: 'extra_slots' });
+        await receitaService.registrar({
+          clientUserId: extras.client_user_id,
+          kind: 'conexoes_extras',
+          provider: 'asaas',
+          externalId: payment.id,
+          amountCents: Math.round(Number(payment.value) * 100),
+          billingType: payment.billingType || null,
+        });
+      }
       return;
     }
     logger.warn(`Asaas: pagamento ${payment.id} de uma assinatura desconhecida (${payment.subscription}).`);
@@ -242,6 +269,17 @@ async function handlePaymentReceived(payment) {
   // mostraria a venda de estreia de cada cliente e mais nenhuma depois.
   if (!registroLocal) {
     avisarUtmifyDaRenovacao(payment, clientUserId, { purpose: 'subscription', planId: assinatura.plan_id });
+    // Receita recorrente. Era exatamente esta a parte que nao ficava gravada em
+    // lugar nenhum - e e a que sustenta o negocio. Guardada pelo mesmo
+    // `!registroLocal`: a primeira mensalidade ja foi registrada pelo checkout.
+    await receitaService.registrarMensalidade({
+      clientUserId,
+      provider: 'asaas',
+      externalId: payment.id,
+      planId: assinatura.plan_id,
+      amountCents: Math.round(Number(payment.value) * 100),
+      billingType: payment.billingType || null,
+    });
   }
 
   // Comissão roda pra TODA mensalidade paga, não só pras que reativam - por
@@ -295,6 +333,10 @@ function avisarUtmifyDaRenovacao(payment, clientUserId, { purpose, planId = null
 async function handlePaymentRefunded(payment, motivo) {
   if (!payment.id) return;
 
+  // Receita primeiro e para QUALQUER cobranca: renovacao, checkout, excedente.
+  // Idempotente (so marca o que ainda nao estava estornado).
+  await receitaService.marcarEstorno({ provider: 'asaas', externalId: payment.id });
+
   const registro = await asaasPaymentsRepository.findByAsaasId(payment.id);
   if (registro) {
     await checkoutService.aplicarEstorno(registro, motivo);
@@ -318,6 +360,8 @@ async function handlePaymentRefunded(payment, motivo) {
 // A contestação foi ganha, ou o estorno foi negado: o dinheiro ficou conosco.
 async function handleRefundReverted(payment) {
   if (!payment.id) return;
+
+  await receitaService.desfazerEstorno({ provider: 'asaas', externalId: payment.id });
 
   const registro = await asaasPaymentsRepository.findByAsaasId(payment.id);
   if (registro) {

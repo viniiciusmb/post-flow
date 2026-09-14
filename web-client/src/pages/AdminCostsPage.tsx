@@ -32,8 +32,10 @@ function min(v: number) {
   return `${Math.round(v).toLocaleString("pt-BR")} min`
 }
 
+// Dia de hoje em Brasília, o mesmo fuso do filtro no servidor. toISOString
+// usaria UTC: depois das 21h o seletor abriria em "amanhã".
 function hoje() {
-  return new Date().toISOString().slice(0, 10)
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date())
 }
 
 function Metric({

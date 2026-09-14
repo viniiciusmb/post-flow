@@ -13,6 +13,7 @@ const creditPurchasesRepository = require('../../../repositories/creditPurchases
 const creditsUnlockService = require('../../../services/creditsUnlockService');
 const affiliateService = require('../../../services/affiliateService');
 const logger = require('../../../lib/logger');
+const receitaService = require('../../../services/receitaService');
 
 async function handleCheckoutCompleted(session) {
   const clientUserId = Number(session.metadata && session.metadata.clientUserId);
@@ -45,6 +46,14 @@ async function handleCheckoutCompleted(session) {
       logger.error(`Webhook checkout.session.completed (pagamento): compra nao encontrada pra session ${session.id}.`);
       return;
     }
+    await receitaService.registrar({
+      clientUserId,
+      kind: 'credito_avulso',
+      provider: 'stripe',
+      externalId: session.payment_intent || session.id,
+      amountCents: purchase.amount_cents,
+      billingType: 'CREDIT_CARD',
+    });
     await clientCreditsRepository.addExtra(clientUserId, purchase.bucket, purchase.minutes);
     await creditsUnlockService.unlockAwaitingCreditsForClient(clientUserId);
     return;
@@ -111,6 +120,22 @@ async function handleInvoicePaid(invoice) {
 
   const existing = await clientSubscriptionsRepository.findByStripeCustomerId(invoice.customer);
   if (!existing) return;
+
+  // Mensalidade (primeira ou recorrencia - o receitaService decide). Fatura sem
+  // assinatura e avulsa (excedente faturado) e ja entra por outro caminho.
+  if (invoice.subscription && Number(invoice.amount_paid) > 0) {
+    const pagoEm = invoice.status_transitions && invoice.status_transitions.paid_at;
+    await receitaService.registrarMensalidade({
+      clientUserId: existing.client_user_id,
+      provider: 'stripe',
+      externalId: invoice.id,
+      planId: existing.plan_id,
+      amountCents: invoice.amount_paid,
+      billingType: 'CREDIT_CARD',
+      paidAt: pagoEm ? new Date(pagoEm * 1000) : null,
+    });
+  }
+
   // So reativa quem estava inadimplente. Nao mexe em quem cancelou de
   // proposito: pagar uma fatura antiga nao deveria ressuscitar a assinatura.
   if (existing.status !== 'inadimplente') return;
@@ -151,9 +176,16 @@ async function faturaDaCobranca(cobranca) {
 // Uma cobrança sem fatura é pagamento avulso (crédito ou excedente), que não
 // gera comissão: não há o que desfazer.
 async function handleChargeRefunded(charge, motivo) {
+  // Receita: a mensalidade foi registrada pelo id da FATURA, e o credito avulso
+  // e o excedente pelo da cobranca (payment_intent). Marca os dois - so um
+  // deles existe no livro, e marcar o que nao existe nao faz nada.
+  const intencao = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent && charge.payment_intent.id;
+  if (intencao) await receitaService.marcarEstorno({ provider: 'stripe', externalId: intencao });
+
   const invoiceId = await faturaDaCobranca(charge);
   if (!invoiceId) return;
 
+  await receitaService.marcarEstorno({ provider: 'stripe', externalId: invoiceId });
   await affiliateService.reverseCommissionForPayment({ externalPaymentId: invoiceId, motivo });
 
   const existing = await clientSubscriptionsRepository.findByStripeCustomerId(charge.customer);
@@ -166,8 +198,11 @@ async function handleChargeRefunded(charge, motivo) {
 // ganha devolve o dinheiro pra nós, e só ela restaura a comissão.
 async function handleDisputeClosed(dispute) {
   if (dispute.status !== 'won') return;
+  const intencao = typeof dispute.payment_intent === 'string' ? dispute.payment_intent : dispute.payment_intent && dispute.payment_intent.id;
+  if (intencao) await receitaService.desfazerEstorno({ provider: 'stripe', externalId: intencao });
   const invoiceId = await faturaDaCobranca(dispute.charge);
   if (!invoiceId) return;
+  await receitaService.desfazerEstorno({ provider: 'stripe', externalId: invoiceId });
   await affiliateService.restoreCommissionForPayment({ externalPaymentId: invoiceId });
 }
 

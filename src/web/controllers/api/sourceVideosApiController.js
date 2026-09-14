@@ -398,6 +398,10 @@ async function createManual(req, res) {
   // enquadramento — e o corte sairia com o estilo que ele estava justamente
   // trocando.
   if (escolha.styleSource === 'manual') {
+    // Marcado como "esperando o estilo": sem isso o resgate de vídeo preso em
+    // detected o enfileiraria sozinho 30 minutos depois, com o cliente ainda
+    // no editor. O "Começar a cortar" chama /enqueue, que limpa a marca.
+    await sourceVideosRepository.markAutoSkipped(sourceVideo.id, 'aguardando_estilo');
     return res.status(201).json({
       id: Number(sourceVideo.id),
       title: sourceVideo.title,
@@ -455,6 +459,10 @@ async function uploadVideo(req, res) {
   const estilo = await aplicarEstiloEscolhido(req, sourceVideo.id, escolha);
 
   if (escolha.styleSource === 'manual') {
+    // Marcado como "esperando o estilo": sem isso o resgate de vídeo preso em
+    // detected o enfileiraria sozinho 30 minutos depois, com o cliente ainda
+    // no editor. O "Começar a cortar" chama /enqueue, que limpa a marca.
+    await sourceVideosRepository.markAutoSkipped(sourceVideo.id, 'aguardando_estilo');
     return res.status(201).json({
       id: Number(sourceVideo.id),
       title: sourceVideo.title,

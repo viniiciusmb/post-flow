@@ -51,7 +51,91 @@ export interface TiktokCapacity {
   dispensadoAte: string | null
 }
 
+/** Números de receita da tela Início (mesmas funções da tela de Receita). */
+export interface ReceitaResumoInicio {
+  liquidoCents: number
+  primeiraCents: number
+  recorrenciaCents: number
+  extrasCents: number
+  mrrCents: number
+  pagantes: number
+  cortesia: number
+  inadimplentes: number
+}
+
+export type TipoDeReceita = "primeira_mensalidade" | "recorrencia" | "credito_avulso" | "excedente" | "conexoes_extras"
+
+export interface AssinaturaDaReceita {
+  clientUserId: number
+  email: string
+  nome: string | null
+  status: SubscriptionStatus
+  /** false = plano atribuído à mão, sem cobrança automática (cortesia). */
+  pagante: boolean
+  meioDePagamento: "cartao" | "pix" | "cartao_stripe" | "manual"
+  cartao: { bandeira: string | null; final: string } | null
+  planKey: string | null
+  planName: string | null
+  /** Mensalidade cheia + conexões extras. Para cortesia é o valor de tabela. */
+  mensalidadeCents: number
+  extraChannels: number
+  extraTiktokAccounts: number
+  assinanteDesde: string
+  canceladoEm: string | null
+  meses: number
+  parcelasPagas: number
+  totalPagoCents: number
+  ultimoPagamento: string | null
+}
+
+export interface PagamentoDaReceita {
+  id: number
+  kind: TipoDeReceita
+  provider: "asaas" | "stripe"
+  amountCents: number
+  billingType: string | null
+  paidAt: string
+  refundedAt: string | null
+  clientUserId: number | null
+  email: string | null
+  nome: string | null
+  planName: string | null
+}
+
+export interface AdminRevenueResponse {
+  range: RangeInfo
+  atual: {
+    mrrCents: number
+    arrCents: number
+    pagantes: number
+    ticketMedioCents: number | null
+    cortesia: number
+    inadimplentes: number
+    mrrEmRiscoCents: number
+    canceladas: number
+    mrrPorPlano: { key: string; name: string; assinaturas: number; mrrCents: number }[]
+  }
+  periodo: {
+    brutoCents: number
+    estornosCents: number
+    estornosQtd: number
+    liquidoCents: number
+    primeiraCents: number
+    recorrenciaCents: number
+    extrasCents: number
+    extras: { creditoAvulsoCents: number; excedenteCents: number; conexoesExtrasCents: number }
+    pagamentos: number
+    novasAssinaturas: number
+    renovacoes: number
+    cancelamentos: number
+  }
+  porMes: { mes: string; primeiraCents: number; recorrenciaCents: number; extrasCents: number }[]
+  assinaturas: AssinaturaDaReceita[]
+  pagamentos: PagamentoDaReceita[]
+}
+
 export interface AdminDashboardResponse {
+  receita: ReceitaResumoInicio
   /** Quanto a operação gastou no período escolhido. */
   custos: {
     totalUsd: number
@@ -547,9 +631,11 @@ export interface SourceVideo {
   errorMessage: string | null
   billingBlockReason: BillingBlockReason | null
   /** Preenchido quando o vídeo foi detectado mas NÃO entrou na fila sozinho
-   *  ('duracao' = passou do limite configurado no canal). O botão de processar
-   *  continua valendo: foi escolha do cliente, não impossibilidade. */
-  autoSkippedReason: "duracao" | null
+   *  ('duracao' = passou do limite configurado no canal; 'mais_recente' = o
+   *  freio de fila pegou um vídeo mais novo do mesmo canal; 'aguardando_estilo'
+   *  = vídeo avulso esperando o "Começar a cortar"). O botão de processar
+   *  continua valendo: foi escolha, não impossibilidade. */
+  autoSkippedReason: "duracao" | "mais_recente" | "aguardando_estilo" | null
   clipCount: number
   readyClipCount: number
   processingStartedAt: string | null

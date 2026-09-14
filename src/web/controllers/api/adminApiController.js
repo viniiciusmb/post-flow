@@ -13,11 +13,12 @@ const settingsRepository = require('../../../repositories/settingsRepository');
 const videoCostsRepository = require('../../../repositories/videoCostsRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
 const backfillPostingsService = require('../../../services/backfillPostingsService');
+const receitaService = require('../../../services/receitaService');
 
 async function dashboard(req, res) {
   const { range, since, until } = resolveRange(req.query.range);
 
-  const [clients, postings, channels, videosInProgress, clipsInRange, tiktokCapacity, custos, cotacao] =
+  const [clients, postings, channels, videosInProgress, clipsInRange, tiktokCapacity, custos, cotacao, receita] =
     await Promise.all([
       usersRepository.listByRole(ROLES.CLIENT),
       postingsRepository.listAllWithDetails(),
@@ -33,6 +34,10 @@ async function dashboard(req, res) {
       // que 5 canais de teste queimaram US$ 16 sem ninguem notar.
       videoCostsRepository.resumo({ since, until }),
       settingsRepository.getValue('cotacao_usd_brl', 5.4),
+      // Receita ao lado do custo, pelo mesmo motivo: o fundador abre o Inicio
+      // todo dia, e as duas perguntas que importam sao quanto saiu e quanto
+      // entrou. Mesma funcao da tela de Receita - os numeros nunca discordam.
+      receitaService.resumoParaInicio({ since, until }),
     ]);
 
   const postingsInRange = postings.filter((p) => {
@@ -45,6 +50,7 @@ async function dashboard(req, res) {
   res.json({
     range: { key: range, since, until },
     tiktokCapacity,
+    receita,
     custos: {
       totalUsd: Number(custos.total_usd) || 0,
       // O custo do video NOVO, que e o que vale pra decidir preco (a media

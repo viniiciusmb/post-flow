@@ -98,7 +98,9 @@ test('intervalo escolhido a mao tambem filtra', async () => {
   await lancamento(admin.id, { diasAtras: 0, whisperUsd: 0.13 });
   await lancamento(admin.id, { diasAtras: 10, whisperUsd: 0.31 });
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  // No fuso de Brasília, como o produto. Com toISOString (UTC) este teste
+  // falhava todo dia entre 21h e meia-noite: "hoje" virava amanhã.
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
   const r = await agent.get(`/api/admin/costs?range=custom&since=${hoje}&until=${hoje}`);
   const meu = r.body.porCliente.find((c) => c.clientUserId === Number(admin.id));
 

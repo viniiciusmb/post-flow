@@ -43,10 +43,23 @@ const CORTES_NA_FILA_PRA_LIBERAR = 1;
 // A fila que importa e a da conta do TikTok onde ESTE canal publica. Canal sem
 // conta vinculada nao tem fila pra engarrafar (os cortes vao pro Drive ou ficam
 // prontos esperando), entao nada segura ele.
+//
+// "Livre" exige DUAS coisas, e a segunda faltava ate 13/09/2026:
+//   - no maximo CORTES_NA_FILA_PRA_LIBERAR cortes esperando publicacao;
+//   - NENHUM video a caminho dessa conta (baixando, transcrevendo, cortando,
+//     ou enfileirado esperando a vez).
+//
+// Sem a segunda, o freio era cego durante a hora em que um video processa: ele
+// ainda nao gerou postagem nenhuma, a fila parece vazia, e a checagem de 20
+// minutos depois pega o proximo video. Os cortes dos dois nascem juntos e a
+// fila fica intercalada - exatamente o que o freio existe pra impedir.
 async function filaEstaLivre(channel) {
   if (!channel.tiktok_account_id) return true;
-  const pendentes = await postingsRepository.countPendingForAccount(channel.tiktok_account_id);
-  return pendentes <= CORTES_NA_FILA_PRA_LIBERAR;
+  const [pendentes, aCaminho] = await Promise.all([
+    postingsRepository.countPendingForAccount(channel.tiktok_account_id),
+    sourceVideosRepository.countOnTheWayForAccount(channel.tiktok_account_id),
+  ]);
+  return aCaminho === 0 && pendentes <= CORTES_NA_FILA_PRA_LIBERAR;
 }
 
 // Cadastra um video exclusivo de membros com selo proprio, sem enfileirar.
@@ -93,9 +106,13 @@ async function cadastrarComSelo({ channel, video, title, seguramOMarco }) {
 // O que fica pra tras nao vira lixo eterno: ele deixa de ser exclusivo (o selo
 // sai, porque o selo estaria mentindo) e fica como um video detectado que o
 // cliente pode enfileirar na mao se quiser.
+//
+// Devolve quantos videos mandou pra fila, pra checagem saber que o "um video
+// por vez" do freio ja foi usado nesta volta.
 async function liberarQuemAbriu({ channel, videos, priority, boss }) {
   const comSelo = await sourceVideosRepository.listMembersOnlyByChannel(channel.id);
-  if (!comSelo.length) return;
+  if (!comSelo.length) return 0;
+  let enfileirados = 0;
 
   // O mais recente do canal AGORA - o mesmo criterio que o marco d'agua usa.
   const maisRecente = videos.find((v) => ehPublico(v.availability) && podeBaixarAgora(v.liveStatus));
@@ -116,13 +133,19 @@ async function liberarQuemAbriu({ channel, videos, priority, boss }) {
           `recente do canal - entrando na fila.`
       );
       await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: liberado.id }, { priority });
+      enfileirados += 1;
     } else {
+      // Marcado com motivo: sem ele, este video ficava detected "sem dono" e o
+      // resgate de video preso o enfileirava sozinho 30 minutos depois - o
+      // contrario de "fica disponivel pro cliente enfileirar na mao".
+      await sourceVideosRepository.markAutoSkipped(liberado.id, 'mais_recente');
       logger.info(
         `Canal "${channel.channel_name}": "${liberado.title}" saiu de "somente membros", mas ja nao e ` +
           `o mais recente - fica disponivel pro cliente enfileirar na mao.`
       );
     }
   }
+  return enfileirados;
 }
 
 async function run(boss) {
@@ -234,9 +257,9 @@ async function run(boss) {
         }
       }
 
-      // Do mais antigo pro mais novo, pra entrar na fila em ordem
-      // cronologica (e pro video mais recente, no fim do loop, virar o
-      // novo marco d'agua).
+      // A ordem em que os videos novos sao percorridos depende do freio (ver
+      // `umPorVez` logo abaixo). O marco d'agua nao depende dela: e sempre o
+      // video mais novo da listagem que nao ficou pra depois.
       const priority = await queuePriorityService.resolveQueuePriorityForClient(channel.client_user_id);
 
       // ------------------------------------------------------------------
@@ -252,7 +275,7 @@ async function run(boss) {
       // maos. Se o video nem aparece mais na listagem (saiu do ar, ficou
       // privado, ou o canal publicou muita coisa desde entao), nada acontece -
       // ele continua com o selo, que e a verdade que sabemos.
-      await liberarQuemAbriu({ channel, videos, priority, boss });
+      const liberados = await liberarQuemAbriu({ channel, videos, priority, boss });
       // Videos que SEGURAM o marco d'agua - ver logo abaixo do loop.
       //
       // Duas coisas caem aqui, por motivos diferentes:
@@ -264,8 +287,24 @@ async function run(boss) {
       // estaria perdido em silencio. Foi exatamente assim que um video da conta
       // risestyle sumiu em 27/08/2026.
       const seguramOMarco = new Set();
-      let enfileirados = 0;
-      for (const video of [...newVideos].reverse()) {
+      // UM VIDEO POR VEZ quando o freio vale para este canal.
+      //
+      // O freio decide SE o canal pode pegar video; esta variavel decide
+      // QUANTOS. Ate 13/09/2026 a resposta era "ate o teto de rajada (3)": um
+      // canal segurado por 2 dias, que publicou 3 videos nesse tempo, pegava os
+      // 3 de uma vez quando a fila liberava, e a fila da conta ficava com 40
+      // cortes de 3 videos intercalados.
+      //
+      // Com o freio, o canal pega o MAIS RECENTE (por isso a lista e percorrida
+      // do mais novo pro mais velho) e os outros sao cadastrados com o motivo
+      // 'mais_recente' - visiveis na tela, com botao de processar, em vez de
+      // sumirem. Sem freio, continua como sempre: do mais antigo pro mais novo,
+      // ate o teto de rajada.
+      const umPorVez = Boolean(channel.process_only_when_queue_clear && channel.tiktok_account_id);
+      const ordem = umPorVez ? [...newVideos] : [...newVideos].reverse();
+
+      let enfileirados = liberados;
+      for (const video of ordem) {
         // Teto batido: o resto SEGURA O MARCO e fica pra proxima checagem, em
         // vez de entrar na fila agora. Sem segurar o marco isto viraria perda
         // de video em vez de adiamento.
@@ -305,6 +344,34 @@ async function run(boss) {
         // (o video existe, mas nao e nosso pra baixar).
         if (!ehPublico(video.availability)) {
           await cadastrarComSelo({ channel, video, title: video.title, seguramOMarco });
+          continue;
+        }
+
+        // Freio ligado e o video mais recente ja entrou nesta volta: os mais
+        // antigos ficam cadastrados com motivo, visiveis e com botao de
+        // processar. Sem a consulta individual ao video: ela sai pelo proxy e
+        // so serve pro titulo original de um video que nao vai ser cortado agora.
+        //
+        // O marco anda por cima deles de proposito - eles FORAM tratados (estao
+        // na lista do cliente). Segurar o marco os reapresentaria a cada 20
+        // minutos pra sempre.
+        if (umPorVez && enfileirados >= 1) {
+          const deixado = await sourceVideosRepository.createIfNotExists({
+            youtubeChannelId: channel.id,
+            ownerClientUserId: channel.client_user_id,
+            youtubeVideoId: video.videoId,
+            title: video.title,
+            thumbnailUrl: video.thumbnailUrl,
+            publishedAt: video.publishedAt,
+            durationSeconds: video.durationSeconds,
+            autoSkippedReason: 'mais_recente',
+          });
+          if (deixado) {
+            logger.info(
+              `Canal "${channel.channel_name}": "${deixado.title}" ficou de fora - o freio ja pegou o video ` +
+                `mais recente do canal nesta checagem. O cliente pode mandar processar.`
+            );
+          }
           continue;
         }
 

@@ -12,6 +12,7 @@ const requireAuthApi = require('../../middleware/requireAuthApi');
 const requireRoleApi = require('../../middleware/requireRoleApi');
 const asyncHandler = require('../../lib/asyncHandler');
 const { ROLES } = require('../../../config/constants');
+const adminRevenueApiController = require('../../controllers/api/adminRevenueApiController');
 
 const router = express.Router();
 
@@ -31,6 +32,7 @@ router.get('/metrics', asyncHandler(adminMetricsApiController.overview));
 // Quantos videos processar ao mesmo tempo - ver videoConcurrencyService.
 router.post('/metrics/max-simultaneos', asyncHandler(adminMetricsApiController.setMaxSimultaneos));
 router.get('/costs', asyncHandler(adminCostsApiController.overview));
+router.get('/revenue', asyncHandler(adminRevenueApiController.overview));
 router.post('/costs/cotacao', asyncHandler(adminCostsApiController.setCotacao));
 router.post('/costs/infra', asyncHandler(adminCostsApiController.setInfra));
 // Video narrado a partir de um roteiro - MODO DE TESTE, so admin. Fica atras

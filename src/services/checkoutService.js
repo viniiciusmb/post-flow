@@ -38,6 +38,7 @@ const cpfCnpj = require('../lib/cpfCnpj');
 const precosDasConexoes = require('../lib/precoDasConexoesExtras');
 const { aplicaPromocao } = require('../lib/promocaoDePrimeiroMes');
 const logger = require('../lib/logger');
+const receitaService = require('./receitaService');
 
 const { AsaasError } = asaasService;
 
@@ -370,6 +371,17 @@ async function ativarAssinaturaPaga({ clientUserId, plan, asaasPaymentId, amount
   // so deixa passar a PRIMEIRA confirmacao - entao o aviso repetido do Asaas
   // (caminho sincrono + webhook) nunca vira duas vendas la.
   utmifyService.vendaPaga(marcado);
+  // Receita logo depois do markPaidOnce, pelo mesmo motivo da Utmify: só a
+  // primeira confirmação passa por aqui.
+  await receitaService.registrarMensalidade({
+    clientUserId,
+    provider: 'asaas',
+    externalId: asaasPaymentId,
+    planId: plan.id,
+    amountCents,
+    billingType: marcado.billing_type,
+    paidAt: marcado.paid_at,
+  });
 
   const antes = await clientSubscriptionsRepository.getOrCreate(clientUserId);
   const primeiraAtivacao = antes.status === 'sem_plano' || !antes.plan_id;
@@ -532,6 +544,15 @@ async function liberarCreditoPago({ asaasPaymentId, clientUserId, creditPurchase
   // so deixa passar a PRIMEIRA confirmacao - entao o aviso repetido do Asaas
   // (caminho sincrono + webhook) nunca vira duas vendas la.
   utmifyService.vendaPaga(marcado);
+  await receitaService.registrar({
+    clientUserId,
+    kind: 'credito_avulso',
+    provider: 'asaas',
+    externalId: asaasPaymentId,
+    amountCents: marcado.amount_cents,
+    billingType: marcado.billing_type,
+    paidAt: marcado.paid_at,
+  });
 
   const compra = await creditPurchasesRepository.markPaidById(Number(creditPurchaseId), asaasPaymentId);
   if (!compra) {
@@ -642,6 +663,15 @@ async function liberarExtrasPagos({ asaasPaymentId, clientUserId, pedido }) {
   // so deixa passar a PRIMEIRA confirmacao - entao o aviso repetido do Asaas
   // (caminho sincrono + webhook) nunca vira duas vendas la.
   utmifyService.vendaPaga(marcado);
+  await receitaService.registrar({
+    clientUserId,
+    kind: 'conexoes_extras',
+    provider: 'asaas',
+    externalId: asaasPaymentId,
+    amountCents: marcado.amount_cents,
+    billingType: marcado.billing_type,
+    paidAt: marcado.paid_at,
+  });
 
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
   const canais = Number(subscription.extra_channels) + Number(pedido.canais);

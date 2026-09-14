@@ -1,6 +1,6 @@
 import { useT } from "@/i18n"
 import { useEffect, useState } from "react"
-import { IconUsers, IconListDetails, IconBrandYoutube, IconClockHour4, IconScissors, IconCoins, IconCurrencyDollar } from "@tabler/icons-react"
+import { IconUsers, IconListDetails, IconBrandYoutube, IconClockHour4, IconScissors, IconCoins, IconCurrencyDollar, IconTrendingUp, IconReceipt2 } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { PostingsTable, type PostingRow } from "@/components/dashboard/PostingsTable"
@@ -11,6 +11,10 @@ import { useDateRange } from "@/hooks/useDateRange"
 import { api } from "@/lib/api"
 import type { AdminDashboardResponse } from "@/types/api"
 import { TiktokLimitAlert } from "@/components/dashboard/TiktokLimitAlert"
+
+function brl(cents: number) {
+  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
 
 function num(v: number, casas: number) {
   return v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas })
@@ -102,6 +106,42 @@ export function AdminDashboardPage() {
           </>
         )}
       </div>
+
+      {/* Receita ao lado do custo: as duas perguntas que o fundador faz todo
+          dia são quanto saiu e quanto entrou. Os números vêm das mesmas
+          funções da tela de Receita, então os dois lugares nunca discordam. */}
+      {data && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Receita no período"
+            value={brl(data.receita.liquidoCents)}
+            hint={`1ª venda ${brl(data.receita.primeiraCents)} · recorrência ${brl(
+              data.receita.recorrenciaCents,
+            )} · extras ${brl(data.receita.extrasCents)}`}
+            icon={<IconTrendingUp />}
+            href="/admin/revenue"
+            hrefLabel="Ver receita"
+          />
+          <StatCard
+            label="MRR — receita recorrente mensal"
+            value={brl(data.receita.mrrCents)}
+            hint={`${data.receita.pagantes} ${data.receita.pagantes === 1 ? "assinante pagante" : "assinantes pagantes"}`}
+            icon={<IconReceipt2 />}
+            href="/admin/revenue"
+            hrefLabel="Ver MRR"
+          />
+          <StatCard
+            label="Assinaturas ativas"
+            value={data.receita.pagantes}
+            hint={`pagantes · + ${data.receita.cortesia} de cortesia${
+              data.receita.inadimplentes ? ` · ${data.receita.inadimplentes} inadimplente(s)` : ""
+            }`}
+            icon={<IconUsers />}
+            href="/admin/revenue"
+            hrefLabel="Ver assinaturas"
+          />
+        </div>
+      )}
 
       {/* Custo do período, na tela inicial de propósito: custo que só existe
           em tela própria é custo que ninguém olha — foi assim que 5 canais de

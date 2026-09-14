@@ -120,9 +120,21 @@ async function findByAsaasSubscriptionId(asaasSubscriptionId) {
   return rows[0] || null;
 }
 
+// canceled_at acompanha o status: carimbado na PRIMEIRA vez que vira
+// cancelado (o aviso repetido não adianta a data) e apagado quando volta a
+// ativo - senão um cliente que voltou continuaria contando como cancelamento
+// no painel de Receita.
 async function setStatus(clientUserId, status) {
   const { rows } = await pool.query(
-    `UPDATE client_subscriptions SET status = $2, updated_at = now() WHERE client_user_id = $1 RETURNING *`,
+    `UPDATE client_subscriptions
+        SET status = $2,
+            canceled_at = CASE
+              WHEN $2 = 'cancelado' THEN COALESCE(canceled_at, now())
+              WHEN $2 = 'ativo' THEN NULL
+              ELSE canceled_at
+            END,
+            updated_at = now()
+      WHERE client_user_id = $1 RETURNING *`,
     [clientUserId, status]
   );
   return rows[0] || null;

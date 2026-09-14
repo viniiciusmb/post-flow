@@ -16,6 +16,7 @@ const stripeService = require('./stripeService');
 const asaasService = require('./asaasService');
 const logger = require('../lib/logger');
 const { ROLES } = require('../config/constants');
+const receitaService = require('./receitaService');
 
 // Quanto custa o minuto que passou da cota. Duas dimensoes:
 //
@@ -240,6 +241,15 @@ async function reserveBeforeDownload(sourceVideo, clientUserId) {
     rateCentsPerMin,
     ...idDaCobranca(cobranca),
   });
+  // Receita: o dinheiro já entrou (a cobrança aprovou antes de chegar aqui).
+  await receitaService.registrar({
+    clientUserId,
+    kind: 'excedente',
+    provider: cobranca.provider === 'asaas' ? 'asaas' : 'stripe',
+    externalId: cobranca.id,
+    amountCents,
+    billingType: 'CREDIT_CARD',
+  });
 
   // Parte saiu do credito: precisa do registro tambem, senao esses minutos
   // ficam debitados sem rastro - e releaseIfReserved nao teria como devolve-los
@@ -412,6 +422,15 @@ async function chargeForUpload(sourceVideo, clientUserId) {
     minutes: minutesUncovered,
     rateCentsPerMin,
     ...idDaCobranca(cobranca),
+  });
+  // Receita: o dinheiro já entrou (a cobrança aprovou antes de chegar aqui).
+  await receitaService.registrar({
+    clientUserId,
+    kind: 'excedente',
+    provider: cobranca.provider === 'asaas' ? 'asaas' : 'stripe',
+    externalId: cobranca.id,
+    amountCents,
+    billingType: 'CREDIT_CARD',
   });
 
   if (minutesFromCredit > 0) {

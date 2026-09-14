@@ -45,7 +45,7 @@ async function countAutoSkippedByChannelIds(youtubeChannelIds) {
   const { rows } = await pool.query(
     `SELECT youtube_channel_id, count(*)::int AS n
        FROM source_videos
-      WHERE youtube_channel_id = ANY($1::bigint[]) AND auto_skipped_reason IS NOT NULL
+      WHERE youtube_channel_id = ANY($1::bigint[]) AND auto_skipped_reason = 'duracao'
       GROUP BY youtube_channel_id`,
     [youtubeChannelIds]
   );
@@ -57,6 +57,56 @@ async function countAutoSkippedByChannelIds(youtubeChannelIds) {
 // achar que o pedido dele foi ignorado.
 async function clearAutoSkippedReason(id) {
   await pool.query('UPDATE source_videos SET auto_skipped_reason = NULL, updated_at = now() WHERE id = $1', [id]);
+}
+
+// Marca um video ja cadastrado como "deixado de fora de proposito". So vale
+// para video ainda detected: marcar um que ja comecou a processar seria mentir
+// na tela sobre por que ele nao entrou.
+async function markAutoSkipped(id, reason) {
+  await pool.query(
+    `UPDATE source_videos SET auto_skipped_reason = $2, updated_at = now()
+      WHERE id = $1 AND status = 'detected'`,
+    [id, reason]
+  );
+}
+
+// Quantos videos estao A CAMINHO de uma conta do TikTok: ja decididos a virar
+// corte nela, mas que ainda nao terminaram (por isso ainda nao tem postagem).
+//
+// O freio de engarrafamento soma isto a fila de postagens. Contar so a fila
+// deixava o freio cego durante a hora em que um video processa, e o canal
+// pegava o proximo video no meio - a origem da fila intercalada de 13/09/2026.
+//
+// O que conta:
+//   - as etapas em andamento, e as esperas que terminam sozinhas (credito que
+//     volta no reset, computador do cliente que liga);
+//   - detected SEM motivo de exclusao: e um video enfileirado esperando a vez
+//     do worker (ou que o resgate de "preso em detected" vai enfileirar).
+// O que NAO conta: paused (decisao do cliente, ele pode nunca retomar - contar
+// travaria o canal pra sempre), e detected COM motivo (ninguem vai processar
+// sem o cliente mandar).
+//
+// Destino: video de canal vai pra conta vinculada ao canal; video avulso, pras
+// contas escolhidas no envio - a mesma regra de destinoDoVideoService.
+async function countOnTheWayForAccount(tiktokAccountId) {
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS n
+       FROM source_videos sv
+       LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
+      WHERE (
+              sv.status IN ('downloading', 'transcribing', 'selecting_clips', 'cutting',
+                            'aguardando_creditos', 'aguardando_conexao')
+              OR (sv.status = 'detected' AND sv.auto_skipped_reason IS NULL)
+            )
+        AND (
+              (sv.youtube_channel_id IS NOT NULL AND yc.tiktok_account_id = $1)
+              OR (sv.youtube_channel_id IS NULL AND EXISTS (
+                    SELECT 1 FROM source_video_tiktok_targets t
+                     WHERE t.source_video_id = sv.id AND t.tiktok_account_id = $1))
+            )`,
+    [tiktokAccountId]
+  );
+  return rows[0].n;
 }
 
 // Quantos videos com selo de "somente membros" cada canal tem.
@@ -359,9 +409,19 @@ async function findTransientErrorsForAutoRetry() {
 //
 // `updated_at` responde o que a varredura quer saber: ha quanto tempo ele esta
 // parado NESTE estado.
+//
+// Vídeo com `auto_skipped_reason` NÃO está preso: ele foi deixado de fora DE
+// PROPÓSITO (passou do limite de duração, o freio escolheu um mais recente, ou
+// o cliente ainda está escolhendo o estilo) e espera o cliente mandar. Até
+// 13/09/2026 esta varredura não fazia essa distinção e enfileirava todos -
+// um vídeo de 37 min num canal com limite de 30 foi processado 40 minutos
+// depois de barrado, gerou 19 cortes e uma cobrança de excedente.
 async function findStuckDetected() {
   const { rows } = await pool.query(
-    `SELECT * FROM source_videos WHERE status = 'detected' AND updated_at < now() - interval '30 minutes'`
+    `SELECT * FROM source_videos
+      WHERE status = 'detected'
+        AND auto_skipped_reason IS NULL
+        AND updated_at < now() - interval '30 minutes'`
   );
   return rows;
 }
@@ -740,6 +800,8 @@ module.exports = {
   countMembersOnlyByChannelIds,
   countAutoSkippedByChannelIds,
   clearAutoSkippedReason,
+  markAutoSkipped,
+  countOnTheWayForAccount,
   liberarDeSomenteMembros,
   createManual,
   setChosenAudioLanguage,

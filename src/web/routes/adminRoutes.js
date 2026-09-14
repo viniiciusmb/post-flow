@@ -17,6 +17,7 @@ router.get('/queue', serveSpaPage('admin-queue'));
 router.get('/metrics', serveSpaPage('admin-metrics'));
 router.get('/bandwidth', serveSpaPage('bandwidth'));
 router.get('/costs', serveSpaPage('admin-costs'));
+router.get('/revenue', serveSpaPage('admin-revenue'));
 router.get('/billing', serveSpaPage('admin-billing'));
 router.get('/commissions', serveSpaPage('admin-commissions'));
 router.get('/narrated', serveSpaPage('admin-narrated'));

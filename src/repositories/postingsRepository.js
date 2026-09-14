@@ -1,6 +1,7 @@
 'use strict';
 
 const pool = require('../db/pool');
+const logger = require('../lib/logger');
 const postingScheduleSettingsRepository = require('./postingScheduleSettingsRepository');
 const { projectQueueTimes } = require('../lib/postingSchedule');
 
@@ -59,6 +60,11 @@ async function listPendingScheduledFor(tiktokAccountId) {
 // garante que o mesmo video nunca gera duas postagens para a mesma conta.
 // caption comeca igual a descricao do corte (quando ha uma), mas depois e
 // editavel a parte na fila sem afetar o corte original.
+//
+// Toda postagem nova passa por agruparFilaPorVideo. Fica AQUI, e nao em cada
+// chamador, porque sao tres caminhos que criam postagem (pipeline, backfill ao
+// conectar/vincular, botoes da tela de Cortes) e bastaria um esquecer para a
+// fila voltar a intercalar.
 async function createIfNotExists({ videoId, tiktokAccountId, caption = null }) {
   const scheduledFor = await computeNextScheduledFor(tiktokAccountId);
   const { rows } = await pool.query(
@@ -68,7 +74,102 @@ async function createIfNotExists({ videoId, tiktokAccountId, caption = null }) {
      RETURNING *`,
     [videoId, tiktokAccountId, caption, scheduledFor]
   );
-  return rows[0] || null;
+  const criada = rows[0] || null;
+  if (!criada) return null;
+
+  // Falhar ao reorganizar nao pode desfazer a postagem: ela ja existe e vai
+  // sair. No pior caso a fila fica na ordem de chegada, como era antes.
+  try {
+    const mudou = await agruparFilaPorVideo(tiktokAccountId);
+    if (mudou) {
+      const { rows: atual } = await pool.query('SELECT * FROM postings WHERE id = $1', [criada.id]);
+      return atual[0] || criada;
+    }
+  } catch (err) {
+    logger.error(`Nao consegui agrupar a fila da conta ${tiktokAccountId} por video:`, err.message);
+  }
+  return criada;
+}
+
+// Trava por conta pro agrupamento. O primeiro numero so separa esta trava de
+// outras pg_advisory_xact_lock do sistema (a de afiliados usa outro espaco).
+const TRAVA_DA_FILA = 8501;
+
+// Deixa os cortes de um mesmo video JUNTOS e em sequencia na fila da conta.
+//
+// Por que existe: dois videos renderizando ao mesmo tempo (o video-worker roda
+// 2 em paralelo) criam postagens alternadas - Parte 1 do video A, Parte 1 do
+// video B, Parte 2 do A... Como a fila segue a ordem de criacao, o perfil do
+// TikTok publicava uma serie picotada no meio da outra. Aconteceu de verdade
+// em 13/09/2026: 40 cortes de 3 videos intercalados.
+//
+// A regra:
+//   - os grupos (um por video) ficam na ordem em que o PRIMEIRO corte de cada um
+//     aparece hoje - quem ja estava na frente continua na frente;
+//   - dentro do grupo, a ordem relativa atual e preservada (e a ordem das
+//     partes, porque os cortes nascem na ordem em que renderizam);
+//   - os HORARIOS nao sao recalculados: o mesmo conjunto de horarios ja
+//     reservados e redistribuido na ordem nova. Recalcular a partir de agora
+//     poderia empurrar pra frente um corte que ja estava na hora de sair.
+//
+// Devolve true quando a ordem mudou. Fila ja agrupada nao escreve nada.
+async function agruparFilaPorVideo(tiktokAccountId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Dois cortes terminando juntos na mesma conta reorganizariam a fila ao
+    // mesmo tempo, cada um a partir de uma leitura que o outro ja invalidou.
+    await client.query('SELECT pg_advisory_xact_lock($1, $2)', [TRAVA_DA_FILA, Number(tiktokAccountId)]);
+
+    const { rows } = await client.query(
+      `SELECT p.id, p.scheduled_for, c.source_video_id
+         FROM postings p
+         JOIN videos v ON v.id = p.video_id
+         LEFT JOIN clips c ON c.id = v.clip_id
+        WHERE p.tiktok_account_id = $1 AND p.status = 'pending'
+        ORDER BY ${PENDING_ORDER}`,
+      [tiktokAccountId]
+    );
+
+    // Map guarda a ordem de insercao: o grupo nasce onde o primeiro corte dele
+    // aparece. Postagem sem video-fonte (origem Drive) e um grupo sozinha.
+    const grupos = new Map();
+    for (const r of rows) {
+      const chave = r.source_video_id ? `sv:${r.source_video_id}` : `p:${r.id}`;
+      if (!grupos.has(chave)) grupos.set(chave, []);
+      grupos.get(chave).push(r);
+    }
+    const nova = [...grupos.values()].flat();
+
+    const igual = nova.every((r, i) => r.id === rows[i].id);
+    if (igual) {
+      await client.query('COMMIT');
+      return false;
+    }
+
+    // Postagem sem horario (anterior a migration 032) conta como vencida; nesse
+    // caso nao da pra redistribuir horarios sem inventar um, entao so a ordem muda.
+    const todosComHorario = rows.every((r) => r.scheduled_for);
+    const horarios = rows.map((r) => r.scheduled_for).sort((a, b) => new Date(a) - new Date(b));
+
+    for (let i = 0; i < nova.length; i++) {
+      await client.query(
+        `UPDATE postings
+            SET queue_order = $2,
+                scheduled_for = CASE WHEN $4 THEN $3::timestamptz ELSE scheduled_for END,
+                updated_at = now()
+          WHERE id = $1`,
+        [nova[i].id, i, todosComHorario ? horarios[i] : null, todosComHorario]
+      );
+    }
+    await client.query('COMMIT');
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 const ORIGIN_CASE = `
@@ -629,6 +730,7 @@ module.exports = {
   findPublishableByIdOwnedByClient,
   countTodayForAccount,
   countPendingForAccount,
+  agruparFilaPorVideo,
   agendarNovaTentativa,
   marcarErroDefinitivo,
   reflowScheduledFor,

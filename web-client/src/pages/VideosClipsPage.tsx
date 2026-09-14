@@ -661,6 +661,18 @@ function VideoRow({
         </div>
       )}
 
+      {/* Vídeo que o freio de fila deixou de fora porque o canal publicou um
+          mais novo enquanto a fila estava cheia. Sem este aviso ele pareceria
+          esquecido; com ele, o cliente sabe que foi escolha e pode mandar. */}
+      {video.autoSkippedReason === "mais_recente" && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-2">
+          <TonePill tone="neutral" dot={false}>
+            {t("cortes.naoEraOMaisRecente")}
+          </TonePill>
+          <p className="min-w-0 text-xs text-muted-foreground">{t("cortes.naoEraOMaisRecenteTexto")}</p>
+        </div>
+      )}
+
       {/* Explicação de vídeo parado esperando o computador do cliente. Some
           inteira quando o admin desliga a exibição do túnel — o pedido foi que
           NADA sobre a internet do cliente aparecesse, e este texto é sobre
