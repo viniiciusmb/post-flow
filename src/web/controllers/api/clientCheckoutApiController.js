@@ -227,6 +227,7 @@ async function pagar(req, res) {
           priceCents: item.priceCents,
           dadosDoTitular: req.body.titular || {},
           email: req.session.user.email,
+          remoteIp: req.ip,
         });
         return res.json({ ...r, tipo: 'creditos' });
       }

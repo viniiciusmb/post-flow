@@ -14,18 +14,9 @@ const config = require('../src/config');
 const asaasService = require('../src/services/asaasService');
 const { CONTACT } = require('../src/config/constants');
 
-const EVENTOS = [
-  'CHECKOUT_PAID',
-  'CHECKOUT_EXPIRED',
-  'CHECKOUT_CANCELED',
-  'PAYMENT_CONFIRMED',
-  'PAYMENT_RECEIVED',
-  'PAYMENT_OVERDUE',
-  'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED',
-  'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_REFUSED',
-  'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_EXPIRED',
-  'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_CANCELLED',
-];
+// Lista única, conferida por teste contra os `case` do webhook - ver o
+// comentário no próprio arquivo sobre o que acontecia sem isso.
+const EVENTOS = require('../src/config/asaasWebhookEvents');
 
 const URL_WEBHOOK = `${CONTACT.siteUrl}/api/asaas/webhook`;
 

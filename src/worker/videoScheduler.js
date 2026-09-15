@@ -11,6 +11,7 @@ const driveExportJob = require('./jobs/driveExportJob');
 const tunnelTestJob = require('./jobs/tunnelTestJob');
 const creditWeeklyResetJob = require('./jobs/creditWeeklyResetJob');
 const overageBillingJob = require('./jobs/overageBillingJob');
+const assinaturasAsaasJob = require('./jobs/assinaturasAsaasJob');
 const narratedVideoJob = require('./videoJobs/narratedVideoJob');
 const narratedVideosRepository = require('../repositories/narratedVideosRepository');
 const videoConcurrencyService = require('../services/videoConcurrencyService');
@@ -28,6 +29,7 @@ const QUEUE_TUNNEL_TEST_ONE = 'tunnel-test-one';
 const QUEUE_TUNNEL_TEST_ALL = 'tunnel-test-all';
 const QUEUE_CREDIT_WEEKLY_RESET = 'credit-weekly-reset';
 const QUEUE_OVERAGE_BILLING = 'overage-billing';
+const QUEUE_ASSINATURAS_ASAAS = 'asaas-subscriptions-check';
 const QUEUE_NARRATED_VIDEO = 'narrated-video';
 const QUEUE_NARRATED_RECOVERY = 'narrated-video-recovery';
 
@@ -44,6 +46,7 @@ async function start(boss) {
   await boss.createQueue(QUEUE_TUNNEL_TEST_ALL);
   await boss.createQueue(QUEUE_CREDIT_WEEKLY_RESET);
   await boss.createQueue(QUEUE_OVERAGE_BILLING);
+  await boss.createQueue(QUEUE_ASSINATURAS_ASAAS);
   await boss.createQueue(QUEUE_NARRATED_VIDEO);
   await boss.createQueue(QUEUE_NARRATED_RECOVERY);
 
@@ -94,6 +97,9 @@ async function start(boss) {
   await boss.schedule(QUEUE_OVERAGE_BILLING, '20 * * * *');
   logger.info('Faturamento de excedente agendado de hora em hora.');
 
+  await boss.schedule(QUEUE_ASSINATURAS_ASAAS, '40 * * * *');
+  logger.info('Conferencia de assinaturas canceladas no Asaas agendada de hora em hora.');
+
   await boss.schedule(QUEUE_NARRATED_RECOVERY, '*/10 * * * *');
   logger.info('Recuperacao de video narrado travado agendada a cada 10 minutos.');
 
@@ -133,6 +139,10 @@ async function start(boss) {
 
   await boss.work(QUEUE_OVERAGE_BILLING, async () => {
     await overageBillingJob.run();
+  });
+
+  await boss.work(QUEUE_ASSINATURAS_ASAAS, async () => {
+    await assinaturasAsaasJob.run();
   });
 
   // Video narrado: UM trabalhador fixo, de proposito fora do

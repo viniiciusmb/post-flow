@@ -40,6 +40,7 @@ const usersRepository = require('../repositories/usersRepository');
 const referralsRepository = require('../repositories/referralsRepository');
 const subscriptionPlansRepository = require('../repositories/subscriptionPlansRepository');
 const creditPurchasesRepository = require('../repositories/creditPurchasesRepository');
+const asaasPaymentsRepository = require('../repositories/asaasPaymentsRepository');
 
 const URL_PADRAO = 'https://api.utmify.com.br/api-credentials/orders';
 
@@ -192,6 +193,16 @@ async function montarPedido(registro, { status, remoteIp = null } = {}) {
     utmDoCliente(clientUserId),
   ]);
 
+  // IP de quem comprou, NUNCA nulo. A Utmify recusa a venda inteira com
+  // "customer.ip cannot be null" - foi assim que, em 14-15/09/2026, a venda
+  // aprovada do cartão e as duas do PIX nunca chegaram ao painel: só o aviso
+  // que saía da tela de pagamento tinha o IP em mãos. Agora ele é gravado na
+  // cobrança; a renovação mensal (que não tem cobrança nossa) usa o da compra
+  // mais recente. Sem nenhum IP conhecido o campo NÃO vai: omitido ela aceita
+  // (conferido contra a API real com isTest, que valida sem salvar).
+  const ip =
+    remoteIp || registro.customer_ip || (await asaasPaymentsRepository.ultimoIpDoCliente(clientUserId));
+
   const totalCents = Number(registro.amount_cents);
   const pago = status === 'paid';
   const estornado = status === 'refunded' || status === 'chargedback';
@@ -210,7 +221,7 @@ async function montarPedido(registro, { status, remoteIp = null } = {}) {
       phone: null,
       document: usuario?.cpf_cnpj || null,
       country: 'BR',
-      ip: remoteIp || null,
+      ...(ip ? { ip } : {}),
     },
     products: [produto],
     trackingParameters,

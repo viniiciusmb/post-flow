@@ -26,17 +26,33 @@ async function create({
   // reescrevendo o passado numa tela que existe pra provar o que aconteceu.
   cardBrand = null,
   cardLast4 = null,
+  // IP de quem comprou. So existe no momento da compra: o aviso de venda
+  // aprovada sai do webhook (IP do Asaas) e o PIX e pago horas depois no app
+  // do banco. A Utmify recusa venda sem ele (ver utmifyService.montarPedido).
+  customerIp = null,
 }) {
   const { rows } = await pool.query(
     `INSERT INTO asaas_payments
        (asaas_payment_id, client_user_id, purpose, billing_type, amount_cents, plan_id, credit_purchase_id,
-        slots, extra_channels, extra_tiktok_accounts, card_brand, card_last4)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        slots, extra_channels, extra_tiktok_accounts, card_brand, card_last4, customer_ip)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
     [asaasPaymentId, clientUserId, purpose, billingType, amountCents, planId, creditPurchaseId,
-     slots, extraChannels, extraTiktokAccounts, cardBrand, cardLast4]
+     slots, extraChannels, extraTiktokAccounts, cardBrand, cardLast4, customerIp]
   );
   return rows[0];
+}
+
+// O IP da compra mais recente do cliente. Serve a renovacao mensal, que nao
+// passa pelo nosso checkout e portanto nao tem IP proprio.
+async function ultimoIpDoCliente(clientUserId) {
+  const { rows } = await pool.query(
+    `SELECT customer_ip FROM asaas_payments
+      WHERE client_user_id = $1 AND customer_ip IS NOT NULL
+      ORDER BY created_at DESC LIMIT 1`,
+    [clientUserId]
+  );
+  return rows[0] ? rows[0].customer_ip : null;
 }
 
 // O extrato de faturas do cliente: tudo que ele pagou, do mais novo pro mais
@@ -119,6 +135,7 @@ async function listForClient(clientUserId, { limit = 20 } = {}) {
 module.exports = {
   listPaidByClient,
   create,
+  ultimoIpDoCliente,
   findByAsaasId,
   markPaidOnce,
   markRefundedOnce,

@@ -323,6 +323,7 @@ async function assinarComCartaoSalvo({ clientUserId, plan, remoteIp }) {
     billingType: 'CREDIT_CARD',
     amountCents: preco.primeiraCobrancaCents,
     planId: plan.id,
+    customerIp: remoteIp || null,
     cardBrand: subscription.asaas_card_brand,
     cardLast4: subscription.asaas_card_last4,
   });
@@ -350,6 +351,11 @@ async function assinarComCartaoSalvo({ clientUserId, plan, remoteIp }) {
 // ficar gritando no log: é dinheiro sendo cobrado duas vezes.
 async function cancelarAssinaturaAnterior(clientUserId, subscription) {
   if (!subscription.asaas_subscription_id) return;
+  // Solta a referência ANTES de pedir o cancelamento. O Asaas avisa
+  // SUBSCRIPTION_DELETED dessa assinatura antiga, e se o aviso ainda a
+  // encontrasse ligada ao cliente, uma TROCA de plano viraria cancelamento de
+  // quem acabou de pagar mais.
+  await clientSubscriptionsRepository.soltarAssinaturaAsaas(clientUserId, subscription.asaas_subscription_id);
   try {
     await asaasService.cancelSubscription(subscription.asaas_subscription_id);
   } catch (err) {
@@ -463,6 +469,7 @@ async function comprarCreditoComCartao({ clientUserId, minutes, bucket, priceCen
     billingType: 'CREDIT_CARD',
     amountCents: priceCents,
     creditPurchaseId: compra.id,
+    customerIp: remoteIp || null,
     cardBrand: subscription.asaas_card_brand,
     cardLast4: subscription.asaas_card_last4,
   });
@@ -476,7 +483,7 @@ async function comprarCreditoComCartao({ clientUserId, minutes, bucket, priceCen
   return { pago: true, paymentId: cobranca.id, minutes };
 }
 
-async function comprarCreditoComPix({ clientUserId, minutes, bucket, priceCents, dadosDoTitular, email }) {
+async function comprarCreditoComPix({ clientUserId, minutes, bucket, priceCents, dadosDoTitular, email, remoteIp = null }) {
   const titular = validarDadosDoTitular({
     ...dadosDoTitular,
     email: dadosDoTitular.email || email,
@@ -519,10 +526,11 @@ async function comprarCreditoComPix({ clientUserId, minutes, bucket, priceCents,
     billingType: 'PIX',
     amountCents: priceCents,
     creditPurchaseId: compra.id,
+    customerIp: remoteIp || null,
   });
   // Venda nasce pendente no painel da Utmify. No cartao ela vira "paga"
   // segundos depois; no PIX fica aqui ate o cliente pagar no banco.
-  utmifyService.vendaPendente(registroDaVenda);
+  utmifyService.vendaPendente(registroDaVenda, { remoteIp });
 
   const qr = await asaasService.getPixQrCode(cobranca.id);
   return {
@@ -627,6 +635,7 @@ async function comprarExtras({ clientUserId, canais = 0, contas = 0, remoteIp })
     slots: pedido.canais + pedido.contas,
     extraChannels: pedido.canais,
     extraTiktokAccounts: pedido.contas,
+    customerIp: remoteIp || null,
     cardBrand: subscription.asaas_card_brand,
     cardLast4: subscription.asaas_card_last4,
   });

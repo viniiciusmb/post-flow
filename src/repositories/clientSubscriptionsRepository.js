@@ -60,6 +60,9 @@ async function setPlan(clientUserId, planId) {
        status = 'ativo',
        cycle_anchor_dow = COALESCE(client_subscriptions.cycle_anchor_dow, EXCLUDED.cycle_anchor_dow),
        first_plan_at = COALESCE(client_subscriptions.first_plan_at, now()),
+       -- Plano novo desfaz um cancelamento agendado: quem voltou a pagar
+       -- nao pode ser cortado na data do cancelamento antigo.
+       cancel_at = NULL,
        updated_at = now()
      RETURNING *`,
     [clientUserId, planId]
@@ -84,6 +87,7 @@ async function setAsaasSubscription(clientUserId, { customerId, subscriptionId }
         SET asaas_customer_id = $2,
             asaas_subscription_id = $3,
             subscription_provider = 'asaas',
+            cancel_at = CASE WHEN $3::text IS NOT NULL THEN NULL ELSE cancel_at END,
             updated_at = now()
       WHERE client_user_id = $1
       RETURNING *`,
@@ -254,6 +258,105 @@ async function findByAsaasExtraSlotsSubscriptionId(asaasSubscriptionId) {
   return rows[0] || null;
 }
 
+// ---------- cancelamento de assinatura ----------
+//
+// Todas condicionadas ao id da assinatura que foi encerrada: se o cliente já
+// trocou para uma assinatura NOVA quando o aviso da antiga chega, nada muda.
+// Sem essa condição, uma troca de plano (que cancela a anterior no Asaas)
+// cancelaria o cliente que acabou de pagar.
+
+// Desliga a referência local antes de o próprio sistema cancelar a assinatura
+// no Asaas (troca de plano). O aviso SUBSCRIPTION_DELETED que vem em seguida
+// não encontra mais ninguém.
+async function soltarAssinaturaAsaas(clientUserId, subscriptionId) {
+  await pool.query(
+    `UPDATE client_subscriptions SET asaas_subscription_id = NULL, updated_at = now()
+      WHERE client_user_id = $1 AND asaas_subscription_id = $2`,
+    [clientUserId, subscriptionId]
+  );
+}
+
+// Cancelamento que só vale no fim do período pago. COALESCE: o aviso repetido
+// (ou a conferência de hora em hora achando o mesmo cancelamento) não empurra
+// a data pra frente.
+async function agendarCancelamento(clientUserId, subscriptionId, ate) {
+  const { rows } = await pool.query(
+    `UPDATE client_subscriptions
+        SET cancel_at = COALESCE(cancel_at, $3), updated_at = now()
+      WHERE client_user_id = $1 AND asaas_subscription_id = $2 AND status IN ('ativo', 'inadimplente')
+      RETURNING *`,
+    [clientUserId, subscriptionId, ate]
+  );
+  return rows[0] || null;
+}
+
+// O que acontece quando o cancelamento passa a valer, num lugar só (usado
+// pelo cancelamento imediato E pelo agendado que venceu):
+//   - status 'cancelado' (a cota semanal para de renovar - ver cicloDeCredito);
+//   - a cota que sobrou da semana acaba junto: ela é do plano, que terminou;
+//   - o crédito AVULSO continua: foi comprado à parte e não expira;
+//   - a cobrança automática de excedente é desligada: quem cancelou não
+//     autorizou mais cobrança nenhuma.
+// Nada é apagado: canais, contas e cortes continuam lá para quem voltar.
+const ENCERRAR_SQL = (onde) => `
+  WITH cancelada AS (
+    UPDATE client_subscriptions
+       SET status = 'cancelado', canceled_at = COALESCE(canceled_at, now()), cancel_at = NULL,
+           overage_card_enabled = false, updated_at = now()
+     WHERE ${onde}
+     RETURNING *
+  ), cota AS (
+    UPDATE client_credits cc
+       SET used_normal = GREATEST(cc.used_normal, cc.quota_normal),
+           used_bonus = GREATEST(cc.used_bonus, cc.quota_bonus),
+           updated_at = now()
+      FROM cancelada
+     WHERE cc.client_user_id = cancelada.client_user_id
+  )
+  SELECT * FROM cancelada`;
+
+async function cancelarAgora(clientUserId, subscriptionId) {
+  const { rows } = await pool.query(
+    ENCERRAR_SQL(`client_user_id = $1 AND asaas_subscription_id = $2 AND status <> 'cancelado'`),
+    [clientUserId, subscriptionId]
+  );
+  return rows[0] || null;
+}
+
+async function finalizarCancelamentosVencidos() {
+  const { rows } = await pool.query(
+    ENCERRAR_SQL(`cancel_at IS NOT NULL AND cancel_at <= now() AND status <> 'cancelado'`)
+  );
+  return rows;
+}
+
+// Remove as conexões extras de uma assinatura de extras encerrada. Mesma regra
+// do não-pagamento: canal e conta que já existem continuam, o limite só volta
+// a barrar novos.
+async function removerExtrasDaAssinatura(clientUserId, subscriptionId) {
+  const { rows } = await pool.query(
+    `UPDATE client_subscriptions
+        SET extra_channels = 0, extra_tiktok_accounts = 0,
+            asaas_extra_slots_subscription_id = NULL, updated_at = now()
+      WHERE client_user_id = $1 AND asaas_extra_slots_subscription_id = $2
+      RETURNING *`,
+    [clientUserId, subscriptionId]
+  );
+  return rows[0] || null;
+}
+
+// Quem precisa ser conferido no Asaas: assinatura de plano ainda valendo sem
+// cancelamento já conhecido, e qualquer assinatura de extras.
+async function listarAssinaturasAsaasParaConferir() {
+  const { rows } = await pool.query(
+    `SELECT client_user_id, status, cancel_at, asaas_subscription_id, asaas_extra_slots_subscription_id
+       FROM client_subscriptions
+      WHERE (asaas_subscription_id IS NOT NULL AND status IN ('ativo', 'inadimplente') AND cancel_at IS NULL)
+         OR asaas_extra_slots_subscription_id IS NOT NULL`
+  );
+  return rows;
+}
+
 // ---------- promoção de primeiro mês ----------
 
 // Marca a promoção como consumida, uma vez só. O `IS NULL` na cláusula é o que
@@ -314,4 +417,10 @@ module.exports = {
   clearExtraSlotsSubscription,
   markFirstMonthUsed,
   countActiveByPlan,
+  soltarAssinaturaAsaas,
+  agendarCancelamento,
+  cancelarAgora,
+  finalizarCancelamentosVencidos,
+  removerExtrasDaAssinatura,
+  listarAssinaturasAsaasParaConferir,
 };

@@ -555,6 +555,8 @@ export const es: Dicionario = {
   "plano.cartaoIndisponivel": "El pago con tarjeta aún no está disponible — habla con soporte.",
   "plano.semPlanoAtivo": "Aún no tienes un plan activo — elige uno abajo o habla con soporte para activarlo.",
   "plano.ultimaCobrancaFalhou": "Tu último cobro falló — actualiza la tarjeta para mantener la suscripción activa.",
+  "plano.assinaturaCancelada": "Tu suscripción fue cancelada — elige un plan abajo para volver a procesar vídeos.",
+  "plano.cancelamentoAgendado": "Suscripción cancelada — mantienes el acceso hasta el {data}.",
   "plano.renovaEm": "Tu cuota semanal se renueva en {tempo}",
   "plano.renovaAgora": "Tu cuota semanal se renueva en cualquier momento",
   "plano.renovaJuncao": "{a} y {b}",

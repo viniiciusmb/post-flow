@@ -33,6 +33,7 @@ const affiliateService = require('../../../services/affiliateService');
 const utmifyService = require('../../../services/utmifyService');
 const logger = require('../../../lib/logger');
 const receitaService = require('../../../services/receitaService');
+const cancelamentoDeAssinaturaService = require('../../../services/cancelamentoDeAssinaturaService');
 
 // ---------- checkout pago ----------
 
@@ -416,6 +417,26 @@ async function handlePaymentOverdue(payment) {
   );
 }
 
+// Cartão recusado DEPOIS de a cobrança ficar pendente (reprovado na análise
+// antifraude, ou captura recusada). No caminho síncrono a recusa já é tratada
+// na hora; este aviso é o caso do cartão que entrou "em análise". Sem ele, a
+// venda ficava pendente para sempre (no histórico e na Utmify) e a recorrência
+// de uma mensalidade que nunca foi paga continuava de pé.
+async function handlePagamentoRecusado(payment) {
+  if (!payment.id) return;
+  const recusado = await asaasPaymentsRepository.markStatusIfPending(payment.id, 'falhou');
+  if (!recusado) return; // não era nosso, ou já tinha sido resolvido
+  utmifyService.vendaRecusada(recusado);
+
+  if (recusado.purpose === 'credit_package' && recusado.credit_purchase_id) {
+    await creditPurchasesRepository.markFailedById(Number(recusado.credit_purchase_id));
+  }
+  if (recusado.purpose === 'subscription') {
+    await cancelamentoDeAssinaturaService.desfazerAssinaturaNaoPaga(recusado);
+  }
+  logger.warn(`Asaas: cobranca ${payment.id} recusada depois da analise (cliente ${recusado.client_user_id}).`);
+}
+
 // ---------- rota ----------
 
 async function webhook(req, res) {
@@ -433,7 +454,11 @@ async function webhook(req, res) {
   // havia como responder a pergunta mais básica durante um problema de
   // pagamento - "o aviso chegou?" -, porque um evento ignorado passava em
   // silêncio absoluto e ficava idêntico a um evento que nunca chegou.
-  const alvo = (req.body.checkout && req.body.checkout.id) || (req.body.payment && req.body.payment.id) || '-';
+  const alvo =
+    (req.body.checkout && req.body.checkout.id) ||
+    (req.body.payment && req.body.payment.id) ||
+    (req.body.subscription && req.body.subscription.id) ||
+    '-';
   logger.info(`Asaas: evento ${evento} recebido (${alvo}).`);
 
   try {
@@ -467,6 +492,23 @@ async function webhook(req, res) {
 
       case 'PAYMENT_OVERDUE':
         await handlePaymentOverdue(req.body.payment || {});
+        break;
+
+      case 'PAYMENT_CREDIT_CARD_CAPTURE_REFUSED':
+      case 'PAYMENT_REPROVED_BY_RISK_ANALYSIS':
+        await handlePagamentoRecusado(req.body.payment || {});
+        break;
+
+      // Assinatura cancelada no painel do Asaas, removida ou inativada. O
+      // acesso segue até o fim do período pago (ver
+      // cancelamentoDeAssinaturaService). Se este aviso se perder, a
+      // conferência de hora em hora acha o mesmo cancelamento.
+      case 'SUBSCRIPTION_INACTIVATED':
+      case 'SUBSCRIPTION_DELETED':
+        await cancelamentoDeAssinaturaService.registrarEncerramento(
+          req.body.subscription && req.body.subscription.id,
+          { origem: evento }
+        );
         break;
 
       // Dinheiro devolvido ou retido. Sem estes casos o prejuízo era em
@@ -533,5 +575,6 @@ module.exports = {
   handleCheckoutPaid,
   handlePaymentReceived,
   handlePaymentOverdue,
+  handlePagamentoRecusado,
   handlePixAuthorizationActivated,
 };

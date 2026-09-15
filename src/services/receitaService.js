@@ -142,7 +142,7 @@ function mensalidadeDe(linha) {
 
 async function listarAssinaturas() {
   const { rows } = await pool.query(
-    `SELECT cs.client_user_id, cs.status, cs.first_plan_at, cs.canceled_at, cs.created_at,
+    `SELECT cs.client_user_id, cs.status, cs.first_plan_at, cs.canceled_at, cs.cancel_at, cs.created_at,
             cs.asaas_subscription_id, cs.asaas_pix_authorization_id, cs.stripe_subscription_id,
             cs.subscription_provider, cs.asaas_card_brand, cs.asaas_card_last4,
             cs.extra_channels, cs.extra_tiktok_accounts,
@@ -191,6 +191,9 @@ async function listarAssinaturas() {
       extraTiktokAccounts: Number(l.extra_tiktok_accounts) || 0,
       assinanteDesde: inicio,
       canceladoEm: l.canceled_at,
+      // Cancelamento já pedido que só vale no fim do período pago. Até lá a
+      // assinatura continua 'ativo' - mas não vai renovar.
+      cancelaEm: l.cancel_at || null,
       meses: mesesEntre(inicio, fim),
       parcelasPagas: Number(l.parcelas) || 0,
       totalPagoCents: Number(l.total_pago) || 0,
@@ -203,10 +206,14 @@ async function listarAssinaturas() {
 // presente, não uma soma do passado.
 function fotoAtual(assinaturas) {
   const ativasPagantes = assinaturas.filter((a) => a.status === 'ativo' && a.pagante);
-  const mrrCents = ativasPagantes.reduce((s, a) => s + a.mensalidadeCents, 0);
+  // MRR é o que VAI se repetir. Quem já cancelou continua ativo até o fim do
+  // período pago, mas não renova - somá-lo mostraria uma receita recorrente
+  // que já se sabe que não vem.
+  const recorrentes = ativasPagantes.filter((a) => !a.cancelaEm);
+  const mrrCents = recorrentes.reduce((s, a) => s + a.mensalidadeCents, 0);
 
   const porPlano = new Map();
-  for (const a of ativasPagantes) {
+  for (const a of recorrentes) {
     const chave = a.planKey || 'sem_plano';
     const atual = porPlano.get(chave) || { key: chave, name: a.planName || '—', assinaturas: 0, mrrCents: 0 };
     atual.assinaturas += 1;
@@ -220,7 +227,8 @@ function fotoAtual(assinaturas) {
     pagantes: ativasPagantes.length,
     // Ticket médio só existe com pelo menos um pagante: dividir por zero
     // viraria "R$ 0,00", que parece um número e não é.
-    ticketMedioCents: ativasPagantes.length ? Math.round(mrrCents / ativasPagantes.length) : null,
+    ticketMedioCents: recorrentes.length ? Math.round(mrrCents / recorrentes.length) : null,
+    cancelamentosAgendados: assinaturas.filter((a) => a.status !== 'cancelado' && a.cancelaEm).length,
     cortesia: assinaturas.filter((a) => a.status === 'ativo' && !a.pagante).length,
     inadimplentes: assinaturas.filter((a) => a.status === 'inadimplente').length,
     // Quanto do MRR está parado esperando o cliente acertar o pagamento.

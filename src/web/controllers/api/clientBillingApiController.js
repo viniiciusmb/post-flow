@@ -130,6 +130,8 @@ async function overview(req, res) {
       planKey: subscription.plan_key || null,
       planName: subscription.plan_name || null,
       status: subscription.status,
+      // Assinatura cancelada que ainda vale até o fim do período pago.
+      cancelaEm: subscription.cancel_at || null,
       overageCardEnabled: subscription.overage_card_enabled,
       // Promoção de estreia: só para quem NUNCA teve plano nenhum. A tela e o
       // checkout consultam a MESMA função (ver lib/promocaoDePrimeiroMes) —

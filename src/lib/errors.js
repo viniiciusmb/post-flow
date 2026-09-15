@@ -31,6 +31,17 @@ class WaitingForTunnelError extends Error {
   }
 }
 
+// O cliente apagou o video enquanto ele era processado. Nao e erro de ninguem:
+// o pipeline so precisa parar - sem marcar status (a linha nao existe mais) e
+// sem ir pro painel de erros do admin.
+class VideoApagadoError extends Error {
+  constructor(message = 'Video apagado pelo cliente durante o processamento.') {
+    super(message);
+    this.name = 'VideoApagadoError';
+  }
+}
+
 module.exports = {
+  VideoApagadoError,
   WaitingForTunnelError,
   ChargeFailedError, PausedError, AwaitingCreditsError };

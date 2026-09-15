@@ -515,6 +515,19 @@ export function ClientBillingPage() {
           {data.subscription.status === "inadimplente" && (
             <TonePill tone="danger">{t("plano.ultimaCobrancaFalhou")}</TonePill>
           )}
+          {data.subscription.status === "cancelado" && (
+            <TonePill tone="danger">{t("plano.assinaturaCancelada")}</TonePill>
+          )}
+          {/* Cancelou, mas o período pago ainda não acabou: sem a data, o
+              cliente que cancelou acharia que perdeu o acesso na hora — ou,
+              pior, que o cancelamento não funcionou. */}
+          {data.subscription.status !== "cancelado" && data.subscription.cancelaEm && (
+            <TonePill tone="violet">
+              {t("plano.cancelamentoAgendado", {
+                data: new Date(data.subscription.cancelaEm).toLocaleDateString(),
+              })}
+            </TonePill>
+          )}
 
           {/* O prazo fica ACIMA dos dois cartões porque os dois bolsos
               renovam no mesmo instante — repetir dentro de cada um seria a

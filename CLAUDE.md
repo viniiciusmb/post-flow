@@ -787,3 +787,30 @@ Relato do fundador: a conta `risestyle43` tinha 40 cortes na fila da conta "Aque
 **ORDEM DO DEPLOY**: as duas migrations são compatíveis com o código antigo (a `085` só alarga um CHECK; a `086` só cria tabela/coluna), então vale a regra nº 1 de sempre — implantar e rodar `migrate.js up` imediatamente.
 
 896 testes (eram 875). Seis mutações validadas: freio ignorando vídeo a caminho (3 falhas), sem um-por-vez (2), resgate enfileirando barrados (2), criação sem agrupamento (1), MRR contando cortesia (1), renovação não registrada (1).
+
+**Utmify recusando venda, avisos do Asaas que nunca chegavam, assinatura cancelada e vídeo apagado no meio (2026-09-15, migration `087`).** Auditoria dos dois primeiros clientes pagantes (Eduardo #203, Max; Davy #204, Pro + R$20 de crédito no PIX). O fluxo funcionou — 27 publicações reais, zero erro de postagem —, mas apareceram quatro buracos.
+
+**1. A Utmify recusava venda sem IP.** O fundador viu só a venda PENDENTE de R$99,90 e nada do PIX. O log mostrava `HTTP 400 "customer.ip cannot be null"`: só o aviso que saía da tela de pagamento tinha o IP em mãos; o "aprovada" (que sai depois, às vezes pelo webhook) e o PIX iam com `ip: null`.
+- **A documentação da Utmify diz que o IP "não é obrigatório" — e a API recusa nulo.** Conferido contra a API real com `isTest: true` (valida sem salvar): nulo → 400; campo AUSENTE, vazio ou `0.0.0.0` → 200. Lição: não confie na documentação de terceiro para campo opcional; teste o formato exato com o modo de teste.
+- `asaas_payments.customer_ip` guarda o IP no momento da compra. `montarPedido` usa: IP da chamada → IP gravado → IP da compra mais recente do cliente (renovação mensal, que não tem cobrança nossa) → **omite o campo**. Nunca `null`.
+- As duas vendas perdidas do Davy foram reenviadas como aprovadas em 15/09 (200 nas duas).
+
+**2. A conta do Asaas não assinava os eventos de estorno.** O webhook `postflowclips.com` estava com 10 eventos. Todo o tratamento de estorno/contestação/cobrança apagada feito em 09/09 **nunca recebeu um aviso** — tratar um evento não assinado é o mesmo que não tratar, e nada avisa. A lista agora mora em `src/config/asaasWebhookEvents.js`, e `tests/web/asaasAssinaturaEncerradaWebhook.test.js` compara com os `case` do webhook nos dois sentidos. `scripts/asaas-setup.js` já foi rodado em produção e o Asaas aceitou os 12 eventos novos. **Sempre que um `case` novo entrar no webhook, rodar `docker exec <web> node scripts/asaas-setup.js` depois do deploy.** A mesma conta tem um segundo webhook de outro sistema (`interactivelivegames.com`) — não mexer.
+
+**3. Assinatura cancelada passava em silêncio** — o cliente seguia `ativo` para sempre. `cancelamentoDeAssinaturaService`, por dois caminhos:
+- **Aviso** `SUBSCRIPTION_DELETED`/`SUBSCRIPTION_INACTIVATED`, e **conferência de hora em hora** (`assinaturasAsaasJob`, minuto 40, no video-worker) que pergunta ao Asaas o estado de cada assinatura — aviso de webhook se perde, e o item 2 prova que isso acontece de verdade.
+- **O acesso vai até o fim do período pago**, como já prometiam os termos de uso: grava `client_subscriptions.cancel_at` e só vira `cancelado` quando a data chega. O fim é **a última mensalidade paga (e não estornada) do livro de receita + 1 mês**, e NÃO o `nextDueDate` do Asaas, que avança antes de a cobrança seguinte ser paga e daria um mês de graça. Inadimplente, plano dado pelo admin ou mês pago já vencido → cancela na hora.
+- Ao virar cancelado: a cota da semana acaba, o crédito avulso fica (comprado à parte), a cobrança automática de excedente é desligada, e `creditsService` recusa excedente de assinatura cancelada mesmo com o cartão religado. Nada é apagado.
+- **Troca de plano não pode virar cancelamento**: `cancelarAssinaturaAnterior` solta a referência local ANTES de cancelar no Asaas, e toda escrita de cancelamento é condicionada ao id da assinatura encerrada.
+- **404 do Asaas NÃO cancela** — é sintoma de chave/conta trocada (a mesma armadilha da Stripe em 14/08), e cancelaria todos os clientes de uma vez.
+- Voltar a assinar (`setPlan`/`setAsaasSubscription`) desfaz o agendamento. MRR não soma quem já cancelou; o painel de Receita mostra "Cancela em dd/mm" e a tela Plano e uso diz até quando o acesso vale.
+- De quebra: `PAYMENT_REPROVED_BY_RISK_ANALYSIS`/`PAYMENT_CREDIT_CARD_CAPTURE_REFUSED` marcam a cobrança como falha, avisam a Utmify e **desfazem a recorrência** de uma mensalidade que ficou "em análise" e foi recusada — antes ela ficava de pé e cobraria no mês seguinte por um plano que nunca valeu.
+- **Não existe botão de cancelar assinatura para o cliente** — o cancelamento hoje só acontece no painel do Asaas. Pendente de decisão do fundador.
+
+**4. Vídeo apagado no meio do processamento continuava sendo processado.** `isCancelRequested` tratava linha sumida como "não pediu pausa". Agora linha sumida para o pipeline como uma pausa (`VideoApagadoError`), sem gravar status e sem ir pro painel de erros; o laço de cortes também para quando um corte quebra porque a pasta sumiu. Os 7 erros falsos do Davy (#2006/#2008) foram marcados como resolvidos.
+
+**Pendência de decisão (não mexida)**: a política de privacidade diz "não usamos rastreamento publicitário de terceiros", mas a Utmify recebe nome, e-mail, CPF e IP de cada venda, e não aparece na lista de terceiros.
+
+**ORDEM DO DEPLOY**: a migration `087` só acrescenta colunas e **já foi aplicada em produção antes do deploy** (código novo com schema antigo quebraria o checkout). Depois do deploy, `migrate.js up` sai sem fazer nada.
+
+936 testes (eram 918), 4 arquivos (`videoApagadoNoMeio`, `cancelamentoDeAssinatura`, `asaasAssinaturaEncerradaWebhook`, e 4 casos novos em `utmifyVendas`). Sete mutações validadas: IP nulo voltando (4 falhas), pipeline e corte ignorando o vídeo apagado (1 cada), cancelar sempre na hora (4), 404 cancelando (1), evento fora da lista assinada (1), cancelado pagando excedente (1).

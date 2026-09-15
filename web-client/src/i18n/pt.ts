@@ -561,6 +561,8 @@ export const pt = {
   "plano.cartaoIndisponivel": "Pagamento por cartão ainda não está disponível — fale com o suporte.",
   "plano.semPlanoAtivo": "Você ainda não tem um plano ativo — escolha um abaixo ou fale com o suporte pra ativar.",
   "plano.ultimaCobrancaFalhou": "Sua última cobrança falhou — atualize o cartão pra manter a assinatura ativa.",
+  "plano.assinaturaCancelada": "Sua assinatura foi cancelada — escolha um plano abaixo pra voltar a processar vídeos.",
+  "plano.cancelamentoAgendado": "Assinatura cancelada — você continua com acesso até {data}.",
   // Contador de renovacao da cota semanal. Unidades separadas em singular e
   // plural porque o t() so troca {n} por um numero - nao ha sistema de plural.
   "plano.renovaEm": "Sua cota semanal renova em {tempo}",

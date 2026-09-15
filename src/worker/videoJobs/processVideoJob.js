@@ -11,7 +11,13 @@ const errorReportService = require('../../services/errorReportService');
 const downloadTunnelsRepository = require('../../repositories/downloadTunnelsRepository');
 const logger = require('../../lib/logger');
 const erroDeProcessamento = require('../../lib/erroDeProcessamento');
-const { PausedError, AwaitingCreditsError, ChargeFailedError, WaitingForTunnelError } = require('../../lib/errors');
+const {
+  PausedError,
+  AwaitingCreditsError,
+  ChargeFailedError,
+  WaitingForTunnelError,
+  VideoApagadoError,
+} = require('../../lib/errors');
 const creditsService = require('../../services/creditsService');
 const custoService = require('../../services/custoService');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
@@ -190,14 +196,32 @@ function guardarComoCompartilhado(filePath, youtubeVideoId, audioLanguage) {
 // sem isso, pausar so tinha efeito depois que a etapa inteira terminasse
 // (podia levar minutos). O trabalho ja feito ate ali (download, transcricao,
 // cortes ja renderizados) fica salvo pra retomar depois sem refazer.
+//
+// Video APAGADO conta como pedido de parada. Antes a linha sumida devolvia
+// "nao pediu pausa" e o pipeline seguia trabalhando num video que nao existia
+// mais: em 15/09/2026 um cliente apagou dois videos no meio (#2006 na
+// transcricao, #2008 no corte), o worker continuou gastando Whisper e IA, e
+// cada corte quebrou com ENOENT (a pasta tinha sido apagada junto) - 7 "erros
+// abertos" no painel do admin que nao eram defeito nenhum.
 async function isCancelRequested(sourceVideoId) {
   const current = await sourceVideosRepository.findById(sourceVideoId);
-  return Boolean(current && current.cancel_requested);
+  return !current || Boolean(current.cancel_requested);
 }
 
 async function checkPaused(sourceVideoId) {
-  if (await isCancelRequested(sourceVideoId)) {
-    throw new PausedError('Pausado pelo cliente.');
+  const current = await sourceVideosRepository.findById(sourceVideoId);
+  if (!current) throw new VideoApagadoError();
+  if (current.cancel_requested) throw new PausedError('Pausado pelo cliente.');
+}
+
+// Na duvida (banco fora do ar), responde que existe: ai o erro segue o
+// tratamento normal e aparece no painel, que e o lado seguro. Dizer "foi
+// apagado" por engano esconderia uma falha de verdade.
+async function videoAindaExiste(sourceVideoId) {
+  try {
+    return Boolean(await sourceVideosRepository.findById(sourceVideoId));
+  } catch {
+    return true;
   }
 }
 
@@ -819,6 +843,11 @@ async function run(sourceVideoId) {
         // catch de fora, que trata a pausa do video inteiro. Sem esse
         // desvio, toda pausa durante o render marcava o corte como erro.
         if (err instanceof PausedError) throw err;
+        // O corte quebrou porque o video (e a pasta dele) foi apagado no meio -
+        // tipicamente ENOENT antes de o ffmpeg chegar a conferir a pausa. Para o
+        // video inteiro em vez de tentar os cortes seguintes e registrar um
+        // "erro" por corte.
+        if (!(await videoAindaExiste(sourceVideo.id))) throw new VideoApagadoError();
         logger.error(`Falha ao renderizar o corte ${clip.id}:`, err);
         await clipsRepository.updateStatus(clip.id, 'error', { errorMessage: null });
         await errorReportService.report({
@@ -843,6 +872,14 @@ async function run(sourceVideoId) {
 
     await sourceVideosRepository.updateStatus(sourceVideo.id, 'ready');
   } catch (err) {
+    // Vem antes de tudo: a pausa que os servicos lancam (download, Whisper,
+    // ffmpeg) tambem e o jeito de um video apagado chegar aqui, e qualquer
+    // outro erro (ENOENT na pasta apagada) pode ser consequencia da exclusao.
+    // Nada a gravar - a linha nao existe - e nada a reportar.
+    if (err instanceof VideoApagadoError || !(await videoAindaExiste(sourceVideo.id))) {
+      logger.info(`Video-fonte ${sourceVideo.id} foi apagado pelo cliente - processamento interrompido.`);
+      return;
+    }
     if (err instanceof PausedError) {
       logger.info(`Processamento do video-fonte ${sourceVideo.id} pausado - progresso preservado pra retomar depois.`);
       // Nao apaga workDir nem cancel_requested aqui - o video baixado, a

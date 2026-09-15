@@ -203,7 +203,9 @@ async function reserveBeforeDownload(sourceVideo, clientUserId) {
   }
 
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  if (!subscription.overage_card_enabled) {
+  // Assinatura cancelada nunca cobra excedente, mesmo com o cartão autorizado:
+  // quem cancelou não autorizou mais nada daqui pra frente.
+  if (!subscription.overage_card_enabled || subscription.status === 'cancelado') {
     // Sem cartao o video nao vai rodar, entao o que ja foi consumido tem que
     // voltar - senao o cliente perde credito sem receber nada em troca.
     await devolverCreditoConsumido();
@@ -392,7 +394,9 @@ async function chargeForUpload(sourceVideo, clientUserId) {
   }
 
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  if (!subscription.overage_card_enabled) {
+  // Assinatura cancelada nunca cobra excedente, mesmo com o cartão autorizado:
+  // quem cancelou não autorizou mais nada daqui pra frente.
+  if (!subscription.overage_card_enabled || subscription.status === 'cancelado') {
     await devolverCreditoConsumido();
     return { outcome: 'blocked' };
   }

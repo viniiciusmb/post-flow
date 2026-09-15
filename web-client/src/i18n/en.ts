@@ -555,6 +555,8 @@ export const en: Dicionario = {
   "plano.cartaoIndisponivel": "Card payment is not available yet — contact support.",
   "plano.semPlanoAtivo": "You do not have an active plan yet — choose one below or contact support to activate it.",
   "plano.ultimaCobrancaFalhou": "Your last charge failed — update the card to keep the subscription active.",
+  "plano.assinaturaCancelada": "Your subscription was cancelled — choose a plan below to process videos again.",
+  "plano.cancelamentoAgendado": "Subscription cancelled — you keep access until {data}.",
   "plano.renovaEm": "Your weekly allowance renews in {tempo}",
   "plano.renovaAgora": "Your weekly allowance renews at any moment",
   "plano.renovaJuncao": "{a} and {b}",

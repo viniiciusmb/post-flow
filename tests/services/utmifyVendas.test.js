@@ -358,6 +358,93 @@ test('o endereço da Utmify só pode ser trocado por um local', async () => {
   }
 });
 
+// A Utmify recusa a venda inteira com "customer.ip cannot be null". Em
+// 14-15/09/2026 isso fez sumir do painel a venda aprovada do cartão e as duas
+// do PIX: só o aviso que saía da tela de pagamento tinha o IP.
+test('PIX: a venda pendente E a aprovada levam o IP de quem comprou', async () => {
+  await comAsaasFalso(respostasPadrao({ paymentStatus: 'PENDING' }), async () => {
+    await comUtmifyFalsa(async (pedidos) => {
+      const cliente = await createClient();
+      await clientSubscriptionsRepository.getOrCreate(cliente.id);
+
+      const compra = await checkoutService.comprarCreditoComPix({
+        clientUserId: cliente.id,
+        minutes: 100,
+        bucket: 'normal',
+        priceCents: 2000,
+        dadosDoTitular: TITULAR,
+        email: cliente.email,
+        remoteIp: '189.10.20.30',
+      });
+      await utmifyService.aguardarEnvios();
+
+      // O pagamento chega horas depois, pelo webhook - que não tem o IP do cliente.
+      const registro = await asaasPaymentsRepository.findByAsaasId(compra.paymentId);
+      await checkoutService.aplicarPagamentoConfirmado(registro);
+      await utmifyService.aguardarEnvios();
+
+      assert.deepEqual(
+        pedidos.map((p) => [p.corpo.status, p.corpo.customer.ip]),
+        [
+          ['waiting_payment', '189.10.20.30'],
+          ['paid', '189.10.20.30'],
+        ]
+      );
+    });
+  });
+});
+
+test('cartão: a venda aprovada leva o mesmo IP da pendente', async () => {
+  await comAsaasFalso(respostasPadrao(), async () => {
+    await comUtmifyFalsa(async (pedidos) => {
+      const cliente = await clienteComCartao();
+      await checkoutService.assinarComCartaoSalvo({ clientUserId: cliente.id, plan: await planoMax(), remoteIp: '200.1.2.3' });
+      await utmifyService.aguardarEnvios();
+
+      assert.equal(pedidos.length, 2);
+      for (const { corpo } of pedidos) assert.equal(corpo.customer.ip, '200.1.2.3', `venda "${corpo.status}" sem IP`);
+    });
+  });
+});
+
+test('renovação mensal (sem compra nossa) usa o IP da compra mais recente', async () => {
+  await comAsaasFalso(respostasPadrao(), async () => {
+    await comUtmifyFalsa(async (pedidos) => {
+      const cliente = await clienteComCartao();
+      await checkoutService.assinarComCartaoSalvo({ clientUserId: cliente.id, plan: await planoMax(), remoteIp: '200.1.2.3' });
+      await utmifyService.aguardarEnvios();
+      pedidos.length = 0;
+
+      // O formato que o webhook monta para a renovação (avisarUtmifyDaRenovacao).
+      utmifyService.vendaPaga({
+        asaas_payment_id: `pay_renovacao_ip_${process.pid}_${Date.now()}`,
+        client_user_id: cliente.id,
+        purpose: 'subscription',
+        billing_type: 'CREDIT_CARD',
+        amount_cents: 23390,
+      });
+      await utmifyService.aguardarEnvios();
+
+      assert.equal(pedidos[0].corpo.customer.ip, '200.1.2.3');
+    });
+  });
+});
+
+test('sem IP conhecido, o campo não vai - nunca como nulo, que a Utmify recusa', async () => {
+  const cliente = await createClient();
+  const pedido = await utmifyService.montarPedido(
+    {
+      asaas_payment_id: 'pay_sem_ip',
+      client_user_id: cliente.id,
+      purpose: 'subscription',
+      billing_type: 'CREDIT_CARD',
+      amount_cents: 100,
+    },
+    { status: 'paid' }
+  );
+  assert.equal(Object.prototype.hasOwnProperty.call(pedido.customer, 'ip'), false);
+});
+
 test('toda cobrança criada no checkout avisa a Utmify', async () => {
   // Esta é uma varredura de CÓDIGO, não de comportamento, e é de propósito.
   //

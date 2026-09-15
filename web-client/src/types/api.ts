@@ -82,6 +82,8 @@ export interface AssinaturaDaReceita {
   extraTiktokAccounts: number
   assinanteDesde: string
   canceladoEm: string | null
+  /** Cancelamento já pedido que só vale no fim do período pago (até lá, status continua ativo). */
+  cancelaEm: string | null
   meses: number
   parcelasPagas: number
   totalPagoCents: number
@@ -920,6 +922,8 @@ export interface ClientBillingOverviewResponse {
     planKey: string | null
     planName: string | null
     status: SubscriptionStatus
+    /** Assinatura cancelada que ainda vale até esta data (fim do período pago). */
+    cancelaEm: string | null
     overageCardEnabled: boolean
     promoDisponivel: boolean
     extraChannels: number

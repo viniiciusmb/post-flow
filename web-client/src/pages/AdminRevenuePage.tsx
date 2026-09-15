@@ -104,6 +104,10 @@ function MeioDePagamento({ a }: { a: AssinaturaDaReceita }) {
 function StatusDaAssinatura({ a }: { a: AssinaturaDaReceita }) {
   if (a.status === "inadimplente") return <TonePill tone="danger">Inadimplente</TonePill>
   if (a.status === "cancelado") return <TonePill tone="neutral">Cancelada</TonePill>
+  // Já cancelou, mas ainda está no período pago: continua ativo e fora do MRR.
+  if (a.cancelaEm) {
+    return <TonePill tone="violet">Cancela em {new Date(a.cancelaEm).toLocaleDateString("pt-BR")}</TonePill>
+  }
   if (!a.pagante) return <TonePill tone="neutral">Cortesia</TonePill>
   return <TonePill tone="success">Pagante</TonePill>
 }
