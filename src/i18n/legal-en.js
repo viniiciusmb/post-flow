@@ -232,7 +232,7 @@ module.exports = {
     intro:
       'This page explains, in plain English, what data Post Flow stores, why it stores it, who it is shared with and how you delete everything. It applies to the website <a href="{site}">{site}</a> and to the desktop program we offer for download.',
     resumo:
-      '<strong>Summary in three lines:</strong> We store the minimum needed for the service to work. We do not sell your data and we do not use it for advertising. You can disconnect your accounts and delete everything whenever you want, by emailing <a href="mailto:{email}">{email}</a>.',
+      '<strong>Summary in three lines:</strong> We store the minimum needed for the service to work. We do not sell your data. When you pay, the details of that purchase go to Utmify, the tool we use to know which ad or link each sale came from. You can disconnect your accounts and delete everything whenever you want, by emailing <a href="mailto:{email}">{email}</a>.',
     secoes: [
       {
         h: '1. Who controls your data',
@@ -308,7 +308,12 @@ module.exports = {
               ],
               [
                 'Tax ID (CPF or CNPJ)',
-                'Required by the Brazilian Central Bank for Automatic PIX (the recurring debit you authorise). <strong>We only ask for it from customers who choose PIX</strong> — card payers never give us a tax ID',
+                'Required by Asaas for any payment (card or PIX) and by the Brazilian Central Bank for Automatic PIX. Also sent to Utmify with the purchase details',
+                'For as long as the account exists, and for the period required by tax law after closure',
+              ],
+              [
+                'IP address and purchase origin',
+                'Recorded at payment time: the IP goes to Asaas for fraud analysis, and the IP plus the link or campaign that brought you go to Utmify to measure where sales come from',
                 'For as long as the account exists, and for the period required by tax law after closure',
               ],
             ],
@@ -400,7 +405,8 @@ module.exports = {
               '<strong>Anthropic (Claude)</strong>. Receives the <em>text transcript</em> to pick the best segments. It does not receive the video or the audio.',
               '<strong>TikTok</strong>. Receives the clips you asked to publish.',
               '<strong>Google Drive</strong>. Receives the clips you asked to export.',
-              '<strong>Asaas</strong>. Processes the subscription and credit purchases (card and PIX) and stores card data. Receives your name, email and, for Automatic PIX, your tax ID.',
+              '<strong>Asaas</strong>. Processes the subscription and credit purchases (card and PIX) and stores card data. Receives your name, email, tax ID (CPF or CNPJ), the card billing address and the IP address the purchase was made from (used for fraud analysis).',
+              '<strong>Utmify</strong>. A sales measurement tool. When you pay, it receives the details of that purchase (product, amount, payment method and status: pending, approved, refused or refunded), your name, email, tax ID, the purchase IP address and which link or campaign brought you to the site. It lets us know which ads and promotions bring customers. It is sent from our server: there is no Utmify pixel or code in your browser, and it receives nothing about your videos or connected accounts.',
               '<strong>Stripe</strong>. Used only for the automatic overage charge of customers who enabled it, and stores that card\'s data.',
               '<strong>Hostinger</strong>. Hosts the server the system runs on.',
             ],
@@ -408,7 +414,7 @@ module.exports = {
           {
             tipo: 'p',
             texto:
-              '<strong>We do not sell your data and we do not use third-party advertising trackers.</strong>',
+              '<strong>We do not sell your data.</strong> The only marketing measurement tool is Utmify, described above, and it only receives purchase data. The site has no pixel or advertising tracker.',
           },
         ],
       },

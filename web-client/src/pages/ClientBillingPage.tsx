@@ -289,6 +289,7 @@ export function ClientBillingPage() {
   const [minutosAvulsos, setMinutosAvulsos] = useState<number | null>(null)
   const [payments, setPayments] = useState<ClientPaymentsResponse | null>(null)
   const [removerPedido, setRemoverPedido] = useState<"canais" | "contas" | null>(null)
+  const [cancelarPedido, setCancelarPedido] = useState(false)
 
   async function load() {
     const res = await api.get<ClientBillingOverviewResponse>("/api/client/billing/overview")
@@ -447,6 +448,13 @@ export function ClientBillingPage() {
     await runAction("extras-remover", () =>
       api.post("/api/client/checkout/extras/remover", { [oQue]: 1 })
     )
+  }
+
+  // Cancelar o plano. Discreto por decisão do fundador, mas com confirmação na
+  // própria frase: é um clique que para a cobrança de verdade no Asaas.
+  async function cancelarPlano() {
+    setCancelarPedido(false)
+    await runAction("cancelar-plano", () => api.post("/api/client/billing/cancel"))
   }
 
   // Só anuncia o desconto se o cliente ainda tiver direito a ele.
@@ -1207,6 +1215,42 @@ export function ClientBillingPage() {
                 ))}
               </CardContent>
             </Card>
+          )}
+
+          {/* Cancelar plano: de propósito uma frase pequena e apagada no fim
+              da página, não um botão (decisão do fundador). */}
+          {data.subscription.podeCancelar && (
+            <div className="text-xs text-muted-foreground/70">
+              {cancelarPedido ? (
+                <span>
+                  {t("plano.cancelarConfirmar")}{" "}
+                  <button
+                    type="button"
+                    className="underline underline-offset-4 hover:text-foreground"
+                    onClick={cancelarPlano}
+                    disabled={busyKey === "cancelar-plano"}
+                  >
+                    {t("plano.cancelarSim")}
+                  </button>
+                  {" · "}
+                  <button
+                    type="button"
+                    className="underline-offset-4 hover:underline"
+                    onClick={() => setCancelarPedido(false)}
+                  >
+                    {t("plano.cancelarVoltar")}
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="underline-offset-4 hover:underline"
+                  onClick={() => setCancelarPedido(true)}
+                >
+                  {t("plano.cancelarPlano")}
+                </button>
+              )}
+            </div>
           )}
         </>
       )}

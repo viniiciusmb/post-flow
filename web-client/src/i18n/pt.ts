@@ -563,6 +563,10 @@ export const pt = {
   "plano.ultimaCobrancaFalhou": "Sua última cobrança falhou — atualize o cartão pra manter a assinatura ativa.",
   "plano.assinaturaCancelada": "Sua assinatura foi cancelada — escolha um plano abaixo pra voltar a processar vídeos.",
   "plano.cancelamentoAgendado": "Assinatura cancelada — você continua com acesso até {data}.",
+  "plano.cancelarPlano": "Cancelar plano",
+  "plano.cancelarConfirmar": "Cancelar o plano? Você continua com acesso até o fim do período já pago.",
+  "plano.cancelarSim": "Sim, cancelar",
+  "plano.cancelarVoltar": "Voltar",
   // Contador de renovacao da cota semanal. Unidades separadas em singular e
   // plural porque o t() so troca {n} por um numero - nao ha sistema de plural.
   "plano.renovaEm": "Sua cota semanal renova em {tempo}",

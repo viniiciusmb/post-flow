@@ -924,6 +924,8 @@ export interface ClientBillingOverviewResponse {
     status: SubscriptionStatus
     /** Assinatura cancelada que ainda vale até esta data (fim do período pago). */
     cancelaEm: string | null
+    /** Mostra o link "Cancelar plano": só com recorrência de cartão ainda valendo. */
+    podeCancelar: boolean
     overageCardEnabled: boolean
     promoDisponivel: boolean
     extraChannels: number

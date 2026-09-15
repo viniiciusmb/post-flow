@@ -233,7 +233,7 @@ module.exports = {
     intro:
       'Esta página explica, en español claro, qué datos guarda Post Flow, por qué los guarda, con quién los comparte y cómo borras todo. Vale para el sitio <a href="{site}">{site}</a> y para el programa de ordenador que ofrecemos para descargar.',
     resumo:
-      '<strong>Resumen en tres líneas:</strong> Guardamos lo mínimo para que el servicio funcione. No vendemos tus datos ni los usamos para publicidad. Puedes desconectar tus cuentas y borrar todo cuando quieras, escribiendo a <a href="mailto:{email}">{email}</a>.',
+      '<strong>Resumen en tres líneas:</strong> Guardamos lo mínimo para que el servicio funcione. No vendemos tus datos. Cuando pagas, los datos de esa compra van a Utmify, la herramienta que usamos para saber de qué anuncio o enlace vino cada venta. Puedes desconectar tus cuentas y borrar todo cuando quieras, escribiendo a <a href="mailto:{email}">{email}</a>.',
     secoes: [
       {
         h: '1. Quién es el responsable de tus datos',
@@ -309,7 +309,12 @@ module.exports = {
               ],
               [
                 'CPF o CNPJ',
-                'Exigido por el Banco Central de Brasil para el PIX Automático (el débito recurrente que tú autorizas). <strong>Solo se lo pedimos a quien elige pagar con PIX</strong>: quien paga con tarjeta nunca nos informa el documento',
+                'Exigido por Asaas para cualquier pago (tarjeta o PIX) y por el Banco Central de Brasil para el PIX Automático. También se envía a Utmify junto con los datos de la compra',
+                'Mientras exista la cuenta, y durante el plazo exigido por la ley fiscal tras el cierre',
+              ],
+              [
+                'Dirección IP y origen de la compra',
+                'Registrados al momento del pago: la IP va a Asaas para el análisis antifraude, y la IP y el enlace o campaña que te trajo van a Utmify para medir de dónde vienen las ventas',
                 'Mientras exista la cuenta, y durante el plazo exigido por la ley fiscal tras el cierre',
               ],
             ],
@@ -401,7 +406,8 @@ module.exports = {
               '<strong>Anthropic (Claude)</strong>. Recibe la <em>transcripción en texto</em> para elegir los mejores fragmentos. No recibe el vídeo ni el audio.',
               '<strong>TikTok</strong>. Recibe los clips que mandaste publicar.',
               '<strong>Google Drive</strong>. Recibe los clips que mandaste exportar.',
-              '<strong>Asaas</strong>. Procesa la suscripción y la compra de crédito (tarjeta y PIX) y guarda los datos de la tarjeta. Recibe tu nombre, correo y, en el PIX Automático, tu CPF o CNPJ.',
+              '<strong>Asaas</strong>. Procesa la suscripción y la compra de crédito (tarjeta y PIX) y guarda los datos de la tarjeta. Recibe tu nombre, correo, CPF o CNPJ, la dirección de facturación de la tarjeta y la dirección IP desde la que se hizo la compra (usada en el análisis antifraude).',
+              '<strong>Utmify</strong>. Herramienta de medición de ventas. Cuando pagas, recibe los datos de esa compra (producto, valor, forma de pago y estado: pendiente, aprobada, rechazada o reembolsada), tu nombre, correo, CPF o CNPJ, la dirección IP de la compra y el enlace o campaña por el que llegaste al sitio. Nos sirve para saber qué anuncios y promociones traen clientes. Se envía desde nuestro servidor: no hay píxel ni código de Utmify en tu navegador, y no recibe nada de tus vídeos ni de tus cuentas conectadas.',
               '<strong>Stripe</strong>. Se usa solo para el cobro automático de excedente de quien activó esa opción, y guarda los datos de esa tarjeta.',
               '<strong>Hostinger</strong>. Aloja el servidor donde funciona el sistema.',
             ],
@@ -409,7 +415,7 @@ module.exports = {
           {
             tipo: 'p',
             texto:
-              '<strong>No vendemos tus datos y no usamos rastreadores publicitarios de terceros.</strong>',
+              '<strong>No vendemos tus datos.</strong> La única herramienta de medición de marketing es Utmify, descrita arriba, y solo recibe datos de compras. El sitio no tiene píxel ni rastreador publicitario.',
           },
         ],
       },

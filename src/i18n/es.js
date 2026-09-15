@@ -283,6 +283,8 @@ module.exports = {
     arquivoSumiu: "El archivo de ese clip ya no está en el servidor.",
     arquivoSumiuReinicio: "El archivo de ese clip ya no está en el servidor (esto pasa si el servicio se reinició antes de la descarga).",
     assinaturaNaoEncontrada: "Suscripción no encontrada.",
+    semAssinaturaParaCancelar: "No hay cobro recurrente para cancelar en esta cuenta. Habla con soporte.",
+    cancelamentoFalhou: "No pudimos cancelar ahora. Inténtalo de nuevo en unos minutos — no se cambió nada.",
     cadastrePixAntes: "Registra tu clave Pix antes de solicitar el retiro.",
     canalJaCadastrado: "Ese canal ya está registrado.",
     canalNaoEncontrado: "Canal no encontrado.",

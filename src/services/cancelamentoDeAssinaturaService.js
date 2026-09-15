@@ -160,7 +160,49 @@ async function desfazerAssinaturaNaoPaga(registro) {
   return true;
 }
 
+// O próprio cliente pediu para cancelar (link "Cancelar plano" em Plano e uso).
+//
+// Ordem: cancela no Asaas PRIMEIRO. Se o Asaas falhar, nada muda do nosso lado
+// e o cliente vê o erro - marcar "cancelado" aqui com a recorrência ainda de pé
+// no Asaas faria a pessoa ser cobrada no mês seguinte por um plano que ela
+// cancelou, o pior desencontro possível. O aviso SUBSCRIPTION_DELETED que o
+// Asaas manda em seguida cai no mesmo registrarEncerramento e não muda nada
+// (idempotente).
+async function cancelarPeloCliente(clientUserId) {
+  const sub = await clientSubscriptionsRepository.getOrCreate(clientUserId);
+
+  // Clique repetido, ou aviso do Asaas que chegou antes: já está feito.
+  if (sub.status === 'cancelado' || sub.cancel_at) {
+    return { status: sub.status, cancelaEm: sub.cancel_at || null, jaEstava: true };
+  }
+  if (!sub.asaas_subscription_id) {
+    const err = new Error('sem assinatura recorrente para cancelar');
+    err.code = 'SEM_ASSINATURA';
+    throw err;
+  }
+
+  await asaasService.cancelSubscription(sub.asaas_subscription_id);
+
+  if (sub.asaas_extra_slots_subscription_id) {
+    const idExtras = sub.asaas_extra_slots_subscription_id;
+    await clientSubscriptionsRepository.soltarAssinaturaDeExtras(clientUserId, idExtras);
+    try {
+      await asaasService.cancelSubscription(idExtras);
+    } catch (err) {
+      logger.error(
+        `ATENCAO: cliente ${clientUserId} cancelou o plano mas a recorrencia de extras ${idExtras} nao foi cancelada - pode cobrar mes que vem:`,
+        err.message
+      );
+    }
+  }
+
+  await registrarEncerramento(sub.asaas_subscription_id, { origem: 'cancelado pelo cliente' });
+  const depois = await clientSubscriptionsRepository.getOrCreate(clientUserId);
+  return { status: depois.status, cancelaEm: depois.cancel_at || null, jaEstava: false };
+}
+
 module.exports = {
+  cancelarPeloCliente,
   registrarEncerramento,
   conferirNoAsaas,
   finalizarVencidos,

@@ -26,6 +26,7 @@ const planLimitsService = require('../../../services/planLimitsService');
 const subscriptionCheckoutService = require('../../../services/subscriptionCheckoutService');
 const checkoutService = require('../../../services/checkoutService');
 const cicloDeCredito = require('../../../lib/cicloDeCredito');
+const cancelamentoDeAssinaturaService = require('../../../services/cancelamentoDeAssinaturaService');
 const { resolveStripeCustomerId } = subscriptionCheckoutService;
 
 // Credito avulso: o cliente escolhe MINUTOS numa barra, e o preco por minuto e
@@ -132,6 +133,13 @@ async function overview(req, res) {
       status: subscription.status,
       // Assinatura cancelada que ainda vale até o fim do período pago.
       cancelaEm: subscription.cancel_at || null,
+      // Só quem tem recorrência de cartão no Asaas cancela por aqui. Plano dado
+      // pelo admin não cobra nada (não há o que cancelar), e o PIX Automático
+      // se cancela no app do banco - onde a autorização foi dada.
+      podeCancelar:
+        Boolean(subscription.asaas_subscription_id) &&
+        subscription.status !== 'cancelado' &&
+        !subscription.cancel_at,
       overageCardEnabled: subscription.overage_card_enabled,
       // Promoção de estreia: só para quem NUNCA teve plano nenhum. A tela e o
       // checkout consultam a MESMA função (ver lib/promocaoDePrimeiroMes) —
@@ -604,6 +612,21 @@ async function disableOverageCard(req, res) {
   res.json({ overageCardEnabled: updated.overage_card_enabled });
 }
 
+// Link "Cancelar plano" (discreto, no fim de Plano e uso). O acesso continua
+// até o fim do período pago - ver cancelamentoDeAssinaturaService.
+async function cancelSubscription(req, res) {
+  try {
+    const r = await cancelamentoDeAssinaturaService.cancelarPeloCliente(req.session.user.id);
+    res.json({ status: r.status, cancelaEm: r.cancelaEm });
+  } catch (err) {
+    if (err.code === 'SEM_ASSINATURA') {
+      return res.status(400).json({ error: res.locals.t('erros.semAssinaturaParaCancelar') });
+    }
+    logger.error(`Cancelamento pelo cliente ${req.session.user.id} falhou no Asaas:`, err.message);
+    return res.status(502).json({ error: res.locals.t('erros.cancelamentoFalhou') });
+  }
+}
+
 // Reunidas num objeto pra o controller de checkout usar exatamente as mesmas
 // regras (piso, teto, passo e o calculo do preco) sem reimplementar nada - duas
 // telas cobrando precos diferentes pelo mesmo credito seria o pior desencontro
@@ -627,6 +650,7 @@ module.exports = {
   setupOverageCard,
   enableOverageCard,
   disableOverageCard,
+  cancelSubscription,
   payments,
   setDefaultCard,
   // Exportadas pro teste: sao a trava que impede uma cobranca errada.

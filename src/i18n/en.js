@@ -282,6 +282,8 @@ module.exports = {
     arquivoSumiu: "That clip's file is no longer on the server.",
     arquivoSumiuReinicio: "That clip's file is no longer on the server (this happens if the service restarted before the download).",
     assinaturaNaoEncontrada: "Subscription not found.",
+    semAssinaturaParaCancelar: "There is no recurring charge to cancel on this account. Please contact support.",
+    cancelamentoFalhou: "We could not cancel right now. Try again in a few minutes — nothing was changed.",
     cadastrePixAntes: "Set up your Pix key before requesting a withdrawal.",
     canalJaCadastrado: "That channel is already registered.",
     canalNaoEncontrado: "Channel not found.",

@@ -291,6 +291,8 @@ module.exports = {
     arquivoSumiu: "O arquivo desse corte não está mais no servidor.",
     arquivoSumiuReinicio: "O arquivo desse corte não está mais no servidor (isso acontece se o serviço foi reiniciado antes do download).",
     assinaturaNaoEncontrada: "Assinatura não encontrada.",
+    semAssinaturaParaCancelar: "Não há cobrança recorrente para cancelar nesta conta. Fale com o suporte.",
+    cancelamentoFalhou: "Não conseguimos cancelar agora. Tente de novo em alguns minutos — nada foi alterado.",
     cadastrePixAntes: "Cadastre sua chave Pix antes de solicitar o saque.",
     canalJaCadastrado: "Esse canal já está cadastrado.",
     canalNaoEncontrado: "Canal não encontrado.",

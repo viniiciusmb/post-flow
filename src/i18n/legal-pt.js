@@ -235,7 +235,7 @@ module.exports = {
     intro:
       'Esta página explica, em português claro, quais dados o Post Flow guarda, por que guarda, com quem compartilha e como você apaga tudo. Vale para o site <a href="{site}">{site}</a> e para o programa de computador que oferecemos para download.',
     resumo:
-      '<strong>Resumo em três linhas:</strong> Guardamos o mínimo pra o serviço funcionar. Não vendemos seus dados nem usamos pra publicidade. Você pode desconectar suas contas e apagar tudo quando quiser, mandando um e-mail para <a href="mailto:{email}">{email}</a>.',
+      '<strong>Resumo em três linhas:</strong> Guardamos o mínimo pra o serviço funcionar. Não vendemos seus dados. Quando você paga, os dados daquela compra vão pra Utmify, a ferramenta que usamos pra saber de qual anúncio ou link cada venda veio. Você pode desconectar suas contas e apagar tudo quando quiser, mandando um e-mail para <a href="mailto:{email}">{email}</a>.',
     secoes: [
       {
         h: '1. Quem é o controlador dos seus dados',
@@ -311,7 +311,12 @@ module.exports = {
               ],
               [
                 'CPF ou CNPJ',
-                'Exigido pelo Banco Central para o PIX Automático (o débito recorrente autorizado por você). <strong>Só pedimos de quem escolhe pagar por PIX</strong> — quem paga com cartão nunca informa CPF pra nós',
+                'Exigido pelo Asaas para qualquer pagamento (cartão ou PIX) e pelo Banco Central para o PIX Automático. Também enviado à Utmify junto com os dados da compra',
+                'Enquanto a conta existir, e pelo prazo exigido por lei fiscal após o encerramento',
+              ],
+              [
+                'Endereço IP e origem da compra',
+                'Registrados no momento do pagamento: o IP vai ao Asaas para a análise antifraude, e o IP e o link ou campanha que trouxe você vão à Utmify para medir de onde vêm as vendas',
                 'Enquanto a conta existir, e pelo prazo exigido por lei fiscal após o encerramento',
               ],
             ],
@@ -402,7 +407,8 @@ module.exports = {
               '<strong>Anthropic (Claude)</strong>. Recebe a <em>transcrição em texto</em> pra escolher os melhores trechos. Não recebe o vídeo nem o áudio.',
               '<strong>TikTok</strong>. Recebe os cortes que você mandou publicar.',
               '<strong>Google Drive</strong>. Recebe os cortes que você mandou exportar.',
-              '<strong>Asaas</strong>. Processa a assinatura e a compra de crédito (cartão e PIX) e guarda os dados do cartão. Recebe seu nome, e-mail e, no caso do PIX Automático, seu CPF ou CNPJ.',
+              '<strong>Asaas</strong>. Processa a assinatura e a compra de crédito (cartão e PIX) e guarda os dados do cartão. Recebe seu nome, e-mail, CPF ou CNPJ, o endereço de cobrança do cartão e o endereço IP de onde a compra foi feita (usado na análise antifraude).',
+              '<strong>Utmify</strong>. Ferramenta de medição de vendas. Quando você paga, recebe os dados daquela compra (produto, valor, forma de pagamento e situação: pendente, aprovada, recusada ou estornada), seu nome, e-mail, CPF ou CNPJ, o endereço IP da compra e de qual link ou campanha você chegou ao site. Serve pra sabermos quais anúncios e divulgações trazem clientes. É enviada pelo nosso servidor: não há pixel nem código da Utmify no seu navegador, e ela não recebe nada dos seus vídeos nem das suas contas conectadas.',
               '<strong>Stripe</strong>. Usada apenas para a cobrança automática de excedente de quem ativou essa opção, e guarda os dados desse cartão.',
               '<strong>Hostinger</strong>. Hospeda o servidor onde o sistema roda.',
             ],
@@ -410,7 +416,7 @@ module.exports = {
           {
             tipo: 'p',
             texto:
-              '<strong>Não vendemos seus dados e não usamos rastreamento publicitário de terceiros.</strong>',
+              '<strong>Não vendemos seus dados.</strong> A única ferramenta de medição de marketing é a Utmify, descrita acima, e ela só recebe dados de compras. O site não tem pixel nem rastreador de publicidade.',
           },
         ],
       },

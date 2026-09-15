@@ -276,6 +276,19 @@ async function soltarAssinaturaAsaas(clientUserId, subscriptionId) {
   );
 }
 
+// O cliente cancelou o plano: a recorrência das conexões extras também é
+// cancelada no Asaas, mas as conexões seguem valendo até o fim do período pago
+// (saem junto com o plano, em ENCERRAR_SQL). Soltar o id antes de cancelar é o
+// que impede o aviso/conferência de "assinatura de extras encerrada" de
+// removê-las na hora.
+async function soltarAssinaturaDeExtras(clientUserId, subscriptionId) {
+  await pool.query(
+    `UPDATE client_subscriptions SET asaas_extra_slots_subscription_id = NULL, updated_at = now()
+      WHERE client_user_id = $1 AND asaas_extra_slots_subscription_id = $2`,
+    [clientUserId, subscriptionId]
+  );
+}
+
 // Cancelamento que só vale no fim do período pago. COALESCE: o aviso repetido
 // (ou a conferência de hora em hora achando o mesmo cancelamento) não empurra
 // a data pra frente.
@@ -302,7 +315,11 @@ const ENCERRAR_SQL = (onde) => `
   WITH cancelada AS (
     UPDATE client_subscriptions
        SET status = 'cancelado', canceled_at = COALESCE(canceled_at, now()), cancel_at = NULL,
-           overage_card_enabled = false, updated_at = now()
+           overage_card_enabled = false,
+           -- Conexão extra só existe junto de um plano: sem plano, ela acaba.
+           -- Até aqui (período pago) ela continuou valendo.
+           extra_channels = 0, extra_tiktok_accounts = 0, asaas_extra_slots_subscription_id = NULL,
+           updated_at = now()
      WHERE ${onde}
      RETURNING *
   ), cota AS (
@@ -418,6 +435,7 @@ module.exports = {
   markFirstMonthUsed,
   countActiveByPlan,
   soltarAssinaturaAsaas,
+  soltarAssinaturaDeExtras,
   agendarCancelamento,
   cancelarAgora,
   finalizarCancelamentosVencidos,

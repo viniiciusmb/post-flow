@@ -28,6 +28,9 @@ router.post('/overage-card/setup', asyncHandler(controller.setupOverageCard));
 // nao autoriza cobranca automatica.
 router.post('/overage-card/enable', asyncHandler(controller.enableOverageCard));
 router.post('/overage-card/disable', asyncHandler(controller.disableOverageCard));
+// Cancelar o plano: para a recorrência no Asaas; o acesso vai até o fim do
+// período pago.
+router.post('/cancel', asyncHandler(controller.cancelSubscription));
 // Cartoes salvos + extrato. Separado do /overview porque fala com a Stripe:
 // se ela cair, a tela de plano continua abrindo sem este pedaco.
 router.get('/payments', asyncHandler(controller.payments));
