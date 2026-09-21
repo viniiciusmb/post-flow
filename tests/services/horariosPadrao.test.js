@@ -77,8 +77,10 @@ test('o modo Padrão usa exatamente os horários que a tela mostra', () => {
     ...comuns,
   });
 
-  assert.deepEqual(
-    padrao.map((d) => d.getTime()),
-    manualComOsMesmos.map((d) => d.getTime())
-  );
+  // Compara o HORÁRIO (minuto), não o carimbo: cada chamada pega o próprio
+  // "agora" e preserva os segundos dele, então o milissegundo que passa entre
+  // as duas fazia este teste falhar de vez em quando (visto em 21/09/2026) sem
+  // nada errado no produto. O que a publicação usa é o minuto.
+  const minuto = (d) => Math.floor(d.getTime() / 60000);
+  assert.deepEqual(padrao.map(minuto), manualComOsMesmos.map(minuto));
 });

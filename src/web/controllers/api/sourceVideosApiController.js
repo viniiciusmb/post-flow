@@ -39,7 +39,12 @@ const DEFAULT_AVG_PROCESSING_SECONDS = 480;
 // de destino - o cliente escolhe na hora do envio. Com 0 contas, segue sem
 // nenhuma (corte fica pronto mas nao vira postagem); com 1, usa ela direto;
 // com 2+, exige que pelo menos uma tenha sido marcada.
-async function resolveTiktokAccountIds(req) {
+//
+// Recebe `res` porque a mensagem de erro sai traduzida (res.locals.t). Sem
+// ele, o caso "2+ contas e nenhuma marcada" virava ReferenceError e o cliente
+// recebia um 500 genérico em vez de "escolha uma conta" (visto em produção em
+// 17/09/2026).
+async function resolveTiktokAccountIds(req, res) {
   const accounts = await tiktokAccountsRepository.listActiveByClientId(req.session.user.id);
   if (accounts.length === 0) return { tiktokAccountIds: [] };
   if (accounts.length === 1) return { tiktokAccountIds: [accounts[0].id] };
@@ -341,7 +346,7 @@ async function createManual(req, res) {
     });
   }
 
-  const targets = await resolveTiktokAccountIds(req);
+  const targets = await resolveTiktokAccountIds(req, res);
   if (targets.error) return res.status(400).json({ error: targets.error });
 
   let metadata;
@@ -426,7 +431,7 @@ async function uploadVideo(req, res) {
     return res.status(400).json({ error: res.locals.t('erros.nenhumArquivo') });
   }
 
-  const targets = await resolveTiktokAccountIds(req);
+  const targets = await resolveTiktokAccountIds(req, res);
   if (targets.error) {
     fs.unlinkSync(req.file.path);
     return res.status(400).json({ error: targets.error });
