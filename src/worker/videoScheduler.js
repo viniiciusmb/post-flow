@@ -33,6 +33,8 @@ const QUEUE_ASSINATURAS_ASAAS = 'asaas-subscriptions-check';
 const QUEUE_NARRATED_VIDEO = 'narrated-video';
 const QUEUE_NARRATED_RECOVERY = 'narrated-video-recovery';
 
+const PRAZO_DE_TRABALHO_LONGO_S = 4 * 60 * 60;
+
 async function start(boss) {
   await boss.createQueue(QUEUE_CHANNEL_CHECK);
   await boss.createQueue(QUEUE_VIDEO_PROCESSING);
@@ -49,6 +51,27 @@ async function start(boss) {
   await boss.createQueue(QUEUE_ASSINATURAS_ASAAS);
   await boss.createQueue(QUEUE_NARRATED_VIDEO);
   await boss.createQueue(QUEUE_NARRATED_RECOVERY);
+
+  // Prazo que o pg-boss da pra um job terminar, nas filas de trabalho longo.
+  //
+  // O padrao e 15 minutos, e ao estourar o pg-boss NAO interrompe o handler:
+  // ele so desiste de esperar, marca o job como falho e libera o trabalhador
+  // pra buscar o proximo - enquanto o video antigo continua renderizando em
+  // segundo plano. Com o video medindo 40 minutos de mediana (maximo visto:
+  // 139), isso acontecia com quase todo video: em 23/09/2026 havia TRES
+  // cortando ao mesmo tempo com o limite do painel em 2, e 21 dos 24 jobs da
+  // semana tinham sido reentregues aos 15 minutos. O limite de "videos ao
+  // mesmo tempo" nunca foi de verdade.
+  //
+  // 4 horas: acima do mais longo ja medido com folga. Se um handler travar de
+  // verdade, o VIDEO e recuperado pelo sinal de vida (videoStuckRecoveryJob) em
+  // minutos; so a vaga do trabalhador fica presa ate o prazo.
+  //
+  // updateQueue, e nao opcao do createQueue: createQueue nao mexe em fila que
+  // ja existe, e em producao ela existe. Vale pra todo job enviado a fila, por
+  // qualquer caminho, sem precisar lembrar disso em cada boss.send.
+  await boss.updateQueue(QUEUE_VIDEO_PROCESSING, { expireInSeconds: PRAZO_DE_TRABALHO_LONGO_S });
+  await boss.updateQueue(QUEUE_NARRATED_VIDEO, { expireInSeconds: PRAZO_DE_TRABALHO_LONGO_S });
 
   await boss.schedule(QUEUE_CHANNEL_CHECK, '*/20 * * * *');
   logger.info('Checagem de canais do YouTube agendada a cada 20 minutos.');
