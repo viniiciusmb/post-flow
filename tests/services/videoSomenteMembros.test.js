@@ -236,6 +236,147 @@ test('canal novo cujo vídeo mais recente é de membros não perde esse vídeo',
   assert.equal(await lerMarco(canal.id), publico, 'o marco nasceu em cima do vídeo fechado');
 });
 
+// --- 2b. "É o mais recente?" quando o vídeo abre ---
+//
+// Falha real de 22/09/2026, canal "Manual do Mundo": no minuto em que o
+// exclusivo abriu, a listagem do YouTube veio com um vídeo ANTIGO (processado
+// em 17/09, antes do exclusivo existir) na frente dele. O exclusivo foi marcado
+// como "o canal pegou um mais novo" e ficou parado com a fila vazia.
+
+// Um cenário com um vídeo antigo já processado (cadastrado há 5 dias) e um
+// exclusivo cadastrado depois dele (há 4 dias), ainda fechado.
+async function exclusivoDepoisDeUmAntigo({ maxVideoMinutes = null, duracaoDoExclusivo = 600 } = {}) {
+  const antigo = idDeVideo();
+  const exclusivo = idDeVideo();
+  const { cliente, canal } = await canalComMarco(antigo);
+  if (maxVideoMinutes) {
+    await pool.query('UPDATE youtube_channels SET max_video_minutes = $2 WHERE id = $1', [canal.id, maxVideoMinutes]);
+  }
+
+  const jaProcessado = await sourceVideosRepository.createIfNotExists({
+    youtubeChannelId: canal.id,
+    ownerClientUserId: cliente.id,
+    youtubeVideoId: antigo,
+    title: 'Antigo',
+  });
+  await pool.query(`UPDATE source_videos SET status = 'ready', created_at = now() - interval '5 days' WHERE id = $1`, [
+    jaProcessado.id,
+  ]);
+
+  await comYtDlp(
+    {
+      listagem: async () => [
+        {
+          videoId: exclusivo,
+          title: 'Exclusivo',
+          availability: 'subscriber_only',
+          liveStatus: null,
+          durationSeconds: duracaoDoExclusivo,
+        },
+        { videoId: antigo, title: 'Antigo', availability: null, liveStatus: null },
+      ],
+    },
+    () => channelCheckJob.run(bossFalso())
+  );
+  const fechado = await sourceVideosRepository.findByYoutubeVideoIdForOwner(exclusivo, cliente.id);
+  assert.equal(fechado.status, 'somente_membros');
+  await pool.query(`UPDATE source_videos SET created_at = now() - interval '4 days' WHERE id = $1`, [fechado.id]);
+
+  return { cliente, canal, antigo, exclusivo, duracaoDoExclusivo };
+}
+
+test('abre com a listagem fora de ordem (antigo na frente) e mesmo assim entra na fila', async () => {
+  const { cliente, antigo, exclusivo } = await exclusivoDepoisDeUmAntigo();
+  const boss = bossFalso();
+
+  // Exatamente a listagem de 22/09 20:00: o antigo, já processado, na frente.
+  await comYtDlp(
+    {
+      listagem: async () => [
+        { videoId: antigo, title: 'Antigo', availability: null, liveStatus: null },
+        { videoId: exclusivo, title: 'Exclusivo aberto', availability: null, liveStatus: null },
+      ],
+    },
+    () => channelCheckJob.run(boss)
+  );
+
+  const aberto = await sourceVideosRepository.findByYoutubeVideoIdForOwner(exclusivo, cliente.id);
+  assert.equal(aberto.auto_skipped_reason, null, 'ficou marcado como "o canal pegou um mais novo" sem ter pego nada');
+  assert.deepEqual(boss.enviados, [{ sourceVideoId: aberto.id }], 'abriu, era o mais recente e ficou parado');
+});
+
+test('abre, mas o canal já publicou um vídeo público mais novo: entra o mais novo', async () => {
+  const { cliente, antigo, exclusivo } = await exclusivoDepoisDeUmAntigo();
+  const novo = idDeVideo();
+  const boss = bossFalso();
+
+  await comYtDlp(
+    {
+      listagem: async () => [
+        { videoId: novo, title: 'Novo', availability: null, liveStatus: null },
+        { videoId: exclusivo, title: 'Exclusivo aberto', availability: null, liveStatus: null },
+        { videoId: antigo, title: 'Antigo', availability: null, liveStatus: null },
+      ],
+    },
+    () => channelCheckJob.run(boss)
+  );
+
+  const aberto = await sourceVideosRepository.findByYoutubeVideoIdForOwner(exclusivo, cliente.id);
+  const doNovo = await sourceVideosRepository.findByYoutubeVideoIdForOwner(novo, cliente.id);
+  assert.equal(aberto.auto_skipped_reason, 'mais_recente', 'o exclusivo, já velho, entrou na frente do novo');
+  assert.deepEqual(boss.enviados, [{ sourceVideoId: doNovo.id }], 'era pra entrar só o vídeo novo');
+});
+
+test('abre, mas um vídeo mais novo já foi cadastrado depois dele: não entra', async () => {
+  const { cliente, canal, exclusivo } = await exclusivoDepoisDeUmAntigo();
+  const novo = idDeVideo();
+  await sourceVideosRepository.createIfNotExists({
+    youtubeChannelId: canal.id,
+    ownerClientUserId: cliente.id,
+    youtubeVideoId: novo,
+    title: 'Novo, já processado',
+  });
+  await pool.query(`UPDATE source_videos SET status = 'ready' WHERE youtube_video_id = $1`, [novo]);
+  const boss = bossFalso();
+
+  // Mesmo com a listagem pondo o novo ATRÁS do exclusivo, o histórico manda.
+  await comYtDlp(
+    {
+      listagem: async () => [
+        { videoId: novo, title: 'Novo', availability: null, liveStatus: null },
+        { videoId: exclusivo, title: 'Exclusivo aberto', availability: null, liveStatus: null },
+      ],
+    },
+    () => channelCheckJob.run(boss)
+  );
+
+  const aberto = await sourceVideosRepository.findByYoutubeVideoIdForOwner(exclusivo, cliente.id);
+  assert.equal(aberto.auto_skipped_reason, 'mais_recente');
+  assert.deepEqual(boss.enviados, [], 'o canal já tinha seguido em frente');
+});
+
+test('abre acima do limite de duração do canal: fica parado pelo limite, não entra', async () => {
+  const { cliente, antigo, exclusivo } = await exclusivoDepoisDeUmAntigo({
+    maxVideoMinutes: 30,
+    duracaoDoExclusivo: 45 * 60,
+  });
+  const boss = bossFalso();
+
+  await comYtDlp(
+    {
+      listagem: async () => [
+        { videoId: exclusivo, title: 'Longo', availability: null, liveStatus: null, durationSeconds: 45 * 60 },
+        { videoId: antigo, title: 'Antigo', availability: null, liveStatus: null },
+      ],
+    },
+    () => channelCheckJob.run(boss)
+  );
+
+  const aberto = await sourceVideosRepository.findByYoutubeVideoIdForOwner(exclusivo, cliente.id);
+  assert.equal(aberto.auto_skipped_reason, 'duracao');
+  assert.deepEqual(boss.enviados, [], 'vídeo acima do limite do canal entrou na fila');
+});
+
 // --- 3. Classificação do erro (rede de segurança) ---
 
 test('a mensagem real do YouTube é reconhecida como "só para membros"', () => {

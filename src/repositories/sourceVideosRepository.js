@@ -211,6 +211,18 @@ async function findByYoutubeVideoIdForOwner(youtubeVideoId, ownerClientUserId) {
   return rows[0] || null;
 }
 
+// Varios de uma vez: a liberacao de video de membros precisa saber quais dos
+// videos da listagem ja conhecemos, e uma consulta por video seria uma ida ao
+// banco por item da listagem a cada checagem.
+async function findManyByYoutubeVideoIdsForOwner(youtubeVideoIds, ownerClientUserId) {
+  if (!youtubeVideoIds.length) return [];
+  const { rows } = await pool.query(
+    'SELECT * FROM source_videos WHERE youtube_video_id = ANY($1::text[]) AND owner_client_user_id = $2',
+    [youtubeVideoIds, ownerClientUserId]
+  );
+  return rows;
+}
+
 async function findById(id) {
   const { rows } = await pool.query('SELECT * FROM source_videos WHERE id = $1', [id]);
   return rows[0] || null;
@@ -807,6 +819,7 @@ module.exports = {
   setChosenAudioLanguage,
   createUpload,
   findByYoutubeVideoIdForOwner,
+  findManyByYoutubeVideoIdsForOwner,
   findById,
   findByIdOwnedByClient,
   deleteByIdOwnedByClient,

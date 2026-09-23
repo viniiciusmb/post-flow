@@ -93,6 +93,45 @@ async function cadastrarComSelo({ channel, video, title, seguramOMarco }) {
   );
 }
 
+// Registrado numa checagem ANTERIOR a do video liberado - e por isso mais
+// velho que ele. Uma checagem inteira leva segundos; um minuto de folga separa
+// "mesma volta" de "volta anterior" sem depender de relogio exato.
+const MESMA_CHECAGEM_MS = 60 * 1000;
+
+// "Quem e o video mais recente do canal que o sistema pegaria agora?" - a
+// pergunta que decide se um video de membros que abriu entra na fila.
+//
+// Ate 23/09/2026 a resposta era so "o primeiro publico da listagem". Falhou de
+// verdade no canal "Manual do Mundo" (conta risestyle43@gmail.com): no minuto
+// em que o video exclusivo abriu (22/09 20:00), a listagem do YouTube veio com
+// um video ANTIGO na frente dele - um que o sistema ja tinha processado em
+// 17/09, um dia antes do exclusivo existir. O video aberto foi marcado como
+// "o canal pegou um mais novo" e ficou parado, com a fila da conta vazia. Na
+// checagem seguinte a listagem voltou a ordem certa, mas ai ele ja era "video
+// conhecido" e ninguem mais o olhava.
+//
+// A listagem pode vir fora de ordem; o nosso historico nao. Um video que ja
+// estava cadastrado numa checagem ANTERIOR a do liberado existia antes dele,
+// entao nao pode ser mais novo - fica de fora da conta, esteja onde estiver na
+// listagem. O mesmo vale pro video que o sistema nao pegaria de qualquer jeito
+// (acima do limite de duracao do canal): conta-lo como "mais recente" deixaria
+// o video liberado parado sem nada no lugar dele.
+function maisRecenteDoCanal({ liberado, videos, conhecidos, maxVideoMinutes }) {
+  const cadastroDoLiberado = new Date(liberado.created_at).getTime();
+  return videos.find((v) => {
+    if (!ehPublico(v.availability) || !podeBaixarAgora(v.liveStatus)) return false;
+    if (v.videoId === liberado.youtube_video_id) return true;
+
+    const conhecido = conhecidos.get(v.videoId);
+    if (conhecido) {
+      if (new Date(conhecido.created_at).getTime() < cadastroDoLiberado - MESMA_CHECAGEM_MS) return false;
+      if (conhecido.auto_skipped_reason === 'duracao') return false;
+      return true;
+    }
+    return !passaDoLimite(v.durationSeconds, maxVideoMinutes);
+  });
+}
+
 // Poe na fila os videos deste canal que estavam com selo de "somente membros"
 // e agora aparecem publicos na listagem.
 //
@@ -114,8 +153,14 @@ async function liberarQuemAbriu({ channel, videos, priority, boss }) {
   if (!comSelo.length) return 0;
   let enfileirados = 0;
 
-  // O mais recente do canal AGORA - o mesmo criterio que o marco d'agua usa.
-  const maisRecente = videos.find((v) => ehPublico(v.availability) && podeBaixarAgora(v.liveStatus));
+  const conhecidos = new Map(
+    (
+      await sourceVideosRepository.findManyByYoutubeVideoIdsForOwner(
+        videos.map((v) => v.videoId),
+        channel.client_user_id
+      )
+    ).map((row) => [row.youtube_video_id, row])
+  );
 
   for (const video of comSelo) {
     const naListagem = videos.find((v) => v.videoId === video.youtube_video_id);
@@ -127,7 +172,25 @@ async function liberarQuemAbriu({ channel, videos, priority, boss }) {
     const liberado = await sourceVideosRepository.liberarDeSomenteMembros(video.id, { title: naListagem.title });
     if (!liberado) continue;
 
-    if (maisRecente && maisRecente.videoId === video.youtube_video_id) {
+    // O limite de duracao do canal vale pra ele tambem - ate aqui, um video de
+    // membros longo passava direto pra fila quando abria.
+    const duracao = naListagem.durationSeconds || video.duration_seconds;
+    if (passaDoLimite(duracao, channel.max_video_minutes)) {
+      await sourceVideosRepository.markAutoSkipped(liberado.id, 'duracao');
+      logger.info(
+        `Canal "${channel.channel_name}": "${liberado.title}" saiu de "somente membros", mas tem ` +
+          `${Math.round(Number(duracao) / 60)} min e o limite do canal e ${channel.max_video_minutes}.`
+      );
+      continue;
+    }
+
+    const maisRecente = maisRecenteDoCanal({
+      liberado: video,
+      videos,
+      conhecidos,
+      maxVideoMinutes: channel.max_video_minutes,
+    });
+    if (enfileirados === 0 && maisRecente && maisRecente.videoId === video.youtube_video_id) {
       logger.info(
         `Canal "${channel.channel_name}": "${liberado.title}" saiu de "somente membros" e e o mais ` +
           `recente do canal - entrando na fila.`
@@ -498,4 +561,4 @@ async function run(boss) {
   }
 }
 
-module.exports = { run, MAX_VIDEOS_POR_CHECAGEM };
+module.exports = { run, maisRecenteDoCanal, MAX_VIDEOS_POR_CHECAGEM };
