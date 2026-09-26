@@ -20,6 +20,7 @@
 'use strict';
 
 const asaasService = require('../../../services/asaasService');
+const asaasBillingService = require('../../../services/asaasBillingService');
 const asaasCheckoutsRepository = require('../../../repositories/asaasCheckoutsRepository');
 const asaasPixAuthorizationsRepository = require('../../../repositories/asaasPixAuthorizationsRepository');
 const creditPurchasesRepository = require('../../../repositories/creditPurchasesRepository');
@@ -262,16 +263,33 @@ async function registrarPrimeiraMensalidadePix({ registro, detalhes, clientUserI
     logger.error(`Asaas: falha ao processar comissao da 1a mensalidade Pix ${externalId}:`, err);
   }
 
-  utmifyService.vendaPaga({
-    asaas_payment_id: externalId,
-    client_user_id: clientUserId,
-    purpose: 'subscription',
-    plan_id: plan.id,
-    billing_type: 'PIX',
-    amount_cents: amountCents,
-    created_at: (pagamento && pagamento.dateCreated) || registro.created_at,
-    paid_at: (pagamento && (pagamento.clientPaymentDate || pagamento.paymentDate)) || new Date(),
-  });
+  // Fecha o MESMO pedido que foi anunciado como pendente quando o QR foi
+  // gerado (utmify_order_id). Autorização de antes dessa coluna existir não
+  // tem pedido: aí a venda vai pelo id da cobrança, como antes.
+  utmifyService.vendaPaga(
+    asaasBillingService.pedidoUtmifyDoPix(registro, {
+      asaas_payment_id: registro.utmify_order_id || externalId,
+      client_user_id: clientUserId,
+      plan_id: plan.id,
+      amount_cents: amountCents,
+      paid_at: (pagamento && (pagamento.clientPaymentDate || pagamento.paymentDate)) || new Date(),
+    })
+  );
+}
+
+// QR que expirou, foi recusado ou cancelado SEM nunca ter sido pago: a compra
+// morreu, e a Utmify precisa saber - senão o pedido fica "aguardando
+// pagamento" para sempre no funil. Exceto quando a pessoa já gerou outro QR
+// do mesmo pedido: aí ela ainda está tentando, e dar a venda como perdida
+// agora faria o pedido piscar de pendente para recusado e de volta.
+async function avisarUtmifyDoPixPerdido(registro) {
+  if (!registro || !registro.utmify_order_id) return;
+  const viva = await asaasPixAuthorizationsRepository.pedidoTemOutraTentativaViva(
+    registro.utmify_order_id,
+    registro.asaas_authorization_id
+  );
+  if (viva) return;
+  utmifyService.vendaRecusada(asaasBillingService.pedidoUtmifyDoPix(registro));
 }
 
 // Autorização recusada, expirada ou cancelada pelo cliente no app do banco.
@@ -280,6 +298,7 @@ async function handlePixAuthorizationEncerrada(authorizationId, status) {
   const registro = await asaasPixAuthorizationsRepository.markFinalIfPending(authorizationId, status);
   if (!registro) return;
   logger.warn(`Asaas: autorizacao Pix ${authorizationId} terminou como "${status}" (cliente ${registro.client_user_id}).`);
+  await avisarUtmifyDoPixPerdido(registro);
 }
 
 // A autorização que JÁ estava ativa foi cancelada - pelo cliente no app do
@@ -292,7 +311,8 @@ async function handlePixAuthorizationEncerrada(authorizationId, status) {
 async function handlePixAuthorizationCancelada(authorizationId) {
   const registro = await asaasPixAuthorizationsRepository.findByAsaasId(authorizationId);
   if (!registro) return;
-  await asaasPixAuthorizationsRepository.markFinalIfPending(authorizationId, 'cancelada');
+  const perdida = await asaasPixAuthorizationsRepository.markFinalIfPending(authorizationId, 'cancelada');
+  if (perdida) await avisarUtmifyDoPixPerdido(perdida);
   if (registro.status !== 'ativa') return;
   await encerrarPixNoFimDoMesPago(registro, 'autorizacao cancelada');
 }
@@ -724,4 +744,6 @@ module.exports = {
   handlePaymentOverdue,
   handlePagamentoRecusado,
   handlePixAuthorizationActivated,
+  handlePixAuthorizationEncerrada,
+  handlePixAuthorizationCancelada,
 };

@@ -841,3 +841,12 @@ Relato do fundador: a conta `risestyle43` tinha 40 cortes na fila da conta "Aque
   - Kaynan liberado à mão: Starter até 26/10/2026, receita `pay_ojp9wu1nywukgoiv`, Utmify "paid" aceita. **Em 26/10 ele volta a "sem plano" sozinho** e precisa assinar de novo — avisar o fundador.
   - O mesmo deploy repetiu o sumiço das imagens `web`/`video-worker` do EasyPanel (quarta vez); resolvido com a receita de retag desta página.
   - 920 testes. Mutações validadas: sem a fila (1 falha) e cancelamento voltando a marcar inadimplente (2).
+
+**Utmify do PIX Automático igual ao Interactive Live (26/09/2026, migration `088`).** Comparado com o outro sistema do fundador (`~/Documents/interactivlive`, `src/lib/utmify.server.ts`, `src/lib/checkout.functions.ts` → `orderIdDaCompra`, webhook em `src/routes/api/public/asaas/webhook.ts`), o Post Flow já seguia o mesmo desenho no cartão e no PIX avulso (pendente ao criar a cobrança, pago/recusado no mesmo `orderId` = id da cobrança). Faltava o PIX Automático, que não passa por `asaas_payments`:
+- **Pendente ao gerar o QR** (`asaasBillingService.createPixAutomaticSubscription`), num pedido próprio `pixauto:<id da 1ª autorização>` gravado em `asaas_pix_authorizations.utmify_order_id`, com o IP de quem gerou em `customer_ip` (o webhook não tem IP, e a Utmify recusa IP nulo).
+- **Nova tentativa do mesmo plano em 24h reaproveita o pedido** e só re-anuncia pendente se a anterior já tinha sido dada como perdida — no Interactive Live, três QR em cinco minutos viravam três vendas pendentes e três notificações.
+- **A ativação fecha ESSE pedido como pago** (a receita continua presa ao id da cobrança, para o estorno achar). Autorização anterior à coluna cai no id da cobrança, como antes.
+- **QR que expira/é recusado/cancelado sem pagamento vira "refused"**, exceto quando outra tentativa do mesmo pedido ainda está de pé (a pessoa ainda está pagando).
+- Diferença mantida de propósito: o Interactive Live manda `ip: "0.0.0.0"` quando não tem IP; aqui o campo é omitido, o que a API também aceita (conferido em 15/09).
+- A `088` só acrescenta colunas e **foi aplicada antes do deploy** (código novo com schema antigo quebraria a geração do QR).
+- 924 testes (`tests/services/utmifyPixAutomatico.test.js`, 4 novos). Três mutações validadas: sem reaproveitar o pedido (2 falhas), pago num pedido diferente do pendente (1), e recusar mesmo com tentativa viva (1).

@@ -361,6 +361,7 @@ async function subscribePix(req, res) {
     plan,
     customerId,
     primeiraCobrancaCents: preco.primeiraCobrancaCents,
+    remoteIp: req.ip,
   });
   res.json({ ...resultado, primeiraCobrancaCents: preco.primeiraCobrancaCents, recorrenteCents: preco.recorrenteCents });
 }

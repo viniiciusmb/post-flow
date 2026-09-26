@@ -15,6 +15,7 @@
 
 const asaasService = require('./asaasService');
 const asaasPixAuthorizationsRepository = require('../repositories/asaasPixAuthorizationsRepository');
+const utmifyService = require('./utmifyService');
 const logger = require('../lib/logger');
 
 // Quem pode pagar pelo Asaas neste momento.
@@ -74,7 +75,7 @@ const ANOS_DE_AUTORIZACAO = 2;
 // que o cliente paga agora (immediateQrCode.originalValue) é independente do
 // valor que passa a ser debitado todo mês (value). Foi o que permitiu os dois
 // degraus de preço caberem num produto que só tem um valor por autorização.
-async function createPixAutomaticSubscription({ clientUserId, plan, customerId, primeiraCobrancaCents = null }) {
+async function createPixAutomaticSubscription({ clientUserId, plan, customerId, primeiraCobrancaCents = null, remoteIp = null }) {
   const pixKey = await resolverChavePix();
   const hoje = new Date();
   // A primeira cobrança é o próprio QR Code que o cliente vai pagar agora; a
@@ -93,13 +94,26 @@ async function createPixAutomaticSubscription({ clientUserId, plan, customerId, 
     finishDate: fim.toISOString().slice(0, 10),
   });
 
-  await asaasPixAuthorizationsRepository.create({
+  // Pedido da Utmify desta compra. Uma nova tentativa do mesmo plano reaproveita
+  // o da anterior (ver pedidoUtmifyReaproveitavel), e só re-anuncia "pendente"
+  // se a anterior já tinha sido dada como perdida: anunciar de novo um pedido
+  // que continua pendente só dispara notificação repetida no celular do
+  // fundador - era isso que chegava em três no Interactive Live.
+  const anterior = await asaasPixAuthorizationsRepository.pedidoUtmifyReaproveitavel(clientUserId, plan.id);
+  const utmifyOrderId = anterior ? anterior.utmify_order_id : `pixauto:${autorizacao.id}`;
+  const jaAnunciado = Boolean(anterior && anterior.status === 'criada');
+
+  const registro = await asaasPixAuthorizationsRepository.create({
     asaasAuthorizationId: autorizacao.id,
     clientUserId,
     planId: plan.id,
     asaasCustomerId: customerId,
     amountCents: Number(primeiraCobrancaCents || plan.price_cents),
+    utmifyOrderId,
+    customerIp: remoteIp,
   });
+
+  if (!jaAnunciado) utmifyService.vendaPendente(pedidoUtmifyDoPix(registro), { remoteIp });
 
   return {
     authorizationId: autorizacao.id,
@@ -111,7 +125,25 @@ async function createPixAutomaticSubscription({ clientUserId, plan, customerId, 
   };
 }
 
+// A autorização no formato que o utmifyService entende. O orderId é o pedido
+// da compra (estável entre tentativas), não o id da autorização nem o da
+// cobrança - é ele que faz pendente, pago e recusado serem a MESMA venda.
+function pedidoUtmifyDoPix(registro, extras = {}) {
+  return {
+    asaas_payment_id: registro.utmify_order_id,
+    client_user_id: registro.client_user_id,
+    purpose: 'subscription',
+    plan_id: registro.plan_id,
+    billing_type: 'PIX',
+    amount_cents: registro.amount_cents,
+    created_at: registro.created_at,
+    customer_ip: registro.customer_ip,
+    ...extras,
+  };
+}
+
 module.exports = {
+  pedidoUtmifyDoPix,
   clientePodeUsarAsaas,
   createPixAutomaticSubscription,
   nomeDeItem,
