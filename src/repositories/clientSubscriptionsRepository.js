@@ -97,17 +97,22 @@ async function setAsaasSubscription(clientUserId, { customerId, subscriptionId }
 }
 
 // PIX Automatico: nao ha "assinatura" no sentido do Asaas ate a autorizacao
-// ser ativada - quem manda e a autorizacao, entao e ela que guardamos.
-async function setAsaasPixAuthorization(clientUserId, { customerId, authorizationId }) {
+// ser ativada - quem manda e a autorizacao, entao e ela que guardamos. Junto
+// vai a assinatura que o Asaas cria a partir dela (paymentCreationMode
+// SUBSCRIPTION): e o id que as mensalidades seguintes trazem em
+// `payment.subscription`, e sem ele a renovacao nao tinha dono.
+async function setAsaasPixAuthorization(clientUserId, { customerId, authorizationId, subscriptionId = null }) {
   const { rows } = await pool.query(
     `UPDATE client_subscriptions
         SET asaas_customer_id = $2,
             asaas_pix_authorization_id = $3,
+            asaas_subscription_id = COALESCE($4, asaas_subscription_id),
             subscription_provider = 'asaas_pix',
+            cancel_at = CASE WHEN $4::text IS NOT NULL THEN NULL ELSE cancel_at END,
             updated_at = now()
       WHERE client_user_id = $1
       RETURNING *`,
-    [clientUserId, customerId, authorizationId]
+    [clientUserId, customerId, authorizationId, subscriptionId]
   );
   return rows[0] || null;
 }
@@ -303,6 +308,21 @@ async function agendarCancelamento(clientUserId, subscriptionId, ate) {
   return rows[0] || null;
 }
 
+// PIX Automático encerrado com mês pago em aberto: o acesso vale até `ate`.
+// Presa à autorização (não ao cliente): se ele já autorizou outra, esta
+// antiga não pode agendar o fim da nova. COALESCE pelo mesmo motivo do
+// agendarCancelamento.
+async function agendarFimDoPix(clientUserId, authorizationId, ate) {
+  const { rows } = await pool.query(
+    `UPDATE client_subscriptions
+        SET cancel_at = COALESCE(cancel_at, $3), updated_at = now()
+      WHERE client_user_id = $1 AND asaas_pix_authorization_id = $2 AND status IN ('ativo', 'inadimplente')
+      RETURNING *`,
+    [clientUserId, authorizationId, ate]
+  );
+  return rows[0] || null;
+}
+
 // O que acontece quando o cancelamento passa a valer, num lugar só (usado
 // pelo cancelamento imediato E pelo agendado que venceu):
 //   - status 'cancelado' (a cota semanal para de renovar - ver cicloDeCredito);
@@ -433,6 +453,7 @@ module.exports = {
   setExtras,
   clearExtraSlotsSubscription,
   markFirstMonthUsed,
+  agendarFimDoPix,
   countActiveByPlan,
   soltarAssinaturaAsaas,
   soltarAssinaturaDeExtras,

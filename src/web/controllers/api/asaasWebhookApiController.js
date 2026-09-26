@@ -141,8 +141,15 @@ async function ativarAssinatura(registro, clientUserId, checkout) {
 // próximas no app do banco. É ESTE aviso que ativa o plano - o cliente sai do
 // nosso site para o banco e pode nunca voltar, então não existe clique de
 // "concluí" para escutar.
-async function handlePixAuthorizationActivated(authorizationId) {
-  const registro = await asaasPixAuthorizationsRepository.findByAsaasId(authorizationId);
+//
+// O aviso traz a autorização INTEIRA em `authorization` (com o id dentro), e
+// não um id solto. Até 25/09/2026 o código lia um campo `pixAutomaticAuthorization`
+// que o Asaas nunca mandou: o primeiro cliente que assinou por PIX Automático
+// pagou, e o aviso caiu em "autorização desconhecida (undefined)" - plano sem
+// ativar, receita e Utmify sem registro.
+async function handlePixAuthorizationActivated(autorizacao) {
+  const authorizationId = autorizacao && autorizacao.id;
+  const registro = authorizationId ? await asaasPixAuthorizationsRepository.findByAsaasId(authorizationId) : null;
   if (!registro) {
     logger.warn(`Asaas: autorizacao Pix desconhecida ativada (${authorizationId}) - ignorando.`);
     return;
@@ -161,19 +168,110 @@ async function handlePixAuthorizationActivated(authorizationId) {
     return;
   }
 
+  // O aviso pode vir sem a assinatura e sem o QR imediato (o exemplo da
+  // documentação não traz nenhum dos dois); a consulta traz. Falhar aqui não
+  // pode impedir o plano de ativar - no pior caso a renovação fica sem dono,
+  // que é o que acontecia antes.
+  let detalhes = autorizacao;
+  if (!detalhes.subscriptionId || !detalhes.immediateQrCode || !detalhes.status) {
+    try {
+      detalhes = { ...autorizacao, ...(await asaasService.getPixAutomaticAuthorization(authorizationId)) };
+    } catch (err) {
+      logger.error(`Asaas: nao consegui consultar a autorizacao Pix ${authorizationId} (seguindo sem ela):`, err.message);
+    }
+  }
+
   const antes = await clientSubscriptionsRepository.getOrCreate(clientUserId);
   const primeiraAtivacao = antes.status === 'sem_plano' || !antes.plan_id;
 
   await clientSubscriptionsRepository.setPlan(clientUserId, plan.id);
+  // A assinatura que o Asaas cria a partir da autorização é quem gera as
+  // mensalidades seguintes, e elas chegam com `payment.subscription` = este
+  // id. Sem guardá-lo, toda renovação caía em "assinatura desconhecida".
   await clientSubscriptionsRepository.setAsaasPixAuthorization(clientUserId, {
     customerId: registro.asaas_customer_id,
     authorizationId,
+    subscriptionId: detalhes.subscriptionId || null,
   });
   await clientSubscriptionsRepository.setStatus(clientUserId, 'ativo');
+  // O QR imediato sai pelo preço de estreia: a promoção foi usada agora.
+  await clientSubscriptionsRepository.markFirstMonthUsed(clientUserId);
 
   if (primeiraAtivacao) await clientCreditsRepository.applyPlanQuotaNow(clientUserId, plan.id);
   await creditsUnlockService.unlockAwaitingCreditsForClient(clientUserId);
   logger.info(`Asaas: cliente ${clientUserId} ativou o plano ${plan.key} por PIX Automatico.`);
+
+  try {
+    await registrarPrimeiraMensalidadePix({ registro, detalhes, clientUserId, plan });
+  } catch (err) {
+    logger.error(`Asaas: falha ao registrar a 1a mensalidade Pix do cliente ${clientUserId}:`, err);
+  }
+
+  // O aviso de cancelamento pode ter chegado ANTES deste (ou se perdido). Se a
+  // consulta já diz que a autorização caiu, o mês pago vale e acaba sozinho -
+  // sem isto, `setPlan` acima deixaria o plano ativo para sempre de graça.
+  if (detalhes.status === 'CANCELLED') {
+    await encerrarPixNoFimDoMesPago({ ...ativada, client_user_id: clientUserId }, 'autorizacao ja cancelada ao ativar');
+  }
+}
+
+// A primeira mensalidade do PIX Automático não passa pelo nosso checkout: é
+// o QR imediato da autorização, e o Asaas o registra como uma cobrança avulsa
+// ("gerada a partir de Pix recebido"), sem assinatura e sem referência nossa.
+// O que liga as duas é o identificador de conciliação do QR, que volta na
+// cobrança como `pixQrCodeId`. Com o id da cobrança em mãos, receita,
+// comissão e Utmify ficam presos a ela - e um estorno futuro dela desfaz tudo
+// pelo caminho de sempre.
+async function registrarPrimeiraMensalidadePix({ registro, detalhes, clientUserId, plan }) {
+  const conciliacao = detalhes.immediateQrCode && detalhes.immediateQrCode.conciliationIdentifier;
+  let pagamento = null;
+  if (conciliacao && registro.asaas_customer_id) {
+    try {
+      const lista = await asaasService.listPaymentsByCustomer(registro.asaas_customer_id);
+      pagamento =
+        ((lista && lista.data) || []).find(
+          (p) => p.pixQrCodeId === conciliacao && ['RECEIVED', 'CONFIRMED'].includes(p.status)
+        ) || null;
+    } catch (err) {
+      logger.error(`Asaas: nao consegui listar as cobrancas do cliente ${registro.asaas_customer_id}:`, err.message);
+    }
+  }
+
+  // Sem a cobrança, ainda assim registra: o dinheiro entrou (a autorização só
+  // ativa com o QR pago). O id sintético mantém o registro único.
+  const externalId = pagamento ? pagamento.id : `pix-autorizacao:${registro.asaas_authorization_id}`;
+  const amountCents = pagamento ? Math.round(Number(pagamento.value) * 100) : Number(registro.amount_cents);
+
+  await receitaService.registrarMensalidade({
+    clientUserId,
+    provider: 'asaas',
+    externalId,
+    planId: plan.id,
+    amountCents,
+    billingType: 'PIX',
+  });
+
+  try {
+    await affiliateService.recordCommissionForPayment({
+      clientUserId,
+      provider: 'asaas',
+      externalPaymentId: externalId,
+      amountPaidCents: amountCents,
+    });
+  } catch (err) {
+    logger.error(`Asaas: falha ao processar comissao da 1a mensalidade Pix ${externalId}:`, err);
+  }
+
+  utmifyService.vendaPaga({
+    asaas_payment_id: externalId,
+    client_user_id: clientUserId,
+    purpose: 'subscription',
+    plan_id: plan.id,
+    billing_type: 'PIX',
+    amount_cents: amountCents,
+    created_at: (pagamento && pagamento.dateCreated) || registro.created_at,
+    paid_at: (pagamento && (pagamento.clientPaymentDate || pagamento.paymentDate)) || new Date(),
+  });
 }
 
 // Autorização recusada, expirada ou cancelada pelo cliente no app do banco.
@@ -184,18 +282,62 @@ async function handlePixAuthorizationEncerrada(authorizationId, status) {
   logger.warn(`Asaas: autorizacao Pix ${authorizationId} terminou como "${status}" (cliente ${registro.client_user_id}).`);
 }
 
-// Cliente cancelou no app do banco uma autorização que JÁ estava ativa: a
-// mensalidade para de ser cobrada, então a assinatura fica inadimplente. Não
-// cancelamos de imediato - ele pode ter cancelado por engano e refazer.
+// A autorização que JÁ estava ativa foi cancelada - pelo cliente no app do
+// banco, ou pelo próprio banco logo depois do primeiro pagamento (visto em
+// 26/09/2026: ativada e cancelada 66 ms depois, motivo "OTHER", com os
+// R$59,90 do primeiro mês já recebidos). Sem autorização não há mais cobrança
+// nenhuma, mas o mês pago é do cliente: o acesso segue até o fim dele, igual
+// ao cancelamento do cartão, e só então vira cancelado. Se ele autorizar de
+// novo, `setPlan` desfaz o agendamento.
 async function handlePixAuthorizationCancelada(authorizationId) {
   const registro = await asaasPixAuthorizationsRepository.findByAsaasId(authorizationId);
   if (!registro) return;
   await asaasPixAuthorizationsRepository.markFinalIfPending(authorizationId, 'cancelada');
   if (registro.status !== 'ativa') return;
-  await clientSubscriptionsRepository.setStatus(Number(registro.client_user_id), 'inadimplente');
-  logger.warn(
-    `Asaas: cliente ${registro.client_user_id} cancelou a autorizacao de PIX Automatico - assinatura marcada como inadimplente.`
-  );
+  await encerrarPixNoFimDoMesPago(registro, 'autorizacao cancelada');
+}
+
+// Fim do período pago: o maior entre o livro de receita (última mensalidade +
+// 1 mês) e a própria ativação + 1 mês. A ativação entra porque ela SÓ acontece
+// com o QR imediato pago, e porque a receita da primeira mensalidade pode não
+// ter sido gravada (consulta ao Asaas que falhou).
+async function encerrarPixNoFimDoMesPago(registro, origem) {
+  const clientUserId = Number(registro.client_user_id);
+  const pelaReceita = await cancelamentoDeAssinaturaService.fimDoPeriodoPago(clientUserId);
+  const pelaAtivacao = registro.activated_at ? new Date(registro.activated_at) : null;
+  if (pelaAtivacao) pelaAtivacao.setMonth(pelaAtivacao.getMonth() + 1);
+  const candidatos = [pelaReceita, pelaAtivacao].filter(Boolean);
+  const fim = candidatos.length ? new Date(Math.max(...candidatos.map((d) => d.getTime()))) : null;
+
+  if (fim && fim > new Date()) {
+    const agendado = await clientSubscriptionsRepository.agendarFimDoPix(
+      clientUserId,
+      registro.asaas_authorization_id,
+      fim
+    );
+    if (agendado) {
+      logger.warn(
+        `Asaas: PIX Automatico do cliente ${clientUserId} encerrado (${origem}) - acesso mantido ate ${new Date(agendado.cancel_at).toISOString()}.`
+      );
+      return;
+    }
+  }
+  await clientSubscriptionsRepository.setStatus(clientUserId, 'inadimplente');
+  logger.warn(`Asaas: PIX Automatico do cliente ${clientUserId} encerrado (${origem}) - sem mes pago em aberto, inadimplente.`);
+}
+
+// Os avisos de uma mesma autorização chegam colados (ativação e cancelamento
+// com 66 ms de diferença) e a ativação consulta o Asaas no meio. Soltos, o
+// cancelamento rodaria no meio da ativação e o resultado dependeria de quem
+// termina primeiro. Um de cada vez, na ordem de chegada.
+const filasDeAutorizacao = new Map();
+function emOrdemPorAutorizacao(id, tarefa) {
+  const anterior = filasDeAutorizacao.get(id) || Promise.resolve();
+  const atual = anterior.catch(() => {}).then(tarefa);
+  filasDeAutorizacao.set(id, atual);
+  return atual.finally(() => {
+    if (filasDeAutorizacao.get(id) === atual) filasDeAutorizacao.delete(id);
+  });
 }
 
 // ---------- cobrança recebida (renovação mensal) ----------
@@ -437,6 +579,10 @@ async function handlePagamentoRecusado(payment) {
   logger.warn(`Asaas: cobranca ${payment.id} recusada depois da analise (cliente ${recusado.client_user_id}).`);
 }
 
+function idDaAutorizacao(corpo) {
+  return (corpo && corpo.authorization && corpo.authorization.id) || null;
+}
+
 // ---------- rota ----------
 
 async function webhook(req, res) {
@@ -458,6 +604,7 @@ async function webhook(req, res) {
     (req.body.checkout && req.body.checkout.id) ||
     (req.body.payment && req.body.payment.id) ||
     (req.body.subscription && req.body.subscription.id) ||
+    idDaAutorizacao(req.body) ||
     '-';
   logger.info(`Asaas: evento ${evento} recebido (${alvo}).`);
 
@@ -538,19 +685,19 @@ async function webhook(req, res) {
         await handleRefundReverted(req.body.payment || {});
         break;
 
-      // PIX Automático. O id da autorização vem numa chave própria do corpo,
-      // não dentro de payment/checkout.
+      // PIX Automático. A autorização vem inteira em `authorization` (ver
+      // handlePixAuthorizationActivated).
       case 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED':
-        await handlePixAuthorizationActivated(req.body.pixAutomaticAuthorization);
+        await emOrdemPorAutorizacao(idDaAutorizacao(req.body), () => handlePixAuthorizationActivated(req.body.authorization));
         break;
       case 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_REFUSED':
-        await handlePixAuthorizationEncerrada(req.body.pixAutomaticAuthorization, 'recusada');
+        await emOrdemPorAutorizacao(idDaAutorizacao(req.body), () => handlePixAuthorizationEncerrada(idDaAutorizacao(req.body), 'recusada'));
         break;
       case 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_EXPIRED':
-        await handlePixAuthorizationEncerrada(req.body.pixAutomaticAuthorization, 'expirada');
+        await emOrdemPorAutorizacao(idDaAutorizacao(req.body), () => handlePixAuthorizationEncerrada(idDaAutorizacao(req.body), 'expirada'));
         break;
       case 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_CANCELLED':
-        await handlePixAuthorizationCancelada(req.body.pixAutomaticAuthorization);
+        await emOrdemPorAutorizacao(idDaAutorizacao(req.body), () => handlePixAuthorizationCancelada(idDaAutorizacao(req.body)));
         break;
 
       default:

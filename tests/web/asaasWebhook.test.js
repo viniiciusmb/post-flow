@@ -27,6 +27,7 @@ const creditPurchasesRepository = require('../../src/repositories/creditPurchase
 const clientSubscriptionsRepository = require('../../src/repositories/clientSubscriptionsRepository');
 const subscriptionPlansRepository = require('../../src/repositories/subscriptionPlansRepository');
 const { readCredits } = require('../helpers/db');
+const { comAsaasFalso } = require('../helpers/asaasFalso');
 
 const TOKEN = 'token-secreto-do-webhook-asaas';
 let baseUrl;
@@ -38,6 +39,10 @@ test.before(async () => {
   // aqui sai para a rede (o webhook é o Asaas falando conosco, não o contrário).
   config.asaas.apiKey = '$aact_hmlg_teste';
   config.asaas.environment = 'sandbox';
+  // A ativação do PIX Automático consulta o Asaas. Fora dos testes que sobem
+  // um Asaas falso, a consulta cai numa porta fechada e falha na hora, em vez
+  // de sair para a rede de verdade.
+  config.asaas.baseUrlOverride = 'http://127.0.0.1:9/v3';
 });
 
 test.after(async () => {
@@ -308,7 +313,7 @@ test('autorização de PIX ativada liga o plano e aplica a cota', async () => {
 
   const r = await enviarWebhook({
     event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED',
-    pixAutomaticAuthorization: id,
+    authorization: { id },
   });
   assert.equal(r.status, 200);
 
@@ -327,10 +332,10 @@ test('ativação repetida não aplica a cota duas vezes', async () => {
   const planos = await subscriptionPlansRepository.listActive();
   const id = await autorizacaoPendente(cliente.id, planos[0]);
 
-  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', pixAutomaticAuthorization: id });
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', authorization: { id } });
   const cotaDepoisDeUma = (await readCredits(cliente.id)).quota_normal;
 
-  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', pixAutomaticAuthorization: id });
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', authorization: { id } });
   const cotaDepoisDeDuas = (await readCredits(cliente.id)).quota_normal;
 
   assert.equal(cotaDepoisDeDuas, cotaDepoisDeUma, 'aviso repetido não pode dobrar a cota do plano');
@@ -341,7 +346,7 @@ test('autorização recusada no banco não liga plano nenhum', async () => {
   const planos = await subscriptionPlansRepository.listActive();
   const id = await autorizacaoPendente(cliente.id, planos[0]);
 
-  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_REFUSED', pixAutomaticAuthorization: id });
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_REFUSED', authorization: { id } });
 
   const assinatura = await clientSubscriptionsRepository.getOrCreate(cliente.id);
   assert.notEqual(assinatura.status, 'ativo');
@@ -349,18 +354,69 @@ test('autorização recusada no banco não liga plano nenhum', async () => {
   assert.equal(autorizacao.status, 'recusada');
 });
 
-test('cancelar a autorização depois de ativa marca inadimplente', async () => {
+test('cancelar a autorização depois de ativa mantém o acesso até o fim do mês pago', async () => {
   const cliente = await createLoginableClient();
   const planos = await subscriptionPlansRepository.listActive();
   const id = await autorizacaoPendente(cliente.id, planos[0]);
 
-  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', pixAutomaticAuthorization: id });
-  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_CANCELLED', pixAutomaticAuthorization: id });
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', authorization: { id } });
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_CANCELLED', authorization: { id } });
 
-  // Sem autorização não há cobrança - mas não cancelamos de imediato: pode
-  // ter sido engano, e ele pode autorizar de novo.
+  // Sem autorização não há mais cobrança - mas o mês já foi pago e é dele.
   const assinatura = await clientSubscriptionsRepository.getOrCreate(cliente.id);
-  assert.equal(assinatura.status, 'inadimplente');
+  assert.equal(assinatura.status, 'ativo');
+  assert.ok(assinatura.cancel_at, 'o fim do acesso tem que ficar marcado, senão o plano vale para sempre de graça');
+  const dias = (new Date(assinatura.cancel_at) - Date.now()) / 864e5;
+  assert.ok(dias > 27 && dias < 32, `acesso deveria durar ~1 mês, durou ${dias.toFixed(1)} dias`);
+});
+
+// 26/09/2026: o banco do cliente ativou e cancelou a autorização com 66 ms de
+// diferença, depois de o primeiro mês ser pago. Os dois avisos chegam colados.
+test('ativação e cancelamento chegando juntos: cliente fica com o mês pago', async () => {
+  const cliente = await createLoginableClient();
+  const planos = await subscriptionPlansRepository.listActive();
+  const id = await autorizacaoPendente(cliente.id, planos[0]);
+
+  // A ativação consulta o Asaas no meio; em produção isso leva centenas de
+  // milissegundos, e é nessa janela que o cancelamento chegava.
+  const [a, b] = await comAsaasFalso(
+    {
+      'GET /pix/automatic/authorizations/:id': () =>
+        new Promise((r) => setTimeout(() => r({ body: { id, status: 'ACTIVE', subscriptionId: null } }), 300)),
+    },
+    () =>
+      Promise.all([
+        enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', authorization: { id } }),
+        new Promise((r) => setTimeout(r, 50)).then(() =>
+          enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_CANCELLED', authorization: { id, status: 'CANCELLED' } })
+        ),
+      ])
+  );
+  assert.equal(a.status, 200);
+  assert.equal(b.status, 200);
+
+  const assinatura = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+  assert.equal(assinatura.status, 'ativo');
+  assert.ok(assinatura.cancel_at, 'plano liberado sem data de fim seria acesso de graça para sempre');
+});
+
+test('ativação que já encontra a autorização cancelada no Asaas libera só o mês pago', async () => {
+  const cliente = await createLoginableClient();
+  const planos = await subscriptionPlansRepository.listActive();
+  const id = await autorizacaoPendente(cliente.id, planos[0]);
+
+  await comAsaasFalso(
+    {
+      'GET /pix/automatic/authorizations/:id': () => ({ body: { id, status: 'CANCELLED', subscriptionId: null } }),
+    },
+    async () => {
+      await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', authorization: { id } });
+    }
+  );
+
+  const assinatura = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+  assert.equal(assinatura.status, 'ativo');
+  assert.ok(assinatura.cancel_at);
 });
 
 test('recusa atrasada NÃO derruba uma autorização que já ativou', async () => {
@@ -368,8 +424,8 @@ test('recusa atrasada NÃO derruba uma autorização que já ativou', async () =
   const planos = await subscriptionPlansRepository.listActive();
   const id = await autorizacaoPendente(cliente.id, planos[0]);
 
-  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', pixAutomaticAuthorization: id });
-  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_EXPIRED', pixAutomaticAuthorization: id });
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED', authorization: { id } });
+  await enviarWebhook({ event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_EXPIRED', authorization: { id } });
 
   const autorizacao = await asaasPixAuthorizationsRepository.findByAsaasId(id);
   assert.equal(autorizacao.status, 'ativa', 'aviso fora de ordem não pode desfazer uma ativação');
@@ -377,3 +433,82 @@ test('recusa atrasada NÃO derruba uma autorização que já ativou', async () =
   assert.equal(assinatura.status, 'ativo');
 });
 
+
+// O caso real de 25/09/2026: o primeiro cliente que assinou por PIX
+// Automático pagou e nada aconteceu. O aviso traz a autorização em
+// `authorization` (formato da documentação, sem a assinatura dentro); a
+// assinatura que o Asaas cria a partir dela é quem cobra os meses seguintes, e
+// a primeira mensalidade é uma cobrança avulsa ligada ao QR pelo
+// identificador de conciliação.
+const { comUtmifyFalsa } = require('../helpers/utmifyFalsa');
+const utmifyService = require('../../src/services/utmifyService');
+
+test('PIX Automático ativado guarda a assinatura, registra a 1ª mensalidade e reconhece a renovação', async () => {
+  const cliente = await createLoginableClient();
+  const planos = await subscriptionPlansRepository.listActive();
+  const plano = planos[0];
+  const id = await autorizacaoPendente(cliente.id, plano);
+  const sufixo = `${process.pid}_${Date.now()}`;
+  const subId = `sub_pix_${sufixo}`;
+  const payPrimeira = `pay_pix1_${sufixo}`;
+  const payRenovacao = `pay_pix2_${sufixo}`;
+  const conciliacao = `CONC_${sufixo}`;
+
+  await comAsaasFalso(
+    {
+      'GET /pix/automatic/authorizations/:id': () => ({
+        body: { id, status: 'ACTIVE', subscriptionId: subId, immediateQrCode: { conciliationIdentifier: conciliacao } },
+      }),
+      'GET /payments': () => ({
+        body: {
+          data: [
+            { id: `pay_outro_${sufixo}`, pixQrCodeId: 'OUTRO', status: 'RECEIVED', value: 12.5 },
+            { id: payPrimeira, pixQrCodeId: conciliacao, status: 'RECEIVED', value: 59.9, dateCreated: '2026-09-25', paymentDate: '2026-09-25' },
+          ],
+        },
+      }),
+    },
+    async () => {
+      await comUtmifyFalsa(async (pedidos) => {
+        const r = await enviarWebhook({
+          event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED',
+          authorization: { id, status: 'ACTIVE', customerId: 'cus_x', frequency: 'MONTHLY', value: 99.9 },
+        });
+        assert.equal(r.status, 200);
+        await utmifyService.aguardarEnvios();
+
+        const assinatura = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+        assert.equal(assinatura.status, 'ativo');
+        assert.equal(assinatura.asaas_subscription_id, subId, 'sem a assinatura, a renovação cai em "desconhecida"');
+        assert.ok(assinatura.first_month_used_at, 'o QR imediato sai pelo preço de estreia');
+
+        const { rows: primeira } = await pool.query(
+          "SELECT kind, amount_cents FROM revenue_entries WHERE provider = 'asaas' AND external_id = $1",
+          [payPrimeira]
+        );
+        assert.equal(primeira.length, 1, 'a 1ª mensalidade tem que ficar presa à cobrança do QR imediato');
+        assert.equal(primeira[0].kind, 'primeira_mensalidade');
+        assert.equal(primeira[0].amount_cents, 5990);
+
+        const pagos = pedidos.filter((p) => p.corpo.orderId === payPrimeira && p.corpo.status === 'paid');
+        assert.equal(pagos.length, 1, 'a Utmify precisa receber a venda aprovada');
+
+        // Mês seguinte: a cobrança chega ligada à assinatura criada pela autorização.
+        const r2 = await enviarWebhook({
+          event: 'PAYMENT_RECEIVED',
+          payment: { id: payRenovacao, subscription: subId, value: 99.9, billingType: 'PIX', status: 'RECEIVED' },
+        });
+        assert.equal(r2.status, 200);
+        await utmifyService.aguardarEnvios();
+
+        const { rows: renovacao } = await pool.query(
+          "SELECT kind, client_user_id FROM revenue_entries WHERE provider = 'asaas' AND external_id = $1",
+          [payRenovacao]
+        );
+        assert.equal(renovacao.length, 1);
+        assert.equal(renovacao[0].kind, 'recorrencia');
+        assert.equal(Number(renovacao[0].client_user_id), Number(cliente.id));
+      });
+    }
+  );
+});

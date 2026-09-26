@@ -44,9 +44,12 @@ async function comAsaasFalso(rotas, fn) {
         return;
       }
 
-      const resposta = rotas[chave](corpo, chamadas);
-      res.writeHead(resposta.status || 200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(resposta.body || {}));
+      // A resposta pode ser uma promessa: é assim que um teste simula o Asaas
+      // demorando (e reproduz a corrida entre dois avisos colados).
+      Promise.resolve(rotas[chave](corpo, chamadas)).then((resposta) => {
+        res.writeHead(resposta.status || 200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(resposta.body || {}));
+      });
     });
   });
 

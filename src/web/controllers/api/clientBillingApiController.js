@@ -138,6 +138,7 @@ async function overview(req, res) {
       // se cancela no app do banco - onde a autorização foi dada.
       podeCancelar:
         Boolean(subscription.asaas_subscription_id) &&
+        subscription.subscription_provider !== 'asaas_pix' &&
         subscription.status !== 'cancelado' &&
         !subscription.cancel_at,
       overageCardEnabled: subscription.overage_card_enabled,
