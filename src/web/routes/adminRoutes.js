@@ -21,6 +21,7 @@ router.get('/revenue', serveSpaPage('admin-revenue'));
 router.get('/billing', serveSpaPage('admin-billing'));
 router.get('/commissions', serveSpaPage('admin-commissions'));
 router.get('/narrated', serveSpaPage('admin-narrated'));
+router.get('/lives', serveSpaPage('admin-lives'));
 router.get('/errors', serveSpaPage('admin-errors'));
 
 module.exports = router;

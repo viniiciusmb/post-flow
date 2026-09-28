@@ -8,6 +8,7 @@ const adminBandwidthApiController = require('../../controllers/api/adminBandwidt
 const adminCostsApiController = require('../../controllers/api/adminCostsApiController');
 const adminErrorsApiController = require('../../controllers/api/adminErrorsApiController');
 const adminNarratedApiController = require('../../controllers/api/adminNarratedApiController');
+const adminLivesApiController = require('../../controllers/api/adminLivesApiController');
 const requireAuthApi = require('../../middleware/requireAuthApi');
 const requireRoleApi = require('../../middleware/requireRoleApi');
 const asyncHandler = require('../../lib/asyncHandler');
@@ -45,6 +46,16 @@ router.post('/narrated', asyncHandler(adminNarratedApiController.create));
 router.get('/narrated/:id', asyncHandler(adminNarratedApiController.detail));
 router.get('/narrated/:id/download', asyncHandler(adminNarratedApiController.download));
 router.delete('/narrated/:id', asyncHandler(adminNarratedApiController.remove));
+// Cortes de lives da Twitch - fase de validacao, so admin (ver
+// docs/CHECKLIST_MIGRACAO_E_LIVES.md).
+router.get('/lives', asyncHandler(adminLivesApiController.estado));
+router.put('/lives/config', asyncHandler(adminLivesApiController.salvarConfig));
+router.post('/lives/canais', asyncHandler(adminLivesApiController.adicionarCanal));
+router.delete('/lives/canais/:id', asyncHandler(adminLivesApiController.removerCanal));
+router.post('/lives/canais/:id/clipar-agora', asyncHandler(adminLivesApiController.cliparAgora));
+router.get('/lives/cortes', asyncHandler(adminLivesApiController.listarCortes));
+router.get('/lives/cortes/:id/arquivo', asyncHandler(adminLivesApiController.arquivoDoCorte));
+router.delete('/lives/cortes/:id', asyncHandler(adminLivesApiController.apagarCorte));
 
 router.get('/bandwidth', asyncHandler(adminBandwidthApiController.overview));
 router.post('/bandwidth/founder-tunnel/toggle', asyncHandler(adminBandwidthApiController.toggleFounderTunnel));

@@ -50,6 +50,7 @@ export const es: Dicionario = {
   "menu.custos": "Costos",
   "menu.receita": "Ingresos",
   "menu.narrado": "Video narrado",
+  "menu.lives": "Directos",
   "menu.faturamento": "Facturación",
   "menu.erros": "Errores",
   "menu.grupoOperacao": "Operación",
