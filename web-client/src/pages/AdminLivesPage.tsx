@@ -99,7 +99,8 @@ function duracao(segundos: number) {
 }
 
 function usd(v: number) {
-  return `US$ ${v.toFixed(v < 1 ? 3 : 2)}`
+  const casas = v < 1 ? 3 : 2
+  return `US$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas })}`
 }
 
 function somaCusto(r: ResumoCusto) {
@@ -329,7 +330,7 @@ export function AdminLivesPage() {
                       <div key={rotulo as string} className="rounded-lg border p-3 text-sm">
                         <div className="font-medium">{rotulo as string}</div>
                         <div className="text-muted-foreground">
-                          {usd(v.custo)} de IA · {v.horas.toFixed(1)}h gravadas · {v.cortes} cortes
+                          {usd(v.custo)} de IA · {v.horas.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}h gravadas · {v.cortes} cortes
                           {v.porHora !== null && <> · <strong className="text-foreground">{usd(v.porHora)} por hora de live</strong></>}
                         </div>
                       </div>
