@@ -1,5 +1,5 @@
 // Gravacao de UMA live: streamlink (baixa a transmissao, pulando os anuncios
-// da Twitch) com a saida ligada direto no ffmpeg, que grava em pedacos:
+// da Twitch - padrao no 8.x) com a saida ligada direto no ffmpeg, que grava em pedacos:
 //
 //   seg_NNNNNN.ts  - video+audio COPIADOS (sem recodificar), 10s cada
 //   aud_NNNNN.ogg  - so o audio, mono 16 kHz opus 32 kbps, 30s cada - e o que
@@ -37,14 +37,15 @@ const QUALIDADES = {
 const emAndamento = new Map(); // sessionId -> { parar, terminou }
 
 function argsStreamlink(login, qualidade) {
+  // Sem --twitch-disable-ads: no streamlink 8.x pular os anuncios virou o
+  // padrao e a opcao antiga so gera aviso de obsoleta (o log confirma "Will
+  // skip ad segments" sem ela).
   return [
-    '--twitch-disable-ads',
     '--stdout',
     '--loglevel', 'info',
     // Queda de rede curta nao encerra a gravacao: o streamlink tenta de novo
     // antes de desistir.
     '--stream-segment-attempts', '5',
-    '--hls-segment-queue-threshold', '5',
     `https://twitch.tv/${login}`,
     QUALIDADES[qualidade] || QUALIDADES['480p'],
   ];

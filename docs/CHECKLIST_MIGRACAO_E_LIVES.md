@@ -227,24 +227,35 @@ Começa agora na VPS nova (decisão de 28/09), visível só para o admin.
 
 ### Checklist
 - [x] Inventário lido; lista do que é reaproveitado e do que é novo (acima).
-- [ ] Respostas das perguntas abertas 1, 2 e 3.
-- [ ] Conferir no site da OpenAI o preço atual de `gpt-4o-mini-transcribe` e do modelo de texto mais barato (mini/nano) antes de escolher.
-- [ ] Tabelas novas (canais monitorados, sessões, segmentos, transcrições, candidatos, cortes de live, custos), sem alterar tabelas existentes; migração reversível, testada em banco de teste.
-- [ ] Chave `settings.lives_enabled` (padrão desligada) + tela só no `/admin`.
-- [ ] Vigia (Twitch Get Streams, token de app).
-- [ ] Captura: streamlink (AppImage) + ffmpeg `-c copy`, segmentos de 10 s, uma gravação por canal.
-- [ ] Silêncio e sinais de volume.
-- [ ] Transcrição em blocos de 30 s com `gpt-4o-mini-transcribe`.
-- [ ] Triagem a cada 2 min (JSON validado).
-- [ ] Seleção com limite por hora.
-- [ ] Legenda por palavra (`whisper-1`, serviço existente) + render com `videoEditingService`.
-- [ ] "Clipar agora".
-- [ ] Tela "Lives".
-- [ ] Proteções: máx. de canais gravando, horas por dia, parar com disco > 80%, apagar segmentos antigos, custo por canal/dia, chave geral.
-- [ ] Workers de lives em **container separado** com limite de CPU/memória.
-- [ ] Teste com 1 canal real por algumas horas (custo/h, CPU, disco, tempo até o corte, qualidade).
+- [x] Respostas das perguntas abertas 1, 2 e 3. — 28/09 (ver seção de perguntas). `TWITCH_CLIENT_SECRET` colado pelo Vinicius direto no servidor; havia 2 valores, só o que a Twitch aceitou ficou.
+- [x] Conferir no site da OpenAI o preço atual de `gpt-4o-mini-transcribe` e do modelo de texto mais barato (mini/nano) antes de escolher. — 28/09, developers.openai.com/api/docs/pricing: `gpt-4o-mini-transcribe` US$ 0,003/min; texto mais barato = **`gpt-5-nano`** (US$ 0,05 entrada / 0,40 saída por 1M tokens; `gpt-4.1-nano` 0,10/0,40; `gpt-4o-mini` 0,15/0,60). Com `reasoning_effort: minimal` o nano gastou **0** token de raciocínio (medido). Preços em `src/lib/apiCost.js`.
+- [x] Tabelas novas (canais monitorados, sessões, segmentos, transcrições, candidatos, cortes de live, custos), sem alterar tabelas existentes; migração reversível, testada em banco de teste. — `migrations/089_cortes_de_lives.sql` (8 tabelas `live_*`), reversão manual em `migrations/reversao/089_cortes_de_lives.down.sql`. Aplicada no Postgres de teste (`npm test`) e depois na VPS nova. Um teste varre o código do módulo e falha se ele escrever em qualquer tabela que não seja `live_*`/`settings`.
+- [x] Chave `settings.lives_enabled` (padrão desligada) + tela só no `/admin`. — botão Ligar/Desligar na tela; `LIVES_ENABLED=false` no servidor desliga mesmo com o painel ligado; sem `TWITCH_*` também não liga. Tela `/admin/lives` (menu "Lives"), API `/api/admin/lives/*`; cliente comum recebe 403 (testado).
+- [x] Vigia (Twitch Get Streams, token de app). — `src/services/lives/twitchApi.js`, a cada 60 s, em lotes de 100 canais, token de app em cache e renovado no 401.
+- [x] Captura: streamlink (AppImage) + ffmpeg `-c copy`, segmentos de 10 s, uma gravação por canal. — streamlink **8.6.1 fixo** no Dockerfile (AppImage extraído no build; a imagem continua sem Python). `--twitch-disable-ads`. Uma gravação por canal garantida por índice único parcial (testado com 5 tentativas simultâneas). **Medido na VPS:** ~2% de um núcleo e **0,65 GB/h** em 480p30. Grupo de processos morto com `process.kill(-pid)` e aviso de fim único (lições 3 e 4 do CLAUDE.md).
+- [x] Silêncio e sinais de volume. — ffmpeg `silencedetect` + `ebur128` por bloco, grátis. Bloco com ≥90% de silêncio **não vai pra OpenAI**. Volume/pico vão junto no texto que a IA lê. **Defeito achado testando na VPS:** o ffmpeg 5.1 do servidor não aceita `framelog=quiet` (a análise falharia em todo bloco) → `framelog=verbose`. E o bloco de áudio herdava o relógio do anterior → `-reset_timestamps 1` no áudio. Leitura travada por teste contra a saída REAL do ffmpeg (`tests/fixtures/`). Chat IRC ainda não (opcional no plano).
+- [x] Transcrição em blocos de 30 s com `gpt-4o-mini-transcribe`. — fim do bloco anterior vai no `prompt`; 3 tentativas e depois desiste do bloco; custo registrado em `live_costs`.
+- [x] Triagem a cada 2 min (JSON validado). — últimos 5 min de transcrição, structured outputs (schema strict) + validação nossa (dentro da janela, 15–90 s, nota ≥ 6, sem repetir o mesmo momento). Só avança depois de a IA responder (falha da API não pula trecho — testado). **Observação:** no primeiro teste o nano deu 8/10 pra um trecho banal — o corte duro fica na seleção.
+- [x] Seleção com limite por hora. — a cada 10 min e no fim da live; teto = `cortesPorHora` × horas gravadas (1ª hora conta inteira); ignora id inventado e nota < 7; escreve título e gancho no idioma da fala; um corte por usuário que acompanha o canal.
+- [x] Legenda por palavra (`whisper-1`, serviço existente) + render com `videoEditingService`. — `liveRenderService`: junta os pedaços de 10 s sem recodificar, `openaiTranscriptionService.transcribeAudio` (whisper-1) e `renderClip` com o **estilo que o usuário já configurou** (sem "Parte N"). Um render por vez.
+- [x] "Clipar agora". — últimos 150 s; espera a gravação passar do fim; a mesma transcrição por palavra do render serve pro nano achar o início/fim do momento (uma transcrição paga as duas coisas).
+- [x] Tela "Lives". — liga/desliga, limites (salvos no `onBlur`), custo de hoje e 7 dias com **US$ por hora de live**, canais com status, Clipar agora, cortes com prévia/baixar/apagar, ordenação por nota. Atualiza sozinha enquanto grava. "Postar" ainda NÃO (ver pendências).
+- [x] Proteções: máx. de canais gravando, horas por dia, parar com disco > 80%, apagar segmentos antigos, custo por canal/dia, chave geral. — todas em `settings.lives_config` e editáveis na tela. O limite de horas é **por canal por dia** (não por usuário) nesta fase, porque só o admin usa; vira por usuário quando abrir pra clientes.
+- [x] Workers de lives em **container separado** com limite de CPU/memória. — `postflow_live-worker` (`src/worker/liveIndex.js`), `cpus: 1.0`, `mem_limit: 1536m`. O `video-worker` do YouTube sempre tem pelo menos 1 núcleo livre.
+- [ ] Teste com 1 canal real por algumas horas (custo/h, CPU, disco, tempo até o corte, qualidade). — **em andamento desde 28/09 22:12 UTC**: canal `wb3nji` (react em português, ~1.700 espectadores), acompanhado pelo admin, 480p. **Primeiros 15 min (medido):**
+  - gravação acompanha o relógio (~10 s de atraso); 14,5 min = 155 MB (0,64 GB/h);
+  - **1º corte pronto 14 min depois do início da gravação** (1ª seleção aos 10 min + ~3,5 min de render de um corte de 90 s, com o teto de 1 núcleo);
+  - custo: transcrição US$ 0,0435 (14,5 min × US$ 0,003), triagem US$ 0,0014 (7 chamadas), seleção US$ 0,0007, legenda US$ 0,011 por corte → **projeção ~US$ 0,25 por hora de live** com 5 cortes/h, no teto da estimativa do prompt (US$ 0,18–0,24). Quase tudo é a transcrição corrida; a IA de texto é centavo;
+  - 23 candidatos da triagem (nota média 6,7) → 3 escolhidos (notas 7–8) com título e gancho em português; corte de 90 s em 1080×1920 com o estilo do usuário (título, legenda por palavra, fundo), conferido olhando os quadros;
+  - streamlink 8.x marcou `--twitch-disable-ads` e `--hls-segment-queue-threshold` como obsoletos (pular anúncio já é o padrão) — removidos no código, entram no próximo deploy.
 - [ ] Teste com 2–3 canais.
 - [ ] Relatório com os números medidos.
+
+### Pendências conhecidas do módulo
+- **Postar o corte de live no TikTok** ainda não existe: o motor de postagem é amarrado às tabelas do fluxo do YouTube (`postings.video_id → videos → clips`), e ligar isso exige mexer em tabela existente — regra do prompt: pedir autorização antes.
+- **Chat IRC da Twitch** como sinal extra: não feito (o plano diz que é só apoio).
+- **Ordem do deploy:** o `live-worker` sobe antes de a migration rodar e reinicia sozinho até as tabelas existirem (visto no 1º deploy: 3 reinícios, sem dano).
+- Tudo publicado só na VPS nova, a partir da branch `feature/lives` (nada na `main`, nada no GitHub).
 
 ## FASE 5 — depois da validação
 - [ ] Kick (conferir suporte do streamlink).
