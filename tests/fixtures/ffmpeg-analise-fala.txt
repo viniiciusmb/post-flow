@@ -1,0 +1,30 @@
+Input #0, ogg, from '/tmp/aud.ogg':
+  Duration: 00:01:00.02, start: 30.019688, bitrate: 15 kb/s
+  Stream #0:0: Audio: opus, 48000 Hz, mono, fltp
+    Metadata:
+      encoder         : Lavc59.37.100 libopus
+Stream mapping:
+  Stream #0:0 -> #0:0 (opus (native) -> pcm_s16le (native))
+Press [q] to stop, [?] for help
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf59.27.100
+  Stream #0:0: Audio: pcm_s16le, 48000 Hz, mono, s16, 768 kb/s
+    Metadata:
+      encoder         : Lavc59.37.100 pcm_s16le
+size=N/A time=00:00:29.99 bitrate=N/A speed= 310x    
+video:0kB audio:2812kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: unknown
+[Parsed_ebur128_1 @ 0x5fec491b2080] Summary:
+
+  Integrated loudness:
+    I:         -16.9 LUFS
+    Threshold: -27.8 LUFS
+
+  Loudness range:
+    LRA:        11.7 LU
+    Threshold: -37.9 LUFS
+    LRA low:   -26.1 LUFS
+    LRA high:  -14.4 LUFS
+
+  True peak:
+    Peak:        1.4 dBFS
