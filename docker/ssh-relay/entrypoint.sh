@@ -10,7 +10,14 @@ chown -R tunnel:tunnel /home/tunnel/.ssh
 chmod 700 /home/tunnel/.ssh
 chmod 600 /home/tunnel/.ssh/authorized_keys
 
-ssh-keygen -A
+# Chaves de host: geradas so na primeira vez e guardadas em /etc/ssh/hostkeys
+# (volume). Regenerar a cada reinicio trocava a identidade do servidor, e o
+# programa de bandeja (accept-new) passava a recusar a conexao.
+# /home/tunnel/.ssh tambem e volume: sem ele, reiniciar o container apagava
+# todas as chaves autorizadas e todo tunel pareado parava de funcionar.
+mkdir -p /etc/ssh/hostkeys
+[ -f /etc/ssh/hostkeys/ssh_host_ed25519_key ] || ssh-keygen -q -t ed25519 -N '' -f /etc/ssh/hostkeys/ssh_host_ed25519_key
+[ -f /etc/ssh/hostkeys/ssh_host_rsa_key ] || ssh-keygen -q -t rsa -b 3072 -N '' -f /etc/ssh/hostkeys/ssh_host_rsa_key
 
 # -e manda o log do sshd pra stderr em vez de syslog (esse container nao
 # tem syslog nenhum, entao sem -e as mensagens simplesmente desaparecem e

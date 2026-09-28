@@ -1,0 +1,114 @@
+# Post Flow na VPS propria (sem EasyPanel). Fica em /opt/postflow/compose.yml
+# no servidor, copiado daqui pelo deploy/deploy.sh a cada publicacao.
+#
+# Os nomes de container (postflow_db, postflow_web...) sao os mesmos que o
+# EasyPanel usava de proposito: os comandos do CLAUDE.md
+# (docker ps --filter name=postflow_web), o script de backup
+# (docker ps -f name=postflow_db) e as variaveis de ambiente
+# (postflow_db:5432, postflow_potprovider:4416, postflow_ssh-relay) continuam
+# valendo sem mudar nada.
+#
+# Segredos NAO ficam aqui: postflow.env e db.env existem so no servidor.
+
+name: postflow
+
+x-app: &app
+  image: postflow-app:latest
+  env_file: [postflow.env]
+  restart: unless-stopped
+  networks: [interno]
+  logging: &logs
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  db:
+    image: postgres:17
+    container_name: postflow_db
+    restart: unless-stopped
+    env_file: [db.env]
+    shm_size: 256mb
+    volumes:
+      - /var/lib/postflow-db:/var/lib/postgresql/data
+    networks:
+      interno: { aliases: [postflow_db] }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging: *logs
+
+  potprovider:
+    image: brainicism/bgutil-ytdlp-pot-provider
+    container_name: postflow_potprovider
+    restart: unless-stopped
+    networks:
+      interno: { aliases: [postflow_potprovider] }
+    logging: *logs
+
+  ssh-relay:
+    build: ./app/docker/ssh-relay
+    image: postflow-ssh-relay:latest
+    container_name: postflow_ssh-relay
+    restart: unless-stopped
+    ports:
+      - "2222:22"
+    volumes:
+      # Identidade do servidor e chaves autorizadas sobrevivem a reinicios.
+      - /var/lib/postflow-relay/hostkeys:/etc/ssh/hostkeys
+      - /var/lib/postflow-relay/tunnel-ssh:/home/tunnel/.ssh
+    networks:
+      interno: { aliases: [postflow_ssh-relay] }
+    logging: *logs
+
+  web:
+    <<: *app
+    build: ./app
+    container_name: postflow_web
+    command: ["node", "src/web/server.js"]
+    volumes:
+      - /var/lib/postflow-clips:/tmp/post-flow-video
+    depends_on:
+      db: { condition: service_healthy }
+    stop_grace_period: 30s
+
+  worker:
+    <<: *app
+    container_name: postflow_worker
+    command: ["node", "src/worker/index.js"]
+    depends_on:
+      db: { condition: service_healthy }
+      web: { condition: service_started }
+    stop_grace_period: 30s
+
+  video-worker:
+    <<: *app
+    container_name: postflow_video-worker
+    command: ["node", "src/worker/videoIndex.js"]
+    volumes:
+      - /var/lib/postflow-clips:/tmp/post-flow-video
+    depends_on:
+      db: { condition: service_healthy }
+      web: { condition: service_started }
+    # processGuard devolve os jobs pra fila no SIGTERM; da tempo pra isso.
+    stop_grace_period: 60s
+
+  caddy:
+    image: caddy:2
+    container_name: postflow_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    env_file: [sites.env]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /var/lib/postflow-caddy/data:/data
+      - /var/lib/postflow-caddy/config:/config
+    networks: [interno]
+    logging: *logs
+
+networks:
+  interno:

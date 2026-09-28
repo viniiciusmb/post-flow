@@ -1,0 +1,6 @@
+# Caddy faz o HTTPS (certificado Let's Encrypt automatico) e repassa tudo pro
+# Express. Os dominios vem de sites.env (POSTFLOW_SITES), que so existe no
+# servidor: durante o teste e um nome temporario, na troca vira os dominios reais.
+{$POSTFLOW_SITES} {
+	reverse_proxy postflow_web:3000
+}

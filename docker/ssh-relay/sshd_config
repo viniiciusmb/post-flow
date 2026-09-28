@@ -4,8 +4,11 @@
 # chave, gerenciado pelo control-server.js), nunca um shell ou acesso a
 # qualquer outro lugar.
 Port 22
-HostKey /etc/ssh/ssh_host_ed25519_key
-HostKey /etc/ssh/ssh_host_rsa_key
+# Chaves de host numa pasta propria, montada como volume: se fossem geradas
+# de novo a cada reinicio, o programa de bandeja (StrictHostKeyChecking=
+# accept-new) recusaria o servidor "que mudou de identidade" pra sempre.
+HostKey /etc/ssh/hostkeys/ssh_host_ed25519_key
+HostKey /etc/ssh/hostkeys/ssh_host_rsa_key
 LogLevel VERBOSE
 
 PermitRootLogin no
