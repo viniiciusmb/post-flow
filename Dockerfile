@@ -22,6 +22,16 @@ RUN apt-get update && \
     chmod a+rx /usr/local/bin/yt-dlp && \
     mkdir -p /usr/local/bin/yt-dlp-plugins && \
     curl -L https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases/latest/download/bgutil-ytdlp-pot-provider.zip -o /usr/local/bin/yt-dlp-plugins/bgutil-ytdlp-pot-provider.zip && \
+    # streamlink (gravacao de lives da Twitch - so o live-worker usa). AppImage
+    # oficial, que ja traz o proprio Python: a imagem nao tem Python e nao
+    # precisa passar a ter. Extraido no build porque container nao tem FUSE
+    # pra montar AppImage. Versao FIXA: o plugin da Twitch muda de uma versao
+    # pra outra e uma atualizacao silenciosa pode quebrar a gravacao.
+    curl -L -o /tmp/streamlink.AppImage https://github.com/streamlink/streamlink-appimage/releases/download/8.6.1-1/streamlink-8.6.1-1-cp314-cp314-manylinux_2_28_x86_64.AppImage && \
+    chmod +x /tmp/streamlink.AppImage && \
+    cd /opt && /tmp/streamlink.AppImage --appimage-extract > /dev/null && mv /opt/squashfs-root /opt/streamlink && \
+    ln -s /opt/streamlink/AppRun /usr/local/bin/streamlink && rm /tmp/streamlink.AppImage && cd / && \
+    streamlink --version && \
     apt-get purge -y curl && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*

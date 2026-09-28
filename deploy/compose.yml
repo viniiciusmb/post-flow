@@ -94,6 +94,22 @@ services:
     # processGuard devolve os jobs pra fila no SIGTERM; da tempo pra isso.
     stop_grace_period: 60s
 
+  # Cortes de lives da Twitch (fase de validacao, so admin). Processo proprio
+  # com teto de CPU/memoria: uma live pesada nunca pode tirar o video-worker
+  # (cortes e postagens do YouTube) do ar. Com o modulo desligado no painel,
+  # ele fica parado sem gastar nada.
+  live-worker:
+    <<: *app
+    container_name: postflow_live-worker
+    command: ["node", "src/worker/liveIndex.js"]
+    volumes:
+      - /var/lib/postflow-clips:/tmp/post-flow-video
+    depends_on:
+      db: { condition: service_healthy }
+    cpus: 1.0
+    mem_limit: 1536m
+    stop_grace_period: 40s
+
   caddy:
     image: caddy:2
     container_name: postflow_caddy
