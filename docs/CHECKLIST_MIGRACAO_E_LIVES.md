@@ -19,6 +19,31 @@ variável.
   (`deploy/deploy.sh`), não por botão.
 - **28/09/2026 — migrar só o Post Flow.** Evolution/n8n, minerador, Interactive
   Lives e tiktok-platform ficam na VPS antiga.
+- **28/09/2026 (correção do Vinicius ao item acima sobre o risestyle43):** não é
+  só copiar os dados — **a conta `risestyle43` passou a ser PROCESSADA E
+  PUBLICADA pela VPS nova, de verdade, a partir de 28/09 ~21:30 UTC.** Feito assim:
+  1. backup de produção (`/usr/local/bin/postflow-backup`, com cópia no B2) antes de tudo;
+  2. na VPS ANTIGA, a conta foi **pausada, não apagada** (tokens mantidos):
+     canais 20/30/31 `is_active=false`, contas TikTok 27/28/30 `is_active=false`,
+     agendas `paused=true`, 14 postagens pendentes → `skipped`. Lista exata dos
+     IDs guardada fora do repositório (scratchpad da sessão, `rise_estado_antes.txt`);
+  3. dump novo da produção → VPS nova, filtrado para `risestyle43` (17) + login do
+     admin (1, sem dados), fila do pg-boss limpa, e lá **religado exatamente o
+     que foi pausado na antiga** (3 canais, 3 contas, 3 agendas, 14 postagens);
+  4. cortes da conta copiados (arquivos das 14 postagens conferidos um a um);
+  5. VPS nova trocada para as chaves reais (hash conferido contra a produção);
+     tokens do TikTok testados com consulta só de leitura: as 3 contas respondem;
+  6. backup diário na VPS nova (cron 03:15, **só local** por enquanto — não manda
+     pro B2 pra não misturar com os backups da produção).
+  - **Cuidado na migração final:** o dado vivo do `risestyle43` está na VPS
+    NOVA. O dump final da antiga traria a versão pausada e velha dele — a troca
+    tem que preservar as linhas desta conta que estão na nova.
+  - **Para desfazer:** religar na antiga os IDs acima (`is_active=true`,
+    `paused=false`, postagens de volta a `pending`) e desligar os canais/contas
+    na nova — nunca os dois ligados ao mesmo tempo (postaria em dobro).
+  - Acesso da conta na VPS nova: `https://177-7-61-54.sslip.io` (mesma senha).
+    Conectar conta nova do TikTok/Google por lá **ainda não funciona**: o retorno
+    do OAuth (`*_REDIRECT_URI`) aponta para `postflowclips.com`, que é a antiga.
 
 ## Onde o prompt original não bate com a realidade (regra 9)
 
@@ -33,6 +58,16 @@ variável.
 | App da Twitch talvez exista | Não há nenhuma variável `TWITCH_*` configurada. | **Ação do Vinicius**: criar o app em dev.twitch.tv. |
 
 ## Perguntas abertas para o Vinicius
+
+**Respondidas em 28/09/2026:**
+- 1 → **Sim.** O fluxo atual continua exatamente igual (Claude escolhe os cortes
+  do YouTube). Só o fluxo novo da Twitch usa OpenAI, e tudo nele numa IA só.
+- 2 → **Fica a VPS de 2 núcleos** para validar; aumento decidido depois, quando
+  for necessário. Portanto: 480p, retenção curta e poucos canais simultâneos.
+- 3 → **Client ID recebido** e guardado como `TWITCH_CLIENT_ID`. Falta o
+  `TWITCH_CLIENT_SECRET`, que vai direto para o servidor, não pelo chat.
+
+Texto original das perguntas:
 
 1. Tudo bem as lives usarem só OpenAI enquanto o fluxo do YouTube continua com
    o Claude? (Recomendação: sim. Mexer no fluxo do YouTube está fora do escopo.)
