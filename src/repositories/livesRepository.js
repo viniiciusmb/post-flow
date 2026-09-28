@@ -277,16 +277,6 @@ async function claimPendingTranscript() {
   return rows[0] || null;
 }
 
-async function previousTranscriptText(sessionId, antesDe) {
-  const { rows } = await pool.query(
-    `SELECT text FROM live_transcripts
-      WHERE session_id = $1 AND status = 'feito' AND start_offset < $2
-      ORDER BY start_offset DESC LIMIT 1`,
-    [sessionId, antesDe]
-  );
-  return rows[0]?.text || '';
-}
-
 async function finishTranscript(id, { status, texto = null, loudness = null, pico = null, silencio = null, custoUsd = 0, erro = null }) {
   await pool.query(
     `UPDATE live_transcripts
@@ -524,7 +514,6 @@ module.exports = {
   segmentsOlderThan,
   markSegmentsDeleted,
   claimPendingTranscript,
-  previousTranscriptText,
   finishTranscript,
   failTranscript,
   transcriptCoverage,

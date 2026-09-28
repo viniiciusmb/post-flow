@@ -173,7 +173,9 @@ test('bloco quase todo silencioso nao e mandado pra OpenAI e nao custa nada', as
   assert.equal(custos[0].n, 0);
 });
 
-test('bloco com fala e transcrito com o fim do bloco anterior como contexto, e o custo e registrado', async () => {
+// Medido na 1a live real: com o texto anterior no "prompt", a OpenAI copiava
+// esse texto pra dentro da resposta e todo bloco repetia o fim do anterior.
+test('bloco com fala e transcrito SEM o texto anterior como prompt, e o custo e registrado', async () => {
   const canal = await novoCanal();
   const sessao = await novaSessao(canal);
   await blocoTranscrito(sessao, 0, 30, 'e ai galera, bora comecar a partida');
@@ -191,7 +193,7 @@ test('bloco com fala e transcrito com o fim do bloco anterior como contexto, e o
   } finally {
     desfazer.forEach((d) => d());
   }
-  assert.equal(contextoRecebido, 'e ai galera, bora comecar a partida');
+  assert.ok(!contextoRecebido, 'o texto do bloco anterior nao pode ir como prompt');
   const { rows } = await pool.query("SELECT text, loudness_lufs FROM live_transcripts WHERE session_id = $1 AND start_offset = 30", [sessao.id]);
   assert.equal(rows[0].text, 'que jogada absurda');
   const { rows: custo } = await pool.query("SELECT kind, audio_seconds, cost_usd FROM live_costs WHERE session_id = $1", [sessao.id]);

@@ -31,9 +31,9 @@ async function comUmaNovaTentativa(fn) {
   }
 }
 
-// Transcreve um bloco curto (~30s). "contexto" e o fim do texto do bloco
-// anterior: vai no parametro prompt, que a OpenAI usa pra manter a grafia de
-// nomes e o assunto entre um bloco e outro.
+// Transcreve um bloco curto (~30s). "contexto" vai no parametro prompt da
+// OpenAI - NAO passe o texto do bloco anterior: o gpt-4o-mini-transcribe
+// devolve esse texto copiado dentro da resposta (visto em 28/09/2026).
 async function transcreverBloco(arquivo, { contexto = '', segundos = 0 } = {}) {
   return comUmaNovaTentativa(async () => {
     const form = new FormData();

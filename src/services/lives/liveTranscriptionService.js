@@ -74,8 +74,11 @@ async function processarProximo() {
       });
       return true;
     }
-    const contexto = await livesRepository.previousTranscriptText(bloco.session_id, Number(bloco.start_offset));
-    const { texto, custoUsd } = await openaiLives.transcreverBloco(bloco.file_path, { contexto, segundos });
+    // Sem o texto do bloco anterior como "prompt": medido na primeira live
+    // real (28/09/2026), o gpt-4o-mini-transcribe COPIAVA esse texto pro
+    // comeco da resposta - cada bloco saia repetindo o fim do anterior, e a
+    // triagem via o mesmo momento em dois lugares da live.
+    const { texto, custoUsd } = await openaiLives.transcreverBloco(bloco.file_path, { segundos });
     await livesRepository.finishTranscript(bloco.id, {
       status: 'feito',
       texto,
