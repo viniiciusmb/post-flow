@@ -42,6 +42,22 @@ const config = {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
   },
 
+  // Cortes de lives (so admin, fase de validacao). O app da Twitch e usado
+  // SO para saber se o canal esta ao vivo (token de app, client credentials);
+  // a gravacao em si e feita pelo streamlink, sem login. Sem as duas
+  // variaveis o modulo simplesmente nao liga - nada mais depende dele.
+  twitch: {
+    clientId: process.env.TWITCH_CLIENT_ID || '',
+    clientSecret: process.env.TWITCH_CLIENT_SECRET || '',
+  },
+  lives: {
+    // Chave de emergencia no servidor: LIVES_ENABLED=false desliga o modulo
+    // mesmo com a chave do painel ligada. Sem a variavel, quem manda e o
+    // painel (settings.lives_enabled, que nasce desligado).
+    forcarDesligado: process.env.LIVES_ENABLED === 'false',
+    streamlinkPath: process.env.STREAMLINK_PATH || '/usr/local/bin/streamlink',
+  },
+
   // Voz do video narrado. Vazio = so a voz da OpenAI fica disponivel, que e o
   // padrao e ja funciona; a ElevenLabs e a opcao de qualidade superior, ligada
   // quando a chave chegar, sem mudanca de codigo.

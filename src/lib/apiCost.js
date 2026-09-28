@@ -50,8 +50,39 @@ function imagemIaCostUsd(quantidade = 0) {
   return (quantidade || 0) * IMAGEM_IA_USD_POR_IMAGEM;
 }
 
+// ---------------------------------------------------------------------------
+// Cortes de lives (Twitch). Precos conferidos na tabela oficial da OpenAI em
+// 28/09/2026 (developers.openai.com/api/docs/pricing).
+// ---------------------------------------------------------------------------
+
+// gpt-4o-mini-transcribe: metade do Whisper. Nao da tempo por palavra, por
+// isso so e usado na transcricao corrida da live; a legenda do corte
+// escolhido continua no whisper-1 (openaiTranscriptionService).
+const MINI_TRANSCRIBE_USD_PER_MINUTE = 0.003;
+
+// gpt-5-nano, o modelo de texto mais barato da tabela. Com reasoning_effort
+// 'minimal' ele nao gasta token de raciocinio (medido: 0), entao a saida e so
+// o JSON pedido.
+const GPT5_NANO_USD_PER_MTOK_INPUT = 0.05;
+const GPT5_NANO_USD_PER_MTOK_OUTPUT = 0.4;
+
+function miniTranscribeCostUsd(audioSeconds) {
+  if (!audioSeconds) return 0;
+  return (audioSeconds / 60) * MINI_TRANSCRIBE_USD_PER_MINUTE;
+}
+
+function gpt5NanoCostUsd(inputTokens, outputTokens) {
+  return ((inputTokens || 0) / 1_000_000) * GPT5_NANO_USD_PER_MTOK_INPUT
+    + ((outputTokens || 0) / 1_000_000) * GPT5_NANO_USD_PER_MTOK_OUTPUT;
+}
+
 module.exports = {
   whisperCostUsd,
+  miniTranscribeCostUsd,
+  gpt5NanoCostUsd,
+  MINI_TRANSCRIBE_USD_PER_MINUTE,
+  GPT5_NANO_USD_PER_MTOK_INPUT,
+  GPT5_NANO_USD_PER_MTOK_OUTPUT,
   claudeCostUsd,
   ttsCostUsd,
   imagemIaCostUsd,
