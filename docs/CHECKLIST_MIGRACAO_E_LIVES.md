@@ -247,6 +247,8 @@ Começa agora na VPS nova (decisão de 28/09), visível só para o admin.
   - **1º corte pronto 14 min depois do início da gravação** (1ª seleção aos 10 min + ~3,5 min de render de um corte de 90 s, com o teto de 1 núcleo);
   - custo: transcrição US$ 0,0435 (14,5 min × US$ 0,003), triagem US$ 0,0014 (7 chamadas), seleção US$ 0,0007, legenda US$ 0,011 por corte → **projeção ~US$ 0,25 por hora de live** com 5 cortes/h, no teto da estimativa do prompt (US$ 0,18–0,24). Quase tudo é a transcrição corrida; a IA de texto é centavo;
   - 23 candidatos da triagem (nota média 6,7) → 3 escolhidos (notas 7–8) com título e gancho em português; corte de 90 s em 1080×1920 com o estilo do usuário (título, legenda por palavra, fundo), conferido olhando os quadros;
+  - **28/09 22:43 UTC — teste PAUSADO a pedido do Vinicius** (módulo desligado no `settings.lives_enabled`; canal `wb3nji` continua cadastrado, religar é um clique). Total: 30,6 min gravados em 2 sessões, 3 cortes prontos, **US$ 0,12** gastos. Nenhum processo de gravação ficou rodando (conferido).
+  - Economias medidas e propostas, aguardando decisão: transcrição corrida em 1,5x (-25% do total; 2x quebra a transcrição) e legenda só do trecho exato do corte (-20% da legenda).
   - streamlink 8.x marcou `--twitch-disable-ads` e `--hls-segment-queue-threshold` como obsoletos (pular anúncio já é o padrão) — removidos no código, entram no próximo deploy.
 - [ ] Teste com 2–3 canais.
 - [ ] Relatório com os números medidos.
