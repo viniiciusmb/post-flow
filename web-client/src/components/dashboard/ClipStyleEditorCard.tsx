@@ -810,8 +810,13 @@ export function ClipStyleEditorCard({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <IconAdjustmentsHorizontal className="size-4 text-muted-foreground" />{t("ce.titulo")}</CardTitle>
-        <CardDescription>{t("ce.descricao")}</CardDescription>
+          <IconAdjustmentsHorizontal className="size-4 text-muted-foreground" />
+          {modoLive ? "Estilo dos cortes de live" : t("ce.titulo")}</CardTitle>
+        <CardDescription>
+          {modoLive
+            ? "Legenda, título e fundo só dos cortes das lives. A câmera do streamer, quando destacada, ocupa a faixa escolhida acima."
+            : t("ce.descricao")}
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         {/* Onde este estilo se aplica. Fica no topo porque muda o significado

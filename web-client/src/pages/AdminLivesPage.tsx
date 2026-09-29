@@ -312,7 +312,9 @@ export function AdminLivesPage() {
                       <ToggleGroupItem key={q} value={q}>{q}</ToggleGroupItem>
                     ))}
                   </ToggleGroup>
-                  <span className="text-xs text-muted-foreground">480p ≈ 0,65 GB por hora por canal.</span>
+                  <span className="text-xs text-muted-foreground">
+                    720p ≈ 1,5 GB por hora por canal (480p ≈ 0,65). Use 720p: a câmera do streamer é recortada do vídeo e em 480p sai borrada.
+                  </span>
                 </div>
                 {CAMPOS.map((c) => {
                   const [min, max] = estado.limites.faixas[c.chave] || [0, 999]
