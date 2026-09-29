@@ -253,6 +253,18 @@ Começa agora na VPS nova (decisão de 28/09), visível só para o admin.
 - [ ] Teste com 2–3 canais.
 - [ ] Relatório com os números medidos.
 
+### Versão 2 (28–29/09/2026) — pedido do Vinicius: momentos melhores, câmera do streamer, qualidade e estilo próprio
+- [x] **Diagnóstico da v1**: o nano, lendo só texto, deu nota 7 pra quase todo bloco de 30 s (43 candidatos em 20 min, todos "polêmicos"); volume médio de 30 s não varia (desvio 1,4 LU); corte sempre na borda do bloco.
+- [x] **Sinais do público** (medidos antes de construir): clipes criados por espectadores (API Get Clips, grátis — 28 em 31 min no wb3nji), chat por IRC anônimo (10 → 42 msgs/10 s num momento engraçado), volume segundo a segundo (ebur128). Relógio ↔ gravação pela hora em que cada pedaço fechou (`live_segments.closed_at`), inclusive depois de pausa de anúncio. Só contagens do chat são guardadas, nunca o texto.
+- [x] **Juiz** `gpt-5-mini` (reasoning low) a cada 5 min e no fim; triagem (nano) vê os sinais e aponta no máximo 2 por janela; picos do público viram candidatos sem IA.
+- [x] **Nível de qualidade 1–5 por usuário** (`live_clip_settings.qualidade`): 1 = nota 5+ e até 12/h … 5 = nota 9+ e até 2/h. Avaliação uma vez por canal; distribuição por usuário, sem duplicar.
+- [x] **Ajuste fino** de todo corte com gpt-5-mini palavra a palavra (±20 s, mínimo 20 s — no teste apertou pra 18 s e perdia a preparação).
+- [x] **Câmera do streamer**: gpt-5-mini com imagem em 2 quadros; só aceita janela pequena e com os dois concordando. Erro real pego no teste (rosto do vídeo de react tomado por webcam — mesma pessoa em cima e embaixo) travado por teste com os números reais. Layout `webcam` no render, só ativado por `settings.live_webcam` (nenhum estilo de vídeo mudou). Gravação padrão 720p30 (câmera de 480p sai borrada).
+- [x] **Estilo próprio das lives** com opção "usar o mesmo dos vídeos": mesmo editor (`ClipStyleEditorCard` em `modoLive`) e mesma validação (`validarEstilo`, extraída do controller de vídeo sem mudar comportamento). Teste garante que editar o de live não muda o de vídeo.
+- [x] **Mesma gravação, v1 × v2 (wb3nji, 20 min)**: 43 candidatos/3 cortes mornos → 8 candidatos, juiz honesto (só 3 com nota ≥7, citando clipes de espectadores; trechos analíticos levaram 5–6). Reanálise: US$ 0,007. Câmera certa, cortes de 23–29 s. 31 testes do módulo; 8 mutações novas, todas pegas.
+- [x] **Redução de custo (pedido de 29/09)**: transcrição corrida em **1,5x** (30 s cobrados como 20 s; ~0,4 s de CPU por bloco; 2x quebra a transcrição) e legenda só do trecho + folga do ajuste fino (corte 8: 99 s → 90 s cobrados). Sincronia da legenda conferida re-transcrevendo o corte pronto: a palavra na tela bate com a falada.
+- [ ] Teste AO VIVO da v2 (o chat só existe gravando ao vivo; a reanálise só tinha clipes de espectadores e volume).
+
 ### Pendências conhecidas do módulo
 - **Postar o corte de live no TikTok** ainda não existe: o motor de postagem é amarrado às tabelas do fluxo do YouTube (`postings.video_id → videos → clips`), e ligar isso exige mexer em tabela existente — regra do prompt: pedir autorização antes.
 - **Chat IRC da Twitch** como sinal extra: não feito (o plano diz que é só apoio).
