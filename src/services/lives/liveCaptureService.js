@@ -31,7 +31,9 @@ const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const QUALIDADES = {
   '360p': '360p,360p30,160p,worst',
   '480p': '480p,480p30,360p,360p30,worst',
-  '720p': '720p,720p30,720p60,480p,480p30,worst',
+  // 720p30 antes de 720p60: mesma nitidez pra camera, metade dos quadros pra
+  // gravar e depois decodificar no render.
+  '720p': '720p30,720p,720p60,480p,480p30,worst',
 };
 
 const emAndamento = new Map(); // sessionId -> { parar, terminou }

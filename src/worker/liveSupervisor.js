@@ -17,6 +17,8 @@ const liveTranscriptionService = require('../services/lives/liveTranscriptionSer
 const liveAnalysisService = require('../services/lives/liveAnalysisService');
 const liveRenderService = require('../services/lives/liveRenderService');
 const liveCleanupService = require('../services/lives/liveCleanupService');
+const liveChatService = require('../services/lives/liveChatService');
+const liveViewerClipsService = require('../services/lives/liveViewerClipsService');
 const logger = require('../lib/logger');
 
 // Ate este tanto de blocos transcritos por volta do laço: da conta de uma
@@ -26,6 +28,7 @@ const BLOCOS_POR_VOLTA = 6;
 
 // Encerra a sessao no banco com o ultimo inventario dos pedacos gravados.
 async function encerrarSessao(sessao, { motivo, pedidoParar, fimNatural, ultimasLinhas }) {
+  await liveChatService.parar(Number(sessao.id));
   try {
     await liveSegmentsService.sincronizar(sessao);
   } catch (err) {
@@ -57,6 +60,8 @@ async function comecarGravacao(canal, stream, cfg) {
       qualidade: cfg.qualidade,
       onFim: (info) => encerrarSessao(completa, info),
     });
+    // O chat e sinal de apoio: se nao conectar, a gravacao segue igual.
+    liveChatService.acompanhar({ sessionId: Number(sessao.id), login: canal.login });
   } catch (err) {
     await livesRepository.endSession(sessao.id, { status: 'erro', motivo: err.message });
     throw err;
@@ -155,17 +160,37 @@ async function transcrever() {
   }
 }
 
+// Etapas em ordem, cada uma com a sessao relida (a anterior acabou de mexer
+// nela). Uma etapa que falha nao impede as seguintes: o juiz pode julgar o que
+// a triagem ja tinha achado mesmo se a triagem desta volta falhou.
 async function analisar() {
   if (!(await livesSettings.estaLigado())) return;
-  const cfg = await livesSettings.obterConfig();
-  for (const sessao of await livesRepository.listSessionsForAnalysis()) {
+  for (const s of await livesRepository.listSessionsForAnalysis()) {
+    const etapas = [
+      ['triagem', (x) => liveAnalysisService.triarSessao(x)],
+      ['picos de sinal', (x) => liveAnalysisService.candidatosDeSinal(x)],
+      ['juiz', (x) => liveAnalysisService.julgarSessao(x)],
+      ['distribuicao', (x) => liveAnalysisService.distribuirSessao(x)],
+    ];
+    for (const [nome, etapa] of etapas) {
+      try {
+        const sessao = { ...(await livesRepository.findSession(s.id)), login: s.login };
+        await etapa(sessao);
+      } catch (err) {
+        logger.error(`Lives: ${nome} da sessao ${s.id} falhou:`, err.message);
+      }
+    }
+  }
+}
+
+// Clipes criados pelos espectadores, de todas as sessoes ainda em analise.
+async function coletarClipes() {
+  if (!(await livesSettings.estaLigado())) return;
+  for (const s of await livesRepository.listSessionsForAnalysis()) {
     try {
-      await liveAnalysisService.triarSessao(sessao);
-      // Recarrega: a triagem acabou de mexer em triaged_until/candidatos.
-      const atual = { ...(await livesRepository.findSession(sessao.id)), login: sessao.login };
-      await liveAnalysisService.selecionarSessao(atual, { cortesPorHora: cfg.cortesPorHora });
+      await liveViewerClipsService.coletar(s, s.platform_user_id);
     } catch (err) {
-      logger.error(`Lives: analise da sessao ${sessao.id} falhou:`, err.message);
+      logger.warn(`Lives: clipes dos espectadores de ${s.login} falharam: ${err.message}`);
     }
   }
 }
@@ -214,6 +239,7 @@ async function iniciar() {
   timers.push(laco('segmentos', sincronizarSegmentos, 5_000));
   timers.push(laco('transcrever', transcrever, 5_000));
   timers.push(laco('analisar', analisar, 30_000));
+  timers.push(laco('clipes', coletarClipes, 2 * 60_000));
   timers.push(laco('renderizar', renderizar, 5_000));
   timers.push(laco('limpar', limpar, 10 * 60_000));
 }
@@ -221,6 +247,7 @@ async function iniciar() {
 async function parar() {
   for (const t of timers.splice(0)) clearInterval(t);
   await liveCaptureService.pararTodas('worker desligando');
+  await liveChatService.pararTodos();
 }
 
-module.exports = { iniciar, parar, monitorar, analisar, encerrarSessao };
+module.exports = { iniciar, parar, monitorar, analisar, coletarClipes, encerrarSessao };

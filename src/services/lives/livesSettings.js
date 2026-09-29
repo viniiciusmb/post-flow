@@ -7,12 +7,18 @@ const settingsRepository = require('../../repositories/settingsRepository');
 const twitchApi = require('./twitchApi');
 
 // Padrao pensado pra VPS de 2 nucleos / 96 GB (decisao de 28/09/2026: validar
-// nela antes de pensar em servidor maior). 480p a ~0,65 GB/h medido.
+// nela antes de pensar em servidor maior).
+//
+// 720p e nao 480p: a camera do streamer e RECORTADA do video e esticada pra
+// largura do corte - em 480p ela tem ~150px e sai borrada. 720p30 fica em
+// ~1,5 GB/h (480p: 0,65 medido).
+//
+// "Cortes por hora" saiu daqui: agora e o NIVEL DE QUALIDADE de cada usuario
+// que decide (livesUserSettings.NIVEIS).
 const PADRAO = Object.freeze({
   maxCanais: 2,
-  qualidade: '480p',
+  qualidade: '720p',
   retencaoHoras: 24,
-  cortesPorHora: 5,
   discoMaxPercent: 80,
   horasPorCanalDia: 8,
 });
@@ -20,12 +26,11 @@ const PADRAO = Object.freeze({
 const QUALIDADES = ['360p', '480p', '720p'];
 
 // Faixas aceitas. Fora delas o valor e puxado pra dentro em vez de recusado:
-// um 0 em "cortes por hora" desligaria o modulo sem ninguem perceber, e um
-// 200 encheria o disco. Os tetos sao o que 2 nucleos aguentam com folga.
+// um 0 em "canais ao mesmo tempo" desligaria o modulo sem ninguem perceber, e
+// 50 encheria o disco. Os tetos sao o que 2 nucleos aguentam com folga.
 const FAIXAS = {
   maxCanais: [1, 5],
   retencaoHoras: [6, 72],
-  cortesPorHora: [1, 20],
   discoMaxPercent: [50, 95],
   horasPorCanalDia: [1, 24],
 };

@@ -189,7 +189,7 @@ async function markSelection(sessionId) {
 // encerradas ha pouco (a ultima triagem/selecao acontece depois do fim).
 async function listSessionsForAnalysis() {
   const { rows } = await pool.query(
-    `SELECT s.*, c.login FROM live_sessions s JOIN live_channels c ON c.id = s.live_channel_id
+    `SELECT s.*, c.login, c.platform_user_id FROM live_sessions s JOIN live_channels c ON c.id = s.live_channel_id
       WHERE s.status = 'gravando' OR s.ended_at > now() - interval '30 minutes'
       ORDER BY s.id`
   );
@@ -205,10 +205,10 @@ async function insertSegments(sessionId, kind, segmentos) {
   if (!segmentos.length) return 0;
   const { rows } = await pool.query(
     `WITH novos AS (
-       INSERT INTO live_segments (session_id, kind, seq, file_path, start_offset, end_offset, bytes)
-       SELECT $1, $2, s.seq, s.file_path, s.start_offset, s.end_offset, s.bytes
+       INSERT INTO live_segments (session_id, kind, seq, file_path, start_offset, end_offset, bytes, closed_at)
+       SELECT $1, $2, s.seq, s.file_path, s.start_offset, s.end_offset, s.bytes, s.closed_at
          FROM jsonb_to_recordset($3::jsonb)
-              AS s(seq int, file_path text, start_offset numeric, end_offset numeric, bytes bigint)
+              AS s(seq int, file_path text, start_offset numeric, end_offset numeric, bytes bigint, closed_at timestamptz)
        ON CONFLICT (session_id, kind, seq) DO NOTHING
        RETURNING id, session_id, kind, start_offset, end_offset
      ), pendentes AS (
@@ -277,13 +277,13 @@ async function claimPendingTranscript() {
   return rows[0] || null;
 }
 
-async function finishTranscript(id, { status, texto = null, loudness = null, pico = null, silencio = null, custoUsd = 0, erro = null }) {
+async function finishTranscript(id, { status, texto = null, loudness = null, pico = null, silencio = null, custoUsd = 0, erro = null, momentaneo = null }) {
   await pool.query(
     `UPDATE live_transcripts
         SET status = $2, text = $3, loudness_lufs = $4, peak_db = $5, silence_seconds = $6,
-            cost_usd = cost_usd + $7, error_message = $8
+            cost_usd = cost_usd + $7, error_message = $8, momentary_1s = $9
       WHERE id = $1`,
-    [id, status, texto, loudness, pico, silencio, custoUsd, erro]
+    [id, status, texto, loudness, pico, silencio, custoUsd, erro, momentaneo ? JSON.stringify(momentaneo) : null]
   );
 }
 
@@ -322,6 +322,63 @@ async function transcriptsBetween(sessionId, inicio, fim) {
   return rows;
 }
 
+// ---------------------------------------------------------------- sinais do publico
+
+async function saveChatBuckets(sessionId, baldes) {
+  if (!baldes.length) return;
+  await pool.query(
+    `INSERT INTO live_chat_buckets (session_id, bucket_at, msgs, risadas, hype)
+     SELECT $1, b.bucket_at, b.msgs, b.risadas, b.hype
+       FROM jsonb_to_recordset($2::jsonb) AS b(bucket_at timestamptz, msgs int, risadas int, hype int)
+     ON CONFLICT (session_id, bucket_at) DO UPDATE
+       SET msgs = live_chat_buckets.msgs + EXCLUDED.msgs,
+           risadas = live_chat_buckets.risadas + EXCLUDED.risadas,
+           hype = live_chat_buckets.hype + EXCLUDED.hype`,
+    [sessionId, JSON.stringify(baldes)]
+  );
+}
+
+async function saveViewerClips(sessionId, clipes) {
+  const { rows } = await pool.query(
+    `INSERT INTO live_viewer_clips (session_id, twitch_clip_id, title, view_count, duration_seconds, clip_created_at)
+     SELECT $1, c.id, c.titulo, c.views, c.duracao, c.criado_em
+       FROM jsonb_to_recordset($2::jsonb) AS c(id text, titulo text, views int, duracao numeric, criado_em timestamptz)
+     ON CONFLICT (twitch_clip_id) DO UPDATE SET view_count = EXCLUDED.view_count
+     RETURNING (xmax = 0) AS novo`,
+    [sessionId, JSON.stringify(clipes.map((c) => ({ id: c.id, titulo: c.titulo, views: c.views, duracao: c.duracao, criado_em: c.criadoEm })))]
+  );
+  return rows.filter((r) => r.novo).length;
+}
+
+// Tudo que a linha do tempo de sinais precisa, de uma vez: a ponte relogio ->
+// gravacao (pedacos de video com hora de fechamento), o chat, os clipes dos
+// espectadores e o volume segundo a segundo.
+async function signalSources(sessionId) {
+  const [pedacos, chat, clipes, volume] = await Promise.all([
+    pool.query(
+      `SELECT end_offset, closed_at FROM live_segments
+        WHERE session_id = $1 AND kind = 'video' AND closed_at IS NOT NULL ORDER BY seq`,
+      [sessionId]
+    ),
+    pool.query('SELECT bucket_at, msgs, risadas, hype FROM live_chat_buckets WHERE session_id = $1 ORDER BY bucket_at', [sessionId]),
+    pool.query(
+      'SELECT title, view_count, duration_seconds, clip_created_at FROM live_viewer_clips WHERE session_id = $1 ORDER BY clip_created_at',
+      [sessionId]
+    ),
+    pool.query(
+      `SELECT start_offset, momentary_1s FROM live_transcripts
+        WHERE session_id = $1 AND momentary_1s IS NOT NULL ORDER BY start_offset`,
+      [sessionId]
+    ),
+  ]);
+  return {
+    pedacos: pedacos.rows.map((r) => ({ fim: Number(r.end_offset), fechouEm: new Date(r.closed_at).getTime() })),
+    chat: chat.rows.map((r) => ({ em: new Date(r.bucket_at).getTime(), msgs: r.msgs, risadas: r.risadas, hype: r.hype })),
+    clipes: clipes.rows.map((r) => ({ titulo: r.title, views: r.view_count, duracao: Number(r.duration_seconds), em: new Date(r.clip_created_at).getTime() })),
+    volume: volume.rows.map((r) => ({ inicio: Number(r.start_offset), porSegundo: r.momentary_1s })),
+  };
+}
+
 // ---------------------------------------------------------------- candidatos
 
 async function insertCandidate({ sessionId, source, inicio, fim, motivo, nota, requestedBy = null, status = 'pendente' }) {
@@ -335,7 +392,7 @@ async function insertCandidate({ sessionId, source, inicio, fim, motivo, nota, r
 
 async function candidatesForSession(sessionId) {
   const { rows } = await pool.query(
-    "SELECT * FROM live_candidates WHERE session_id = $1 AND source = 'triagem' ORDER BY start_offset",
+    "SELECT * FROM live_candidates WHERE session_id = $1 AND source IN ('triagem', 'sinal') ORDER BY start_offset",
     [sessionId]
   );
   return rows;
@@ -344,7 +401,7 @@ async function candidatesForSession(sessionId) {
 async function pendingCandidates(sessionId, limite = 15) {
   const { rows } = await pool.query(
     `SELECT * FROM live_candidates
-      WHERE session_id = $1 AND source = 'triagem' AND status = 'pendente'
+      WHERE session_id = $1 AND source IN ('triagem', 'sinal') AND status = 'pendente'
       ORDER BY score DESC NULLS LAST, start_offset LIMIT $2`,
     [sessionId, limite]
   );
@@ -361,18 +418,83 @@ async function setCandidateStatus(ids, status) {
 async function discardStaleCandidates(sessionId, { tudo = false } = {}) {
   await pool.query(
     `UPDATE live_candidates SET status = 'descartado'
-      WHERE session_id = $1 AND source = 'triagem' AND status = 'pendente'
+      WHERE session_id = $1 AND source IN ('triagem', 'sinal') AND status = 'pendente'
         AND ($2 OR created_at < now() - interval '20 minutes')`,
     [sessionId, tudo]
   );
 }
 
-async function countChosenFromTriage(sessionId) {
+async function setCandidateSignals(candidateId, signals) {
+  await pool.query('UPDATE live_candidates SET signals = $2 WHERE id = $1', [candidateId, JSON.stringify(signals)]);
+}
+
+// Resultado do juiz. So mexe em quem ainda esta pendente: julgar duas vezes
+// (duas voltas do laço) nao troca a nota ja dada.
+async function judgeCandidate(candidateId, { status, nota, inicio, fim, titulo, gancho, porque }) {
+  await pool.query(
+    `UPDATE live_candidates
+        SET status = $2, final_score = $3, final_start = $4, final_end = $5, title = $6, hook = $7,
+            reason = COALESCE(NULLIF($8, ''), reason), judged_at = now()
+      WHERE id = $1 AND status = 'pendente'`,
+    [candidateId, status, nota, inicio, fim, titulo, gancho, porque]
+  );
+}
+
+// Aprovados pelo juiz, do melhor pro pior (empate: o que aconteceu antes).
+async function approvedCandidates(sessionId) {
   const { rows } = await pool.query(
-    "SELECT count(*) AS n FROM live_candidates WHERE session_id = $1 AND source = 'triagem' AND status = 'escolhido'",
+    `SELECT * FROM live_candidates
+      WHERE session_id = $1 AND status = 'escolhido' AND final_score IS NOT NULL AND final_start IS NOT NULL
+      ORDER BY final_score DESC, start_offset`,
     [sessionId]
   );
+  return rows;
+}
+
+// Quem acompanha o canal, com o nivel de qualidade de cada um (padrao 3).
+async function followersWithQuality(channelId) {
+  const { rows } = await pool.query(
+    `SELECT f.user_id, COALESCE(s.qualidade, 3) AS qualidade
+       FROM live_channel_follows f
+       LEFT JOIN live_clip_settings s ON s.user_id = f.user_id
+      WHERE f.live_channel_id = $1 AND f.is_active
+      ORDER BY f.user_id`,
+    [channelId]
+  );
+  return rows.map((r) => ({ user_id: Number(r.user_id), qualidade: Number(r.qualidade) }));
+}
+
+// Cortes que o juiz ja deu pra este usuario nesta sessao (o "Clipar agora" nao
+// conta: foi pedido a mao, nao entra no teto do nivel).
+async function countUserClipsFromJudge(sessionId, userId) {
+  const { rows } = await pool.query(
+    "SELECT count(*) AS n FROM live_clips WHERE session_id = $1 AND user_id = $2 AND source <> 'clipar_agora'",
+    [sessionId, userId]
+  );
   return Number(rows[0].n);
+}
+
+// ---------------------------------------------------------------- configuracao por usuario
+
+async function getClipSettings(userId) {
+  const { rows } = await pool.query('SELECT * FROM live_clip_settings WHERE user_id = $1', [userId]);
+  return rows[0] || null;
+}
+
+async function upsertClipSettings(userId, c) {
+  const { rows } = await pool.query(
+    `INSERT INTO live_clip_settings
+       (user_id, usar_estilo_dos_videos, estilo, qualidade, camera_modo, camera_posicao, camera_altura_percent, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+     ON CONFLICT (user_id) DO UPDATE SET
+       usar_estilo_dos_videos = EXCLUDED.usar_estilo_dos_videos, estilo = EXCLUDED.estilo,
+       qualidade = EXCLUDED.qualidade, camera_modo = EXCLUDED.camera_modo,
+       camera_posicao = EXCLUDED.camera_posicao, camera_altura_percent = EXCLUDED.camera_altura_percent,
+       updated_at = now()
+     RETURNING *`,
+    [userId, c.usar_estilo_dos_videos, JSON.stringify(c.estilo || {}), c.qualidade, c.camera_modo, c.camera_posicao, c.camera_altura_percent]
+  );
+  return rows[0];
 }
 
 // ---------------------------------------------------------------- cortes
@@ -384,6 +506,23 @@ async function insertClip({ sessionId, channelId, userId, candidateId, source, i
     [sessionId, channelId, userId, candidateId, source, inicio, fim, titulo || null, gancho || null, nota ?? null]
   );
   return rows[0];
+}
+
+// Um candidato vira no maximo um corte por usuario (indice unico): duas voltas
+// da distribuicao ao mesmo tempo nunca duplicam. Devolve null se ja existia.
+async function insertClipOnce({ sessionId, channelId, userId, candidateId, source, inicio, fim, titulo, gancho, nota }) {
+  const { rows } = await pool.query(
+    `INSERT INTO live_clips (session_id, live_channel_id, user_id, candidate_id, source, start_offset, end_offset, title, hook, score)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     ON CONFLICT (candidate_id, user_id) WHERE candidate_id IS NOT NULL DO NOTHING
+     RETURNING *`,
+    [sessionId, channelId, userId, candidateId, source, inicio, fim, titulo || null, gancho || null, nota ?? null]
+  );
+  return rows[0] || null;
+}
+
+async function setClipWebcam(clipId, webcam) {
+  await pool.query('UPDATE live_clips SET webcam = $2 WHERE id = $1', [clipId, webcam ? JSON.stringify(webcam) : null]);
 }
 
 // Proximo corte a renderizar. O de "Clipar agora" so fica pronto pra render
@@ -518,12 +657,23 @@ module.exports = {
   failTranscript,
   transcriptCoverage,
   transcriptsBetween,
+  saveChatBuckets,
+  saveViewerClips,
+  signalSources,
   insertCandidate,
   candidatesForSession,
   pendingCandidates,
   setCandidateStatus,
   discardStaleCandidates,
-  countChosenFromTriage,
+  setCandidateSignals,
+  judgeCandidate,
+  approvedCandidates,
+  followersWithQuality,
+  countUserClipsFromJudge,
+  getClipSettings,
+  upsertClipSettings,
+  insertClipOnce,
+  setClipWebcam,
   insertClip,
   claimClipToRender,
   updateClipProgress,

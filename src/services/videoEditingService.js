@@ -1230,6 +1230,8 @@ module.exports = {
   buildBackgroundFilter,
   buildWebcamFilter,
   webcamValida,
+  // Exportado pro teste: e a escolha de layout que o render faz de verdade.
+  buildFilter,
   // Exportado pro teste: e o filtro que garante o encaixe exato entre a faixa
   // da capa e o video (sem essa garantia, aparece faixa branca no corte).
   buildThumbnailBandFilter,

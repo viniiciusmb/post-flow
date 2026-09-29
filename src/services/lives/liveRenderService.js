@@ -3,27 +3,35 @@
 //   - legenda palavra por palavra: openaiTranscriptionService (whisper-1, o
 //     unico modelo da OpenAI com tempo por palavra);
 //   - reenquadramento 9:16, legenda queimada, titulo: videoEditingService.renderClip;
-//   - estilo: o que o usuario ja configurou em "Configurar cortes"
-//     (clientVideoSettingsRepository), o mesmo que vale pros cortes dele do YouTube.
+//   - estilo: o dos cortes de live do usuario (livesUserSettings) - proprio,
+//     ou o mesmo dos cortes de video, se ele escolher assim.
 //
-// Corte de "Clipar agora" chega com uma janela de ~150s e sem titulo: aqui,
-// com a transcricao por palavra em maos, o modelo barato acha onde o momento
-// comeca e termina dentro dela - uma transcricao so paga as duas coisas.
+// Com a transcricao por palavra em maos, o gpt-5-mini faz o AJUSTE FINO:
+// onde o momento comeca (o gancho) e termina (logo depois da reacao). O juiz
+// so via blocos de 30s; e aqui que o corte deixa de comecar no meio de uma
+// frase. No "Clipar agora" (janela de ~150s, sem titulo) e esse mesmo passo
+// que acha o momento. Uma transcricao so paga as duas coisas.
+//
+// E aqui tambem que a camera do streamer e localizada, num quadro do proprio
+// trecho: o streamer muda de cena (jogo, conversa) e a camera muda de lugar.
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 const config = require('../../config');
 const livesRepository = require('../../repositories/livesRepository');
-const clientVideoSettingsRepository = require('../../repositories/clientVideoSettingsRepository');
+const livesUserSettings = require('./livesUserSettings');
 const videoEditingService = require('../videoEditingService');
 const openaiTranscriptionService = require('../openaiTranscriptionService');
 const openaiLives = require('./openaiLives');
 const { ajustarIntervalo } = require('./liveAnalysisService');
 const logger = require('../../lib/logger');
 
-// Folga antes/depois pra legenda e fade nao cortarem a primeira/ultima palavra.
-const MARGEM_S = 2;
+// Quanto de video em volta do trecho pedido entra no arquivo de trabalho: e o
+// espaco que o ajuste fino tem pra mover o inicio (achar o gancho) e o fim
+// (pegar a reacao inteira). Custa ~30s a mais de transcricao por corte
+// (~US$ 0,003).
+const MARGEM_S = 15;
 
 function pastaDosCortes(userId) {
   return path.join(config.videoProcessing.workDir, 'lives', 'cortes', String(userId));
@@ -44,7 +52,7 @@ function linhasComTempo(words) {
   return linhas.map((l) => `[${l.inicio.toFixed(1)}s] ${l.texto.join(' ')}`).join('\n');
 }
 
-const SCHEMA_CLIPAR_AGORA = {
+const SCHEMA_AJUSTE = {
   type: 'object',
   additionalProperties: false,
   required: ['inicio_s', 'fim_s', 'titulo', 'gancho'],
@@ -56,12 +64,75 @@ const SCHEMA_CLIPAR_AGORA = {
   },
 };
 
-const SISTEMA_CLIPAR_AGORA = `Alguem apertou "Clipar agora" durante uma live: algo interessante acabou de acontecer nos ultimos ~2 minutos e meio.
-Voce recebe a fala com o tempo (segundos) de cada trecho. Ache o MOMENTO que motivou o clique - normalmente perto do fim - e devolva:
-- inicio_s: onde o corte deve comecar para o momento fazer sentido sozinho (inclua a preparacao necessaria, nada alem);
-- fim_s: logo depois do desfecho/reacao;
+const SISTEMA_AJUSTE = `Voce faz o ajuste fino de um corte de live para TikTok. Recebe a fala com o tempo (segundos) de cada trecho e o que o corte deve mostrar.
+Devolva:
+- inicio_s: o ponto em que quem assiste entende o que esta acontecendo em ate 3 segundos (o gancho). Inclua so a preparacao necessaria, nunca comece no meio de uma frase;
+- fim_s: logo depois do desfecho ou da reacao - corte seco, sem "enrolacao" depois;
 - duracao entre 15 e 90 segundos;
-- titulo curto (ate 60 caracteres) e gancho (ate 100 caracteres), no mesmo idioma da fala, sem hashtag.`;
+- titulo curto (ate 60 caracteres) e gancho (ate 100) no idioma falado, sem hashtag. Se ja vierem bons, pode manter.`;
+
+const SISTEMA_CLIPAR_AGORA = `Alguem apertou "Clipar agora" durante uma live: algo interessante acabou de acontecer nos ultimos ~2 minutos e meio (normalmente perto do fim).
+Ache o MOMENTO que motivou o clique e devolva onde o corte comeca (o gancho, entendivel em 3 segundos, nunca no meio de uma frase) e termina (logo depois da reacao), entre 15 e 90 segundos, com titulo curto (ate 60) e gancho (ate 100) no idioma falado, sem hashtag.`;
+
+const SCHEMA_CAMERA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['tem_webcam', 'x', 'y', 'largura', 'altura', 'confianca'],
+  properties: {
+    tem_webcam: { type: 'boolean' },
+    x: { type: 'number' },
+    y: { type: 'number' },
+    largura: { type: 'number' },
+    altura: { type: 'number' },
+    confianca: { type: 'integer' },
+  },
+};
+
+// Folga em volta do retangulo detectado (fracao do proprio tamanho): a
+// deteccao costuma cortar o topo da cabeca e os ombros.
+const FOLGA_CAMERA = 0.06;
+
+// Acha a webcam do streamer num quadro do trecho (gpt-5-mini com imagem;
+// testado em 28/09/2026: acertou a camera no canto, o nano errou pra mais).
+// Devolve null quando nao ha webcam separada ou a IA nao tem certeza - ai o
+// corte sai com o layout normal do estilo.
+async function localizarCamera(videoPath, instante, custo) {
+  const quadro = `${videoPath}.quadro.jpg`;
+  try {
+    await videoEditingService.runFfmpeg(['-ss', String(instante), '-i', videoPath, '-frames:v', '1', '-q:v', '3', quadro]);
+    const r = await openaiLives.pedirJson({
+      nome: 'camera_live',
+      sistema: 'Voce localiza a camera (webcam) do streamer sobreposta num quadro de live.',
+      usuario:
+        'Existe uma webcam do streamer sobreposta na tela (um retangulo com a pessoa, separado do jogo/video)? ' +
+        'Devolva o retangulo em FRACOES da imagem (0 a 1): x,y do canto superior esquerdo, largura, altura. ' +
+        'Se a live inteira ja for a camera (sem jogo/tela por tras) ou nao houver webcam, tem_webcam=false. confianca de 0 a 100.',
+      schema: SCHEMA_CAMERA,
+      modelo: openaiLives.MODELO_JUIZ,
+      raciocinio: 'low',
+      imagem: fs.readFileSync(quadro).toString('base64'),
+    });
+    await custo('camera', r);
+    const c = r.dados;
+    if (!c.tem_webcam || c.confianca < 60) return null;
+    const fx = c.largura * FOLGA_CAMERA;
+    const fy = c.altura * FOLGA_CAMERA;
+    const x = Math.max(0, c.x - fx);
+    const y = Math.max(0, c.y - fy);
+    const cam = {
+      x,
+      y,
+      largura: Math.min(1 - x, c.largura + 2 * fx),
+      altura: Math.min(1 - y, c.altura + 2 * fy),
+    };
+    return videoEditingService.webcamValida(cam) ? cam : null;
+  } catch (err) {
+    logger.warn(`Lives: nao consegui localizar a camera (${err.message}) - segue com o layout normal.`);
+    return null;
+  } finally {
+    fs.rm(quadro, { force: true }, () => {});
+  }
+}
 
 async function renderizar(clip) {
   const sessao = await livesRepository.findSession(clip.session_id);
@@ -107,37 +178,60 @@ async function renderizar(clip) {
     let fimRel = Math.min(duracaoBruto, fimPedido - origem);
     let titulo = clip.title;
     let gancho = clip.hook;
-
-    if (clip.source === 'clipar_agora') {
-      const r = await openaiLives.pedirJson({
-        nome: 'clipar_agora',
-        sistema: SISTEMA_CLIPAR_AGORA,
-        usuario: linhasComTempo(transcricao.words) || '(ninguem falou nada nesse trecho)',
-        schema: SCHEMA_CLIPAR_AGORA,
-      });
-      await livesRepository.recordCost({
+    const custo = (kind, r) =>
+      livesRepository.recordCost({
         channelId: clip.live_channel_id,
         sessionId: sessao.id,
-        kind: 'clipar_agora',
+        kind,
         inputTokens: r.inputTokens,
         outputTokens: r.outputTokens,
         custoUsd: r.custoUsd,
       });
-      const ajuste = ajustarIntervalo(r.dados.inicio_s, r.dados.fim_s, { min: 0, max: duracaoBruto });
-      // Resposta que nao da pra usar: fica com os ultimos 60s, que e o que a
-      // pessoa quis dizer com "agora" na maior parte das vezes.
+
+    // Ajuste fino em TODO corte (nao so no "Clipar agora").
+    const cliparAgora = clip.source === 'clipar_agora';
+    const pedido = cliparAgora
+      ? 'Momento: o que motivou o clique.'
+      : `Trecho escolhido pelo juiz: ${inicioRel.toFixed(0)}s a ${fimRel.toFixed(0)}s. Titulo proposto: "${titulo || ''}". Gancho proposto: "${gancho || ''}".`;
+    try {
+      const r = await openaiLives.pedirJson({
+        nome: cliparAgora ? 'clipar_agora' : 'ajuste_fino',
+        sistema: cliparAgora ? SISTEMA_CLIPAR_AGORA : SISTEMA_AJUSTE,
+        usuario: `${pedido}\n\n${linhasComTempo(transcricao.words) || '(ninguem falou nada nesse trecho)'}`,
+        schema: SCHEMA_AJUSTE,
+        modelo: openaiLives.MODELO_JUIZ,
+        raciocinio: 'low',
+      });
+      await custo(cliparAgora ? 'clipar_agora' : 'ajuste_fino', r);
+      // Fora do "Clipar agora", o ajuste fica a ate 20s do que o juiz pediu:
+      // e ajuste, nao outra escolha.
+      const limites = cliparAgora
+        ? { min: 0, max: duracaoBruto }
+        : { min: Math.max(0, inicioRel - 20), max: Math.min(duracaoBruto, fimRel + 20) };
+      const ajuste = ajustarIntervalo(r.dados.inicio_s, r.dados.fim_s, limites);
       if (ajuste) {
         inicioRel = ajuste.inicio;
         fimRel = ajuste.fim;
-      } else {
+      } else if (cliparAgora) {
+        // Resposta inutil no Clipar agora: fica com os ultimos 60s.
         inicioRel = Math.max(0, fimRel - 60);
       }
-      titulo = String(r.dados.titulo || '').slice(0, 80) || null;
-      gancho = String(r.dados.gancho || '').slice(0, 150) || null;
+      titulo = String(r.dados.titulo || '').slice(0, 80) || titulo;
+      gancho = String(r.dados.gancho || '').slice(0, 150) || gancho;
+    } catch (err) {
+      // Ajuste fino e melhoria, nao requisito: sem ele o corte sai com o
+      // trecho do juiz (ou os ultimos 60s, no Clipar agora).
+      logger.warn(`Lives: ajuste fino do corte ${clip.id} falhou (${err.message}) - seguindo sem ele.`);
+      if (cliparAgora) inicioRel = Math.max(0, fimRel - 60);
     }
 
     const words = transcricao.words.filter((w) => w.end > inicioRel && w.start < fimRel);
-    const estilo = await clientVideoSettingsRepository.resolveForVideo(clip.user_id);
+    const { estilo, camera } = await livesUserSettings.estiloParaRender(clip.user_id);
+    let webcam = null;
+    if (camera.modo === 'auto') {
+      webcam = await localizarCamera(bruto, (inicioRel + fimRel) / 2, custo);
+      await livesRepository.setClipWebcam(clip.id, webcam);
+    }
     await videoEditingService.renderClip({
       videoPath: bruto,
       startSeconds: inicioRel,
@@ -146,7 +240,12 @@ async function renderizar(clip) {
       title: titulo || '',
       outputPath: saida,
       // Corte de live e peca unica: sem numeracao "Parte N".
-      settings: { ...estilo, show_part_label: false, show_title: Boolean(titulo) && estilo.show_title !== false },
+      settings: {
+        ...estilo,
+        show_part_label: false,
+        show_title: Boolean(titulo) && estilo.show_title !== false,
+        live_webcam: webcam ? { ...webcam, heightPercent: camera.alturaPercent, position: camera.posicao } : null,
+      },
       partIndex: 1,
       partTotal: 1,
       onProgress: (p) => {
