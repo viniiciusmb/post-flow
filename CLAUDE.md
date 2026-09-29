@@ -15,7 +15,7 @@ O Post Flow roda agora na **VPS nova `177.7.61.54`** (docker compose em `/opt/po
 - logs: `docker logs --since 1m postflow_web` (idem `postflow_worker`, `postflow_video-worker`, `postflow_live-worker`);
 - publicar: `deploy/deploy.sh` (deste Mac; não existe mais botão "Implantar").
 
-A VPS antiga ficou só como **ponte** (o serviço `postflow_web` do EasyPanel roda um Caddy que repassa tudo pra nova, e a porta 2222 é redirecionada por iptables via `/root/postflow-ponte/tunel.sh`) enquanto o DNS do `postflowclips.com` propaga. Workers da antiga em 0, banco dela parado mas intacto (caminho de volta: `deploy/virada/virada.sh voltar`). `postflowtiktok.com` ficou apontando pra antiga de propósito (decisão do Vinicius). Detalhes: `docs/CHECKLIST_MIGRACAO_E_LIVES.md`, Fase 3.
+A VPS antiga ficou só como **ponte** (o serviço `postflow_web` do EasyPanel roda um Caddy que repassa tudo pra nova, e a porta 2222 é redirecionada por iptables via `/root/postflow-ponte/tunel.sh`) enquanto o DNS do `postflowclips.com` propaga. Workers da antiga em 0, banco dela parado mas intacto (caminho de volta: `deploy/virada/virada.sh voltar`). `postflowtiktok.com` ficou apontando pra antiga de propósito (decisão do Vinicius). Detalhes: `docs/CHECKLIST_MIGRACAO_E_LIVES.md`, Fase 3. **O que falta fazer (inclusive o perigo de publicar a `origin/main` antes de juntar a `feature/lives`): `docs/PROXIMOS_PASSOS_VPS.md`.**
 
 ## Regra operacional nº 1 — NUNCA esquecer
 
