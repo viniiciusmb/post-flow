@@ -579,6 +579,27 @@ test('formato: paineis sobre a mesma area viram um so', () => {
   assert.equal(f.paineis.reduce((s, p) => s + p.alturaPercent, 0), 100);
 });
 
+test('formato: live de react - webcam declarada que ficou fora dos paineis ganha painel (erro real de 29/09)', () => {
+  // O que a IA respondeu no corte 7 do wb3nji: tomou o youtuber do video
+  // assistido (grande, no meio) pelo streamer e fez um painel so pra ele.
+  const resposta = {
+    pessoas_na_live: 2,
+    webcam_sobreposta: { existe: true, x: 0.02, y: 0.62, largura: 0.2, altura: 0.31, foco_x: 0.1, foco_y: 0.72 },
+    formato: 'paineis',
+    paineis: [painel({ mostra: 'streamer (pessoa grande, centro)', x: 0.25, y: 0.05, largura: 0.5, altura: 0.9, foco_x: 0.5, foco_y: 0.35, altura_na_tela: 100 })],
+    motivo: '',
+  };
+  const f = liveFormatoService.montarFormato(liveFormatoService.garantirWebcam(resposta), FONTE_720P);
+  assert.deepEqual(f.paineis.map((p) => p.mostra), ['streamer (pessoa grande, centro)', 'webcam do streamer']);
+  assert.deepEqual(f.paineis.map((p) => p.alturaPercent), [65, 35]);
+  // A webcam JA num painel: nada muda.
+  const certo = { ...resposta, paineis: [...resposta.paineis, painel({ mostra: 'webcam', x: 0.02, y: 0.62, largura: 0.2, altura: 0.31, altura_na_tela: 35 })] };
+  assert.equal(liveFormatoService.garantirWebcam(certo), certo);
+  // Quadro inteiro com webcam declarada: vira conteudo + webcam.
+  const inteiro = liveFormatoService.garantirWebcam({ ...resposta, formato: 'quadro_inteiro', paineis: [] });
+  assert.deepEqual(inteiro.paineis.map((p) => p.mostra), ['conteudo', 'webcam do streamer']);
+});
+
 test('formato: resposta inutilizavel cai no quadro inteiro (nunca deixa ninguem de fora)', () => {
   assert.equal(liveFormatoService.montarFormato(null, FONTE_720P).tipo, 'quadro_inteiro');
   assert.equal(liveFormatoService.montarFormato({ pessoas_na_live: 1, formato: 'paineis', paineis: [], motivo: '' }, FONTE_720P).tipo, 'quadro_inteiro');
