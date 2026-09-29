@@ -118,6 +118,8 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
+      # Entrada da ponte da VPS antiga (so ela e aceita - ver Caddyfile).
+      - "8443:8443"
     env_file: [sites.env]
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro

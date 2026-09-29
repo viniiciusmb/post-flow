@@ -201,7 +201,54 @@ da troca não volta junto.
 
 ## FASE 3 — Troca (aguardando autorização)
 
-- [ ] Avisar e aguardar o "pode ir".
+**29/09/2026 — o Vinicius marcou a troca para 30/09 às 03:00 (Brasília)** e pediu
+tudo pronto, com gatilho. Preparado e testado (nada mudou na produção):
+
+- **Roteiro:** `deploy/virada/virada.sh` roda **no Mac** (as VPS não têm acesso uma
+  à outra: dar à nova uma chave de root da antiga foi bloqueado pela checagem de
+  segurança, e com razão). Comandos: `checar`, `ensaio`, `executar`, `voltar`,
+  `status`, `agendar`, `cancelar`. Log em `~/Library/Logs/postflow-virada.log`.
+- **Gatilho:** LaunchAgent `com.postflow.virada` (`virada.sh agendar "2026-09-30 03:00"`),
+  dentro de `caffeinate`. Às 01:30 adianta a cópia de arquivos; às 03:00 roda
+  `executar --agendado`, que **se recusa a rodar fora de 02:45–05:30** (Mac que
+  dormiu e acordou às 9h não derruba o site cheio). Testado disparando de
+  verdade às 16:14: a trava recusou e o gatilho se desarmou sozinho.
+- **Ponte na antiga** (`deploy/virada/ponte/`): o serviço `postflow_web` do EasyPanel
+  passa a rodar um Caddy que repassa tudo para a nova (porta 8443, só aceita o IP
+  da antiga, certificado conferido). O site volta **sem esperar o DNS**. Ensaiado:
+  troca + `docker service rollback` num serviço descartável; ponte → nova com a
+  página, cookie `Secure` e o IP do visitante chegando certo.
+- **Túnel:** a nova recebeu as chaves de identidade do relé antigo (mesma impressão
+  digital `xekWr7…`). Na virada, `tunel.sh ligar` redireciona a porta 2222 da antiga
+  no firewall (iptables) — o relé antigo fica intacto, então desfazer é apagar a
+  regra. Ensaiado na porta 2299.
+- **Banco:** dump da antiga + migrations 089–093 + `mesclar.sql` (conta 17 e
+  tabelas `live_*` vindas da nova, com conferência de contagem que desfaz tudo
+  se não bater). Sequências da nova puladas +100000 em 29/09 ~16h para nada
+  criado lá até a virada colidir com a antiga. **Ensaio real** (`virada.sh ensaio`,
+  banco descartável) pegou 2 defeitos que teriam passado: a pasta de exportação
+  do Drive por canal nasce sem `client_user_id` (filtro corrigido), e a cópia de
+  28/09 já tinha perdido a pasta do canal 20 da conta 17 (a fusão devolve). Site
+  subido contra o banco fundido: páginas e API respondem, 74 usuários, sem erro.
+- **Arquivos (decisão do Vinicius):** os cortes já postados (~15 GB) **ficam na
+  antiga**. Conferido no código: o que "se apaga sozinho" é só corte POSTADO há
+  3 dias (`postingCleanupJob`), e quem apaga é a nova — ela limpa o banco, mas os
+  arquivos na antiga só somem quando o Post Flow sair de lá. Vão para a nova só
+  os ~1,8 GB ainda úteis (`copiar-cortes.sh`): corte/capa não postados (inclui
+  **17 postagens na fila de clientes pagantes**, Kassio e Tiago) e upload não
+  terminado. Pré-cópia iniciada em 29/09 16h.
+- **Vigia do DNS** (`dns-vigia.sh`, instalado na nova pela virada): liga o HTTPS de
+  cada domínio real no Caddy só quando os servidores de DNS oficiais já apontam
+  para a nova — antes disso o Let's Encrypt falharia e travaria o domínio.
+
+- [x] Avisar e aguardar o "pode ir". — 29/09: marcado para 30/09 03:00.
+- [ ] **Ação do Vinicius antes das 03:00:** baixar o TTL dos registros A de
+  `postflowclips.com` e `postflowtiktok.com` de 14400 para 300 no painel de DNS da
+  Hostinger (não é obrigatório com a ponte, mas encurta a espera).
+- [ ] **Ação do Vinicius depois das 03:00:** trocar os registros A dos dois domínios
+  para `177.7.61.54` (não mexer em MX nem no `www`, que segue o apex).
+- [ ] Depois da virada: remover a ponte e o redirecionamento do túnel da antiga
+  quando o DNS estiver estável (e o programa de bandeja reiniciado).
 - [ ] Parar só os processos do Post Flow na antiga.
 - [ ] Anotar postagens das próximas horas.
 - [ ] Backup final + rsync final.

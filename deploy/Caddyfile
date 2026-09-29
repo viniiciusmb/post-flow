@@ -1,6 +1,50 @@
 # Caddy faz o HTTPS (certificado Let's Encrypt automatico) e repassa tudo pro
 # Express. Os dominios vem de sites.env (POSTFLOW_SITES), que so existe no
 # servidor: durante o teste e um nome temporario, na troca vira os dominios reais.
+{
+	servers {
+		# A VPS antiga vira uma "ponte" na troca de servidor (deploy/virada/):
+		# ela repassa pra ca tudo que ainda chega nela enquanto o DNS propaga.
+		# Confiar nela e o que faz o IP do visitante chegar certo no Express -
+		# sem isso todo mundo que viesse pela ponte teria o mesmo IP, e o
+		# limitador de tentativas de login travaria todos juntos.
+		trusted_proxies static 72.61.219.94/32
+		trusted_proxies_strict
+	}
+}
+
+(postflow) {
+	reverse_proxy postflow_web:3000 {
+		# Um valor so (o do visitante): o Express confia em 1 salto e pega o
+		# ultimo da lista. Se a ponte acrescentasse o IP dela, seria ele.
+		header_up X-Forwarded-For {client_ip}
+	}
+	# Durante a troca de servidor o site fica fora por alguns minutos; em vez
+	# de um erro seco, quem abrir ve uma mensagem. Retry-After faz os avisos de
+	# pagamento (Asaas/Stripe) tentarem de novo depois.
+	handle_errors 502 503 504 {
+		header Content-Type "text/html; charset=utf-8"
+		header Retry-After 300
+		respond `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Post Flow - voltamos já</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:system-ui,sans-serif;background:#f6f6f8;color:#1a1a1f;padding:16px}@media(prefers-color-scheme:dark){body{background:#141619;color:#eee}}main{max-width:420px;text-align:center}h1{font-size:1.4rem}</style></head><body><main><h1>Estamos trocando de servidor</h1><p>O Post Flow volta em poucos minutos. Seus cortes e agendamentos estão guardados.</p></main></body></html>` 503
+	}
+}
+
 {$POSTFLOW_SITES} {
-	reverse_proxy postflow_web:3000
+	import postflow
+}
+
+# Entrada da ponte: so a VPS antiga fala aqui, sempre com o nome do site
+# original no Host (postflowclips.com...). Nao depende do DNS nem de
+# certificado dos dominios reais - usa o certificado do nome de teste, que o
+# lado da ponte confere. Fora da VPS antiga, a conexao e derrubada.
+https://:8443 {
+	tls /data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/177-7-61-54.sslip.io/177-7-61-54.sslip.io.crt /data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/177-7-61-54.sslip.io/177-7-61-54.sslip.io.key
+	@fora not remote_ip 72.61.219.94/32
+	abort @fora
+	# Diagnostico da ponte: mostra o IP de visitante que vai pro Express.
+	# Usado pelo deploy/virada/virada.sh pra conferir a cadeia antes da troca.
+	handle /__ponte/ip {
+		respond "{client_ip}"
+	}
+	import postflow
 }

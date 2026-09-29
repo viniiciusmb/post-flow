@@ -1,0 +1,33 @@
+# PONTE da VPS antiga (72.61.219.94) para a nova (177.7.61.54).
+#
+# Na virada, o servico postflow_web do EasyPanel passa a rodar ESTE Caddy no
+# lugar do app. O Traefik do EasyPanel continua mandando os dominios pra
+# "postflow_web:3000" como sempre - so que agora quem atende e a ponte, que
+# repassa tudo pra VPS nova. Assim o site volta a funcionar no minuto em que a
+# nova sobe, sem esperar o DNS propagar, e quem ainda tiver o IP antigo em
+# cache (ou um aviso de pagamento do Asaas) continua chegando no lugar certo.
+#
+# Desfazer: docker service rollback postflow_web (volta o app do EasyPanel).
+{
+	admin off
+	auto_https off
+	servers {
+		# Quem fala com a ponte e o Traefik, dentro da rede do Docker.
+		trusted_proxies static private_ranges
+		trusted_proxies_strict
+	}
+}
+
+:3000 {
+	reverse_proxy https://177.7.61.54:8443 {
+		# O Express monta endereco de retorno (Stripe, login do Google) a
+		# partir do Host - ele tem que chegar com o dominio de verdade.
+		header_up Host {host}
+		header_up X-Forwarded-For {client_ip}
+		header_up X-Forwarded-Proto https
+		transport http {
+			# Confere o certificado da VPS nova pelo nome de teste dela.
+			tls_server_name 177-7-61-54.sslip.io
+		}
+	}
+}
