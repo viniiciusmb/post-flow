@@ -465,6 +465,8 @@ export type VideoCaptionStyle =
   // título: a legenda aparece palavra por palavra, e uma faixa larga atrás
   // de uma palavra só ficaria desproporcional.
   | "caixa_colorida" | "papel_rasgado"
+  // "cartao" tambem so existe para titulo (caixa arredondada com sombra).
+  | "cartao"
 export type VideoClipLength = "short" | "balanced" | "long" | "extra_long"
 /** "full_parts" = fatiar o vídeo inteiro em partes sequenciais (Parte 1, Parte 2...). */
 export type VideoClipMode = "ai_choice" | "full_parts" | "fixed_count"

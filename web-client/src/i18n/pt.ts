@@ -528,6 +528,7 @@ export const pt = {
   "ce.contornoGrosso": "Contorno grosso",
   "ce.caixaColorida": "Caixa (cor sua)",
   "ce.papelRasgado": "Papel rasgado",
+  "ce.cartao": "Cartão",
   "ce.corDaCaixa": "Cor da caixa",
   "ce.corDoPapel": "Cor do papel",
   "ce.fonte": "Fonte",

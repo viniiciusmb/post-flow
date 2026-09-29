@@ -77,6 +77,12 @@ const TITLE_STYLES = {
   // ffmpeg, nao o formato de legenda). So contorno leve, pra garantir leitura
   // caso o texto passe da borda do papel.
   papel_rasgado: { tamanho: 76, corLetra: BRANCO, caixa: false, contorno: 3 },
+  // Cartao: caixa de cantos arredondados com sombra e degrade da cor escolhida
+  // (imagem assets/imagens/cartao-titulo.png, sobreposta como o papel). Pedido
+  // do fundador (29/09/2026): um titulo "mais profissional e chamativo". Sem
+  // contorno (texto limpo), e a cor da LETRA segue a da caixa: branca em
+  // caixa escura, preta em caixa clara.
+  cartao: { tamanho: 64, corLetra: BRANCO, caixa: false, contorno: 0, corLetraPelaCaixa: true },
 };
 
 // Fontes que existem DENTRO do container (ver assets/fonts/LEIA-ME.md e o
@@ -97,6 +103,20 @@ const FONTE_PADRAO = 'Anton';
 // gerada por scripts/gerar-papel-rasgado.js de forma deterministica: rodar de
 // novo produz o mesmo arquivo, entao o visual nao muda sem alguem decidir.
 const CAMINHO_PAPEL_RASGADO = path.join(__dirname, '..', '..', 'assets', 'imagens', 'papel-rasgado.png');
+// Imagem do estilo Cartao (scripts/gerar-cartao-titulo.js). Mesmo tamanho do
+// papel (1080x300), entao a mesma conta de largura/altura vale pros dois.
+const CAMINHO_CARTAO = path.join(__dirname, '..', '..', 'assets', 'imagens', 'cartao-titulo.png');
+const IMAGEM_ATRAS_DO_TITULO = { papel_rasgado: CAMINHO_PAPEL_RASGADO, cartao: CAMINHO_CARTAO };
+
+// Caixa clara pede letra escura (luminancia relativa, a mesma conta de
+// contraste da web). Letra branca em caixa amarela some.
+function letraPelaCaixa(hex) {
+  const limpo = String(hex || '').replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(limpo)) return BRANCO;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(limpo.slice(i, i + 2), 16) / 255);
+  const luminancia = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminancia > 0.6 ? PRETO : BRANCO;
+}
 
 // Largura do papel em relacao a do quadro. Nao e o texto que define o tamanho:
 // medir a largura que o texto VAI ter exigiria renderizar antes, e uma imagem
@@ -183,7 +203,7 @@ function linhaDeEstilo({ nome, preset, fonte, alinhamento, margemV, corEscolhida
     `Style: ${nome}`,
     fonte,
     preset.tamanho,
-    preset.corLetra,
+    preset.corLetraPelaCaixa ? letraPelaCaixa(corEscolhida) : preset.corLetra,
     '&H000000FF',
     corDoContorno,
     corDeFundo,
@@ -1171,7 +1191,8 @@ async function renderClip({
 
   // Papel rasgado atras do titulo. So entra quando o estilo pede E o titulo
   // vai aparecer - papel sem titulo seria uma faixa de cor no meio do video.
-  const usaPapel = titleStyle === 'papel_rasgado' && titleSeconds > 0 && fs.existsSync(CAMINHO_PAPEL_RASGADO);
+  const imagemDoTitulo = IMAGEM_ATRAS_DO_TITULO[titleStyle] || null;
+  const usaPapel = Boolean(imagemDoTitulo) && titleSeconds > 0 && fs.existsSync(imagemDoTitulo);
 
   let resultadoFiltro = buildFilter({
     w,
@@ -1231,7 +1252,7 @@ async function renderClip({
       ...(template ? ['-loop', '1', '-framerate', '30', '-i', template.path] : []),
       // Papel rasgado: mesma regra da faixa - imagem parada precisa de taxa de
       // quadros, senao o vstack/overlay duplica quadro sem parar (ver acima).
-      ...(usaPapel ? ['-loop', '1', '-framerate', '30', '-i', CAMINHO_PAPEL_RASGADO] : []),
+      ...(usaPapel ? ['-loop', '1', '-framerate', '30', '-i', imagemDoTitulo] : []),
       ...(filterComplex
         ? ['-filter_complex', filterComplex, '-map', outputLabel, '-map', '0:a']
         : ['-vf', simpleFilter]),
@@ -1311,6 +1332,8 @@ module.exports = {
   hexParaAss,
   hexParaFatores,
   CAMINHO_PAPEL_RASGADO,
+  CAMINHO_CARTAO,
+  letraPelaCaixa,
   buildAssSubtitles,
   quebrarTitulo,
   centroDoTitulo,

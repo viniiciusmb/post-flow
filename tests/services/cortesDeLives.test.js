@@ -711,6 +711,15 @@ test('formato: o render empilha os paineis (alturas pares somando 1920) ou mostr
   assert.match(inteiro.filterComplex, /boxblur/);
 });
 
+test('titulo cartao: letra escura em caixa clara, clara em caixa escura, e a imagem existe', () => {
+  assert.equal(videoEditingService.letraPelaCaixa('#FFD700'), '&H00000000', 'amarelo pede letra preta');
+  assert.equal(videoEditingService.letraPelaCaixa('#FFFFFF'), '&H00000000');
+  assert.equal(videoEditingService.letraPelaCaixa('#D92323'), '&H00FFFFFF', 'vermelho pede letra branca');
+  assert.equal(videoEditingService.letraPelaCaixa('#101010'), '&H00FFFFFF');
+  assert.ok(fs.existsSync(videoEditingService.CAMINHO_CARTAO), 'assets/imagens/cartao-titulo.png no repositorio');
+  assert.ok(videoEditingService.TITLE_STYLES.cartao);
+});
+
 test('retangulo de camera absurdo e recusado (cai no layout normal)', () => {
   assert.equal(videoEditingService.webcamValida({ x: 0.9, y: 0.9, largura: 0.3, altura: 0.3 }), null, 'sai do quadro');
   assert.equal(videoEditingService.webcamValida({ x: 0, y: 0, largura: 0.01, altura: 0.2 }), null, 'pequeno demais');

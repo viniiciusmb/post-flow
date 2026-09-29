@@ -356,6 +356,25 @@ const STYLE_PREVIEW: Record<VideoCaptionStyle, { label: ChaveDeTraducao; render:
       </span>
     ),
   },
+  cartao: {
+    label: "ce.cartao",
+    render: (text) => (
+      <span
+        style={{
+          fontFamily: "Poppins, Arial, sans-serif",
+          fontWeight: 700,
+          color: "var(--cor-da-letra-cartao, #fff)",
+          fontSize: 13,
+          background: "linear-gradient(180deg, var(--cor-da-caixa, #D92323), color-mix(in srgb, var(--cor-da-caixa, #D92323) 85%, #000))",
+          padding: "5px 12px",
+          borderRadius: 10,
+          boxShadow: "0 4px 10px rgba(0,0,0,.35)",
+        }}
+      >
+        {text}
+      </span>
+    ),
+  },
   none: {
     label: "ce.semLegenda",
     render: () => <span className="text-xs text-white/40">(nenhuma)</span>,
@@ -396,7 +415,7 @@ function StyleGallery({
                 exemplo que não corresponde ao que vai sair. */}
             <div
               className="flex h-16 w-full items-center justify-center rounded-md bg-neutral-900"
-              style={{ ["--cor-da-caixa" as string]: corDaCaixa }}
+              style={{ ["--cor-da-caixa" as string]: corDaCaixa, ["--cor-da-letra-cartao" as string]: letraPelaCaixa(corDaCaixa) }}
             >
               {preview.render(sampleText)}
             </div>
@@ -592,7 +611,7 @@ function ClipPreview({
             className="absolute inset-x-0 flex justify-center px-2 text-center"
             style={{ top: `${settings.titleHeightPercent}%` }}
           >
-            <span style={{ fontFamily: settings.titleFont }}>{estiloTitulo.render("SEU TÍTULO")}</span>
+            <span style={{ fontFamily: settings.titleFont, ["--cor-da-letra-cartao" as string]: letraPelaCaixa(settings.titleBoxColor) }}>{estiloTitulo.render("SEU TÍTULO")}</span>
           </div>
         )}
 
@@ -700,6 +719,16 @@ function PartLabelPositionPicker({
 // o bloco de quantidade/modo/idioma dos cortes (quem decide isso nas lives e o
 // nivel de qualidade) e os fundos que dependem de um video do YouTube (capa)
 // ou de upload (minha imagem).
+// Mesma regra do servidor (videoEditingService.letraPelaCaixa): caixa clara
+// pede letra escura - senao a miniatura mostraria letra branca em caixa
+// amarela, diferente do corte que vai sair.
+function letraPelaCaixa(hex: string | undefined) {
+  const limpo = String(hex || "").replace("#", "")
+  if (!/^[0-9a-fA-F]{6}$/.test(limpo)) return "#fff"
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(limpo.slice(i, i + 2), 16) / 255)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6 ? "#000" : "#fff"
+}
+
 export function ClipStyleEditorCard({
   sourceVideoId,
   endpoint = "/api/client/video-settings",
@@ -1399,7 +1428,7 @@ export function ClipStyleEditorCard({
                     opcoes={settings.options.fonts}
                     onChange={(v) => save({ ...settings, titleFont: v })}
                   />
-                  {["caixa_colorida", "papel_rasgado"].includes(settings.titleStyle) && (
+                  {["caixa_colorida", "papel_rasgado", "cartao"].includes(settings.titleStyle) && (
                     <CorSelect
                       label={settings.titleStyle === "papel_rasgado" ? t("ce.corDoPapel") : t("ce.corDaCaixa")}
                       valor={settings.titleBoxColor}

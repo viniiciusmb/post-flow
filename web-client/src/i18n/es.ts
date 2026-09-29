@@ -522,6 +522,7 @@ export const es: Dicionario = {
   "ce.contornoGrosso": "Contorno grueso",
   "ce.caixaColorida": "Caja (tu color)",
   "ce.papelRasgado": "Papel rasgado",
+  "ce.cartao": "Tarjeta",
   "ce.corDaCaixa": "Color de la caja",
   "ce.corDoPapel": "Color del papel",
   "ce.fonte": "Fuente",
