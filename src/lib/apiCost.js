@@ -66,6 +66,18 @@ const MINI_TRANSCRIBE_USD_PER_MINUTE = 0.003;
 const GPT5_NANO_USD_PER_MTOK_INPUT = 0.05;
 const GPT5_NANO_USD_PER_MTOK_OUTPUT = 0.4;
 
+// gpt-5-mini: o "juiz" que da a nota final aos momentos, o ajuste fino do
+// corte e a deteccao da camera. Entrou depois do primeiro teste real, em que o
+// nano sozinho escolheu momentos fracos. 5x o preco do nano, mas e usado em
+// poucas chamadas por hora (centavos).
+const GPT5_MINI_USD_PER_MTOK_INPUT = 0.25;
+const GPT5_MINI_USD_PER_MTOK_OUTPUT = 2.0;
+
+function gpt5MiniCostUsd(inputTokens, outputTokens) {
+  return ((inputTokens || 0) / 1_000_000) * GPT5_MINI_USD_PER_MTOK_INPUT
+    + ((outputTokens || 0) / 1_000_000) * GPT5_MINI_USD_PER_MTOK_OUTPUT;
+}
+
 function miniTranscribeCostUsd(audioSeconds) {
   if (!audioSeconds) return 0;
   return (audioSeconds / 60) * MINI_TRANSCRIBE_USD_PER_MINUTE;
@@ -80,6 +92,9 @@ module.exports = {
   whisperCostUsd,
   miniTranscribeCostUsd,
   gpt5NanoCostUsd,
+  gpt5MiniCostUsd,
+  GPT5_MINI_USD_PER_MTOK_INPUT,
+  GPT5_MINI_USD_PER_MTOK_OUTPUT,
   MINI_TRANSCRIBE_USD_PER_MINUTE,
   GPT5_NANO_USD_PER_MTOK_INPUT,
   GPT5_NANO_USD_PER_MTOK_OUTPUT,

@@ -9,12 +9,16 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('../../config');
-const { miniTranscribeCostUsd, gpt5NanoCostUsd } = require('../../lib/apiCost');
+const { miniTranscribeCostUsd, gpt5NanoCostUsd, gpt5MiniCostUsd } = require('../../lib/apiCost');
 
 const TRANSCRICAO_URL = 'https://api.openai.com/v1/audio/transcriptions';
 const CHAT_URL = 'https://api.openai.com/v1/chat/completions';
 const MODELO_TRANSCRICAO = 'gpt-4o-mini-transcribe';
 const MODELO_TEXTO = 'gpt-5-nano';
+// O juiz, o ajuste fino e a camera usam o mini: no primeiro teste real o nano
+// deu nota 7 pra quase todo trecho - nao distingue momento bom de conversa.
+const MODELO_JUIZ = 'gpt-5-mini';
+const CUSTO_POR_MODELO = { 'gpt-5-nano': gpt5NanoCostUsd, 'gpt-5-mini': gpt5MiniCostUsd };
 const TIMEOUT_MS = 90_000;
 
 function erroPassageiro(status) {
@@ -62,19 +66,29 @@ async function transcreverBloco(arquivo, { contexto = '', segundos = 0 } = {}) {
 // (structured outputs, strict). A validacao de negocio (limites de tempo,
 // nota, ids que existem) continua sendo de quem chama: o schema garante o
 // formato, nao que o conteudo faca sentido.
-async function pedirJson({ nome, sistema, usuario, schema }) {
+// "imagem" (opcional): JPEG em base64, mandado junto com o texto - usado pra
+// achar a camera do streamer num quadro da live.
+async function pedirJson({ nome, sistema, usuario, schema, modelo = MODELO_TEXTO, raciocinio = 'minimal', imagem = null }) {
   return comUmaNovaTentativa(async () => {
+    const conteudoUsuario = imagem
+      ? [
+          { type: 'text', text: usuario },
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imagem}`, detail: 'low' } },
+        ]
+      : usuario;
     const r = await fetch(CHAT_URL, {
       method: 'POST',
       headers: { Authorization: `Bearer ${config.openai.apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: MODELO_TEXTO,
-        // 'minimal': medido em 28/09 - zero token de raciocinio, so o JSON.
-        reasoning_effort: 'minimal',
+        model: modelo,
+        // nano com 'minimal': medido em 28/09 - zero token de raciocinio.
+        // O juiz usa 'low': pensar um pouco e o que separa momento bom de
+        // conversa, e custa centavos no volume dele.
+        reasoning_effort: raciocinio,
         response_format: { type: 'json_schema', json_schema: { name: nome, strict: true, schema } },
         messages: [
           { role: 'system', content: sistema },
-          { role: 'user', content: usuario },
+          { role: 'user', content: conteudoUsuario },
         ],
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -94,8 +108,9 @@ async function pedirJson({ nome, sistema, usuario, schema }) {
     }
     const entrada = dados.usage?.prompt_tokens || 0;
     const saida = dados.usage?.completion_tokens || 0;
-    return { dados: json, inputTokens: entrada, outputTokens: saida, custoUsd: gpt5NanoCostUsd(entrada, saida) };
+    const custo = (CUSTO_POR_MODELO[modelo] || gpt5MiniCostUsd)(entrada, saida);
+    return { dados: json, inputTokens: entrada, outputTokens: saida, custoUsd: custo };
   });
 }
 
-module.exports = { transcreverBloco, pedirJson, MODELO_TRANSCRICAO, MODELO_TEXTO };
+module.exports = { transcreverBloco, pedirJson, MODELO_TRANSCRICAO, MODELO_TEXTO, MODELO_JUIZ };
