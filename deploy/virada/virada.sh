@@ -108,7 +108,7 @@ checar() {
     || log "  aviso tunel: identidade diferente (o rele antigo reiniciou?) - a virada copia de novo"
 
   local ip
-  for d in postflowclips.com postflowtiktok.com; do
+  for d in postflowclips.com; do
     ip=$(dig +short A "$d" "@$(dig +short NS "$d" | head -1)" | tail -1)
     [ "$ip" = 72.61.219.94 ] && ok "DNS $d ainda na antiga (certo antes da virada)" || log "  aviso DNS $d -> $ip"
   done
@@ -249,7 +249,6 @@ subir() {
   corpo=$(curl -s -m 20 --resolve postflowclips.com:443:72.61.219.94 https://postflowclips.com/login -w '\n%{http_code}')
   codigo=$(echo "$corpo" | tail -1)
   { [ "$codigo" = 200 ] && ! echo "$corpo" | grep -q 'trocando de servidor'; } || falha "login pela ponte respondeu $codigo"
-  curl -s -m 20 --resolve postflowtiktok.com:443:72.61.219.94 -o /dev/null -w '%{http_code}' https://postflowtiktok.com/ | grep -qE '^(2|3)' || falha "postflowtiktok.com pela ponte nao respondeu"
   [ "$(curl -s -m 20 --resolve postflowclips.com:443:72.61.219.94 -o /dev/null -w '%{http_code}' https://postflowclips.com/api/auth/me)" = 401 ] || falha "API nao respondeu como esperado"
   local ip
   ip=$(A "curl -s -m 10 -H 'X-Forwarded-For: 198.51.100.7' --connect-to 177-7-61-54.sslip.io:8443:177.7.61.54:8443 https://177-7-61-54.sslip.io:8443/__ponte/ip")
@@ -291,9 +290,9 @@ pos() {
 ==================================================================
  VIRADA CONCLUIDA. O site ja funciona na VPS nova (pela ponte).
 
- Falta so voce: no painel da Hostinger (DNS), trocar o registro A
+ Falta so voce: no painel da Hostinger (DNS), trocar o registro A do postflowclips.com
    postflowclips.com   -> 177.7.61.54
-   postflowtiktok.com  -> 177.7.61.54
+   (postflowtiktok.com NAO: fica esquecido apontando pra antiga)
  (nao mexa em MX nem no www - o www segue o postflowclips.com)
 
  Nao tem pressa: a ponte segura o site ate o DNS propagar. Quando o

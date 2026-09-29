@@ -9,12 +9,15 @@
 # Por isso cada dominio so entra no Caddy quando o servidor de DNS oficial
 # (Hostinger) ja responde com o IP desta VPS. Ai o certificado sai na hora.
 #
-#   dns-vigia.sh            vigia ate os 3 dominios estarem com HTTPS aqui
+#   dns-vigia.sh            vigia ate os dominios estarem com HTTPS aqui
 #   dns-vigia.sh uma-vez    confere uma vez e sai
 set -uo pipefail
 
 IP_NOVA=177.7.61.54
-DOMINIOS=(postflowclips.com postflowtiktok.com www.postflowclips.com)
+# postflowtiktok.com fica de fora de proposito (decisao do Vinicius, 29/09):
+# o sistema nao usa mais esse dominio; ele continua apontando pra antiga e
+# abre o site pela ponte enquanto ela existir.
+DOMINIOS=(postflowclips.com www.postflowclips.com)
 TESTE=177-7-61-54.sslip.io
 DIR=/opt/postflow
 LIMITE_HORAS="${LIMITE_HORAS:-48}"
@@ -74,8 +77,8 @@ if [ "${1:-}" = "uma-vez" ]; then rodada; exit $?; fi
 log "Vigia do DNS iniciado (ate ${LIMITE_HORAS}h)."
 FIM=$(( $(date +%s) + LIMITE_HORAS * 3600 ))
 while [ "$(date +%s)" -lt "$FIM" ]; do
-  if rodada; then log "Tudo pronto: os 3 dominios respondem com HTTPS nesta VPS."; exit 0; fi
+  if rodada; then log "Tudo pronto: os dominios respondem com HTTPS nesta VPS."; exit 0; fi
   sleep 30
 done
-log "Tempo esgotado sem os 3 dominios apontarem pra ca. A ponte continua atendendo."
+log "Tempo esgotado sem os dominios apontarem pra ca. A ponte continua atendendo."
 exit 1

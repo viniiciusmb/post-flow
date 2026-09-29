@@ -27,16 +27,23 @@ trap 'rm -rf "$TMP"' EXIT
 ssh "$ANTIGA" 'bash -s' > "$TMP/antiga.txt" <<'REMOTO'
 set -euo pipefail
 D=$(docker ps -qf name=postflow_db | head -1)
-docker exec -i "$D" psql -U postgres -d postflow -At <<'SQL' | sed '/^$/d' | sort -u > /tmp/virada-necessarios.txt
-SELECT unnest(ARRAY[c.local_clip_path, c.thumbnail_path])
-FROM clips c JOIN source_videos s ON s.id = c.source_video_id
-WHERE s.owner_client_user_id <> 17
-  AND NOT EXISTS (SELECT 1 FROM videos v JOIN postings p ON p.video_id = v.id
-                  WHERE v.clip_id = c.id AND p.status = 'posted')
-UNION
-SELECT local_video_path FROM source_videos
-WHERE owner_client_user_id <> 17 AND input_type = 'upload'
-  AND status NOT IN ('ready', 'error', 'cancelled');
+# Em ORDEM DE URGENCIA: primeiro os cortes das postagens na fila, pelo horario
+# em que vao sair; depois o resto. A internet de envio do Mac e lenta (~0,2
+# MB/s) - assim o corte da proxima postagem chega antes da hora dela.
+docker exec -i "$D" psql -U postgres -d postflow -At <<'SQL' | sed '/^$/d' | awk '!visto[$0]++' > /tmp/virada-necessarios.txt
+SELECT caminho FROM (
+  SELECT unnest(ARRAY[c.local_clip_path, c.thumbnail_path]) AS caminho,
+         COALESCE((SELECT min(p.scheduled_for) FROM videos v JOIN postings p ON p.video_id = v.id
+                   WHERE v.clip_id = c.id AND p.status = 'pending'), 'infinity') AS urgencia
+  FROM clips c JOIN source_videos s ON s.id = c.source_video_id
+  WHERE s.owner_client_user_id <> 17
+    AND NOT EXISTS (SELECT 1 FROM videos v JOIN postings p ON p.video_id = v.id
+                    WHERE v.clip_id = c.id AND p.status = 'posted')
+  UNION ALL
+  SELECT local_video_path, 'infinity' FROM source_videos
+  WHERE owner_client_user_id <> 17 AND input_type = 'upload'
+    AND status NOT IN ('ready', 'error', 'cancelled')
+) x WHERE caminho IS NOT NULL ORDER BY urgencia, caminho;
 SQL
 cd /var/lib/postflow-clips
 sed -n 's#^/tmp/post-flow-video/##p' /tmp/virada-necessarios.txt | while IFS= read -r f; do
@@ -57,8 +64,10 @@ MB=$(awk '{s+=$1} END {printf "%.0f", s/1048576}' "$TMP/faltam.txt")
 echo "Arquivos necessarios: $TOTAL. Faltando na nova: $N ($MB MB)."
 [ "$N" = 0 ] && exit 0
 
-# 4. Manda so os que faltam (tar pelo Mac, sem gravar nada no disco daqui).
-cut -d' ' -f2- "$TMP/faltam.txt" > "$TMP/lista.txt"
+# 4. Manda so os que faltam, na ordem de urgencia da lista da antiga (tar pelo
+# Mac, sem gravar nada no disco daqui).
+cut -d' ' -f2- "$TMP/faltam.txt" > "$TMP/faltam-caminhos.txt"
+cut -d' ' -f2- "$TMP/antiga.txt" | awk 'NR==FNR {f[$0]=1; next} ($0 in f)' "$TMP/faltam-caminhos.txt" - > "$TMP/lista.txt"
 scp -q "$TMP/lista.txt" "$ANTIGA:/tmp/virada-lista.txt"
 ssh "$ANTIGA" "tar -C $PASTA -cf - -T /tmp/virada-lista.txt && rm -f /tmp/virada-lista.txt" \
   | ssh "$NOVA" "tar -C $PASTA -xf -"
