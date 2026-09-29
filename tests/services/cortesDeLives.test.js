@@ -522,7 +522,7 @@ const painel = (extra) => ({ mostra: 'x', x: 0, y: 0, largura: 0.3, altura: 0.8,
 
 test('formato: duas pessoas nas pontas viram dois paineis, cada um centrado no rosto, somando a tela toda', () => {
   const f = liveFormatoService.montarFormato({
-    pessoas_na_live: 2,
+    pessoas_da_live: [{}, {}],
     formato: 'paineis',
     paineis: [
       painel({ mostra: 'esquerda', x: 0.02, foco_x: 0.15 }),
@@ -555,7 +555,7 @@ test('formato: o recorte tem EXATAMENTE a proporcao do painel (sem distorcer a p
 
 test('formato: sem ninguem NA live (so personagem de jogo/desenho), no maximo um painel', () => {
   const f = liveFormatoService.montarFormato({
-    pessoas_na_live: 0,
+    pessoas_da_live: [],
     formato: 'paineis',
     paineis: [painel({ x: 0 }), painel({ x: 0.35 }), painel({ x: 0.7 })],
     motivo: 'tres personagens da arte do jogo',
@@ -566,7 +566,7 @@ test('formato: sem ninguem NA live (so personagem de jogo/desenho), no maximo um
 
 test('formato: paineis sobre a mesma area viram um so', () => {
   const f = liveFormatoService.montarFormato({
-    pessoas_na_live: 2,
+    pessoas_da_live: [{}, {}],
     formato: 'paineis',
     paineis: [
       painel({ mostra: 'filme', x: 0, y: 0, largura: 0.8, altura: 0.9, altura_na_tela: 50 }),
@@ -579,33 +579,55 @@ test('formato: paineis sobre a mesma area viram um so', () => {
   assert.equal(f.paineis.reduce((s, p) => s + p.alturaPercent, 0), 100);
 });
 
-test('formato: live de react - webcam declarada que ficou fora dos paineis ganha painel (erro real de 29/09)', () => {
+test('formato: live de react - webcam da live que ficou fora dos paineis ganha painel (erro real de 29/09)', () => {
   // O que a IA respondeu no corte 7 do wb3nji: tomou o youtuber do video
   // assistido (grande, no meio) pelo streamer e fez um painel so pra ele.
+  const webcam = { tipo: 'webcam', x: 0.02, y: 0.62, largura: 0.2, altura: 0.31, foco_x: 0.1, foco_y: 0.72 };
   const resposta = {
-    pessoas_na_live: 2,
-    webcam_sobreposta: { existe: true, x: 0.02, y: 0.62, largura: 0.2, altura: 0.31, foco_x: 0.1, foco_y: 0.72 },
+    pessoas_da_live: [webcam],
     formato: 'paineis',
-    paineis: [painel({ mostra: 'streamer (pessoa grande, centro)', x: 0.25, y: 0.05, largura: 0.5, altura: 0.9, foco_x: 0.5, foco_y: 0.35, altura_na_tela: 100 })],
+    paineis: [painel({ mostra: 'video assistido', x: 0.25, y: 0.05, largura: 0.5, altura: 0.9, foco_x: 0.5, foco_y: 0.35, altura_na_tela: 100 })],
     motivo: '',
   };
-  const f = liveFormatoService.montarFormato(liveFormatoService.garantirWebcam(resposta), FONTE_720P);
-  assert.deepEqual(f.paineis.map((p) => p.mostra), ['streamer (pessoa grande, centro)', 'webcam do streamer']);
-  assert.deepEqual(f.paineis.map((p) => p.alturaPercent), [65, 35]);
-  // A webcam JA num painel: nada muda.
-  const certo = { ...resposta, paineis: [...resposta.paineis, painel({ mostra: 'webcam', x: 0.02, y: 0.62, largura: 0.2, altura: 0.31, altura_na_tela: 35 })] };
-  assert.equal(liveFormatoService.garantirWebcam(certo), certo);
-  // Quadro inteiro com webcam declarada: vira conteudo + webcam.
-  const inteiro = liveFormatoService.garantirWebcam({ ...resposta, formato: 'quadro_inteiro', paineis: [] });
+  const f = liveFormatoService.montarFormato(liveFormatoService.garantirPessoas(resposta), FONTE_720P);
+  assert.deepEqual(f.paineis.map((p) => p.mostra), ['video assistido', 'webcam do streamer']);
+  // Quadro inteiro com webcam: vira conteudo + webcam (no quadro inteiro ela
+  // seria um quadradinho).
+  const inteiro = liveFormatoService.montarFormato(liveFormatoService.garantirPessoas({ ...resposta, formato: 'quadro_inteiro', paineis: [] }), FONTE_720P);
   assert.deepEqual(inteiro.paineis.map((p) => p.mostra), ['conteudo', 'webcam do streamer']);
+});
+
+test('formato: webcam DENTRO do painel do conteudo nao conta como mostrada, e nao e "repetida"', () => {
+  const webcam = { tipo: 'webcam', x: 0.75, y: 0.7, largura: 0.2, altura: 0.25, foco_x: 0.85, foco_y: 0.8 };
+  const r = liveFormatoService.garantirPessoas({
+    pessoas_da_live: [webcam],
+    formato: 'paineis',
+    paineis: [painel({ mostra: 'tela toda', x: 0, y: 0, largura: 1, altura: 1, altura_na_tela: 100 })],
+    motivo: '',
+  });
+  const f = liveFormatoService.montarFormato(r, FONTE_720P);
+  assert.deepEqual(f.paineis.map((p) => p.mostra), ['tela toda', 'webcam do streamer']);
+});
+
+test('formato: pessoa da live esquecida pela IA ganha painel; se nao couber, quadro inteiro', () => {
+  const esq = { tipo: 'vtuber', x: 0.02, y: 0.2, largura: 0.3, altura: 0.7, foco_x: 0.17, foco_y: 0.35 };
+  const dir = { tipo: 'vtuber', x: 0.68, y: 0.2, largura: 0.3, altura: 0.7, foco_x: 0.83, foco_y: 0.35 };
+  const soUma = { pessoas_da_live: [esq, dir], formato: 'paineis', paineis: [painel({ ...esq, mostra: 'vtuber verde', altura_na_tela: 100 })], motivo: '' };
+  const f = liveFormatoService.montarFormato(liveFormatoService.garantirPessoas(soUma), FONTE_720P);
+  assert.equal(f.paineis.length, 2);
+  assert.ok(f.paineis[1].x + f.paineis[1].largura / 2 > 0.7, 'a da direita ganhou o painel dela');
+  // Quatro pessoas e so um painel: nao cabe em 3 -> quadro inteiro.
+  const quatro = [0, 0.25, 0.5, 0.75].map((x) => ({ tipo: 'na_camera', x, y: 0.2, largura: 0.2, altura: 0.6, foco_x: x + 0.1, foco_y: 0.35 }));
+  const g = liveFormatoService.garantirPessoas({ pessoas_da_live: quatro, formato: 'paineis', paineis: [painel({ x: 0, largura: 0.2 })], motivo: '' });
+  assert.equal(g.formato, 'quadro_inteiro');
 });
 
 test('formato: resposta inutilizavel cai no quadro inteiro (nunca deixa ninguem de fora)', () => {
   assert.equal(liveFormatoService.montarFormato(null, FONTE_720P).tipo, 'quadro_inteiro');
-  assert.equal(liveFormatoService.montarFormato({ pessoas_na_live: 1, formato: 'paineis', paineis: [], motivo: '' }, FONTE_720P).tipo, 'quadro_inteiro');
-  const minusculo = { pessoas_na_live: 1, formato: 'paineis', paineis: [painel({ largura: 0.01, altura: 0.01 })], motivo: '' };
+  assert.equal(liveFormatoService.montarFormato({ pessoas_da_live: [{}], formato: 'paineis', paineis: [], motivo: '' }, FONTE_720P).tipo, 'quadro_inteiro');
+  const minusculo = { pessoas_da_live: [{}], formato: 'paineis', paineis: [painel({ largura: 0.01, altura: 0.01 })], motivo: '' };
   assert.equal(liveFormatoService.montarFormato(minusculo, FONTE_720P).tipo, 'quadro_inteiro');
-  assert.equal(liveFormatoService.montarFormato({ pessoas_na_live: 9, formato: 'quadro_inteiro', paineis: [], motivo: 'grupo' }, FONTE_720P).tipo, 'quadro_inteiro');
+  assert.equal(liveFormatoService.montarFormato({ pessoas_da_live: [], formato: 'quadro_inteiro', paineis: [], motivo: 'grupo' }, FONTE_720P).tipo, 'quadro_inteiro');
 });
 
 test('formato: o render empilha os paineis (alturas pares somando 1920) ou mostra o quadro inteiro', () => {

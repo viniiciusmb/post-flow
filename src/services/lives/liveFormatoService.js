@@ -29,29 +29,30 @@ const ALTURA_MIN_PAINEL = 20; // % da tela
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['pessoas_na_live', 'webcam_sobreposta', 'formato', 'paineis', 'motivo'],
+  required: ['pessoas_da_live', 'formato', 'paineis', 'motivo'],
   properties: {
-    // A janela da webcam do streamer, respondida A PARTE dos paineis. Em live
-    // de react a IA confundia o video assistido (pessoa grande) com o
-    // streamer e deixava a webcam de fora - e sem ela nao se ve a reacao.
-    // Com a webcam declarada, o servidor garante um painel pra ela.
-    webcam_sobreposta: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['existe', 'x', 'y', 'largura', 'altura', 'foco_x', 'foco_y'],
-      properties: {
-        existe: { type: 'boolean' },
-        x: { type: 'number' },
-        y: { type: 'number' },
-        largura: { type: 'number' },
-        altura: { type: 'number' },
-        foco_x: { type: 'number' },
-        foco_y: { type: 'number' },
+    // TODAS as pessoas da live, com onde cada uma esta - respondido A PARTE
+    // dos paineis. A IA nao e consistente: na mesma imagem ora acerta, ora
+    // esquece a webcam ou uma das pessoas (visto repetindo o teste de 12
+    // lives). Com a lista, o SERVIDOR garante que ninguem fica de fora
+    // (garantirPessoas), em vez de depender de a IA lembrar.
+    pessoas_da_live: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['tipo', 'x', 'y', 'largura', 'altura', 'foco_x', 'foco_y'],
+        properties: {
+          tipo: { type: 'string', enum: ['webcam', 'na_camera', 'vtuber'] },
+          x: { type: 'number' },
+          y: { type: 'number' },
+          largura: { type: 'number' },
+          altura: { type: 'number' },
+          foco_x: { type: 'number' },
+          foco_y: { type: 'number' },
+        },
       },
     },
-    // Contado ANTES de montar os paineis: sem isso a IA fazia um painel pra
-    // cada personagem desenhado de um jogo, como se fossem convidados.
-    pessoas_na_live: { type: 'integer' },
     formato: { type: 'string', enum: ['paineis', 'quadro_inteiro'] },
     paineis: {
       type: 'array',
@@ -87,13 +88,16 @@ Para cada painel devolva:
 - foco_x, foco_y: o CENTRO DO ROSTO da pessoa (ou o centro do que importa, se nao for pessoa), em fracoes do video original. O recorte e centrado aqui;
 - altura_na_tela: quanto da tela vertical o painel ocupa, em % (a soma dos paineis = 100, cada um no minimo 20).
 
-Primeiro conte "pessoas_na_live": quantas pessoas estao NA live (streamer, convidados, VTubers). Personagens de jogo, filme, desenho ou arte no conteudo contam ZERO.
-
-Depois diga em "webcam_sobreposta" se existe uma JANELA DE WEBCAM sobreposta ao conteudo (retangulo menor, normalmente num canto, com a pessoa que faz a live) e onde ela esta (em fracoes, com o centro do rosto em foco_x/foco_y). Se nao existir, existe=false e o resto 0.
-ATENCAO com live de REACT: o streamer esta assistindo um video (YouTube, filme, outra live) que ocupa a tela - a pessoa GRANDE no meio geralmente e quem esta NO VIDEO, nao o streamer. O streamer e quem esta na janela pequena de webcam. A webcam SEMPRE ganha um painel: e ela que mostra a reacao.
+Primeiro liste em "pessoas_da_live" TODAS as pessoas que estao NA live, cada uma com o retangulo dela (da cabeca ao peito, ou a janela inteira da webcam) e o centro do rosto (foco_x, foco_y), em fracoes:
+- tipo "webcam": o streamer numa janela de webcam SOBREPOSTA ao conteudo (retangulo menor, normalmente num canto);
+- tipo "na_camera": pessoa filmada pela camera principal da live (podcast, conversa, IRL);
+- tipo "vtuber": avatar animado do streamer ou convidado.
+Personagens de jogo, filme, desenho ou arte no conteudo NAO entram na lista.
+ATENCAO com live de REACT: o streamer esta assistindo um video (YouTube, filme, outra live) que ocupa a tela - a pessoa GRANDE no meio geralmente e quem esta NO VIDEO (conteudo, nao entra na lista). O streamer e quem esta na janela pequena de webcam.
 
 Regras:
-- No maximo um painel por pessoa da live, mais um painel pro conteudo (tela/jogo/video), se houver conteudo. Com 2 pessoas e nada mais, sao 2 paineis.
+- No maximo um painel por pessoa da lista, mais um painel pro conteudo (tela/jogo/video), se houver conteudo. Com 2 pessoas e nada mais, sao 2 paineis.
+- A webcam do streamer SEMPRE ganha um painel: e ela que mostra a reacao.
 - NINGUEM importante pode ficar de fora. Pessoas nas duas pontas do video: um painel pra cada (uma em cima, outra embaixo) - nunca um recorte no meio mostrando o espaco entre elas.
 - Tela do PC / jogo / video + webcam do streamer: um painel com a webcam (30-45%) e outro com o conteudo.
 - Uma pessoa so (mesmo num canto): um painel centrado nela.
@@ -180,7 +184,7 @@ function montarFormato(resposta, fonte) {
   if (!resposta || resposta.formato !== 'paineis') return { ...QUADRO_INTEIRO, motivo: resposta?.motivo || '' };
   // Teto de paineis pelo que a IA contou: pessoas + 1 (o conteudo). Com zero
   // pessoas, um painel so (o conteudo) - nunca um painel por personagem.
-  const pessoas = Math.max(0, Number(resposta.pessoas_na_live) || 0);
+  const pessoas = Array.isArray(resposta.pessoas_da_live) ? resposta.pessoas_da_live.length : 0;
   const brutos = (resposta.paineis || []).slice(0, Math.min(MAX_PAINEIS, pessoas + 1));
   if (!brutos.length) return { ...QUADRO_INTEIRO, motivo: resposta.motivo };
   const lim = (v) => Math.max(0, Math.min(1, Number(v)));
@@ -203,8 +207,12 @@ function montarFormato(resposta, fonte) {
   // Paineis que mostram a MESMA area (mais de 30% do menor dentro do outro)
   // viram um so: visto no teste, um filme com webcam virou 3 paineis, dois
   // repetindo a mesma janela de webcam (o streamer e alguem atras dele).
+  // So conta como repetido se os dois tem tamanho PARECIDO: a webcam dentro
+  // do painel do conteudo (tela toda) e painel diferente, nao repeticao.
+  const area = (r) => r.largura * r.altura;
+  const parecidos = (a, b) => Math.max(area(a), area(b)) / Math.min(area(a), area(b)) < 3;
   for (let i = rois.length - 1; i > 0; i -= 1) {
-    const repetido = rois.slice(0, i).some((r) => sobreposicaoDoMenor(r, rois[i]) > 0.3);
+    const repetido = rois.slice(0, i).some((r) => parecidos(r, rois[i]) && sobreposicaoDoMenor(r, rois[i]) > 0.3);
     if (repetido) rois.splice(i, 1);
   }
 
@@ -222,33 +230,59 @@ function montarFormato(resposta, fonte) {
   return { tipo: 'paineis', paineis, motivo: String(resposta.motivo || '').slice(0, 200) };
 }
 
-// Garante a webcam do streamer: se a IA declarou uma janela de webcam e
-// nenhum painel mostra ela, o painel dela entra (35%) e os outros dividem o
-// resto - com no maximo 3 paineis, sai o ultimo que nao e webcam.
-function garantirWebcam(resposta) {
-  const w = resposta?.webcam_sobreposta;
-  if (!resposta || !w || !w.existe) return resposta;
-  const cam = { x: Number(w.x), y: Number(w.y), largura: Number(w.largura), altura: Number(w.altura) };
-  const valida = [cam.x, cam.y, cam.largura, cam.altura].every(Number.isFinite) &&
-    cam.largura >= 0.05 && cam.altura >= 0.05 && cam.largura <= 0.6 && cam.altura <= 0.6;
-  if (!valida) return resposta;
-  const paineis = resposta.formato === 'paineis' ? [...(resposta.paineis || [])] : [];
-  const jaTem = paineis.some((p) => sobreposicaoDoMenor(
-    { x: Number(p.x), y: Number(p.y), largura: Number(p.largura), altura: Number(p.altura) }, cam) > 0.5);
-  if (jaTem) return resposta;
-  const outros = paineis.slice(0, MAX_PAINEIS - 1);
-  const somaOutros = outros.reduce((s, p) => s + Math.max(1, Number(p.altura_na_tela) || 0), 0) || 1;
-  const conteudo = outros.length
-    ? outros.map((p) => ({ ...p, altura_na_tela: Math.round(((Math.max(1, Number(p.altura_na_tela) || 0)) / somaOutros) * 65) }))
-    // Nao havia painel nenhum (ou era quadro inteiro): o conteudo e o quadro
-    // todo menos a webcam - usa o video inteiro como painel de conteudo.
-    : [{ mostra: 'conteudo', x: 0, y: 0, largura: 1, altura: 1, foco_x: 0.5, foco_y: 0.5, altura_na_tela: 65 }];
-  return {
-    ...resposta,
-    pessoas_na_live: Math.max(1, Number(resposta.pessoas_na_live) || 0),
-    formato: 'paineis',
-    paineis: [...conteudo, { mostra: 'webcam do streamer', ...cam, foco_x: w.foco_x, foco_y: w.foco_y, altura_na_tela: 35 }],
-  };
+function caixa(p) {
+  return { x: Number(p.x), y: Number(p.y), largura: Number(p.largura), altura: Number(p.altura) };
+}
+
+function caixaValida(c) {
+  return [c.x, c.y, c.largura, c.altura].every(Number.isFinite) && c.largura >= 0.04 && c.altura >= 0.04 && c.largura <= 1 && c.altura <= 1;
+}
+
+// A pessoa esta "no painel" se mais da metade da caixa dela esta dentro do
+// recorte que o painel pediu. A WEBCAM precisa de painel PROPRIO (no maximo 4x
+// o tamanho dela): dentro do painel do conteudo, que cobre a tela toda, ela
+// "aparece" como um quadradinho - e a reacao se perde do mesmo jeito.
+function estaNoPainel(pessoa, p) {
+  const a = caixa(pessoa);
+  const b = caixa(p);
+  const ix = Math.max(0, Math.min(a.x + a.largura, b.x + b.largura) - Math.max(a.x, b.x));
+  const iy = Math.max(0, Math.min(a.y + a.altura, b.y + b.altura) - Math.max(a.y, b.y));
+  const dentro = (ix * iy) / (a.largura * a.altura) > 0.5;
+  if (!dentro) return false;
+  if (pessoa.tipo === 'webcam') return b.largura * b.altura <= 4 * a.largura * a.altura;
+  return true;
+}
+
+// NINGUEM DA LIVE FICA DE FORA - garantido aqui, nao pedido a IA. Cada pessoa
+// que a IA listou e que nenhum painel mostra ganha um painel; se isso passar
+// de 3 paineis, o corte vira quadro inteiro (onde todo mundo aparece). E
+// webcam no quadro inteiro vira painel proprio: no quadro inteiro ela fica um
+// quadradinho e a reacao se perde (erro real do corte 7 do wb3nji).
+function garantirPessoas(resposta) {
+  if (!resposta) return resposta;
+  const pessoas = (resposta.pessoas_da_live || []).filter((p) => caixaValida(caixa(p)));
+  if (!pessoas.length) return resposta;
+  let paineis = resposta.formato === 'paineis' ? [...(resposta.paineis || [])] : [];
+  const temWebcam = pessoas.some((p) => p.tipo === 'webcam');
+  if (!paineis.length && !temWebcam) return resposta; // quadro inteiro: todos aparecem
+  if (!paineis.length) {
+    paineis = [{ mostra: 'conteudo', x: 0, y: 0, largura: 1, altura: 1, foco_x: 0.5, foco_y: 0.5, altura_na_tela: 65 }];
+  }
+  const faltando = pessoas.filter((pe) => !paineis.some((pa) => estaNoPainel(pe, pa)));
+  if (!faltando.length) return { ...resposta, formato: 'paineis', paineis };
+  if (paineis.length + faltando.length > MAX_PAINEIS) {
+    return { ...resposta, formato: 'quadro_inteiro', paineis: [], motivo: `${resposta.motivo || ''} (quadro inteiro pra ninguem ficar de fora)` };
+  }
+  const novos = faltando.map((pe) => ({
+    mostra: pe.tipo === 'webcam' ? 'webcam do streamer' : 'pessoa da live',
+    ...caixa(pe),
+    foco_x: pe.foco_x,
+    foco_y: pe.foco_y,
+    altura_na_tela: pe.tipo === 'webcam' ? 35 : 50,
+  }));
+  // Alturas: as da IA pros paineis dela, as nossas pros novos - o montarFormato
+  // normaliza pra 100 depois.
+  return { ...resposta, formato: 'paineis', paineis: [...paineis, ...novos] };
 }
 
 async function extrairQuadro(videoPath, instante) {
@@ -275,7 +309,7 @@ async function escolherFormato(videoPath, inicio, fim, custo) {
       imagem: quadros.map((q) => fs.readFileSync(q).toString('base64')),
     });
     await custo('camera', r);
-    return montarFormato(garantirWebcam(r.dados), fonte);
+    return montarFormato(garantirPessoas(r.dados), fonte);
   } catch (err) {
     logger.warn(`Lives: nao consegui escolher o formato (${err.message}) - quadro inteiro.`);
     return { ...QUADRO_INTEIRO, motivo: 'falha na escolha' };
@@ -284,4 +318,4 @@ async function escolherFormato(videoPath, inicio, fim, custo) {
   }
 }
 
-module.exports = { escolherFormato, montarFormato, garantirWebcam, encaixarRecorte, dimensoes: duracaoEDimensoes, SCHEMA, INSTRUCAO };
+module.exports = { escolherFormato, montarFormato, garantirPessoas, encaixarRecorte, dimensoes: duracaoEDimensoes, SCHEMA, INSTRUCAO };
