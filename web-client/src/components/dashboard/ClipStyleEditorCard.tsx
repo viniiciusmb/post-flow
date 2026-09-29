@@ -695,7 +695,16 @@ function PartLabelPositionPicker({
  * de canal (não faz sentido escolher canal aqui) e tudo que é salvo vale só
  * para aquele vídeo, sem tocar no padrão do cliente nem nos canais dele.
  */
-export function ClipStyleEditorCard({ sourceVideoId }: { sourceVideoId?: number } = {}) {
+// modoLive: o mesmo editor, gravando o estilo dos cortes de LIVE (endpoint
+// proprio). Esconde o que nao existe numa live: o seletor de canal do YouTube,
+// o bloco de quantidade/modo/idioma dos cortes (quem decide isso nas lives e o
+// nivel de qualidade) e os fundos que dependem de um video do YouTube (capa)
+// ou de upload (minha imagem).
+export function ClipStyleEditorCard({
+  sourceVideoId,
+  endpoint = "/api/client/video-settings",
+  modoLive = false,
+}: { sourceVideoId?: number; endpoint?: string; modoLive?: boolean } = {}) {
   const t = useT()
   const { idioma } = useI18n()
   const [settings, setSettings] = useState<ClientVideoSettingsResponse | null>(null)
@@ -714,20 +723,22 @@ export function ClipStyleEditorCard({ sourceVideoId }: { sourceVideoId?: number 
   const [enviandoTemplate, setEnviandoTemplate] = useState(false)
   const [erroTemplate, setErroTemplate] = useState<string | null>(null)
 
-  const queryAlvo = sourceVideoId
+  const queryAlvo = modoLive
+    ? ""
+    : sourceVideoId
     ? `?sourceVideoId=${sourceVideoId}`
     : alvo === "all"
       ? ""
       : `?channelId=${alvo}`
 
   useEffect(() => {
-    api.get<ClientVideoSettingsResponse>(`/api/client/video-settings${queryAlvo}`).then((data) => {
+    api.get<ClientVideoSettingsResponse>(`${endpoint}${queryAlvo}`).then((data) => {
       setSettings(data)
       setZoomDraft(data.cropZoomPercent)
       setDescriptionDraft(data.descriptionTemplate ?? "")
       setVersaoTemplate((v) => v + 1)
     })
-  }, [queryAlvo])
+  }, [queryAlvo, endpoint])
 
   async function save(next: ClientVideoSettingsResponse) {
     setSettings(next)
@@ -739,7 +750,7 @@ export function ClipStyleEditorCard({ sourceVideoId }: { sourceVideoId?: number 
         : alvo === "all"
           ? next
           : { ...next, channelId: Number(alvo) }
-      const updated = await api.put<ClientVideoSettingsResponse>("/api/client/video-settings", corpo)
+      const updated = await api.put<ClientVideoSettingsResponse>(endpoint, corpo)
       // O PUT devolve só o que foi salvo; a lista de canais e o alvo vêm do
       // GET, então preservamos pra tela não perder o seletor depois de salvar.
       setSettings({ ...updated, channels: next.channels, channelId: next.channelId, usesDefault: false })
@@ -810,7 +821,7 @@ export function ClipStyleEditorCard({ sourceVideoId }: { sourceVideoId?: number 
             Some quando o editor está travado num vídeo avulso: ali o alvo já
             está decidido, e oferecer "todos os canais" faria o cliente mudar o
             padrão dele achando que ajustava só aquele vídeo. */}
-        {!sourceVideoId && (
+        {!sourceVideoId && !modoLive && (
         <Field>
           <FieldLabel>{t("ce.aplicarEm")}</FieldLabel>
           <div className="flex flex-wrap items-center gap-2">
@@ -856,6 +867,7 @@ export function ClipStyleEditorCard({ sourceVideoId }: { sourceVideoId?: number 
             a MESMA linha do banco, cada um mandando metade dos campos, o que
             ja causou o bug de "configuracao que nao salva".
             ---------------------------------------------------------------- */}
+        {!modoLive && (
         <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/20 p-4" data-tour="como-funcionam-cortes">
           {/* Idioma do áudio. Fica ANTES de tudo porque é a primeira decisão do
               corte: é ela que escolhe qual trilha vai ser baixada, e todo o
@@ -1054,6 +1066,7 @@ export function ClipStyleEditorCard({ sourceVideoId }: { sourceVideoId?: number 
             </Field>
           )}
         </div>
+        )}
 
         <Field data-tour="estilo-visual">
           <FieldLabel>{t("ce.estiloVisualDoCorte")}</FieldLabel>
@@ -1104,7 +1117,7 @@ export function ClipStyleEditorCard({ sourceVideoId }: { sourceVideoId?: number 
                     { valor: "thumbnail", titulo: t("ce.capaDoVideo"), amostra: "capa" },
                     { valor: "frame", titulo: t("ce.frameDoVideo"), amostra: "capa" },
                   ] as const
-                ).map((op) => {
+                ).filter((op) => !modoLive || (op.valor !== "template" && op.valor !== "thumbnail")).map((op) => {
                   const escolhido = settings.backgroundStyle === op.valor
                   // Escolher "minha imagem" sem ter enviado nada renderizaria
                   // com o desfocado sem explicar por quê - o servidor recusa, e
@@ -1208,7 +1221,7 @@ export function ClipStyleEditorCard({ sourceVideoId }: { sourceVideoId?: number 
 
             {/* Enviar imagem só faz sentido pro fundo "minha imagem" - a capa
                 do vídeo o sistema pega sozinho. */}
-            {settings.backgroundStyle !== "thumbnail" && (
+            {settings.backgroundStyle !== "thumbnail" && !modoLive && (
             <Field>
               <FieldLabel>{t("ce.suaImagemDeFundo")}</FieldLabel>
               <p className="text-xs text-muted-foreground">

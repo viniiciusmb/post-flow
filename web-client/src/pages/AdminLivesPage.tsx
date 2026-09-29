@@ -15,6 +15,8 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TonePill, type Tone } from "@/components/ui/tone-pill"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ClipStyleEditorCard } from "@/components/dashboard/ClipStyleEditorCard"
 import { useAuth } from "@/hooks/useAuth"
 import { api } from "@/lib/api"
 
@@ -22,10 +24,19 @@ type Config = {
   maxCanais: number
   qualidade: string
   retencaoHoras: number
-  cortesPorHora: number
   discoMaxPercent: number
   horasPorCanalDia: number
 }
+
+type Opcoes = {
+  usarEstiloDosVideos: boolean
+  qualidade: number
+  cameraModo: "auto" | "desligado"
+  cameraPosicao: "top" | "bottom"
+  cameraAlturaPercent: number
+}
+
+type Nivel = { notaMinima: number; porHora: number; nome: string }
 
 type Canal = {
   id: number
@@ -56,12 +67,14 @@ type Estado = {
   discoPercent: number | null
   canais: Canal[]
   custos: { hoje: ResumoCusto; seteDias: ResumoCusto }
+  opcoes: Opcoes
+  niveis: Record<string, Nivel>
 }
 
 type Corte = {
   id: number
   canal: { id: number; login: string; nome: string }
-  origem: "triagem" | "clipar_agora"
+  origem: "triagem" | "sinal" | "clipar_agora"
   duracao: number
   titulo: string | null
   gancho: string | null
@@ -76,7 +89,6 @@ type Corte = {
 
 const CAMPOS: { chave: keyof Config; rotulo: string; ajuda: string; sufixo: string }[] = [
   { chave: "maxCanais", rotulo: "Canais gravando ao mesmo tempo", ajuda: "Acima disso, quem entrar ao vivo espera vaga.", sufixo: "canais" },
-  { chave: "cortesPorHora", rotulo: "Cortes por hora de live", ajuda: "Teto de cortes escolhidos pela IA.", sufixo: "por hora" },
   { chave: "horasPorCanalDia", rotulo: "Horas gravadas por canal por dia", ajuda: "Protege contra live de 24h.", sufixo: "horas" },
   { chave: "retencaoHoras", rotulo: "Apagar a gravação bruta depois de", ajuda: "Os cortes prontos não são apagados.", sufixo: "horas" },
   { chave: "discoMaxPercent", rotulo: "Parar de gravar com o disco em", ajuda: "Protege os cortes do YouTube.", sufixo: "%" },
@@ -125,6 +137,7 @@ export function AdminLivesPage() {
   const [confirmando, setConfirmando] = useState<string | null>(null)
   const [clipando, setClipando] = useState<number | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
+  const [alturaCamera, setAlturaCamera] = useState<string | null>(null)
 
   const carregar = useCallback(async () => {
     try {
@@ -176,6 +189,14 @@ export function AdminLivesPage() {
       const novo = await api.put<Estado>("/api/admin/lives/config", { config: { [chave]: valor } })
       setEstado(novo)
       setRascunho((r) => ({ ...r, [chave]: undefined }))
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não consegui salvar.")
+    }
+  }
+
+  async function salvarOpcoes(parcial: Partial<Opcoes>) {
+    try {
+      setEstado(await api.put<Estado>("/api/admin/lives/opcoes", parcial))
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não consegui salvar.")
     }
@@ -343,6 +364,109 @@ export function AdminLivesPage() {
 
           <Card>
             <CardHeader>
+              <CardTitle>Seus cortes de live</CardTitle>
+              <CardDescription>
+                A IA avalia cada momento da live uma vez só; aqui você decide quais chegam até você e como eles ficam.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-6">
+              <div className="flex flex-col gap-2">
+                <Label>Qualidade dos cortes</Label>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {Object.entries(estado.niveis).map(([valor, n]) => {
+                    const ativo = estado.opcoes.qualidade === Number(valor)
+                    return (
+                      <button
+                        key={valor}
+                        type="button"
+                        onClick={() => void salvarOpcoes({ qualidade: Number(valor) })}
+                        className={`flex min-w-0 flex-col items-start gap-0.5 rounded-lg border p-3 text-left text-sm transition-colors ${
+                          ativo ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"
+                        }`}
+                      >
+                        <span className="font-semibold">{valor} · {n.nome}</span>
+                        <span className={`text-xs ${ativo ? "opacity-90" : "text-muted-foreground"}`}>
+                          nota {n.notaMinima}+ · até {n.porHora} por hora
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  Quanto mais alta, menos cortes — só os momentos que a IA considerou muito bons. Quanto mais baixa, mais
+                  cortes, com momentos de menor chance de viralizar.
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label>Câmera do streamer</Label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    value={estado.opcoes.cameraModo}
+                    onValueChange={(v) => v && void salvarOpcoes({ cameraModo: v as Opcoes["cameraModo"] })}
+                  >
+                    <ToggleGroupItem value="auto">Destacar a câmera</ToggleGroupItem>
+                    <ToggleGroupItem value="desligado">Não destacar</ToggleGroupItem>
+                  </ToggleGroup>
+                  {estado.opcoes.cameraModo === "auto" && (
+                    <>
+                      <ToggleGroup
+                        type="single"
+                        variant="outline"
+                        value={estado.opcoes.cameraPosicao}
+                        onValueChange={(v) => v && void salvarOpcoes({ cameraPosicao: v as Opcoes["cameraPosicao"] })}
+                      >
+                        <ToggleGroupItem value="top">Em cima</ToggleGroupItem>
+                        <ToggleGroupItem value="bottom">Embaixo</ToggleGroupItem>
+                      </ToggleGroup>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={20}
+                          max={60}
+                          className="w-20"
+                          value={alturaCamera ?? String(estado.opcoes.cameraAlturaPercent)}
+                          onChange={(e) => setAlturaCamera(e.target.value)}
+                          onBlur={(e) => {
+                            if (alturaCamera === null) return
+                            setAlturaCamera(null)
+                            void salvarOpcoes({ cameraAlturaPercent: Number(e.target.value) })
+                          }}
+                        />
+                        <span className="text-sm text-muted-foreground">% da altura do vídeo</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  A IA encontra a webcam do streamer em cada corte e coloca ela numa faixa própria, pra dar pra ver a reação.
+                  Se a live não tiver webcam separada, o corte sai no estilo normal.
+                </span>
+              </div>
+
+              <label className="flex items-start gap-3 text-sm">
+                <Checkbox
+                  checked={estado.opcoes.usarEstiloDosVideos}
+                  onCheckedChange={(v) => void salvarOpcoes({ usarEstiloDosVideos: v === true })}
+                />
+                <span>
+                  <span className="font-medium">Usar o mesmo estilo dos cortes de vídeo</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Legenda, título e fundo iguais aos dos seus cortes do YouTube. Desmarque pra ter um estilo só para as lives.
+                  </span>
+                </span>
+              </label>
+            </CardContent>
+          </Card>
+
+          {!estado.opcoes.usarEstiloDosVideos && (
+            <ClipStyleEditorCard key="estilo-live" endpoint="/api/admin/lives/estilo" modoLive />
+          )}
+
+          <Card>
+            <CardHeader>
               <CardTitle>Canais da Twitch</CardTitle>
               <CardDescription>
                 Cole o nome ou o link do canal. O streamer não precisa fazer nada, e você não precisa entrar na Twitch.
@@ -479,6 +603,7 @@ export function AdminLivesPage() {
                         <TonePill tone={STATUS_CORTE[k.status].tone}>{STATUS_CORTE[k.status].texto}</TonePill>
                         {k.nota !== null && <TonePill tone={k.nota >= 8 ? "success" : "cyan"}>Nota {k.nota}</TonePill>}
                         {k.origem === "clipar_agora" && <TonePill tone="violet">Clipar agora</TonePill>}
+                        {k.origem === "sinal" && <TonePill tone="indigo">Reação do público</TonePill>}
                         <span className="text-xs text-muted-foreground">{duracao(k.duracao)} · {k.canal.nome}</span>
                       </div>
                       <div className="font-medium leading-snug">{k.titulo || "(sem título ainda)"}</div>

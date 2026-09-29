@@ -51,11 +51,11 @@ test('admin ve o modulo desligado e o motivo de a Twitch nao estar pronta', asyn
 
 test('salvar configuracao puxa os limites pra dentro da faixa', async () => {
   const { agent } = await logado('admin');
-  const r = await agent.put('/api/admin/lives/config', { config: { maxCanais: 99, cortesPorHora: 3 } });
+  const r = await agent.put('/api/admin/lives/config', { config: { maxCanais: 99, horasPorCanalDia: 3 } });
   assert.equal(r.status, 200);
   assert.equal(r.body.config.maxCanais, 5);
-  assert.equal(r.body.config.cortesPorHora, 3);
-  await agent.put('/api/admin/lives/config', { config: { maxCanais: 2, cortesPorHora: 5 } });
+  assert.equal(r.body.config.horasPorCanalDia, 3);
+  await agent.put('/api/admin/lives/config', { config: { maxCanais: 2, horasPorCanalDia: 8 } });
 });
 
 test('adicionar canal: nome invalido e 400; canal que nao existe e 404; valido entra na lista', async () => {
@@ -105,4 +105,47 @@ test('um admin nao acessa nem apaga o corte de outro', async () => {
   assert.equal((await outro.agent.delete(`/api/admin/lives/cortes/${corte.id}`)).status, 404);
   assert.equal((await outro.agent.get('/api/admin/lives/cortes')).body.cortes.some((c) => c.id === Number(corte.id)), false);
   assert.equal((await dono.agent.get('/api/admin/lives/cortes')).body.cortes.some((c) => c.id === Number(corte.id)), true);
+});
+
+test('opcoes de live: qualidade fora de 1 a 5 e recusada, dentro e salva', async () => {
+  const { agent } = await logado('admin');
+  assert.equal((await agent.put('/api/admin/lives/opcoes', { qualidade: 9 })).status, 400);
+  assert.equal((await agent.put('/api/admin/lives/opcoes', { cameraAlturaPercent: 90 })).status, 400);
+  const r = await agent.put('/api/admin/lives/opcoes', { qualidade: 4, cameraPosicao: 'bottom' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.opcoes.qualidade, 4);
+  assert.equal(r.body.opcoes.cameraPosicao, 'bottom');
+  // Campo ausente preserva o que ja estava salvo.
+  const r2 = await agent.put('/api/admin/lives/opcoes', { cameraModo: 'desligado' });
+  assert.equal(r2.body.opcoes.qualidade, 4);
+  assert.equal(r2.body.niveis['5'].notaMinima, 9);
+});
+
+test('estilo proprio de live nasce igual ao de video e editar ele NAO mexe no estilo de video', async () => {
+  const { agent } = await logado('admin');
+  const opcoes = (await agent.get('/api/client/video-settings')).body.options;
+  const [estiloVideo, estiloLive] = opcoes.captionStyles.filter((c) => c !== 'none');
+  assert.equal((await agent.put('/api/client/video-settings', { captionStyle: estiloVideo })).status, 200);
+
+  // Ligado por padrao: a live usa o estilo de video.
+  assert.equal((await agent.get('/api/admin/lives/estilo')).body.captionStyle, estiloVideo);
+
+  // Desligar: nasce como copia do de video.
+  const r = await agent.put('/api/admin/lives/opcoes', { usarEstiloDosVideos: false });
+  assert.equal(r.body.opcoes.usarEstiloDosVideos, false);
+  assert.equal((await agent.get('/api/admin/lives/estilo')).body.captionStyle, estiloVideo);
+
+  // Editar o de live...
+  const salvo = await agent.put('/api/admin/lives/estilo', { captionStyle: estiloLive });
+  assert.equal(salvo.status, 200);
+  assert.equal(salvo.body.captionStyle, estiloLive);
+  // ...nao muda o de video.
+  assert.equal((await agent.get('/api/client/video-settings')).body.captionStyle, estiloVideo);
+});
+
+test('estilo de live recusa fundo de capa do YouTube e imagem enviada, e valor invalido', async () => {
+  const { agent } = await logado('admin');
+  assert.equal((await agent.put('/api/admin/lives/estilo', { backgroundStyle: 'thumbnail' })).status, 400);
+  assert.equal((await agent.put('/api/admin/lives/estilo', { backgroundStyle: 'template' })).status, 400);
+  assert.equal((await agent.put('/api/admin/lives/estilo', { captionStyle: 'nao-existe' })).status, 400);
 });

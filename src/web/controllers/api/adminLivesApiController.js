@@ -11,6 +11,9 @@ const twitchApi = require('../../../services/lives/twitchApi');
 const liveCleanupService = require('../../../services/lives/liveCleanupService');
 const config = require('../../../config');
 const { resolveRange } = require('../../../lib/dateRanges');
+const livesUserSettings = require('../../../services/lives/livesUserSettings');
+const clientVideoSettingsRepository = require('../../../repositories/clientVideoSettingsRepository');
+const { toApiWithOptions, validarEstilo } = require('./clientVideoSettingsApiController');
 
 // "Clipar agora" pega os ultimos ~150s: tempo de a pessoa ver o momento,
 // reagir e clicar, com a preparacao do momento inclusa.
@@ -68,14 +71,25 @@ function corteParaApi(k) {
   };
 }
 
+function opcoesParaApi(c) {
+  return {
+    usarEstiloDosVideos: c.usar_estilo_dos_videos,
+    qualidade: c.qualidade,
+    cameraModo: c.camera_modo,
+    cameraPosicao: c.camera_posicao,
+    cameraAlturaPercent: c.camera_altura_percent,
+  };
+}
+
 async function estado(req, res) {
   const userId = req.session.user.id;
-  const [ligadoNoPainel, cfg, canais, custoHoje, custo7d] = await Promise.all([
+  const [ligadoNoPainel, cfg, canais, custoHoje, custo7d, opcoes] = await Promise.all([
     require('../../../repositories/settingsRepository').getValue('lives_enabled', false),
     livesSettings.obterConfig(),
     livesRepository.listChannelsForUser(userId),
     livesRepository.costSummary(resolveRange('today').since),
     livesRepository.costSummary(resolveRange('last7days').since),
+    livesUserSettings.obter(userId),
   ]);
   let discoPercent = null;
   try {
@@ -96,7 +110,84 @@ async function estado(req, res) {
     discoPercent,
     canais: canais.map(canalParaApi),
     custos: { hoje: custoHoje, seteDias: custo7d },
+    opcoes: opcoesParaApi(opcoes),
+    niveis: livesUserSettings.NIVEIS,
   });
+}
+
+// Opcoes dos cortes de live do usuario: qualidade, camera e se o estilo
+// visual e o mesmo dos cortes de video. Campo ausente preserva o salvo.
+async function salvarOpcoes(req, res) {
+  const userId = req.session.user.id;
+  const atual = await livesUserSettings.obter(userId);
+  const b = req.body || {};
+  const nova = { ...atual };
+  if (b.qualidade !== undefined) {
+    const q = Number(b.qualidade);
+    if (!Number.isInteger(q) || q < 1 || q > 5) return res.status(400).json({ error: 'Qualidade vai de 1 a 5.' });
+    nova.qualidade = q;
+  }
+  if (b.cameraModo !== undefined) {
+    if (!['auto', 'desligado'].includes(b.cameraModo)) return res.status(400).json({ error: 'Opcao de camera invalida.' });
+    nova.camera_modo = b.cameraModo;
+  }
+  if (b.cameraPosicao !== undefined) {
+    if (!['top', 'bottom'].includes(b.cameraPosicao)) return res.status(400).json({ error: 'Posicao da camera invalida.' });
+    nova.camera_posicao = b.cameraPosicao;
+  }
+  if (b.cameraAlturaPercent !== undefined) {
+    const a = Number(b.cameraAlturaPercent);
+    if (!Number.isInteger(a) || a < 20 || a > 60) return res.status(400).json({ error: 'Altura da camera vai de 20% a 60%.' });
+    nova.camera_altura_percent = a;
+  }
+  if (b.usarEstiloDosVideos !== undefined) {
+    nova.usar_estilo_dos_videos = Boolean(b.usarEstiloDosVideos);
+    // Primeira vez com estilo proprio: nasce IGUAL ao dos videos, pra pessoa
+    // ajustar a partir do que ja conhece em vez de comecar do zero.
+    if (!nova.usar_estilo_dos_videos && !Object.keys(atual.estilo || {}).length) {
+      nova.estilo = estiloSoVisual(await clientVideoSettingsRepository.resolveForVideo(userId));
+    }
+  }
+  await livesRepository.upsertClipSettings(userId, nova);
+  return estado(req, res);
+}
+
+// Do registro do estilo, so o que e visual. Quantidade/modo/idioma dos cortes
+// de video nao tem sentido numa live, e a imagem enviada (template) mora no
+// estilo de video - nao e copiada.
+function estiloSoVisual(linha) {
+  const { id, client_user_id, youtube_channel_id, source_video_id, created_at, updated_at, background_template_path, ...resto } = linha || {};
+  return { ...resto, background_style: ['template', 'thumbnail'].includes(resto.background_style) ? 'blur' : resto.background_style };
+}
+
+// Estilo visual dos cortes de live - mesmo formato de resposta do estilo de
+// video, pra o MESMO editor da tela servir aos dois (ClipStyleEditorCard em
+// modoLive).
+async function obterEstilo(req, res) {
+  const userId = req.session.user.id;
+  const cfg = await livesUserSettings.obter(userId);
+  const base = cfg.usar_estilo_dos_videos
+    ? estiloSoVisual(await clientVideoSettingsRepository.resolveForVideo(userId))
+    : { ...clientVideoSettingsRepository.DEFAULTS, ...cfg.estilo };
+  res.json({ ...toApiWithOptions(base), channels: [], channelId: null, usesDefault: false });
+}
+
+// Salvar pelo editor liga o estilo proprio (quem editou quer que valha).
+async function salvarEstilo(req, res) {
+  const userId = req.session.user.id;
+  const cfg = await livesUserSettings.obter(userId);
+  const atual = cfg.usar_estilo_dos_videos && !Object.keys(cfg.estilo || {}).length
+    ? estiloSoVisual(await clientVideoSettingsRepository.resolveForVideo(userId))
+    : { ...clientVideoSettingsRepository.DEFAULTS, ...cfg.estilo };
+  const corpo = { ...(req.body || {}) };
+  if (['template', 'thumbnail'].includes(corpo.backgroundStyle)) {
+    return res.status(400).json({ error: 'Nos cortes de live o fundo nao pode ser imagem enviada nem capa do video.' });
+  }
+  const validado = validarEstilo(corpo, { ...atual, background_template_path: null });
+  if (validado.erro) return res.status(400).json({ error: res.locals.t(validado.erro) });
+  const linha = estiloSoVisual(clientVideoSettingsRepository.doCamelParaColuna(validado.entrada));
+  await livesRepository.upsertClipSettings(userId, { ...cfg, usar_estilo_dos_videos: false, estilo: linha });
+  res.json({ ...toApiWithOptions({ ...clientVideoSettingsRepository.DEFAULTS, ...linha }), channels: [], channelId: null, usesDefault: false });
 }
 
 async function salvarConfig(req, res) {
@@ -192,4 +283,4 @@ async function apagarCorte(req, res) {
   res.json({ ok: true });
 }
 
-module.exports = { estado, salvarConfig, adicionarCanal, removerCanal, cliparAgora, listarCortes, arquivoDoCorte, apagarCorte, JANELA_CLIPAR_AGORA_S };
+module.exports = { estado, salvarConfig, salvarOpcoes, obterEstilo, salvarEstilo, adicionarCanal, removerCanal, cliparAgora, listarCortes, arquivoDoCorte, apagarCorte, JANELA_CLIPAR_AGORA_S };

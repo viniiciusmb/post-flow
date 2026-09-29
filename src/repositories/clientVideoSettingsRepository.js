@@ -291,6 +291,9 @@ function doColunaParaCamel(linha) {
 }
 
 module.exports = {
+  // Exportado pro estilo dos cortes de LIVE, que guarda o mesmo formato de
+  // colunas num JSON proprio (live_clip_settings.estilo).
+  doCamelParaColuna,
   findVideoOverride,
   copiarEstiloParaVideo,
   setVideoAudioLanguage,

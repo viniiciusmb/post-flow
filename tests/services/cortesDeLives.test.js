@@ -8,8 +8,12 @@
 //   4. bloco quase todo silencioso NAO e mandado pra OpenAI (nao custa);
 //   5. a triagem so anda quando ha 2 min de texto novo, nunca pula buraco, e
 //      falha da API nao faz o trecho ser pulado;
-//   6. a selecao respeita o teto por hora, ignora id inventado e nota baixa, e
-//      faz um corte por usuario que acompanha o canal;
+//   6. o juiz (gpt-5-mini) aprova de 5 pra cima e ignora id inventado; cada
+//      usuario recebe so o que passa no NIVEL DE QUALIDADE dele, sem duplicar
+//      e dentro do teto por hora do nivel;
+//   6b. sinais do publico: chat, risada, clipe de espectador e pausa de
+//      anuncio viram candidato no lugar certo; live sem reacao nao gera pico;
+//   6c. layout da camera e recusa de retangulo absurdo;
 //   7. o supervisor nao faz nada com o modulo desligado, respeita o limite de
 //      canais e para de gravar quando a live acaba;
 //   8. a retencao apaga os pedacos brutos antigos;
@@ -35,6 +39,10 @@ const liveCaptureService = require('../../src/services/lives/liveCaptureService'
 const liveCleanupService = require('../../src/services/lives/liveCleanupService');
 const liveSupervisor = require('../../src/worker/liveSupervisor');
 const settingsRepository = require('../../src/repositories/settingsRepository');
+const livesUserSettings = require('../../src/services/lives/livesUserSettings');
+const liveChatService = require('../../src/services/lives/liveChatService');
+const liveSignalsService = require('../../src/services/lives/liveSignalsService');
+const videoEditingService = require('../../src/services/videoEditingService');
 const { createClient } = require('../helpers/db');
 
 test.after(async () => {
@@ -88,11 +96,12 @@ test('o modulo nasce desligado e nao liga sem a Twitch configurada', async () =>
 });
 
 test('limites fora da faixa sao puxados pra dentro, nao aceitos crus', () => {
-  const c = livesSettings.sanitizar({ maxCanais: 50, cortesPorHora: 0, retencaoHoras: 'x', qualidade: '4k', discoMaxPercent: 99 });
+  const c = livesSettings.sanitizar({ maxCanais: 50, horasPorCanalDia: 0, retencaoHoras: 'x', qualidade: '4k', discoMaxPercent: 99 });
   assert.equal(c.maxCanais, 5);
-  assert.equal(c.cortesPorHora, 1);
+  assert.equal(c.horasPorCanalDia, 1);
   assert.equal(c.retencaoHoras, livesSettings.PADRAO.retencaoHoras);
-  assert.equal(c.qualidade, '480p');
+  // Padrao 720p: a camera recortada de 480p sai borrada.
+  assert.equal(c.qualidade, '720p');
   assert.equal(c.discoMaxPercent, 95);
 });
 
@@ -205,9 +214,17 @@ test('bloco com fala e transcrito SEM o texto anterior como prompt, e o custo e 
 test('a leitura da analise de audio bate com a saida REAL do ffmpeg 5.1 do servidor', () => {
   const fixtures = path.join(__dirname, '..', 'fixtures');
   const fala = liveTranscriptionService.interpretarAnalise(fs.readFileSync(path.join(fixtures, 'ffmpeg-analise-fala.txt'), 'utf8'), 30);
-  assert.deepEqual(fala, { silencioSegundos: 0, loudness: -16.9, pico: 1.4 });
+  assert.equal(fala.loudness, -16.8);
+  assert.equal(fala.pico, 3.8);
+  assert.ok(fala.silencioSegundos < 2);
+  // Volume segundo a segundo: 30 valores, e o grito do segundo 18 aparece
+  // (a media do bloco inteiro esconde ele).
+  assert.equal(fala.momentaneo.length, 30);
+  assert.equal(fala.momentaneo[18], -6.9);
+  assert.ok(fala.momentaneo.filter((v, i) => i !== 18).every((v) => v < -12));
   const silencio = liveTranscriptionService.interpretarAnalise(fs.readFileSync(path.join(fixtures, 'ffmpeg-analise-silencio.txt'), 'utf8'), 30);
   assert.equal(silencio.silencioSegundos, 30);
+  assert.ok(silencio.momentaneo.every((v) => v === -70));
   // Bloco que TERMINA em silencio: conta ate o fim do bloco.
   assert.equal(liveTranscriptionService.interpretarAnalise('silence_start: 20.5\n', 30).silencioSegundos, 9.5);
 });
@@ -278,69 +295,186 @@ test('falha da OpenAI na triagem NAO marca o trecho como visto', async () => {
 
 // ------------------------------------------------------------------ 6
 
-test('selecao respeita o teto por hora, ignora id inventado e nota baixa, e faz um corte por seguidor', async () => {
+test('juiz (gpt-5-mini) aprova de 5 pra cima, reprova o resto e ignora id inventado', async () => {
   const canal = await novoCanal();
-  const [a, b] = [await createClient(), await createClient()];
-  await livesRepository.follow(a.id, canal.id);
-  await livesRepository.follow(b.id, canal.id);
   const sessao = await novaSessao(canal, { recorded: 1800 });
-  const c1 = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: 100, fim: 140, motivo: 'm1', nota: 9 });
-  const c2 = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: 300, fim: 340, motivo: 'm2', nota: 8 });
+  for (let t = 0; t < 1200; t += 30) await blocoTranscrito(sessao, t, t + 30, 'fala');
+  const c1 = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: 100, fim: 140, motivo: 'm1', nota: 8 });
+  const c2 = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'sinal', inicio: 300, fim: 340, motivo: 'chat explodiu' });
   const c3 = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: 600, fim: 640, motivo: 'm3', nota: 7 });
-  let maximoPedido = null;
-  const desfazer = trocar(openaiLives, 'pedirJson', async ({ sistema }) => {
-    maximoPedido = Number(sistema.match(/NO MAXIMO (\d+)/)[1]);
+  let modelo = null;
+  const desfazer = trocar(openaiLives, 'pedirJson', async (pedido) => {
+    modelo = pedido.modelo;
     return {
       dados: {
-        escolhidos: [
-          { id: Number(c1.id), inicio_s: 95, fim_s: 138, titulo: 'Que jogada', gancho: 'olha isso', nota: 9 },
-          { id: 999999, inicio_s: 0, fim_s: 30, titulo: 'inventado', gancho: '', nota: 10 },
-          { id: Number(c3.id), inicio_s: 600, fim_s: 640, titulo: 'fraco', gancho: '', nota: 5 },
-          { id: Number(c2.id), inicio_s: 300, fim_s: 340, titulo: 'Segundo', gancho: '', nota: 8 },
+        avaliacoes: [
+          { id: Number(c1.id), nota: 9, inicio_s: 95, fim_s: 138, titulo: 'Que jogada', gancho: 'olha isso', porque: 'reacao forte' },
+          { id: 999999, nota: 10, inicio_s: 0, fim_s: 30, titulo: 'inventado', gancho: '', porque: '' },
+          { id: Number(c2.id), nota: 6, inicio_s: 300, fim_s: 340, titulo: 'Chat riu', gancho: '', porque: 'ok' },
+          { id: Number(c3.id), nota: 3, inicio_s: 600, fim_s: 640, titulo: 'fraco', gancho: '', porque: 'opiniao morna' },
         ],
       },
-      inputTokens: 2000,
-      outputTokens: 200,
-      custoUsd: 0.0002,
+      inputTokens: 5000,
+      outputTokens: 500,
+      custoUsd: 0.002,
     };
   });
   try {
-    // Teto de 1 por hora; a primeira hora conta inteira -> 1 vaga.
-    assert.equal(await liveAnalysisService.selecionarSessao(sessao, { cortesPorHora: 1 }), 1);
+    assert.equal(await liveAnalysisService.julgarSessao(sessao), 2);
   } finally {
     desfazer();
   }
-  assert.equal(maximoPedido, 1);
-  const { rows: cortes } = await pool.query('SELECT user_id, candidate_id, start_offset, title FROM live_clips WHERE session_id = $1 ORDER BY user_id', [sessao.id]);
-  assert.equal(cortes.length, 2, 'um corte pra cada usuario que acompanha o canal');
-  assert.deepEqual(cortes.map((c) => Number(c.user_id)), [Number(a.id), Number(b.id)].sort((x, y) => x - y));
-  assert.ok(cortes.every((c) => Number(c.candidate_id) === Number(c1.id) && c.title === 'Que jogada'));
-  assert.equal(Number(cortes[0].start_offset), 95);
+  assert.equal(modelo, 'gpt-5-mini');
+  const { rows } = await pool.query('SELECT id, status, final_score, final_start, title FROM live_candidates WHERE session_id = $1 ORDER BY id', [sessao.id]);
+  assert.deepEqual(rows.map((r) => [r.status, r.final_score]), [['escolhido', 9], ['escolhido', 6], ['descartado', 3]]);
+  assert.equal(Number(rows[0].final_start), 95);
+  const { rows: custo } = await pool.query("SELECT kind FROM live_costs WHERE session_id = $1", [sessao.id]);
+  assert.deepEqual(custo.map((c) => c.kind), ['juiz']);
 });
 
-test('selecao nao chama a IA antes de 10 minutos da anterior, mas sempre roda no fim da live', async () => {
+test('juiz nao roda antes de 5 minutos do anterior, mas sempre roda no fim da live', async () => {
   const canal = await novoCanal();
-  const u = await createClient();
-  await livesRepository.follow(u.id, canal.id);
   const sessao = await novaSessao(canal, { recorded: 600 });
+  for (let t = 0; t < 600; t += 30) await blocoTranscrito(sessao, t, t + 30, 'fala');
   await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: 100, fim: 140, nota: 8 });
   let chamadas = 0;
   const desfazer = trocar(openaiLives, 'pedirJson', async () => {
     chamadas += 1;
-    return { dados: { escolhidos: [] }, inputTokens: 1, outputTokens: 1, custoUsd: 0 };
+    return { dados: { avaliacoes: [] }, inputTokens: 1, outputTokens: 1, custoUsd: 0 };
   });
   try {
     const recente = { ...sessao, last_selection_at: new Date(Date.now() - 60_000) };
-    await liveAnalysisService.selecionarSessao(recente, { cortesPorHora: 5 });
+    await liveAnalysisService.julgarSessao(recente);
     assert.equal(chamadas, 0);
-    await liveAnalysisService.selecionarSessao({ ...recente, status: 'encerrada' }, { cortesPorHora: 5 });
+    await liveAnalysisService.julgarSessao({ ...recente, status: 'encerrada' });
     assert.equal(chamadas, 1);
   } finally {
     desfazer();
   }
-  // Com a live encerrada, o que sobrou pendente e descartado.
   const { rows } = await pool.query("SELECT count(*)::int AS n FROM live_candidates WHERE session_id = $1 AND status = 'pendente'", [sessao.id]);
-  assert.equal(rows[0].n, 0);
+  assert.equal(rows[0].n, 0, 'com a live encerrada, o que o juiz nao aprovou sai da fila');
+});
+
+test('cada usuario recebe so o que passa no nivel de qualidade dele, sem duplicar', async () => {
+  const canal = await novoCanal();
+  const exigente = await createClient();
+  const tolerante = await createClient();
+  await livesRepository.follow(exigente.id, canal.id);
+  await livesRepository.follow(tolerante.id, canal.id);
+  await livesRepository.upsertClipSettings(exigente.id, { ...livesUserSettings.PADRAO, qualidade: 5 });
+  await livesRepository.upsertClipSettings(tolerante.id, { ...livesUserSettings.PADRAO, qualidade: 1 });
+  const sessao = await novaSessao(canal, { recorded: 1800 });
+  for (const [ini, nota] of [[100, 9], [300, 7], [500, 5], [700, 4]]) {
+    const c = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: ini, fim: ini + 40, nota: 8 });
+    await livesRepository.judgeCandidate(c.id, {
+      status: nota >= 5 ? 'escolhido' : 'descartado', nota, inicio: ini, fim: ini + 40, titulo: `t${nota}`, gancho: '', porque: '',
+    });
+  }
+  await liveAnalysisService.distribuirSessao(sessao);
+  await liveAnalysisService.distribuirSessao(sessao); // segunda volta nao duplica
+  const notas = async (u) =>
+    (await pool.query('SELECT score FROM live_clips WHERE session_id = $1 AND user_id = $2 ORDER BY score DESC', [sessao.id, u.id])).rows.map((r) => r.score);
+  assert.deepEqual(await notas(exigente), [9], 'nivel 5: so nota 9+');
+  assert.deepEqual(await notas(tolerante), [9, 7, 5], 'nivel 1: nota 5+');
+});
+
+test('o teto por hora do nivel vale mesmo com muitos aprovados', async () => {
+  const canal = await novoCanal();
+  const u = await createClient();
+  await livesRepository.follow(u.id, canal.id);
+  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 4 }); // ate 3 por hora
+  const sessao = await novaSessao(canal, { recorded: 1800 });
+  for (let i = 0; i < 6; i += 1) {
+    const c = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'sinal', inicio: i * 100, fim: i * 100 + 40 });
+    await livesRepository.judgeCandidate(c.id, { status: 'escolhido', nota: 9, inicio: i * 100, fim: i * 100 + 40, titulo: 'x', gancho: '', porque: '' });
+  }
+  await liveAnalysisService.distribuirSessao(sessao);
+  const { rows } = await pool.query('SELECT count(*)::int AS n, min(source) AS origem FROM live_clips WHERE session_id = $1', [sessao.id]);
+  assert.equal(rows[0].n, 3);
+  assert.equal(rows[0].origem, 'sinal');
+});
+
+// ------------------------------------------------------------------ sinais do publico
+
+test('chat: uma risada por mensagem, e reacao conta a parte', () => {
+  assert.deepEqual(liveChatService.classificar('KKKKKKKKKKKKKK kkkkk'), { risada: true, hype: false });
+  assert.deepEqual(liveChatService.classificar('KEKW'), { risada: true, hype: false });
+  assert.deepEqual(liveChatService.classificar('???'), { risada: false, hype: true });
+  assert.deepEqual(liveChatService.classificar('PogChamp que isso'), { risada: false, hype: true });
+  assert.deepEqual(liveChatService.classificar('boa noite chat'), { risada: false, hype: false });
+});
+
+test('hora de relogio vira tempo da gravacao, inclusive depois de pausa de anuncio', () => {
+  const t0 = Date.parse('2026-09-28T22:00:00Z');
+  // 3 pedacos de 10s, e uma pausa de 60s (anuncio) antes do 3o.
+  const pedacos = [
+    { fim: 10, fechouEm: t0 + 10_000 },
+    { fim: 20, fechouEm: t0 + 20_000 },
+    { fim: 30, fechouEm: t0 + 90_000 },
+  ];
+  const para = liveSignalsService.relogioParaGravacao(pedacos);
+  assert.equal(para(t0 + 15_000), 15);
+  // Durante o anuncio a gravacao nao anda: evento cai onde ela retomou.
+  assert.equal(para(t0 + 50_000), 20);
+  assert.equal(para(t0 + 85_000), 25);
+});
+
+test('pico do chat, risadas e clipe de espectador viram candidato com o momento ANTES da reacao', () => {
+  const t0 = Date.parse('2026-09-28T22:00:00Z');
+  const pedacos = Array.from({ length: 60 }, (_, i) => ({ fim: (i + 1) * 10, fechouEm: t0 + (i + 1) * 10_000 }));
+  // Chat normal: 5 msgs a cada 5s. Aos ~305s de relogio: explosao com risada.
+  const chat = [];
+  for (let s = 0; s < 600; s += 5) chat.push({ em: t0 + s * 1000, msgs: 5, risadas: 0, hype: 0 });
+  chat.find((b) => b.em === t0 + 305_000).msgs = 40;
+  chat.find((b) => b.em === t0 + 305_000).risadas = 25;
+  const clipes = [{ titulo: 'ahahaha', views: 3, duracao: 30, em: t0 + 312_000 }];
+  const linha = liveSignalsService.montarLinhaDoTempo({ pedacos, chat, clipes, volume: [] }, 600);
+  const picos = liveSignalsService.picos(linha, 600);
+  assert.equal(picos.length, 1);
+  const [p] = picos;
+  // Reacao do chat aos 300s (305 - 5s de atraso) => o corte comeca ~40s antes.
+  assert.ok(p.inicio <= 260 && p.inicio >= 240, `inicio ${p.inicio}`);
+  assert.ok(p.fim >= 310 && p.fim <= 330, `fim ${p.fim}`);
+  assert.match(p.descricao, /risada/);
+  assert.match(p.descricao, /clipe\(s\) criado\(s\) por espectadores \("ahahaha"\)/);
+});
+
+test('live sem reacao nenhuma nao gera pico (chat constante nao e momento)', () => {
+  const t0 = Date.parse('2026-09-28T22:00:00Z');
+  const pedacos = Array.from({ length: 60 }, (_, i) => ({ fim: (i + 1) * 10, fechouEm: t0 + (i + 1) * 10_000 }));
+  const chat = Array.from({ length: 120 }, (_, i) => ({ em: t0 + i * 5000, msgs: 8, risadas: 1, hype: 0 }));
+  const linha = liveSignalsService.montarLinhaDoTempo({ pedacos, chat, clipes: [], volume: [] }, 600);
+  assert.deepEqual(liveSignalsService.picos(linha, 600), []);
+});
+
+// ------------------------------------------------------------------ camera
+
+test('layout da camera: recorta a webcam pela fracao e empilha em cima do conteudo', () => {
+  const r = videoEditingService.buildWebcamFilter({
+    w: 1080, h: 1920, subtitlesFilter: null, cam: { x: 0.02, y: 0.7, largura: 0.18, altura: 0.3 }, heightPercent: 40, position: 'top',
+  });
+  assert.match(r.filterComplex, /crop=iw\*0\.1800:ih\*0\.3000:iw\*0\.0200:ih\*0\.7000/);
+  assert.match(r.filterComplex, /scale=1080:768:force_original_aspect_ratio=increase,crop=1080:768/);
+  assert.match(r.filterComplex, /\[camera\]\[conteudo\]vstack/);
+  const embaixo = videoEditingService.buildWebcamFilter({ w: 1080, h: 1920, cam: { x: 0, y: 0, largura: 0.3, altura: 0.3 }, heightPercent: 40, position: 'bottom' });
+  assert.match(embaixo.filterComplex, /\[conteudo\]\[camera\]vstack/);
+});
+
+test('o render escolhe o layout da camera quando o corte traz a webcam', () => {
+  const cam = { x: 0.02, y: 0.7, largura: 0.18, altura: 0.3 };
+  const r = videoEditingService.buildFilter({ w: 1080, h: 1920, subtitlesFilter: null, fundo: { style: 'webcam', cam, heightPercent: 40, position: 'top' } });
+  assert.match(r.filterComplex, /\[camera\]\[conteudo\]vstack/);
+  // E sem webcam, nada muda pros cortes do YouTube.
+  const semCamera = videoEditingService.buildFilter({ w: 1080, h: 1920, subtitlesFilter: null, fundo: null });
+  assert.ok(semCamera.simpleFilter && !/vstack/.test(semCamera.simpleFilter));
+});
+
+test('retangulo de camera absurdo e recusado (cai no layout normal)', () => {
+  assert.equal(videoEditingService.webcamValida({ x: 0.9, y: 0.9, largura: 0.3, altura: 0.3 }), null, 'sai do quadro');
+  assert.equal(videoEditingService.webcamValida({ x: 0, y: 0, largura: 0.01, altura: 0.2 }), null, 'pequeno demais');
+  assert.equal(videoEditingService.webcamValida({ x: 0, y: 0, largura: 0.95, altura: 0.95 }), null, 'a live inteira');
+  assert.equal(videoEditingService.webcamValida(null), null);
+  assert.ok(videoEditingService.webcamValida({ x: 0.02, y: 0.7, largura: 0.18, altura: 0.3 }));
 });
 
 // ------------------------------------------------------------------ 7
@@ -356,6 +490,10 @@ function capturaFalsa() {
     trocar(liveCaptureService, 'gravando', (id) => ativas.has(id)),
     trocar(liveCaptureService, 'quantasGravando', () => ativas.size),
     trocar(liveCleanupService, 'usoDoDiscoPercent', () => 30),
+    // Sem isto o teste conecta de verdade no chat da Twitch e o processo
+    // nunca termina (a conexao se reabre sozinha quando cai).
+    trocar(liveChatService, 'acompanhar', () => {}),
+    trocar(liveChatService, 'parar', async () => {}),
   ];
   return { iniciadas, paradas, desfazer: () => desfazer.forEach((d) => d()) };
 }

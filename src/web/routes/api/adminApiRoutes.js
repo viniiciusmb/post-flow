@@ -50,6 +50,9 @@ router.delete('/narrated/:id', asyncHandler(adminNarratedApiController.remove));
 // docs/CHECKLIST_MIGRACAO_E_LIVES.md).
 router.get('/lives', asyncHandler(adminLivesApiController.estado));
 router.put('/lives/config', asyncHandler(adminLivesApiController.salvarConfig));
+router.put('/lives/opcoes', asyncHandler(adminLivesApiController.salvarOpcoes));
+router.get('/lives/estilo', asyncHandler(adminLivesApiController.obterEstilo));
+router.put('/lives/estilo', asyncHandler(adminLivesApiController.salvarEstilo));
 router.post('/lives/canais', asyncHandler(adminLivesApiController.adicionarCanal));
 router.delete('/lives/canais/:id', asyncHandler(adminLivesApiController.removerCanal));
 router.post('/lives/canais/:id/clipar-agora', asyncHandler(adminLivesApiController.cliparAgora));
