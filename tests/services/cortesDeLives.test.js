@@ -622,6 +622,29 @@ test('formato: pessoa da live esquecida pela IA ganha painel; se nao couber, qua
   assert.equal(g.formato, 'quadro_inteiro');
 });
 
+test('formato: "webcam" que nao muda entre os quadros e a foto do canal, e sai do corte', async () => {
+  const foto = { tipo: 'webcam', x: 0.02, y: 0.55, largura: 0.2, altura: 0.25, foco_x: 0.12, foco_y: 0.65 };
+  const pessoaDeVerdade = { tipo: 'na_camera', x: 0.3, y: 0.2, largura: 0.4, altura: 0.7, foco_x: 0.5, foco_y: 0.35 };
+  const resposta = {
+    pessoas_da_live: [foto, pessoaDeVerdade],
+    formato: 'paineis',
+    paineis: [
+      painel({ mostra: 'foto do canal', ...foto, altura_na_tela: 35 }),
+      painel({ mostra: 'programa', ...pessoaDeVerdade, altura_na_tela: 65 }),
+    ],
+    motivo: '',
+  };
+  // Mudanca medida: a foto nao mexe (0,3), a pessoa sim (13).
+  const desfazer = trocar(liveFormatoService, 'mudancaNaArea', async (_a, _b, c) => (c.x < 0.1 ? 0.3 : 13));
+  try {
+    const r = await liveFormatoService.descartarImagensParadas(resposta, ['a.jpg', 'b.jpg'], FONTE_720P);
+    assert.deepEqual(r.pessoas_da_live, [pessoaDeVerdade]);
+    assert.deepEqual(r.paineis.map((p) => p.mostra), ['programa']);
+  } finally {
+    desfazer();
+  }
+});
+
 test('formato: resposta inutilizavel cai no quadro inteiro (nunca deixa ninguem de fora)', () => {
   assert.equal(liveFormatoService.montarFormato(null, FONTE_720P).tipo, 'quadro_inteiro');
   assert.equal(liveFormatoService.montarFormato({ pessoas_da_live: [{}], formato: 'paineis', paineis: [], motivo: '' }, FONTE_720P).tipo, 'quadro_inteiro');

@@ -285,6 +285,62 @@ function garantirPessoas(resposta) {
   return { ...resposta, formato: 'paineis', paineis: [...paineis, ...novos] };
 }
 
+// Quanto uma area mudou entre os dois quadros (media da diferenca de brilho,
+// 0-255). Pessoa de verdade sempre muda (respira, pisca, fala); a FOTO do
+// canal nao. Medido em 29/09/2026 sobre video real comprimido em h264: foto
+// fixa 0,34 - webcam real 13,4. No teste de 12 lives a IA marcou a foto do
+// canal (um avatar parado num canto) como webcam do streamer.
+const MUDANCA_MINIMA_DE_PESSOA = 2;
+
+function mudancaNaArea(quadroA, quadroB, c, fonte) {
+  const px = (v, tot) => Math.max(0, Math.round(v * tot));
+  const w = Math.max(8, px(c.largura, fonte.w));
+  const h = Math.max(8, px(c.altura, fonte.h));
+  const recorte = `crop=${w}:${h}:${px(c.x, fonte.w)}:${px(c.y, fonte.h)}`;
+  return new Promise((resolve) => {
+    const filho = spawn(process.env.FFMPEG_PATH || 'ffmpeg', [
+      '-nostdin', '-hide_banner', '-i', quadroA, '-i', quadroB,
+      '-filter_complex', `[0]${recorte}[a];[1]${recorte}[b];[a][b]blend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG`,
+      '-f', 'null', '-',
+    ]);
+    let saida = '';
+    let terminou = false;
+    const fim = (v) => {
+      if (terminou) return;
+      terminou = true;
+      resolve(v);
+    };
+    filho.stderr.on('data', (d) => { saida += d; });
+    // Medida que falha nao tira ninguem: na duvida, a pessoa fica.
+    filho.on('error', () => fim(Infinity));
+    filho.on('close', () => {
+      const m = saida.match(/YAVG=([\d.]+)/);
+      fim(m ? Number(m[1]) : Infinity);
+    });
+  });
+}
+
+// Tira da resposta as "pessoas" que nao mudaram entre os quadros (foto do
+// canal, avatar parado) e os paineis dedicados a elas.
+async function descartarImagensParadas(resposta, quadros, fonte) {
+  if (!resposta || quadros.length < 2) return resposta;
+  const pessoas = resposta.pessoas_da_live || [];
+  const paradas = [];
+  for (const pe of pessoas) {
+    const c = caixa(pe);
+    if (!caixaValida(c)) continue;
+    const mudanca = await module.exports.mudancaNaArea(quadros[0], quadros[1], c, fonte);
+    if (mudanca < MUDANCA_MINIMA_DE_PESSOA) paradas.push(pe);
+  }
+  if (!paradas.length) return resposta;
+  const soDela = (pa) => paradas.some((pe) => estaNoPainel({ ...pe, tipo: 'webcam' }, pa));
+  return {
+    ...resposta,
+    pessoas_da_live: pessoas.filter((pe) => !paradas.includes(pe)),
+    paineis: (resposta.paineis || []).filter((pa) => !soDela(pa)),
+  };
+}
+
 async function extrairQuadro(videoPath, instante) {
   const quadro = `${videoPath}.fmt-${Math.round(instante * 10)}.jpg`;
   await videoEditingService.runFfmpeg(['-ss', String(instante), '-i', videoPath, '-frames:v', '1', '-q:v', '3', quadro]);
@@ -309,7 +365,8 @@ async function escolherFormato(videoPath, inicio, fim, custo) {
       imagem: quadros.map((q) => fs.readFileSync(q).toString('base64')),
     });
     await custo('camera', r);
-    return montarFormato(garantirPessoas(r.dados), fonte);
+    const semFotosParadas = await descartarImagensParadas(r.dados, quadros, fonte);
+    return montarFormato(garantirPessoas(semFotosParadas), fonte);
   } catch (err) {
     logger.warn(`Lives: nao consegui escolher o formato (${err.message}) - quadro inteiro.`);
     return { ...QUADRO_INTEIRO, motivo: 'falha na escolha' };
@@ -318,4 +375,4 @@ async function escolherFormato(videoPath, inicio, fim, custo) {
   }
 }
 
-module.exports = { escolherFormato, montarFormato, garantirPessoas, encaixarRecorte, dimensoes: duracaoEDimensoes, SCHEMA, INSTRUCAO };
+module.exports = { escolherFormato, montarFormato, garantirPessoas, descartarImagensParadas, mudancaNaArea, MUDANCA_MINIMA_DE_PESSOA, encaixarRecorte, dimensoes: duracaoEDimensoes, SCHEMA, INSTRUCAO };
