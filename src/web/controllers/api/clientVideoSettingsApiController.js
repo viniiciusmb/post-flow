@@ -214,9 +214,12 @@ async function getPorCanal(req, res) {
   });
 }
 
-async function update(req, res) {
-  const alvoVideo = await resolverAlvoDeVideo(req);
-  if (alvoVideo.erro) return res.status(400).json({ error: res.locals.t('erros.videoNaoEncontrado') });
+// Valida o corpo de um PUT de estilo de corte contra o que ja esta salvo
+// ("atual") e devolve { entrada } pronta pro repositorio, ou { erro } com a
+// chave de traducao do primeiro problema. Separada do update() pra ser a MESMA
+// regra no estilo dos cortes de live (adminLivesApiController): duas copias da
+// validacao divergiriam na primeira opcao nova.
+function validarEstilo(body, atual) {
   const {
     captionStyle,
     clipLength,
@@ -242,40 +245,8 @@ async function update(req, res) {
     titleHeightPercent,
     titleBoxColor,
     captionBoxColor,
-  } = req.body;
+  } = body;
 
-  const alvo = await resolverAlvo(req);
-  if (alvo.erro) return res.status(404).json({ error: alvo.erro });
-
-  // O que ja esta gravado precisa ser lido ANTES de validar qualquer coisa:
-  // a regra desta rota e "campo ausente preserva o salvo", e sem o salvo em
-  // maos nao da pra decidir nada.
-  //
-  // O caminho do template nao vem do cliente: e preservado daqui e so muda
-  // pelas rotas de upload/remocao. Aceitar caminho de arquivo vindo do
-  // navegador seria deixar o cliente apontar pra qualquer arquivo do servidor.
-  // A base do que já está salvo, no alvo pedido. Campo ausente no corpo
-  // preserva o valor daqui, então pegar a base errada apagaria configuração
-  // que ninguém mandou mudar.
-  const atual = alvoVideo.sourceVideoId
-    ? (await clientVideoSettingsRepository.findVideoOverride(req.session.user.id, alvoVideo.sourceVideoId)) ||
-      (await clientVideoSettingsRepository.findByClientId(req.session.user.id))
-    : alvo.channelId
-      ? (await clientVideoSettingsRepository.findChannelOverride(req.session.user.id, alvo.channelId)) ||
-        (await clientVideoSettingsRepository.findByClientId(req.session.user.id))
-      : await clientVideoSettingsRepository.findByClientId(req.session.user.id);
-
-  // ---------------------------------------------------------------------
-  // Campo AUSENTE preserva o que ja estava salvo; campo PRESENTE e invalido
-  // e recusado.
-  //
-  // Esta tela e gravada por DOIS cartoes (qualidade/quantidade e estilo
-  // visual), cada um mandando so o que edita. Exigir o campo inteiro de todo
-  // mundo obrigava cada cartao a reenviar os campos do outro - e o que ele
-  // reenviava era a copia carregada quando a pagina abriu, apagando o que o
-  // cliente tinha acabado de escolher no outro cartao. Foi o bug de
-  // "configuracao que nao salva" relatado em 22/08/2026.
-  // ---------------------------------------------------------------------
   const invalidos = [];
 
   function daLista(recebido, salvo, lista, erro, padrao) {
@@ -339,13 +310,13 @@ async function update(req, res) {
   const titleSecondsNum = inteiro(titleSeconds, atual.title_seconds, 1, 15, 'erros.duracaoTituloInvalida', 3);
   const cropZoomPercentNum = inteiro(cropZoomPercent, atual.crop_zoom_percent, 0, 100, 'erros.zoomInvalido', 100);
   const backgroundHeight = inteiro(
-    req.body.backgroundVideoHeightPercent, atual.background_video_height_percent, 10, 100, 'erros.alturaInvalida', 100
+    body.backgroundVideoHeightPercent, atual.background_video_height_percent, 10, 100, 'erros.alturaInvalida', 100
   );
   const backgroundOffset = inteiro(
-    req.body.backgroundVideoOffsetPercent, atual.background_video_offset_percent, 0, 100, 'erros.posicaoVideoInvalida', 50
+    body.backgroundVideoOffsetPercent, atual.background_video_offset_percent, 0, 100, 'erros.posicaoVideoInvalida', 50
   );
 
-  if (invalidos.length) return res.status(400).json({ error: res.locals.t(invalidos[0]) });
+  if (invalidos.length) return { erro: invalidos[0] };
 
   // Descricao fixa sem texto nenhum renderizaria legenda vazia no TikTok.
   // So checa quando a descricao veio nesta chamada: o cartao de estilo nao
@@ -353,7 +324,7 @@ async function update(req, res) {
   const descricaoVeio = descriptionTemplate !== undefined;
   const descricaoFinal = descricaoVeio ? descriptionTemplate : atual.description_template;
   if (modoDescricao === 'fixed' && !String(descricaoFinal || '').trim()) {
-    return res.status(400).json({ error: res.locals.t('erros.escrevaDescricao') });
+    return { erro: 'erros.escrevaDescricao' };
   }
 
   // Campo ausente PRESERVA o que ja estava salvo, em vez de cair num padrao.
@@ -362,8 +333,8 @@ async function update(req, res) {
   // escolha feita no outro. E exatamente o bug que ja aconteceu com os
   // horarios de postagem.
   const ESTILOS_DE_FUNDO = ['blur', 'black', 'white', 'template', 'thumbnail', 'frame'];
-  const backgroundStyle = ESTILOS_DE_FUNDO.includes(req.body.backgroundStyle)
-    ? req.body.backgroundStyle
+  const backgroundStyle = ESTILOS_DE_FUNDO.includes(body.backgroundStyle)
+    ? body.backgroundStyle
     : atual.background_style || 'blur';
 
   // Escolher "template" sem ter enviado imagem nenhuma renderizaria com o
@@ -372,7 +343,7 @@ async function update(req, res) {
   // O estilo "thumbnail" nao precisa dessa checagem: a imagem e a capa do
   // proprio video, baixada na hora de renderizar - nao ha nada pra enviar.
   if (backgroundStyle === 'template' && !atual.background_template_path) {
-    return res.status(400).json({ error: res.locals.t('erros.envieImagemAntes') });
+    return { erro: 'erros.envieImagemAntes' };
   }
 
   // Fonte e altura seguem a MESMA regra do estilo de fundo: campo ausente
@@ -390,7 +361,7 @@ async function update(req, res) {
   const fonteLegenda = resolverFonte(captionFont, atual.caption_font);
   const fonteTitulo = resolverFonte(titleFont, atual.title_font);
   if (fonteLegenda === null || fonteTitulo === null) {
-    return res.status(400).json({ error: res.locals.t('erros.fonteInvalida') });
+    return { erro: 'erros.fonteInvalida' };
   }
 
   // Altura em % da altura do video. O teto de 80 impede que o texto suba tanto
@@ -403,7 +374,7 @@ async function update(req, res) {
   const captionHeightNum = resolverAltura(captionHeightPercent, atual.caption_height_percent, 14);
   const titleHeightNum = resolverAltura(titleHeightPercent, atual.title_height_percent, 8);
   if (captionHeightNum === null || titleHeightNum === null) {
-    return res.status(400).json({ error: res.locals.t('erros.alturaInvalida') });
+    return { erro: 'erros.alturaInvalida' };
   }
 
   // Cor da caixa / do papel rasgado. Mesma regra de campo ausente preservar o
@@ -417,16 +388,17 @@ async function update(req, res) {
   const corTitulo = resolverCor(titleBoxColor, atual.title_box_color);
   const corLegenda = resolverCor(captionBoxColor, atual.caption_box_color);
   if (corTitulo === null || corLegenda === null) {
-    return res.status(400).json({ error: res.locals.t('erros.corInvalida') });
+    return { erro: 'erros.corInvalida' };
   }
 
   // De que lado fica a faixa da capa. Campo ausente preserva o salvo, pelo
   // mesmo motivo do estilo de fundo (dois cartoes salvam esta mesma tela).
-  const thumbnailPosition = ['top', 'bottom'].includes(req.body.thumbnailPosition)
-    ? req.body.thumbnailPosition
+  const thumbnailPosition = ['top', 'bottom'].includes(body.thumbnailPosition)
+    ? body.thumbnailPosition
     : atual.thumbnail_position || 'top';
 
-  const saved = await clientVideoSettingsRepository.upsert(req.session.user.id, {
+  return {
+    entrada: {
     backgroundStyle,
     backgroundTemplatePath: atual.background_template_path,
     backgroundVideoHeightPercent: backgroundHeight,
@@ -468,7 +440,50 @@ async function update(req, res) {
     partLabelSizePercent: tamanhoNumeracao,
     audioLanguage: idioma,
     titleStyle: estiloTitulo,
-  }, alvoVideo.sourceVideoId
+    },
+  };
+}
+
+async function update(req, res) {
+  const alvoVideo = await resolverAlvoDeVideo(req);
+  if (alvoVideo.erro) return res.status(400).json({ error: res.locals.t('erros.videoNaoEncontrado') });
+  const alvo = await resolverAlvo(req);
+  if (alvo.erro) return res.status(404).json({ error: alvo.erro });
+
+  // O que ja esta gravado precisa ser lido ANTES de validar qualquer coisa:
+  // a regra desta rota e "campo ausente preserva o salvo", e sem o salvo em
+  // maos nao da pra decidir nada.
+  //
+  // O caminho do template nao vem do cliente: e preservado daqui e so muda
+  // pelas rotas de upload/remocao. Aceitar caminho de arquivo vindo do
+  // navegador seria deixar o cliente apontar pra qualquer arquivo do servidor.
+  // A base do que já está salvo, no alvo pedido. Campo ausente no corpo
+  // preserva o valor daqui, então pegar a base errada apagaria configuração
+  // que ninguém mandou mudar.
+  const atual = alvoVideo.sourceVideoId
+    ? (await clientVideoSettingsRepository.findVideoOverride(req.session.user.id, alvoVideo.sourceVideoId)) ||
+      (await clientVideoSettingsRepository.findByClientId(req.session.user.id))
+    : alvo.channelId
+      ? (await clientVideoSettingsRepository.findChannelOverride(req.session.user.id, alvo.channelId)) ||
+        (await clientVideoSettingsRepository.findByClientId(req.session.user.id))
+      : await clientVideoSettingsRepository.findByClientId(req.session.user.id);
+
+  // ---------------------------------------------------------------------
+  // Campo AUSENTE preserva o que ja estava salvo; campo PRESENTE e invalido
+  // e recusado.
+  //
+  // Esta tela e gravada por DOIS cartoes (qualidade/quantidade e estilo
+  // visual), cada um mandando so o que edita. Exigir o campo inteiro de todo
+  // mundo obrigava cada cartao a reenviar os campos do outro - e o que ele
+  // reenviava era a copia carregada quando a pagina abriu, apagando o que o
+  // cliente tinha acabado de escolher no outro cartao. Foi o bug de
+  // "configuracao que nao salva" relatado em 22/08/2026.
+  // ---------------------------------------------------------------------
+  const validado = validarEstilo(req.body, atual);
+  if (validado.erro) return res.status(400).json({ error: res.locals.t(validado.erro) });
+  const idioma = validado.entrada.audioLanguage;
+
+  const saved = await clientVideoSettingsRepository.upsert(req.session.user.id, validado.entrada, alvoVideo.sourceVideoId
     ? { sourceVideoId: alvoVideo.sourceVideoId }
     : { youtubeChannelId: alvo.channelId });
 
@@ -494,4 +509,4 @@ async function removeChannelStyle(req, res) {
   res.json({ ok: true });
 }
 
-module.exports = { get, update, removeChannelStyle, resolverAlvo, toApiWithOptions };
+module.exports = { get, update, removeChannelStyle, resolverAlvo, toApiWithOptions, validarEstilo };
