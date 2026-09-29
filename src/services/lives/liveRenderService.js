@@ -113,7 +113,9 @@ const SCHEMA_AJUSTE = {
 const SISTEMA_AJUSTE = `Voce faz o ajuste fino de um corte de live para TikTok. Recebe a fala com o tempo (segundos) de cada trecho e o que o corte deve mostrar.
 Devolva:
 - inicio_s: o COMECO de uma frase, no ponto em que quem assiste entende o que esta acontecendo em ate 3 segundos (o gancho). Inclua so a preparacao necessaria;
-- fim_s: o FIM de uma frase, DEPOIS do desfecho - quando o assunto do corte se conclui (a resposta, a piada, a revelacao, a reacao). Nunca termine no meio de uma fala nem antes da conclusao: se o desfecho vem nas frases seguintes, estenda ate ele;
+- fim_s: o FIM da frase em que o ASSUNTO DO TITULO se conclui (a resposta, a piada, a revelacao, a reacao a ela). Duas regras, as duas valem:
+  1. nunca termine antes da conclusao nem no meio de uma fala - se o desfecho vem nas frases seguintes, estenda ate ele;
+  2. nunca continue num assunto NOVO - quando alguem muda de assunto (outra pergunta, outro tema, "e o fulano?"), o corte termina na frase ANTERIOR a essa mudanca;
 - duracao normalmente entre 25 e 60 segundos (nunca menos de 20, nunca mais de 90): corte curto demais perde a preparacao e ninguem entende a graca;
 - titulo curto (ate 60 caracteres) e gancho (ate 100) no idioma falado, sem hashtag. Se ja vierem bons, pode manter.`;
 
