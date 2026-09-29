@@ -203,8 +203,21 @@ async function renderizar(clip) {
     const origem = Number(segmentos[0].start_offset);
     const duracaoBruto = await videoEditingService.probeDuration(bruto);
 
-    await videoEditingService.extractAudio(bruto, audio);
-    const transcricao = await openaiTranscriptionService.transcribeAudio(audio);
+    // So o trecho pedido mais a folga do ajuste fino vai pra legenda - nao os
+    // pedacos de 10s inteiros que o arquivo de trabalho carrega (ate 20s a mais
+    // por corte, pagos no whisper-1). Os tempos das palavras voltam pro eixo
+    // do arquivo de trabalho somando o inicio do recorte.
+    const audioDe = Math.max(0, inicioPedido - origem - MARGEM_S);
+    const audioAte = Math.min(duracaoBruto, fimPedido - origem + MARGEM_S);
+    await videoEditingService.runFfmpeg([
+      '-ss', String(audioDe), '-to', String(audioAte), '-i', bruto,
+      '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', audio,
+    ]);
+    const transcricaoDoRecorte = await openaiTranscriptionService.transcribeAudio(audio);
+    const transcricao = {
+      ...transcricaoDoRecorte,
+      words: transcricaoDoRecorte.words.map((w) => ({ ...w, start: w.start + audioDe, end: w.end + audioDe })),
+    };
     await livesRepository.recordCost({
       channelId: clip.live_channel_id,
       sessionId: sessao.id,

@@ -4,12 +4,22 @@
 // com pausas longas (AFK, tela de espera) isso corta boa parte do custo.
 'use strict';
 
+const fs = require('fs');
 const { spawn } = require('child_process');
 const livesRepository = require('../../repositories/livesRepository');
 const openaiLives = require('./openaiLives');
 const logger = require('../../lib/logger');
 
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
+// A transcricao corrida vai ACELERADA em 1,5x: a OpenAI cobra por minuto de
+// audio enviado, entao 30s viram 20s cobrados (-33% no maior custo do modulo).
+// Medido em 28/09/2026 com blocos reais: em 1,5x o texto mantem o sentido
+// (perde uma palavra ou outra nas pontas), que e o que a triagem e o juiz
+// precisam. Em 2x a transcricao QUEBRA ("(musica acelerada)") - nao subir.
+// A legenda do corte nao passa por aqui: e feita a parte, em velocidade
+// normal (liveRenderService). Custo de CPU: ~0,4s por bloco.
+const VELOCIDADE_TRANSCRICAO = 1.5;
+
 // Acima de 90% de silencio o bloco e pulado. Nao 100%: live tem ruido de
 // fundo (musica baixa, clique de teclado) que nunca e silencio absoluto.
 const LIMITE_SILENCIO = 0.9;
@@ -46,6 +56,29 @@ function analisarAudio(arquivo, duracao) {
 // "duracao" vem do banco (inicio/fim do bloco na lista do ffmpeg), nao do
 // cabecalho do arquivo: o cabecalho de um pedaco pode herdar o relogio do
 // anterior e dizer que tem o dobro do tamanho.
+function acelerarAudio(arquivo, destino) {
+  return new Promise((resolve, reject) => {
+    const filho = spawn(FFMPEG, [
+      '-y', '-hide_banner', '-loglevel', 'error', '-i', arquivo,
+      '-af', `atempo=${VELOCIDADE_TRANSCRICAO}`, '-c:a', 'libopus', '-b:a', '32k', destino,
+    ]);
+    let erro = '';
+    let terminou = false;
+    filho.stderr.on('data', (c) => { erro += c; });
+    filho.on('error', (err) => {
+      if (terminou) return;
+      terminou = true;
+      reject(err);
+    });
+    filho.on('close', (codigo) => {
+      if (terminou) return;
+      terminou = true;
+      if (codigo !== 0) return reject(new Error(`ffmpeg (acelerar audio) saiu com ${codigo}: ${erro.slice(-300)}`));
+      resolve(destino);
+    });
+  });
+}
+
 function interpretarAnalise(saida, duracao) {
   const silencio = [...saida.matchAll(/silence_duration:\s*([\d.]+)/g)].reduce((s, m) => s + Number(m[1]), 0);
   // Bloco que TERMINA em silencio nao tem "silence_duration" do ultimo
@@ -96,7 +129,16 @@ async function processarProximo() {
     // real (28/09/2026), o gpt-4o-mini-transcribe COPIAVA esse texto pro
     // comeco da resposta - cada bloco saia repetindo o fim do anterior, e a
     // triagem via o mesmo momento em dois lugares da live.
-    const { texto, custoUsd } = await openaiLives.transcreverBloco(bloco.file_path, { segundos });
+    const acelerado = `${bloco.file_path}.rapido.ogg`;
+    const segundosCobrados = segundos / VELOCIDADE_TRANSCRICAO;
+    let resultado;
+    try {
+      await module.exports.acelerarAudio(bloco.file_path, acelerado);
+      resultado = await openaiLives.transcreverBloco(acelerado, { segundos: segundosCobrados });
+    } finally {
+      fs.rm(acelerado, { force: true }, () => {});
+    }
+    const { texto, custoUsd } = resultado;
     await livesRepository.finishTranscript(bloco.id, {
       status: 'feito',
       texto,
@@ -110,7 +152,8 @@ async function processarProximo() {
       channelId: bloco.live_channel_id,
       sessionId: bloco.session_id,
       kind: 'transcricao',
-      audioSeconds: segundos,
+      // Os segundos COBRADOS (o audio acelerado), nao os da live.
+      audioSeconds: segundosCobrados,
       custoUsd,
     });
   } catch (err) {
@@ -120,4 +163,4 @@ async function processarProximo() {
   return true;
 }
 
-module.exports = { processarProximo, analisarAudio, interpretarAnalise, LIMITE_SILENCIO };
+module.exports = { processarProximo, analisarAudio, acelerarAudio, interpretarAnalise, LIMITE_SILENCIO, VELOCIDADE_TRANSCRICAO };

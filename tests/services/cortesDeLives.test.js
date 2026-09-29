@@ -185,16 +185,21 @@ test('bloco quase todo silencioso nao e mandado pra OpenAI e nao custa nada', as
 
 // Medido na 1a live real: com o texto anterior no "prompt", a OpenAI copiava
 // esse texto pra dentro da resposta e todo bloco repetia o fim do anterior.
-test('bloco com fala e transcrito SEM o texto anterior como prompt, e o custo e registrado', async () => {
+test('bloco com fala e transcrito acelerado em 1,5x, sem o texto anterior como prompt, e o custo e registrado', async () => {
   const canal = await novoCanal();
   const sessao = await novaSessao(canal);
   await blocoTranscrito(sessao, 0, 30, 'e ai galera, bora comecar a partida');
   await livesRepository.insertSegments(sessao.id, 'audio', [{ seq: 99, file_path: '/x/aud2.ogg', start_offset: 30, end_offset: 60, bytes: 1 }]);
   let contextoRecebido = null;
+  let arquivoEnviado = null;
+  let segundosEnviados = null;
   const desfazer = [
     trocar(liveTranscriptionService, 'analisarAudio', async () => ({ silencioSegundos: 2, loudness: -18, pico: -1 })),
-    trocar(openaiLives, 'transcreverBloco', async (_f, { contexto, segundos }) => {
+    trocar(liveTranscriptionService, 'acelerarAudio', async (_orig, destino) => destino),
+    trocar(openaiLives, 'transcreverBloco', async (f, { contexto, segundos }) => {
       contextoRecebido = contexto;
+      arquivoEnviado = f;
+      segundosEnviados = segundos;
       return { texto: 'que jogada absurda', custoUsd: (segundos / 60) * 0.003 };
     }),
   ];
@@ -204,12 +209,17 @@ test('bloco com fala e transcrito SEM o texto anterior como prompt, e o custo e 
     desfazer.forEach((d) => d());
   }
   assert.ok(!contextoRecebido, 'o texto do bloco anterior nao pode ir como prompt');
+  // Economia de 28/09: vai o audio ACELERADO em 1,5x - 30s de live cobrados
+  // como 20s.
+  assert.match(arquivoEnviado, /\.rapido\.ogg$/);
+  assert.equal(segundosEnviados, 20);
   const { rows } = await pool.query("SELECT text, loudness_lufs FROM live_transcripts WHERE session_id = $1 AND start_offset = 30", [sessao.id]);
   assert.equal(rows[0].text, 'que jogada absurda');
   const { rows: custo } = await pool.query("SELECT kind, audio_seconds, cost_usd FROM live_costs WHERE session_id = $1", [sessao.id]);
   assert.equal(custo.length, 1);
   assert.equal(custo[0].kind, 'transcricao');
-  assert.ok(Math.abs(Number(custo[0].cost_usd) - 0.0015) < 1e-9);
+  assert.equal(Number(custo[0].audio_seconds), 20);
+  assert.ok(Math.abs(Number(custo[0].cost_usd) - 0.001) < 1e-9, 'US$ 0,001 em vez de 0,0015');
 });
 
 test('a leitura da analise de audio bate com a saida REAL do ffmpeg 5.1 do servidor', () => {
