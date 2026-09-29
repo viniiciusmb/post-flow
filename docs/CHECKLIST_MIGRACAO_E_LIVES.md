@@ -286,6 +286,7 @@ Começa agora na VPS nova (decisão de 28/09), visível só para o admin.
 - **Chat IRC da Twitch** como sinal extra: não feito (o plano diz que é só apoio).
 - **Ordem do deploy:** o `live-worker` sobe antes de a migration rodar e reinicia sozinho até as tabelas existirem (visto no 1º deploy: 3 reinícios, sem dano).
 - Tudo publicado só na VPS nova, a partir da branch `feature/lives` (nada na `main`, nada no GitHub).
+- **Tipos de momento (29/09, pedido do fundador):** triagem e juiz agora procuram ENGRAÇADO (piada, duplo sentido, mancada, constrangedor, xingamento) e SÉRIO (dinheiro com número, "ganhei/comprei", polêmica, briga, ofensa) — catálogo único em `O_QUE_VIRALIZA`. A fala ganha pistas sem IA (`tiposDeMomento.pistasDaFala`: dinheiro com número, compra, palavrão). O juiz grava o tipo (`live_candidates.moment_type`, migration 093); dinheiro/ostentação/polêmica não são barrados pela exigência de reação do chat dos níveis 3–5 (a nota mínima continua valendo). Título de dinheiro leva o número. Ainda não visto numa live real.
 
 ## FASE 5 — depois da validação
 - [ ] Kick (conferir suporte do streamlink).
