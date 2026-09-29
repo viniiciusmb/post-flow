@@ -21,6 +21,7 @@ const path = require('path');
 const config = require('../../config');
 const livesRepository = require('../../repositories/livesRepository');
 const livesUserSettings = require('./livesUserSettings');
+const liveFormatoService = require('./liveFormatoService');
 const videoEditingService = require('../videoEditingService');
 const openaiTranscriptionService = require('../openaiTranscriptionService');
 const openaiLives = require('./openaiLives');
@@ -281,8 +282,16 @@ async function renderizar(clip) {
 
     const words = transcricao.words.filter((w) => w.end > inicioRel && w.start < fimRel);
     const { estilo, camera } = await livesUserSettings.estiloParaRender(clip.user_id);
+    // Enquadramento: 'ia' = a IA monta o formato deste corte (paineis ou
+    // quadro inteiro); 'auto' = sempre destacar a webcam; 'desligado' =
+    // estilo normal. O que foi decidido fica gravado no corte (coluna webcam)
+    // pra dar pra conferir depois.
     let webcam = null;
-    if (camera.modo === 'auto') {
+    let formato = null;
+    if (camera.modo === 'ia') {
+      formato = await liveFormatoService.escolherFormato(bruto, inicioRel, fimRel, custo);
+      await livesRepository.setClipWebcam(clip.id, { formato });
+    } else if (camera.modo === 'auto') {
       webcam = await localizarCamera(bruto, inicioRel, fimRel, custo);
       await livesRepository.setClipWebcam(clip.id, webcam);
     }
@@ -299,6 +308,7 @@ async function renderizar(clip) {
         show_part_label: false,
         show_title: Boolean(titulo) && estilo.show_title !== false,
         live_webcam: webcam ? { ...webcam, heightPercent: camera.alturaPercent, position: camera.posicao } : null,
+        live_formato: formato,
       },
       partIndex: 1,
       partTotal: 1,

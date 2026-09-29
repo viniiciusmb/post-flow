@@ -20,7 +20,8 @@ const PADRAO = Object.freeze({
   usar_estilo_dos_videos: true,
   estilo: {},
   qualidade: 3,
-  camera_modo: 'auto',
+  // 'ia' = a IA escolhe o formato de cada corte (liveFormatoService).
+  camera_modo: 'ia',
   camera_posicao: 'top',
   camera_altura_percent: 40,
 });

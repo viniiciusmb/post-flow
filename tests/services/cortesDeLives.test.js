@@ -44,6 +44,7 @@ const liveChatService = require('../../src/services/lives/liveChatService');
 const liveSignalsService = require('../../src/services/lives/liveSignalsService');
 const videoEditingService = require('../../src/services/videoEditingService');
 const liveRenderService = require('../../src/services/lives/liveRenderService');
+const liveFormatoService = require('../../src/services/lives/liveFormatoService');
 const { createClient } = require('../helpers/db');
 
 test.after(async () => {
@@ -512,6 +513,95 @@ test('camera: quadros que discordam (algo que se mexe) sao recusados', async () 
   const b = { tem_webcam: true, x: 0.7, y: 0.05, largura: 0.2, altura: 0.3, confianca: 90 };
   assert.equal(await cameraCom([a, b]), null);
   assert.equal(await cameraCom([a, { ...a, tem_webcam: false }]), null);
+});
+
+// ------------------------------------------------------------------ formato escolhido pela IA
+
+const FONTE_720P = { w: 1280, h: 720 };
+const painel = (extra) => ({ mostra: 'x', x: 0, y: 0, largura: 0.3, altura: 0.8, foco_x: 0.15, foco_y: 0.3, altura_na_tela: 50, ...extra });
+
+test('formato: duas pessoas nas pontas viram dois paineis, cada um centrado no rosto, somando a tela toda', () => {
+  const f = liveFormatoService.montarFormato({
+    pessoas_na_live: 2,
+    formato: 'paineis',
+    paineis: [
+      painel({ mostra: 'esquerda', x: 0.02, foco_x: 0.15 }),
+      painel({ mostra: 'direita', x: 0.68, foco_x: 0.83 }),
+    ],
+    motivo: 'duas pessoas nas pontas',
+  }, FONTE_720P);
+  assert.equal(f.tipo, 'paineis');
+  assert.equal(f.paineis.length, 2);
+  assert.equal(f.paineis.reduce((s, p) => s + p.alturaPercent, 0), 100);
+  // A pessoa da direita fica no painel dela - o recorte nao volta pro meio.
+  const direita = f.paineis[1];
+  assert.ok(direita.x + direita.largura / 2 > 0.7, `centro ${direita.x + direita.largura / 2}`);
+  // Nenhum recorte sai do quadro.
+  for (const p of f.paineis) assert.ok(p.x >= 0 && p.y >= 0 && p.x + p.largura <= 1.0001 && p.y + p.altura <= 1.0001);
+});
+
+test('formato: o recorte tem EXATAMENTE a proporcao do painel (sem distorcer a pessoa)', () => {
+  for (const variosPaineis of [false, true]) {
+    const r = liveFormatoService.encaixarRecorte(
+      { x: 0.35, y: 0.1, largura: 0.3, altura: 0.8, focoX: 0.5, focoY: 0.3 },
+      { w: 1080, h: 960 },
+      FONTE_720P,
+      { variosPaineis }
+    );
+    const proporcao = (r.largura * FONTE_720P.w) / (r.altura * FONTE_720P.h);
+    assert.ok(Math.abs(proporcao - 1080 / 960) < 0.01, `proporcao ${proporcao}`);
+  }
+});
+
+test('formato: sem ninguem NA live (so personagem de jogo/desenho), no maximo um painel', () => {
+  const f = liveFormatoService.montarFormato({
+    pessoas_na_live: 0,
+    formato: 'paineis',
+    paineis: [painel({ x: 0 }), painel({ x: 0.35 }), painel({ x: 0.7 })],
+    motivo: 'tres personagens da arte do jogo',
+  }, FONTE_720P);
+  assert.equal(f.paineis.length, 1);
+  assert.equal(f.paineis[0].alturaPercent, 100);
+});
+
+test('formato: paineis sobre a mesma area viram um so', () => {
+  const f = liveFormatoService.montarFormato({
+    pessoas_na_live: 2,
+    formato: 'paineis',
+    paineis: [
+      painel({ mostra: 'filme', x: 0, y: 0, largura: 0.8, altura: 0.9, altura_na_tela: 50 }),
+      painel({ mostra: 'webcam', x: 0.8, y: 0.7, largura: 0.2, altura: 0.3, foco_x: 0.9, foco_y: 0.8, altura_na_tela: 30 }),
+      painel({ mostra: 'alguem atras na webcam', x: 0.82, y: 0.72, largura: 0.15, altura: 0.25, foco_x: 0.9, foco_y: 0.8, altura_na_tela: 20 }),
+    ],
+    motivo: '',
+  }, FONTE_720P);
+  assert.deepEqual(f.paineis.map((p) => p.mostra), ['filme', 'webcam']);
+  assert.equal(f.paineis.reduce((s, p) => s + p.alturaPercent, 0), 100);
+});
+
+test('formato: resposta inutilizavel cai no quadro inteiro (nunca deixa ninguem de fora)', () => {
+  assert.equal(liveFormatoService.montarFormato(null, FONTE_720P).tipo, 'quadro_inteiro');
+  assert.equal(liveFormatoService.montarFormato({ pessoas_na_live: 1, formato: 'paineis', paineis: [], motivo: '' }, FONTE_720P).tipo, 'quadro_inteiro');
+  const minusculo = { pessoas_na_live: 1, formato: 'paineis', paineis: [painel({ largura: 0.01, altura: 0.01 })], motivo: '' };
+  assert.equal(liveFormatoService.montarFormato(minusculo, FONTE_720P).tipo, 'quadro_inteiro');
+  assert.equal(liveFormatoService.montarFormato({ pessoas_na_live: 9, formato: 'quadro_inteiro', paineis: [], motivo: 'grupo' }, FONTE_720P).tipo, 'quadro_inteiro');
+});
+
+test('formato: o render empilha os paineis (alturas pares somando 1920) ou mostra o quadro inteiro', () => {
+  const paineis = [
+    { x: 0, y: 0, largura: 0.5, altura: 1, alturaPercent: 33 },
+    { x: 0.5, y: 0, largura: 0.5, altura: 1, alturaPercent: 33 },
+    { x: 0.25, y: 0, largura: 0.5, altura: 1, alturaPercent: 34 },
+  ];
+  const r = videoEditingService.buildFilter({ w: 1080, h: 1920, subtitlesFilter: null, fundo: { style: 'formato_ia', formato: { tipo: 'paineis', paineis } } });
+  const alturas = [...r.filterComplex.matchAll(/crop=1080:(\d+),setsar=1\[painel/g)].map((m) => Number(m[1]));
+  assert.equal(alturas.length, 3);
+  assert.equal(alturas.reduce((a, b) => a + b, 0), 1920);
+  assert.ok(alturas.every((a) => a % 2 === 0));
+  assert.match(r.filterComplex, /vstack=inputs=3/);
+  const inteiro = videoEditingService.buildFilter({ w: 1080, h: 1920, subtitlesFilter: null, fundo: { style: 'formato_ia', formato: { tipo: 'quadro_inteiro', paineis: [] } } });
+  assert.match(inteiro.filterComplex, /scale=1080:-2/);
+  assert.match(inteiro.filterComplex, /boxblur/);
 });
 
 test('retangulo de camera absurdo e recusado (cai no layout normal)', () => {

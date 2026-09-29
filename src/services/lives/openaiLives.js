@@ -70,10 +70,12 @@ async function transcreverBloco(arquivo, { contexto = '', segundos = 0 } = {}) {
 // achar a camera do streamer num quadro da live.
 async function pedirJson({ nome, sistema, usuario, schema, modelo = MODELO_TEXTO, raciocinio = 'minimal', imagem = null }) {
   return comUmaNovaTentativa(async () => {
-    const conteudoUsuario = imagem
+    // Uma imagem ou varias (o formato do corte e decidido vendo dois quadros).
+    const imagens = imagem ? (Array.isArray(imagem) ? imagem : [imagem]) : [];
+    const conteudoUsuario = imagens.length
       ? [
           { type: 'text', text: usuario },
-          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imagem}`, detail: 'low' } },
+          ...imagens.map((b64) => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}`, detail: 'low' } })),
         ]
       : usuario;
     const r = await fetch(CHAT_URL, {

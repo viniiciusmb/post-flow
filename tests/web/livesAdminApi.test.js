@@ -116,6 +116,9 @@ test('opcoes de live: qualidade fora de 1 a 5 e recusada, dentro e salva', async
   assert.equal(r.body.opcoes.qualidade, 4);
   assert.equal(r.body.opcoes.cameraPosicao, 'bottom');
   // Campo ausente preserva o que ja estava salvo.
+  // O padrao novo e a IA escolher o formato.
+  assert.equal(r.body.opcoes.cameraModo, 'ia');
+  assert.equal((await agent.put('/api/admin/lives/opcoes', { cameraModo: 'qualquer' })).status, 400);
   const r2 = await agent.put('/api/admin/lives/opcoes', { cameraModo: 'desligado' });
   assert.equal(r2.body.opcoes.qualidade, 4);
   assert.equal(r2.body.niveis['5'].notaMinima, 9);

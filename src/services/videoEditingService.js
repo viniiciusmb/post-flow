@@ -890,6 +890,53 @@ function buildWebcamFilter({ w, h, subtitlesFilter, cam, heightPercent, position
   return { filterComplex: chain.join(';'), outputLabel: '[outv]' };
 }
 
+// Formato escolhido pela IA pros cortes de LIVE (settings.live_formato):
+//
+//   paineis        - de 1 a 3 recortes do video original empilhados de cima
+//                    pra baixo, cada um PREENCHENDO a largura (ex.: a metade
+//                    esquerda com uma pessoa em cima e a direita com a outra
+//                    embaixo; so a webcam em cima e o jogo embaixo; zoom numa
+//                    pessoa so);
+//   quadro_inteiro - o video inteiro, sem cortar ninguem, sobre ele mesmo
+//                    desfocado (grupo grande, plano aberto).
+//
+// Os recortes ja chegam aqui no formato certo de cada painel (ver
+// liveFormatoService.encaixarRecorte), entao o scale+crop final so arredonda.
+function buildPaineisFilter({ w, h, subtitlesFilter, formato }) {
+  const legenda = subtitlesFilter ? `,${subtitlesFilter}` : '';
+  if (formato.tipo === 'quadro_inteiro') {
+    const chain = [
+      `[0:v]split=2[paraFundo][paraVideo]`,
+      `[paraFundo]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=18:4,setsar=1[fundo]`,
+      `[paraVideo]scale=${w}:-2,setsar=1[video]`,
+      `[fundo][video]overlay=(W-w)/2:(H-h)/2${legenda}[outv]`,
+    ];
+    return { filterComplex: chain.join(';'), outputLabel: '[outv]' };
+  }
+  const f = (v) => Math.max(0, Math.min(1, Number(v))).toFixed(4);
+  const paineis = formato.paineis;
+  // Alturas em pixels, PARES (yuv420p), somando exatamente h.
+  const alturas = paineis.map((p) => Math.floor((h * p.alturaPercent) / 100 / 2) * 2);
+  alturas[alturas.length - 1] += h - alturas.reduce((a, b) => a + b, 0);
+  const chain = [];
+  if (paineis.length > 1) {
+    chain.push(`[0:v]split=${paineis.length}${paineis.map((_, i) => `[entrada${i}]`).join('')}`);
+  }
+  paineis.forEach((p, i) => {
+    const entrada = paineis.length > 1 ? `[entrada${i}]` : '[0:v]';
+    chain.push(
+      `${entrada}crop=iw*${f(p.largura)}:ih*${f(p.altura)}:iw*${f(p.x)}:ih*${f(p.y)},` +
+        `scale=${w}:${alturas[i]}:force_original_aspect_ratio=increase,crop=${w}:${alturas[i]},setsar=1[painel${i}]`
+    );
+  });
+  if (paineis.length > 1) {
+    chain.push(`${paineis.map((_, i) => `[painel${i}]`).join('')}vstack=inputs=${paineis.length}${legenda}[outv]`);
+  } else {
+    chain.push(`[painel0]null${legenda}[outv]`);
+  }
+  return { filterComplex: chain.join(';'), outputLabel: '[outv]' };
+}
+
 // Retangulo da camera valido o bastante pra usar: dentro do quadro e com um
 // tamanho que faz sentido (camera de 2% da tela e erro de deteccao, de 90% e
 // "a live inteira e a camera", caso em que o layout normal ja serve).
@@ -907,6 +954,9 @@ function buildFilter({ w, h, subtitlesFilter, cropZoomPercent, fundo }) {
   // Fundo escolhido explicitamente (template, preto, branco ou desfocado). O
   // 'blur' so entra por aqui quando ha altura definida - com o video ocupando
   // o quadro inteiro, o caminho antigo (com zoom continuo) continua valendo.
+  if (fundo && fundo.style === 'formato_ia') {
+    return buildPaineisFilter({ w, h, subtitlesFilter, formato: fundo.formato });
+  }
   if (fundo && fundo.style === 'webcam') {
     return buildWebcamFilter({
       w,
@@ -1015,9 +1065,17 @@ async function renderClip({
   // Corte de live com a camera do streamer localizada: o layout camera +
   // conteudo substitui o fundo escolhido (ver buildWebcamFilter).
   const webcam = webcamValida(settings.live_webcam);
+  // Formato montado pela IA (so cortes de live). Ja vem validado pelo
+  // liveFormatoService; aqui so confere a forma basica.
+  const formatoIa =
+    settings.live_formato &&
+    (settings.live_formato.tipo === 'quadro_inteiro' ||
+      (Array.isArray(settings.live_formato.paineis) && settings.live_formato.paineis.length >= 1 && settings.live_formato.paineis.length <= 3))
+      ? settings.live_formato
+      : null;
 
   let framePath = null;
-  if (estiloDeFundo === 'frame' && !webcam) {
+  if (estiloDeFundo === 'frame' && !webcam && !formatoIa) {
     framePath = outputPath.replace(/\.mp4$/, '-frame.jpg');
     const instante = instanteDoQuadro(startSeconds, endSeconds);
     try {
@@ -1047,7 +1105,9 @@ async function renderClip({
   // video ocupando o quadro inteiro (100%) nao sobra fundo visivel, entao o
   // caminho antigo (zoom continuo sobre o desfocado) continua valendo - e e o
   // que preserva o comportamento de quem nunca mexeu nessa configuracao.
-  const fundo = webcam
+  const fundo = formatoIa
+    ? { style: 'formato_ia', formato: formatoIa }
+    : webcam
     ? { style: 'webcam', cam: webcam, heightPercent: webcam.heightPercent, position: webcam.position }
     : settings.crop_style_mode === 'manual' && alturaDoVideo < 100
       ? {
@@ -1229,6 +1289,7 @@ module.exports = {
   runFfmpegWithProgress,
   buildBackgroundFilter,
   buildWebcamFilter,
+  buildPaineisFilter,
   webcamValida,
   // Exportado pro teste: e a escolha de layout que o render faz de verdade.
   buildFilter,

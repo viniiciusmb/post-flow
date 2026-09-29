@@ -128,7 +128,7 @@ async function salvarOpcoes(req, res) {
     nova.qualidade = q;
   }
   if (b.cameraModo !== undefined) {
-    if (!['auto', 'desligado'].includes(b.cameraModo)) return res.status(400).json({ error: 'Opcao de camera invalida.' });
+    if (!['ia', 'auto', 'desligado'].includes(b.cameraModo)) return res.status(400).json({ error: 'Opcao de enquadramento invalida.' });
     nova.camera_modo = b.cameraModo;
   }
   if (b.cameraPosicao !== undefined) {

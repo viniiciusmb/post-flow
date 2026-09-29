@@ -31,7 +31,7 @@ type Config = {
 type Opcoes = {
   usarEstiloDosVideos: boolean
   qualidade: number
-  cameraModo: "auto" | "desligado"
+  cameraModo: "ia" | "auto" | "desligado"
   cameraPosicao: "top" | "bottom"
   cameraAlturaPercent: number
 }
@@ -401,7 +401,7 @@ export function AdminLivesPage() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <Label>Câmera do streamer</Label>
+                <Label>Enquadramento</Label>
                 <div className="flex flex-wrap items-center gap-3">
                   <ToggleGroup
                     type="single"
@@ -409,8 +409,9 @@ export function AdminLivesPage() {
                     value={estado.opcoes.cameraModo}
                     onValueChange={(v) => v && void salvarOpcoes({ cameraModo: v as Opcoes["cameraModo"] })}
                   >
+                    <ToggleGroupItem value="ia">A IA escolhe o formato</ToggleGroupItem>
                     <ToggleGroupItem value="auto">Destacar a câmera</ToggleGroupItem>
-                    <ToggleGroupItem value="desligado">Não destacar</ToggleGroupItem>
+                    <ToggleGroupItem value="desligado">Estilo normal</ToggleGroupItem>
                   </ToggleGroup>
                   {estado.opcoes.cameraModo === "auto" && (
                     <>
@@ -443,8 +444,11 @@ export function AdminLivesPage() {
                   )}
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  A IA encontra a webcam do streamer em cada corte e coloca ela numa faixa própria, pra dar pra ver a reação.
-                  Se a live não tiver webcam separada, o corte sai no estilo normal.
+                  {estado.opcoes.cameraModo === "ia"
+                    ? "Em cada corte a IA olha a live e monta o melhor formato: a webcam numa faixa e o jogo na outra, uma pessoa em cima e a outra embaixo quando estão nas pontas, zoom em quem está sozinho num canto — ou o quadro inteiro, quando cortar deixaria alguém de fora."
+                    : estado.opcoes.cameraModo === "auto"
+                      ? "A IA encontra a webcam do streamer em cada corte e coloca ela numa faixa própria. Se a live não tiver webcam separada, o corte sai no estilo normal."
+                      : "O corte segue só o estilo escolhido abaixo, sem enquadramento especial."}
                 </span>
               </div>
 
