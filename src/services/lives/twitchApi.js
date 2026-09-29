@@ -35,7 +35,7 @@ async function obterToken() {
   return tokenEmCache.valor;
 }
 
-async function helix(caminho, parametros) {
+async function helix(caminho, parametros, { completo = false } = {}) {
   for (let tentativa = 0; tentativa < 2; tentativa += 1) {
     const token = await obterToken();
     const url = `${HELIX}${caminho}?${parametros.toString()}`;
@@ -50,7 +50,7 @@ async function helix(caminho, parametros) {
     }
     const dados = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(`Twitch ${caminho} respondeu ${r.status}: ${dados.message || ''}`);
-    return dados.data || [];
+    return completo ? dados : dados.data || [];
   }
   throw new Error(`Twitch ${caminho}: token recusado duas vezes.`);
 }
@@ -91,6 +91,30 @@ async function buscarUsuario(login) {
   return { id: u.id, login: String(u.login).toLowerCase(), nome: u.display_name, imagem: u.profile_image_url };
 }
 
+// Clipes criados pelos espectadores desde "desde". Pagina ate 300 (uma live
+// muito grande pode ter dezenas por hora; mais que isso nao muda a decisao).
+async function buscarClipes(broadcasterId, desde) {
+  const clipes = [];
+  let cursor = null;
+  for (let pagina = 0; pagina < 3; pagina += 1) {
+    const p = new URLSearchParams({ broadcaster_id: String(broadcasterId), started_at: new Date(desde).toISOString(), first: '100' });
+    if (cursor) p.append('after', cursor);
+    const r = await helix('/clips', p, { completo: true });
+    for (const c of r.data || []) {
+      clipes.push({
+        id: c.id,
+        titulo: c.title,
+        views: c.view_count,
+        duracao: Number(c.duration),
+        criadoEm: c.created_at,
+      });
+    }
+    cursor = r.pagination?.cursor;
+    if (!cursor) break;
+  }
+  return clipes;
+}
+
 // Aceita "canal", "@canal", "twitch.tv/canal" ou a URL inteira - e o que a
 // pessoa cola. Devolve null se nao for um login valido da Twitch (3 a 25
 // caracteres, letras, numeros e _).
@@ -106,4 +130,4 @@ function _limparCache() {
   tokenEmCache = null;
 }
 
-module.exports = { configurado, buscarAoVivo, buscarUsuario, normalizarLogin, _limparCache };
+module.exports = { configurado, buscarAoVivo, buscarUsuario, buscarClipes, normalizarLogin, _limparCache };

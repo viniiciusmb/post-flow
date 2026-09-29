@@ -32,13 +32,23 @@ async function sincronizar(sessao) {
   for (const [kind, lista] of [['video', 'video.csv'], ['audio', 'audio.csv']]) {
     const itens = lerLista(path.join(dir, lista)).map((i) => {
       const arquivo = path.join(dir, i.nome);
-      let bytes = 0;
+      let info;
       try {
-        bytes = fs.statSync(arquivo).size;
+        info = fs.statSync(arquivo);
       } catch {
         return null; // listado mas ja apagado (limpeza) - nao registra de novo
       }
-      return { seq: i.seq, file_path: arquivo, start_offset: i.inicio, end_offset: i.fim, bytes };
+      // mtime = quando o ffmpeg fechou o pedaco = hora de relogio do FIM dele.
+      // E a ponte entre o chat/clipes do publico (hora de relogio) e o tempo
+      // da gravacao.
+      return {
+        seq: i.seq,
+        file_path: arquivo,
+        start_offset: i.inicio,
+        end_offset: i.fim,
+        bytes: info.size,
+        closed_at: info.mtime.toISOString(),
+      };
     }).filter(Boolean);
     await livesRepository.insertSegments(sessao.id, kind, itens);
   }

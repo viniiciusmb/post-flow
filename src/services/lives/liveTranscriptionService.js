@@ -20,7 +20,10 @@ function analisarAudio(arquivo, duracao) {
   return new Promise((resolve, reject) => {
     const filho = spawn(FFMPEG, [
       '-hide_banner', '-nostats', '-i', arquivo,
-      '-af', 'silencedetect=noise=-35dB:d=1,ebur128=peak=true:framelog=verbose',
+      // ebur128 SEM framelog: no nivel de log padrao ele imprime o volume
+      // momentaneo 10x por segundo ("t: 12.3 ... M: -18.2"). A media do bloco
+      // quase nao varia; o grito so aparece no segundo (ver interpretarAnalise).
+      '-af', 'silencedetect=noise=-35dB:d=1,ebur128=peak=true',
       '-f', 'null', '-',
     ]);
     let saida = '';
@@ -54,7 +57,21 @@ function interpretarAnalise(saida, duracao) {
   const integrado = saida.match(/Summary:[\s\S]*?I:\s*(-?[\d.]+|-inf)\s*LUFS/);
   const pico = saida.match(/True peak:[\s\S]*?Peak:\s*(-?[\d.]+|-inf)\s*dBFS/);
   const num = (m) => (m && m[1] !== '-inf' ? Number(m[1]) : null);
-  return { silencioSegundos: Math.min(silencioTotal, duracao || silencioTotal), loudness: num(integrado), pico: num(pico) };
+  // Volume momentaneo (janela de 400ms do ebur128) -> o MAIOR de cada
+  // segundo do bloco. -70 e o piso do medidor (silencio).
+  const momentaneo = [];
+  for (const m of saida.matchAll(/\bt:\s*([\d.]+)\s+TARGET:\S+\s+LUFS\s+M:\s*(-?[\d.]+|-inf)/g)) {
+    const seg = Math.floor(Number(m[1]));
+    const valor = m[2] === '-inf' ? -70 : Math.max(-70, Number(m[2]));
+    momentaneo[seg] = momentaneo[seg] === undefined ? valor : Math.max(momentaneo[seg], valor);
+  }
+  const porSegundo = Array.from(momentaneo, (v) => (v === undefined ? -70 : Math.round(v * 10) / 10));
+  return {
+    silencioSegundos: Math.min(silencioTotal, duracao || silencioTotal),
+    loudness: num(integrado),
+    pico: num(pico),
+    momentaneo: porSegundo,
+  };
 }
 
 // Processa UM bloco pendente. Devolve false quando nao ha nada na fila.
@@ -71,6 +88,7 @@ async function processarProximo() {
         loudness: analise.loudness,
         pico: analise.pico,
         silencio: analise.silencioSegundos,
+        momentaneo: analise.momentaneo,
       });
       return true;
     }
@@ -85,6 +103,7 @@ async function processarProximo() {
       loudness: analise.loudness,
       pico: analise.pico,
       silencio: analise.silencioSegundos,
+      momentaneo: analise.momentaneo,
       custoUsd,
     });
     await livesRepository.recordCost({
