@@ -474,6 +474,14 @@ async function countUserClipsFromJudge(sessionId, userId) {
   return Number(rows[0].n);
 }
 
+async function userClipRanges(sessionId, userId) {
+  const { rows } = await pool.query(
+    'SELECT start_offset, end_offset FROM live_clips WHERE session_id = $1 AND user_id = $2',
+    [sessionId, userId]
+  );
+  return rows;
+}
+
 // ---------------------------------------------------------------- configuracao por usuario
 
 async function getClipSettings(userId) {
@@ -670,6 +678,7 @@ module.exports = {
   approvedCandidates,
   followersWithQuality,
   countUserClipsFromJudge,
+  userClipRanges,
   getClipSettings,
   upsertClipSettings,
   insertClipOnce,

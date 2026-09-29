@@ -82,7 +82,7 @@ const TITLE_STYLES = {
   // do fundador (29/09/2026): um titulo "mais profissional e chamativo". Sem
   // contorno (texto limpo), e a cor da LETRA segue a da caixa: branca em
   // caixa escura, preta em caixa clara.
-  cartao: { tamanho: 64, corLetra: BRANCO, caixa: false, contorno: 0, corLetraPelaCaixa: true },
+  cartao: { tamanho: 76, corLetra: BRANCO, caixa: false, contorno: 0, corLetraPelaCaixa: true },
 };
 
 // Fontes que existem DENTRO do container (ver assets/fonts/LEIA-ME.md e o

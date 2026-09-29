@@ -377,8 +377,18 @@ async function distribuirSessao(sessao) {
     const nivel = livesUserSettings.nivel(seguidor.qualidade);
     const teto = Math.floor(nivel.porHora * horas);
     let jaTem = await livesRepository.countUserClipsFromJudge(sessao.id, seguidor.user_id);
+    // O mesmo momento pode chegar por dois caminhos (triagem e pico do
+    // publico) e virar dois candidatos quase iguais - visto no rejulgamento
+    // do thimagroo: "50 mil numa noite" e "Cinquenta mil numa noite". Momento
+    // que ja virou corte pra esta pessoa nao vira outro.
+    const trechosDados = (await livesRepository.userClipRanges(sessao.id, seguidor.user_id)).map((r) => ({
+      inicio: Number(r.start_offset),
+      fim: Number(r.end_offset),
+    }));
     for (const c of aprovados) {
       if (jaTem >= teto) break;
+      const trecho = { inicio: Number(c.final_start), fim: Number(c.final_end) };
+      if (trechosDados.some((t) => sobreposicao(t, trecho) > 0.4)) continue;
       if (Number(c.final_score) < nivel.notaMinima) continue;
       // Niveis altos exigem tambem que o PUBLICO tenha reagido forte (no teste
       // de 29/09, no nivel maximo, sairam cortes nota 9 com reacao morna).
@@ -399,6 +409,7 @@ async function distribuirSessao(sessao) {
       if (corte) {
         jaTem += 1;
         criados += 1;
+        trechosDados.push(trecho);
       }
     }
   }

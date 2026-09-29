@@ -390,6 +390,21 @@ test('cada usuario recebe so o que passa no nivel de qualidade dele, sem duplica
   assert.deepEqual(await notas(tolerante), [9, 7, 5], 'nivel 1: nota 5+');
 });
 
+test('o mesmo momento por dois caminhos (triagem e pico) vira UM corte so', async () => {
+  const canal = await novoCanal();
+  const u = await createClient();
+  await livesRepository.follow(u.id, canal.id);
+  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 1 });
+  const sessao = await novaSessao(canal, { recorded: 1800 });
+  for (const [fonte, ini, titulo] of [['triagem', 300, '50 mil numa noite'], ['sinal', 305, 'Cinquenta mil numa noite'], ['sinal', 900, 'outro momento']]) {
+    const c = await livesRepository.insertCandidate({ sessionId: sessao.id, source: fonte, inicio: ini, fim: ini + 40, nota: 8 });
+    await livesRepository.judgeCandidate(c.id, { status: 'escolhido', nota: 9, inicio: ini, fim: ini + 40, titulo, gancho: '', porque: '' });
+  }
+  await liveAnalysisService.distribuirSessao(sessao);
+  const { rows } = await pool.query('SELECT title FROM live_clips WHERE session_id = $1 ORDER BY start_offset', [sessao.id]);
+  assert.deepEqual(rows.map((r) => r.title), ['50 mil numa noite', 'outro momento']);
+});
+
 test('o teto por hora do nivel vale mesmo com muitos aprovados', async () => {
   const canal = await novoCanal();
   const u = await createClient();
