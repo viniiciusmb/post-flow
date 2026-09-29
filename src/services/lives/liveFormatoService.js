@@ -25,6 +25,8 @@ const FFPROBE = process.env.FFPROBE_PATH || 'ffprobe';
 const SAIDA = { w: 1080, h: 1920 };
 const MAX_PAINEIS = 3;
 const ALTURA_MIN_PAINEL = 20; // % da tela
+// Teto do painel da webcam: acima disso a camera toma a tela do conteudo.
+const ALTURA_MAX_JANELA = 50;
 
 const SCHEMA = {
   type: 'object',
@@ -138,10 +140,26 @@ function duracaoEDimensoes(arquivo) {
 //    fazia cada painel pegar a pessoa do lado - no teste com 3 pessoas lado a
 //    lado, os 3 paineis mostravam as mesmas 3 pessoas. O centro sobe um pouco:
 //    rosto fica na parte de cima do retangulo "cabeca ao peito".
-function encaixarRecorte(roi, painel, fonte, { variosPaineis = false } = {}) {
+//
+// cobrir=true: NUNCA sai do retangulo - corta pra dentro dele. E o modo da
+// webcam: sair da janela da camera pegava a borda preta, o @ do canal e os
+// icones de rede social em volta dela (visto nos cortes do wb3nji).
+function encaixarRecorte(roi, painel, fonte, { variosPaineis = false, cobrir = false } = {}) {
   const alvo = painel.w / painel.h; // proporcao em pixels
   let w = roi.largura * fonte.w;
   let h = roi.altura * fonte.h;
+  if (cobrir) {
+    const cx0 = (roi.x + roi.largura / 2) * fonte.w;
+    const cy0 = (roi.y + roi.altura / 2) * fonte.h;
+    if (w / h > alvo) w = h * alvo;
+    else h = w / alvo;
+    return {
+      x: (cx0 - w / 2) / fonte.w,
+      y: (cy0 - h / 2) / fonte.h,
+      largura: w / fonte.w,
+      altura: h / fonte.h,
+    };
+  }
   // Centro: o rosto que a IA apontou, se ele cair dentro do retangulo; senao,
   // o meio do retangulo.
   const focoValido = (v, ini, tam) => Number.isFinite(v) && v >= ini && v <= ini + tam;
@@ -171,6 +189,13 @@ function encaixarRecorte(roi, painel, fonte, { variosPaineis = false } = {}) {
 }
 
 const QUADRO_INTEIRO = Object.freeze({ tipo: 'quadro_inteiro', paineis: [] });
+
+// Altura (% da tela) em que a janela da camera cabe sem cortar nem esticar,
+// dentro de [20, teto]. Usado tambem pelo modo "Destacar a camera".
+function alturaDaJanela(cam, fonte, teto = ALTURA_MAX_JANELA) {
+  const natural = (100 * SAIDA.w * ((cam.altura * fonte.h) / (cam.largura * fonte.w))) / SAIDA.h;
+  return Math.round(Math.min(teto, Math.max(ALTURA_MIN_PAINEL, natural)));
+}
 
 function sobreposicaoDoMenor(a, b) {
   const ix = Math.max(0, Math.min(a.x + a.largura, b.x + b.largura) - Math.max(a.x, b.x));
@@ -216,17 +241,45 @@ function montarFormato(resposta, fonte) {
     if (repetido) rois.splice(i, 1);
   }
 
-  // Alturas somando 100, nenhuma abaixo do minimo (painel de 8% e uma fita).
-  const soma = rois.reduce((s, r) => s + r.pedido, 0);
-  let alturas = rois.map((r) => Math.round((r.pedido / soma) * 100));
-  if (alturas.some((a) => a < ALTURA_MIN_PAINEL)) alturas = rois.map(() => Math.round(100 / rois.length));
-  alturas[alturas.length - 1] += 100 - alturas.reduce((a, b) => a + b, 0);
+  // Painel de WEBCAM mostra EXATAMENTE a janela da camera (a caixa que a IA
+  // deu pra webcam na lista de pessoas), e a altura dele sai do formato da
+  // propria camera. Assim a cena inteira da camera aparece, sem esticar e sem
+  // pegar nada em volta. So quando a camera e alta/larga demais pro limite do
+  // painel (20% a 50%) e que o recorte corta um pouco - sempre pra dentro.
+  const webcams = (resposta.pessoas_da_live || []).filter((pe) => pe.tipo === 'webcam' && caixaValida(caixa(pe)));
+  for (const r of rois) {
+    const cam = webcams.find((pe) => estaNoPainel(pe, r));
+    if (cam) r.janela = caixa(cam);
+  }
+  const soJanelas = rois.every((r) => r.janela);
 
-  const paineis = rois.map((r, i) => ({
-    ...encaixarRecorte(r, { w: SAIDA.w, h: (SAIDA.h * alturas[i]) / 100 }, fonte, { variosPaineis: rois.length > 1 }),
-    alturaPercent: alturas[i],
-    mostra: r.mostra,
-  }));
+  const alturas = rois.map(() => null);
+  let reservado = 0;
+  if (!soJanelas) {
+    rois.forEach((r, i) => {
+      if (!r.janela) return;
+      const natural = (100 * SAIDA.w * ((r.janela.altura * fonte.h) / (r.janela.largura * fonte.w))) / SAIDA.h;
+      alturas[i] = Math.round(Math.min(ALTURA_MAX_JANELA, Math.max(ALTURA_MIN_PAINEL, natural)));
+      reservado += alturas[i];
+    });
+  }
+  // O resto da tela vai pros outros paineis, na proporcao que a IA pediu,
+  // nenhum abaixo do minimo (painel de 8% e uma fita).
+  const livres = rois.map((r, i) => (alturas[i] === null ? i : -1)).filter((i) => i >= 0);
+  const somaPedida = livres.reduce((s, i) => s + rois[i].pedido, 0);
+  livres.forEach((i) => { alturas[i] = Math.round(((100 - reservado) * rois[i].pedido) / somaPedida); });
+  if (livres.some((i) => alturas[i] < ALTURA_MIN_PAINEL)) {
+    livres.forEach((i) => { alturas[i] = Math.round((100 - reservado) / livres.length); });
+  }
+  alturas[livres.length ? livres[livres.length - 1] : alturas.length - 1] += 100 - alturas.reduce((a, b) => a + b, 0);
+
+  const paineis = rois.map((r, i) => {
+    const alvo = { w: SAIDA.w, h: (SAIDA.h * alturas[i]) / 100 };
+    const recorte = r.janela && !soJanelas
+      ? encaixarRecorte(r.janela, alvo, fonte, { cobrir: true })
+      : encaixarRecorte(r, alvo, fonte, { variosPaineis: rois.length > 1 });
+    return { ...recorte, alturaPercent: alturas[i], mostra: r.mostra, ...(r.janela ? { janelaDaCamera: true } : {}) };
+  });
   return { tipo: 'paineis', paineis, motivo: String(resposta.motivo || '').slice(0, 200) };
 }
 
@@ -375,4 +428,4 @@ async function escolherFormato(videoPath, inicio, fim, custo) {
   }
 }
 
-module.exports = { escolherFormato, montarFormato, garantirPessoas, descartarImagensParadas, mudancaNaArea, MUDANCA_MINIMA_DE_PESSOA, encaixarRecorte, dimensoes: duracaoEDimensoes, SCHEMA, INSTRUCAO };
+module.exports = { alturaDaJanela, escolherFormato, montarFormato, garantirPessoas, descartarImagensParadas, mudancaNaArea, MUDANCA_MINIMA_DE_PESSOA, encaixarRecorte, dimensoes: duracaoEDimensoes, SCHEMA, INSTRUCAO };

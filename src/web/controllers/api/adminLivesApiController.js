@@ -81,8 +81,28 @@ function opcoesParaApi(c) {
   };
 }
 
+// Status ao vivo/offline dos canais direto da Twitch. Com o modulo DESLIGADO
+// o monitor nao roda, e a tela mostrava "Offline" pra canal que estava ao vivo
+// (visto em 29/09/2026 com o thimagroo: nunca tinha sido consultado). A
+// consulta e gratuita; so e refeita se a ultima tiver mais de 60s.
+async function atualizarStatus(canais, { forcar = false } = {}) {
+  if (!twitchApi.configurado()) return;
+  const velhos = canais.filter((c) => forcar || !c.last_checked_at || Date.now() - new Date(c.last_checked_at).getTime() > 60_000);
+  if (!velhos.length) return;
+  try {
+    const aoVivo = await twitchApi.buscarAoVivo(velhos.map((c) => c.login));
+    for (const c of velhos) {
+      const st = aoVivo.get(c.login);
+      await livesRepository.updateChannelStatus(c.id, { isLive: Boolean(st), titulo: st?.titulo, jogo: st?.jogo, espectadores: st?.espectadores });
+    }
+  } catch {
+    // Twitch fora do ar: a tela mostra o ultimo status conhecido.
+  }
+}
+
 async function estado(req, res) {
   const userId = req.session.user.id;
+  await atualizarStatus(await livesRepository.listChannelsForUser(userId));
   const [ligadoNoPainel, cfg, canais, custoHoje, custo7d, opcoes] = await Promise.all([
     require('../../../repositories/settingsRepository').getValue('lives_enabled', false),
     livesSettings.obterConfig(),
@@ -215,6 +235,7 @@ async function adicionarCanal(req, res) {
     profileImageUrl: usuario.imagem,
   });
   await livesRepository.follow(req.session.user.id, canal.id);
+  await atualizarStatus([canal], { forcar: true });
   return estado(req, res);
 }
 

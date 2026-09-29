@@ -494,11 +494,13 @@ async function cameraCom(respostas) {
   }
 }
 
-test('camera: aceita a webcam no canto quando os dois quadros concordam', async () => {
+test('camera: aceita a webcam no canto quando os dois quadros concordam, recortando a janela exata', async () => {
   const canto = { tem_webcam: true, x: 0.02, y: 0.6, largura: 0.2, altura: 0.31, confianca: 90 };
   const cam = await cameraCom([canto, { ...canto, x: 0.025 }]);
   assert.ok(cam, 'devia aceitar');
-  assert.ok(cam.x < 0.02 && cam.largura > 0.2, 'com folga em volta');
+  // Sem folga: a janela exata (media dos dois quadros). Folga pegava a borda
+  // preta e o @ do canal em volta da camera.
+  assert.ok(Math.abs(cam.x - 0.0225) < 1e-9 && Math.abs(cam.largura - 0.2) < 1e-9);
 });
 
 test('camera: rosto GRANDE do video assistido (erro real de 28/09) e recusado', async () => {
@@ -643,6 +645,45 @@ test('formato: "webcam" que nao muda entre os quadros e a foto do canal, e sai d
   } finally {
     desfazer();
   }
+});
+
+test('formato: painel da webcam recorta EXATAMENTE a janela da camera, com a altura no formato dela', () => {
+  // Pedido de 29/09: a webcam era esticada pro painel e o recorte saia da
+  // janela, pegando a borda preta, o @ do canal e os icones em volta.
+  const janela = { tipo: 'webcam', x: 0.02, y: 0.62, largura: 0.2, altura: 0.31, foco_x: 0.12, foco_y: 0.75 };
+  const f = liveFormatoService.montarFormato({
+    pessoas_da_live: [janela],
+    formato: 'paineis',
+    paineis: [
+      painel({ mostra: 'conteudo', x: 0.25, y: 0, largura: 0.5, altura: 1, altura_na_tela: 65 }),
+      // A IA pediu a webcam com folga e 35% de altura - quem manda e a janela.
+      painel({ mostra: 'webcam', x: 0, y: 0.55, largura: 0.3, altura: 0.45, altura_na_tela: 35 }),
+    ],
+    motivo: '',
+  }, FONTE_720P);
+  const [conteudo, cam] = f.paineis;
+  assert.equal(cam.janelaDaCamera, true);
+  // 256x223 px de camera -> 1080x942 no corte = 49% da tela.
+  assert.equal(cam.alturaPercent, 49);
+  assert.equal(conteudo.alturaPercent, 51);
+  // O recorte e a janela (so arredondamento), nada em volta dela.
+  assert.ok(cam.x >= janela.x - 0.001 && cam.x + cam.largura <= janela.x + janela.largura + 0.001);
+  assert.ok(cam.y >= janela.y - 0.001 && cam.y + cam.altura <= janela.y + janela.altura + 0.001);
+  assert.ok(cam.largura > 0.19 && cam.altura > 0.3, 'a cena inteira da camera');
+});
+
+test('formato: camera muito alta cabe no teto de 50% cortando pra DENTRO, nunca pra fora', () => {
+  const alta = { tipo: 'webcam', x: 0.8, y: 0.1, largura: 0.15, altura: 0.8, foco_x: 0.87, foco_y: 0.3 };
+  const f = liveFormatoService.montarFormato({
+    pessoas_da_live: [alta],
+    formato: 'paineis',
+    paineis: [painel({ mostra: 'jogo', x: 0, y: 0, largura: 0.8, altura: 1, altura_na_tela: 60 }), painel({ mostra: 'webcam', ...alta, altura_na_tela: 40 })],
+    motivo: '',
+  }, FONTE_720P);
+  const cam = f.paineis[1];
+  assert.equal(cam.alturaPercent, 50);
+  assert.ok(cam.x >= alta.x - 0.001 && cam.x + cam.largura <= alta.x + alta.largura + 0.001);
+  assert.ok(cam.y >= alta.y - 0.001 && cam.y + cam.altura <= alta.y + alta.altura + 0.001);
 });
 
 test('formato: resposta inutilizavel cai no quadro inteiro (nunca deixa ninguem de fora)', () => {

@@ -66,12 +66,20 @@ test('adicionar canal: nome invalido e 400; canal que nao existe e 404; valido e
   const desfazer = [
     trocar(twitchApi, 'configurado', () => true),
     trocar(twitchApi, 'buscarUsuario', async (l) => (l === login ? { id: '123', login, nome: 'Canal Teste', imagem: null } : null)),
+    // O canal esta AO VIVO na Twitch agora.
+    trocar(twitchApi, 'buscarAoVivo', async (logins) => new Map(logins.filter((l) => l === login).map((l) => [l, { titulo: 'live', jogo: 'Just Chatting', espectadores: 1823 }]))),
   ];
   try {
     assert.equal((await agent.post('/api/admin/lives/canais', { canal: 'naoexiste_xyz' })).status, 404);
     const r = await agent.post('/api/admin/lives/canais', { canal: `https://twitch.tv/${login}` });
     assert.equal(r.status, 200);
-    assert.ok(r.body.canais.some((c) => c.login === login && c.nome === 'Canal Teste'));
+    const canal = r.body.canais.find((c) => c.login === login);
+    assert.equal(canal.nome, 'Canal Teste');
+    // Com o modulo DESLIGADO (padrao), o canal aparece ao vivo na hora - antes
+    // aparecia "Offline" porque so o monitor (que so roda ligado) consultava.
+    assert.equal(r.body.ligado, false);
+    assert.equal(canal.aoVivo, true);
+    assert.equal(canal.espectadores, 1823);
   } finally {
     desfazer.forEach((d) => d());
   }

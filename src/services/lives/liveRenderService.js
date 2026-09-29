@@ -89,10 +89,6 @@ const SCHEMA_CAMERA = {
   },
 };
 
-// Folga em volta do retangulo detectado (fracao do proprio tamanho): a
-// deteccao costuma cortar o topo da cabeca e os ombros.
-const FOLGA_CAMERA = 0.06;
-
 // Webcam de verdade e uma janela SOBREPOSTA e pequena, num canto. Visto no
 // teste de 28/09/2026: numa live de "react", o video assistido tambem mostra
 // gente, e a IA marcou o rosto GRANDE do video como se fosse a webcam - o corte
@@ -157,16 +153,12 @@ async function localizarCamera(videoPath, inicio, fim, custo) {
       detectarNoQuadro(videoPath, inicio + duracao * 0.7, custo),
     ]);
     if (!a || !b || iou(a, b) < 0.5) return null;
-    // Uniao dos dois (pega a camera inteira mesmo se um quadro cortou) + folga.
-    const x0 = Math.min(a.x, b.x);
-    const y0 = Math.min(a.y, b.y);
-    const x1 = Math.max(a.x + a.largura, b.x + b.largura);
-    const y1 = Math.max(a.y + a.altura, b.y + b.altura);
-    const fx = (x1 - x0) * FOLGA_CAMERA;
-    const fy = (y1 - y0) * FOLGA_CAMERA;
-    const x = Math.max(0, x0 - fx);
-    const y = Math.max(0, y0 - fy);
-    const cam = { x, y, largura: Math.min(1 - x, x1 - x0 + 2 * fx), altura: Math.min(1 - y, y1 - y0 + 2 * fy) };
+    // Media dos dois quadros, SEM folga em volta: a janela da camera e um
+    // retangulo exato na tela, e qualquer folga pega o que esta ao redor dela
+    // (borda preta, @ do canal, icones) - foi o "espaco preto no canto" que o
+    // fundador apontou em 29/09/2026.
+    const media = (k) => (a[k] + b[k]) / 2;
+    const cam = { x: media('x'), y: media('y'), largura: media('largura'), altura: media('altura') };
     return videoEditingService.webcamValida(cam) ? cam : null;
   } catch (err) {
     logger.warn(`Lives: nao consegui localizar a camera (${err.message}) - segue com o layout normal.`);
@@ -293,6 +285,12 @@ async function renderizar(clip) {
       await livesRepository.setClipWebcam(clip.id, { formato });
     } else if (camera.modo === 'auto') {
       webcam = await localizarCamera(bruto, inicioRel, fimRel, custo);
+      if (webcam) {
+        // A faixa tem o formato da propria camera (a altura escolhida na tela
+        // vira o TETO): a cena inteira da camera aparece, sem esticar.
+        const fonte = await liveFormatoService.dimensoes(bruto);
+        webcam.alturaPercent = liveFormatoService.alturaDaJanela(webcam, fonte, camera.alturaPercent);
+      }
       await livesRepository.setClipWebcam(clip.id, webcam);
     }
     await videoEditingService.renderClip({
@@ -307,7 +305,7 @@ async function renderizar(clip) {
         ...estilo,
         show_part_label: false,
         show_title: Boolean(titulo) && estilo.show_title !== false,
-        live_webcam: webcam ? { ...webcam, heightPercent: camera.alturaPercent, position: camera.posicao } : null,
+        live_webcam: webcam ? { ...webcam, heightPercent: webcam.alturaPercent, position: camera.posicao } : null,
         live_formato: formato,
       },
       partIndex: 1,
