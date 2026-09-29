@@ -272,7 +272,14 @@ Começa agora na VPS nova (decisão de 28/09), visível só para o admin.
   - **Canal ao vivo aparecendo "Offline"** (thimagroo, 1.823 espectadores): com o módulo desligado o monitor não roda e o status nunca era consultado. Agora a tela consulta a Twitch ao adicionar o canal e ao abrir (grátis, no máximo 1x/min) e mostra "Ao vivo · não está gravando" quando o módulo está desligado.
   - **Qualidade em barra arrastável colorida** (esquerda = mais cortes, direita = mais chance de viralizar), salva ao soltar.
   - **Título "Cartão"**: caixa arredondada, sombra e degradê da cor escolhida, letra preta/branca pelo contraste; imagem gerada por código (`scripts/gerar-cartao-titulo.js`). Disponível pros cortes de vídeo e de live (migration 092 só acrescenta a opção). Aplicado nos cortes de live do admin.
-- [ ] Teste AO VIVO da v2 (o chat só existe gravando ao vivo; a reanálise só tinha clipes de espectadores e volume).
+- [x] **Teste ao vivo (thimagroo, 86 min, 29/09)**: gravação 720p30, 2.024+ mensagens de chat lidas, 3 clipes de espectadores, formato de 2 pessoas nas pontas acertado. ~US$ 0,18/h.
+- [x] **Correções depois do teste ao vivo (29/09)**, a partir da avaliação do Vinicius ("cortes do nível máximo não foram bons; final sem sentido; título com sombra nas bordas"):
+  - **Fim do corte**: caso real — "Vai chegar um amigo novo (mas não é bom)" terminava em "que pode..." e perdia o "mas não vai ser uma boa". Agora o Whisper devolve FRASES na mesma chamada (sem custo extra), o ajuste fino vê a fala frase a frase e até 30 s depois do trecho, e o servidor garante início no começo e fim no FIM de uma frase (`encaixarNaFala`). Instrução pra terminar quando o assunto do título se conclui e nunca emendar assunto novo.
+  - **Juiz**: notas por partes (gancho, desfecho, emoção, entende sozinho) com tetos no servidor (sem desfecho ≤ 6; sem contexto ≤ 5; gancho fraco ≤ 7), comparação com os melhores já aprovados da live, raciocínio `medium`. Níveis 3–5 exigem reação do PÚBLICO (percentil do chat na própria live: 50%/75%/90%). Mesmo momento por dois caminhos vira um corte só.
+  - Rejulgamento das 62 avaliações do thimagroo com o juiz novo (US$ 0,06): no nível 5 só 4 passam (nota 9 + top 10% de reação).
+  - **Título "Cartão" v2**: sem sombra (formava um retângulo escuro), desenhado no tamanho exato de cada título (`src/lib/cartaoTitulo.js`), letra maior; nas lives, título que cairia em cima da legenda sobe pro topo.
+  - Limite honesto: o "fim do assunto" continua sendo decisão da IA — o corte sempre termina no fim de uma frase, mas pode incluir uma troca a mais.
+- [ ] Novo teste ao vivo com as correções de 29/09.
 
 ### Pendências conhecidas do módulo
 - **Postar o corte de live no TikTok** ainda não existe: o motor de postagem é amarrado às tabelas do fluxo do YouTube (`postings.video_id → videos → clips`), e ligar isso exige mexer em tabela existente — regra do prompt: pedir autorização antes.
