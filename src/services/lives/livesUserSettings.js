@@ -8,12 +8,15 @@ const clientVideoSettingsRepository = require('../../repositories/clientVideoSet
 // Qualidade 1 a 5. Mais alta = MENOS cortes, e so os que o juiz considerou
 // muito bons. Mais baixa = mais cortes, com momentos de menor chance de
 // viralizar. A avaliacao e a mesma pra todos; muda o corte de cada um.
+// reacaoMinima: em que posicao o momento precisa estar entre as reacoes do
+// publico daquela live (0,9 = entre os 10% de maior reacao). Ignorado em live
+// sem chat (sem sinal nao ha como comparar).
 const NIVEIS = Object.freeze({
-  1: { notaMinima: 5, porHora: 12, nome: 'Mais cortes' },
-  2: { notaMinima: 6, porHora: 8, nome: 'Muitos cortes' },
-  3: { notaMinima: 7, porHora: 5, nome: 'Equilibrado' },
-  4: { notaMinima: 8, porHora: 3, nome: 'Seletivo' },
-  5: { notaMinima: 9, porHora: 2, nome: 'Só o que tem cara de viral' },
+  1: { notaMinima: 5, porHora: 12, reacaoMinima: 0, nome: 'Mais cortes' },
+  2: { notaMinima: 6, porHora: 8, reacaoMinima: 0, nome: 'Muitos cortes' },
+  3: { notaMinima: 7, porHora: 5, reacaoMinima: 0.5, nome: 'Equilibrado' },
+  4: { notaMinima: 8, porHora: 3, reacaoMinima: 0.75, nome: 'Seletivo' },
+  5: { notaMinima: 9, porHora: 2, reacaoMinima: 0.9, nome: 'Só o que tem cara de viral' },
 });
 
 const PADRAO = Object.freeze({

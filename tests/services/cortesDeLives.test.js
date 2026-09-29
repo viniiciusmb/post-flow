@@ -720,6 +720,87 @@ test('titulo cartao: letra escura em caixa clara, clara em caixa escura, e a ima
   assert.ok(videoEditingService.TITLE_STYLES.cartao);
 });
 
+// ------------------------------------------------------------------ fim do corte, juiz e cartao (29/09)
+
+test('fim do corte vai ate o FIM da frase (caso real: terminou em "que pode..." e perdeu o desfecho)', () => {
+  // Frases como o Whisper devolve, no eixo do arquivo de trabalho.
+  const segments = [
+    { start: 20.0, end: 24.8, text: 'Nao conhece. Ta vendo ai, um amigo mesmo.' },
+    { start: 25.2, end: 36.4, text: 'Tem uma outra pessoa tambem vindo, um outro homem que ja foi seu amigo, que pode pedir uma chance de novo, mas nao vai ser uma boa, ta?' },
+    { start: 37.0, end: 38.2, text: 'Ta bom.' },
+  ];
+  // A IA pediu pra terminar em 29,4s - no meio da frase, antes do desfecho.
+  const r = liveRenderService.encaixarNaFala({ inicio: 21, fim: 29.4, segments, words: [], duracao: 60 });
+  assert.equal(r.fim, 36.8, 'termina no fim da frase (36,4s) + respiro');
+  assert.equal(r.inicio, 19.85, 'comeca no inicio da frase');
+});
+
+test('fim do corte sem frase perto: usa a pausa entre palavras mais proxima', () => {
+  const words = [
+    { word: 'a', start: 10, end: 10.3 }, { word: 'b', start: 10.35, end: 10.7 },
+    { word: 'c', start: 11.5, end: 11.9 }, // pausa de 0,8s antes de "c"
+    { word: 'd', start: 11.95, end: 12.3 },
+  ];
+  const r = liveRenderService.encaixarNaFala({ inicio: 0, fim: 10.4, segments: [], words, duracao: 60 });
+  assert.equal(r.fim, 11.1, 'fim na pausa depois de "b" + respiro');
+});
+
+test('fim do corte nunca passa de 90s: volta pro fim de uma frase que caiba', () => {
+  const segments = [{ start: 0, end: 50, text: 'x' }, { start: 50.5, end: 85, text: 'y' }, { start: 85.5, end: 100, text: 'z' }];
+  const r = liveRenderService.encaixarNaFala({ inicio: 0, fim: 95, segments, words: [], duracao: 120 });
+  assert.equal(r.fim, 85.4);
+});
+
+test('juiz: sem desfecho a nota nao passa de 6; sem contexto, de 5; gancho fraco, de 7', () => {
+  const { aplicarTetos } = liveAnalysisService;
+  assert.equal(aplicarTetos({ nota: 9, gancho_forte: 9, desfecho_claro: 9, emocao: 9, entende_sozinho: true }), 9);
+  assert.equal(aplicarTetos({ nota: 9, gancho_forte: 9, desfecho_claro: 4, emocao: 9, entende_sozinho: true }), 6);
+  assert.equal(aplicarTetos({ nota: 9, gancho_forte: 9, desfecho_claro: 9, emocao: 9, entende_sozinho: false }), 5);
+  assert.equal(aplicarTetos({ nota: 9, gancho_forte: 4, desfecho_claro: 9, emocao: 9, entende_sozinho: true }), 7);
+});
+
+test('nivel maximo exige reacao forte do PUBLICO, nao so nota alta', async () => {
+  const canal = await novoCanal();
+  const u = await createClient();
+  await livesRepository.follow(u.id, canal.id);
+  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 5 });
+  const sessao = await novaSessao(canal, { recorded: 600 });
+  // Linha do tempo: pedacos de 10s fechando no relogio, e chat normal (5
+  // msgs/5s) com UM pico forte aos ~400s de gravacao.
+  const t0 = Date.now() - 600_000;
+  await livesRepository.insertSegments(sessao.id, 'video', Array.from({ length: 60 }, (_, i) => ({
+    seq: i, file_path: `/x/${i}.ts`, start_offset: i * 10, end_offset: (i + 1) * 10, bytes: 1,
+    closed_at: new Date(t0 + (i + 1) * 10_000).toISOString(),
+  })));
+  const baldes = Array.from({ length: 120 }, (_, i) => ({ bucket_at: new Date(t0 + i * 5000).toISOString(), msgs: 5, risadas: 0, hype: 0 }));
+  baldes[81] = { ...baldes[81], msgs: 60, risadas: 30 };
+  await livesRepository.saveChatBuckets(sessao.id, baldes);
+  // Dois candidatos nota 9: um NO pico, outro num trecho sem reacao.
+  for (const [ini, titulo] of [[370, 'no pico'], [100, 'sem reacao']]) {
+    const c = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: ini, fim: ini + 40, nota: 8 });
+    await livesRepository.judgeCandidate(c.id, { status: 'escolhido', nota: 9, inicio: ini, fim: ini + 40, titulo, gancho: '', porque: '' });
+  }
+  await liveAnalysisService.distribuirSessao(sessao);
+  const { rows } = await pool.query('SELECT title FROM live_clips WHERE session_id = $1', [sessao.id]);
+  assert.deepEqual(rows.map((r) => r.title), ['no pico']);
+});
+
+test('cartao do titulo: sem sombra (bordas transparentes), no tamanho pedido', () => {
+  const zlib = require('zlib');
+  const { gerarPng } = require('../../src/lib/cartaoTitulo');
+  const png = gerarPng(400, 200);
+  assert.equal(png.readUInt32BE(16), 400);
+  assert.equal(png.readUInt32BE(20), 200);
+  // Descomprime e confere o canto (fora do arredondado) e o meio da borda de
+  // cima: nada de "sombra" - alfa zero no canto, cartao opaco no meio.
+  const idat = png.subarray(png.indexOf('IDAT') + 4, png.indexOf('IEND') - 8);
+  const cru = zlib.inflateSync(idat);
+  const alfa = (x, y) => cru[y * (1 + 400 * 4) + 1 + x * 4 + 3];
+  assert.equal(alfa(0, 0), 0, 'canto transparente');
+  assert.equal(alfa(399, 199), 0);
+  assert.equal(alfa(200, 100), 255, 'miolo opaco');
+});
+
 test('retangulo de camera absurdo e recusado (cai no layout normal)', () => {
   assert.equal(videoEditingService.webcamValida({ x: 0.9, y: 0.9, largura: 0.3, altura: 0.3 }), null, 'sai do quadro');
   assert.equal(videoEditingService.webcamValida({ x: 0, y: 0, largura: 0.01, altura: 0.2 }), null, 'pequeno demais');

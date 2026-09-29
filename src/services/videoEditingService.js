@@ -790,6 +790,19 @@ function buildBackgroundFilter({ w, h, subtitlesFilter, style, heightPercent, of
 // ANTES da legenda (pro texto ficar por cima do papel). Como overlay exige
 // duas entradas, qualquer caminho que use `-vf` simples vira filter_complex
 // aqui - por isso a funcao recebe o resultado do buildFilter e o converte.
+// Tamanho do fundo atras do titulo (papel rasgado ou cartao). A altura
+// natural e a da imagem original na largura do papel; quando o titulo quebra
+// em mais linhas do que isso comporta, o fundo CRESCE em vez de deixar texto
+// pra fora (defeito relatado em 01/09/2026). O respiro garante que as letras
+// nunca encostem na borda.
+function tamanhoDoFundoDoTitulo(w, linhasDoTitulo, tamanhoDaFonte) {
+  const larguraPapel = Math.round(w * LARGURA_DO_PAPEL);
+  const alturaNatural = Math.round((larguraPapel * ALTURA_DO_PAPEL_ORIGINAL) / LARGURA_DO_PAPEL_ORIGINAL);
+  const alturaDoTexto = alturaDoTitulo(linhasDoTitulo, tamanhoDaFonte);
+  const alturaPapel = Math.max(alturaNatural, alturaDoTexto + 2 * RESPIRO_DO_PAPEL);
+  return { larguraPapel, alturaPapel };
+}
+
 function aplicarPapelRasgado({
   resultado,
   papelIndice,
@@ -819,17 +832,7 @@ function aplicarPapelRasgado({
   }
 
   const { r, g, b } = hexParaFatores(corHex);
-  const larguraPapel = Math.round(w * LARGURA_DO_PAPEL);
-
-  // Altura natural do papel: a imagem esticada proporcionalmente pra largura
-  // acima. So e usada quando o titulo cabe nela.
-  const alturaNatural = Math.round((larguraPapel * ALTURA_DO_PAPEL_ORIGINAL) / LARGURA_DO_PAPEL_ORIGINAL);
-
-  // Quando o titulo quebra em mais linhas do que o papel comporta, o papel
-  // CRESCE em vez de deixar sobrar texto pra fora dele. O respiro garante que
-  // as letras nunca encostem na borda rasgada.
-  const alturaDoTexto = alturaDoTitulo(linhasDoTitulo, tamanhoDaFonte);
-  const alturaPapel = Math.max(alturaNatural, alturaDoTexto + 2 * RESPIRO_DO_PAPEL);
+  const { larguraPapel, alturaPapel } = tamanhoDoFundoDoTitulo(w, linhasDoTitulo, tamanhoDaFonte);
 
   // A imagem e BRANCA: multiplicar cada canal pelo fator da cor da exatamente
   // a cor pedida, e a transparencia das bordas passa intacta (por isso os
@@ -1191,7 +1194,22 @@ async function renderClip({
 
   // Papel rasgado atras do titulo. So entra quando o estilo pede E o titulo
   // vai aparecer - papel sem titulo seria uma faixa de cor no meio do video.
-  const imagemDoTitulo = IMAGEM_ATRAS_DO_TITULO[titleStyle] || null;
+  const linhasDoTitulo = quebrarTitulo(
+    String(title || '').trim().replace(/[{}]/g, ''),
+    fonteValida(settings.title_font),
+    (TITLE_STYLES[titleStyle] || TITLE_STYLES.classic).tamanho
+  ).length;
+  const tamanhoDoTitulo = (TITLE_STYLES[titleStyle] || TITLE_STYLES.classic).tamanho;
+  let imagemDoTitulo = IMAGEM_ATRAS_DO_TITULO[titleStyle] || null;
+  // O cartao e desenhado NO TAMANHO EXATO deste titulo: esticar uma imagem
+  // fixa pra caber duas linhas deformava os cantos arredondados.
+  let cartaoTemporario = null;
+  if (titleStyle === 'cartao' && titleSeconds > 0) {
+    const { larguraPapel, alturaPapel } = tamanhoDoFundoDoTitulo(w, linhasDoTitulo, tamanhoDoTitulo);
+    cartaoTemporario = outputPath.replace(/\.mp4$/, '.cartao.png');
+    fs.writeFileSync(cartaoTemporario, require('../lib/cartaoTitulo').gerarPng(larguraPapel, alturaPapel));
+    imagemDoTitulo = cartaoTemporario;
+  }
   const usaPapel = Boolean(imagemDoTitulo) && titleSeconds > 0 && fs.existsSync(imagemDoTitulo);
 
   let resultadoFiltro = buildFilter({
@@ -1219,12 +1237,8 @@ async function renderClip({
       // O papel e o texto precisam partir da MESMA contagem de linhas, senao
       // voltam a discordar - por isso a quebra e feita pela mesma funcao que o
       // .ass usa, com a mesma fonte e o mesmo corpo de letra.
-      linhasDoTitulo: quebrarTitulo(
-        String(title || '').trim().replace(/[{}]/g, ''),
-        fonteValida(settings.title_font),
-        (TITLE_STYLES[titleStyle] || TITLE_STYLES.classic).tamanho
-      ).length,
-      tamanhoDaFonte: (TITLE_STYLES[titleStyle] || TITLE_STYLES.classic).tamanho,
+      linhasDoTitulo,
+      tamanhoDaFonte: tamanhoDoTitulo,
     });
   }
 
@@ -1290,6 +1304,7 @@ async function renderClip({
       await runFfmpeg(args);
     }
   } finally {
+    if (cartaoTemporario) fs.rm(cartaoTemporario, { force: true }, () => {});
     if (assPath) fs.unlinkSync(assPath);
     // O quadro extraido e descartavel: existe so pra esta renderizacao.
     if (framePath) fs.rmSync(framePath, { force: true });

@@ -18,6 +18,10 @@ async function transcribeAudio(audioFilePath, { language, checkCancelled } = {})
   form.append('model', 'whisper-1');
   form.append('response_format', 'verbose_json');
   form.append('timestamp_granularities[]', 'word');
+  // Frases (segmentos) com inicio e fim, na mesma chamada e sem custo extra:
+  // o corte de live usa pra terminar no FIM de uma frase, nunca no meio (ver
+  // liveRenderService). Quem nao usa (o fluxo do YouTube) so ignora o campo.
+  form.append('timestamp_granularities[]', 'segment');
   if (language) form.append('language', language);
 
   // Confere pausa a cada 2s enquanto espera a OpenAI responder - sem isso,
@@ -59,6 +63,7 @@ async function transcribeAudio(audioFilePath, { language, checkCancelled } = {})
     // E o que impede a IA de escrever titulo em ingles pra video em portugues.
     language: data.language || null,
     words: (data.words || []).map((w) => ({ word: w.word, start: w.start, end: w.end })),
+    segments: (data.segments || []).map((sg) => ({ start: sg.start, end: sg.end, text: String(sg.text || '').trim() })),
     durationSeconds: data.duration || 0,
     costUsd: whisperCostUsd(data.duration),
   };

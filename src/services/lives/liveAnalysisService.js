@@ -33,6 +33,16 @@ const NOTA_MINIMA_TRIAGEM = 6;
 const NOTA_MINIMA_APROVADO = 5;
 const CANDIDATOS_POR_JULGAMENTO = 12;
 
+// Tetos da nota final a partir das notas por partes - garantidos aqui, nao so
+// pedidos: no teste de 29/09 o juiz deu 9 a cortes sem desfecho.
+function aplicarTetos(a) {
+  let nota = Math.max(0, Math.min(10, Math.round(Number(a.nota))));
+  if (a.entende_sozinho === false) nota = Math.min(nota, 5);
+  if (Number(a.desfecho_claro) < 6) nota = Math.min(nota, 6);
+  if (Number(a.gancho_forte) < 6) nota = Math.min(nota, 7);
+  return nota;
+}
+
 function mmss(segundos) {
   const s = Math.max(0, Math.round(segundos));
   const h = Math.floor(s / 3600);
@@ -211,9 +221,16 @@ const SCHEMA_JUIZ = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['id', 'nota', 'inicio_s', 'fim_s', 'titulo', 'gancho', 'porque'],
+        required: ['id', 'gancho_forte', 'desfecho_claro', 'emocao', 'entende_sozinho', 'nota', 'inicio_s', 'fim_s', 'titulo', 'gancho', 'porque'],
         properties: {
           id: { type: 'integer' },
+          // Avaliado ANTES da nota (0-10 cada): obrigar a pensar por partes e
+          // o que deixa a nota final calibrada, e o servidor usa pra aplicar
+          // tetos (ver aplicarTetos).
+          gancho_forte: { type: 'integer' },
+          desfecho_claro: { type: 'integer' },
+          emocao: { type: 'integer' },
+          entende_sozinho: { type: 'boolean' },
           nota: { type: 'integer' },
           inicio_s: { type: 'number' },
           fim_s: { type: 'number' },
@@ -242,7 +259,10 @@ Nota de 0 a 10, calibrada:
 10 = obvio que viraliza (raro, no maximo 1 a cada varias horas); 9 = excelente; 8 = muito bom; 7 = bom, vale postar; 6 = fraco; 5 = so pra encher; 0-4 = nao e corte.
 Seja duro: numa live comum a maioria dos candidatos fica entre 3 e 6.
 
-Para cada candidato devolva: a nota; inicio_s e fim_s (segundos da gravacao) comecando no GANCHO - quem assiste precisa entender em 3 segundos - e terminando logo depois do desfecho/reacao, 15 a 90s; titulo curto (ate 60 caracteres) e gancho (ate 100) no idioma falado, sem hashtag; e "porque" em uma frase.
+Antes da nota, avalie por partes (0 a 10): gancho_forte (os 3 primeiros segundos prendem quem esta rolando o feed?), desfecho_claro (tem conclusao - a piada, a resposta, a revelacao, a reacao?), emocao (intensidade real da reacao), e entende_sozinho (quem NUNCA viu essa live entende o corte?).
+Sem desfecho claro nao e corte bom: a pessoa assiste e fica "e ai?".
+
+Para cada candidato devolva: as notas por partes; a nota final; inicio_s e fim_s (segundos da gravacao) comecando no GANCHO - quem assiste precisa entender em 3 segundos - e terminando logo depois do desfecho/reacao, 15 a 90s; titulo curto (ate 60 caracteres) e gancho (ate 100) no idioma falado, sem hashtag; e "porque" em uma frase.
 Avalie TODOS os candidatos recebidos, usando o id exatamente como veio.`;
 
 async function julgarSessao(sessao, { agora = Date.now() } = {}) {
@@ -274,13 +294,22 @@ async function julgarSessao(sessao, { agora = Date.now() } = {}) {
     );
   }
 
+  // Referencia: os melhores ja aprovados nesta live. Nota absoluta deriva
+  // (tudo vira 8 ou 9); comparando com o que ja passou, o 9 volta a ser raro.
+  const jaAprovados = (await livesRepository.approvedCandidates(sessao.id)).slice(0, 6);
+  const referencia = jaAprovados.length
+    ? `\n\nJa aprovados nesta live (compare: so de 9+ a algo do nivel dos melhores daqui):\n${jaAprovados.map((c) => `- nota ${c.final_score}: "${c.title}"`).join('\n')}`
+    : '';
+
   const resposta = await openaiLives.pedirJson({
     nome: 'juiz_live',
     sistema: SISTEMA_JUIZ,
-    usuario: `Canal: ${sessao.login}. Titulo da live: ${sessao.title || '(sem titulo)'}. Categoria: ${sessao.game_name || '-'}.\n\n${partes.join('\n\n')}`,
+    usuario: `Canal: ${sessao.login}. Titulo da live: ${sessao.title || '(sem titulo)'}. Categoria: ${sessao.game_name || '-'}.${referencia}\n\n${partes.join('\n\n')}`,
     schema: SCHEMA_JUIZ,
     modelo: openaiLives.MODELO_JUIZ,
-    raciocinio: 'low',
+    // 'medium': o juiz decide o que vira corte; pensar mais aqui custa
+    // centavos por hora e e onde a qualidade se decide.
+    raciocinio: 'medium',
   });
   await livesRepository.recordCost({
     channelId: sessao.live_channel_id,
@@ -299,7 +328,7 @@ async function julgarSessao(sessao, { agora = Date.now() } = {}) {
     const cand = porId.get(Number(a.id));
     if (!cand || vistos.has(cand.id)) continue; // id inventado ou repetido
     vistos.add(cand.id);
-    const nota = Math.max(0, Math.min(10, Math.round(Number(a.nota))));
+    const nota = aplicarTetos(a);
     const intervalo = ajustarIntervalo(a.inicio_s, a.fim_s, {
       min: Math.max(0, Number(cand.start_offset) - 30),
       max: Math.min(gravado, Number(cand.end_offset) + 30),
@@ -312,7 +341,7 @@ async function julgarSessao(sessao, { agora = Date.now() } = {}) {
       fim: intervalo?.fim ?? null,
       titulo: String(a.titulo || '').slice(0, 80),
       gancho: String(a.gancho || '').slice(0, 150),
-      porque: String(a.porque || '').slice(0, 300),
+      porque: `[gancho ${a.gancho_forte} · desfecho ${a.desfecho_claro} · emocao ${a.emocao}${a.entende_sozinho === false ? ' · precisa de contexto' : ''}] ${String(a.porque || '')}`.slice(0, 300),
     });
     if (aprovado) aprovados += 1;
   }
@@ -327,10 +356,22 @@ async function julgarSessao(sessao, { agora = Date.now() } = {}) {
 // Cada usuario recebe os aprovados que passam no nivel de qualidade dele,
 // respeitando o teto por hora do nivel (proporcional ao tempo gravado; a
 // primeira hora conta inteira).
+// Onde o momento esta entre as reacoes do PUBLICO daquela live (0 a 1): a
+// fracao das janelas de 10s com reacao menor que a dele. Relativo a propria
+// live, entao funciona igual em live de 500 e de 50 mil pessoas.
+function percentilDeReacao(linha, inicio, fim) {
+  const forcas = linha.janelas.map((j) => j.forca);
+  if (!forcas.length || Math.max(...forcas) <= 0) return null; // live sem sinal (sem chat)
+  const doMomento = Math.max(0, ...linha.janelas.filter((j) => j.inicio < fim && j.inicio + 10 > inicio).map((j) => j.forca));
+  return forcas.filter((f) => f < doMomento).length / forcas.length;
+}
+
 async function distribuirSessao(sessao) {
   const aprovados = await livesRepository.approvedCandidates(sessao.id);
   if (!aprovados.length) return 0;
   const horas = Math.max(1, Number(sessao.recorded_seconds) / 3600);
+  const linha = await liveSignalsService.linhaDaSessao(sessao.id, Math.max(1, Number(sessao.recorded_seconds)));
+  const percentis = new Map(aprovados.map((c) => [c.id, percentilDeReacao(linha, Number(c.final_start), Number(c.final_end))]));
   let criados = 0;
   for (const seguidor of await livesRepository.followersWithQuality(sessao.live_channel_id)) {
     const nivel = livesUserSettings.nivel(seguidor.qualidade);
@@ -339,6 +380,10 @@ async function distribuirSessao(sessao) {
     for (const c of aprovados) {
       if (jaTem >= teto) break;
       if (Number(c.final_score) < nivel.notaMinima) continue;
+      // Niveis altos exigem tambem que o PUBLICO tenha reagido forte (no teste
+      // de 29/09, no nivel maximo, sairam cortes nota 9 com reacao morna).
+      const percentil = percentis.get(c.id);
+      if (percentil !== null && percentil < nivel.reacaoMinima) continue;
       const corte = await livesRepository.insertClipOnce({
         sessionId: sessao.id,
         channelId: sessao.live_channel_id,
@@ -361,6 +406,8 @@ async function distribuirSessao(sessao) {
 }
 
 module.exports = {
+  aplicarTetos,
+  percentilDeReacao,
   triarSessao,
   candidatosDeSinal,
   julgarSessao,

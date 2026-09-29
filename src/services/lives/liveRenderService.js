@@ -29,17 +29,27 @@ const { ajustarIntervalo } = require('./liveAnalysisService');
 const logger = require('../../lib/logger');
 
 // Quanto de video em volta do trecho pedido entra no arquivo de trabalho: e o
-// espaco que o ajuste fino tem pra mover o inicio (achar o gancho) e o fim
-// (pegar a reacao inteira). Custa ~30s a mais de transcricao por corte
-// (~US$ 0,003).
-const MARGEM_S = 15;
+// espaco que o ajuste fino tem pra mover o inicio (achar o gancho) e o fim.
+// DEPOIS do trecho a folga e maior: o desfecho costuma vir logo depois de onde
+// o juiz marcou - no teste de 29/09 o corte "Vai chegar um amigo novo (mas nao
+// e bom)" terminou em "que pode..." e o "mas nao vai ser uma boa" ficou de
+// fora. Custa ~30s a mais de transcricao por corte (~US$ 0,003).
+const MARGEM_ANTES_S = 15;
+const MARGEM_DEPOIS_S = 30;
 
 function pastaDosCortes(userId) {
   return path.join(config.videoProcessing.workDir, 'lives', 'cortes', String(userId));
 }
 
-// Palavras agrupadas em linhas de ~4s com o tempo na frente: e o formato que
-// deixa o modelo apontar inicio/fim com precisao de segundo.
+// A fala FRASE A FRASE com inicio e fim - e o que deixa o modelo ver onde
+// cada frase termina (pedacos fixos de 4s cortavam frases ao meio e ele
+// escolhia o fim no meio de uma fala).
+function frasesComTempo(segments) {
+  return segments.map((sg) => `[${sg.start.toFixed(1)}s - ${sg.end.toFixed(1)}s] ${sg.text}`).join('\n');
+}
+
+// Palavras agrupadas em linhas de ~4s com o tempo na frente (usado quando o
+// Whisper nao devolve frases).
 function linhasComTempo(words) {
   const linhas = [];
   let atual = null;
@@ -51,6 +61,41 @@ function linhasComTempo(words) {
     atual.texto.push(w.word.trim());
   }
   return linhas.map((l) => `[${l.inicio.toFixed(1)}s] ${l.texto.join(' ')}`).join('\n');
+}
+
+// Encaixa inicio e fim do corte nos LIMITES DA FALA - garantido aqui, nao
+// pedido a IA (que no teste terminou o corte no meio de uma frase):
+//  - fim: vai ate o FIM da frase em andamento (mais um respiro). Se a frase
+//    for longa demais (a transcricao junta falas corridas), usa a pausa entre
+//    palavras mais proxima;
+//  - inicio: volta pro COMECO da frase em andamento.
+// Tempos em segundos do arquivo de trabalho; "duracao" e o fim do arquivo.
+const RESPIRO_FIM_S = 0.4;
+const PAUSA_MIN_S = 0.45;
+const ESTENDER_FIM_MAX_S = 10;
+const RECUAR_INICIO_MAX_S = 8;
+
+function encaixarNaFala({ inicio, fim, segments = [], words = [], duracao, duracaoMax = 90 }) {
+  let novoFim = fim;
+  const fraseDoFim = segments.find((sg) => sg.end >= fim - 0.3);
+  if (fraseDoFim && fraseDoFim.end - fim <= ESTENDER_FIM_MAX_S) {
+    novoFim = fraseDoFim.end + RESPIRO_FIM_S;
+  } else {
+    // Sem frase que termine perto: a pausa entre palavras mais proxima depois
+    // do fim pedido (ou a ultima palavra ja dita, se nao houver pausa).
+    const pausa = words.findIndex((w, i) => i + 1 < words.length && w.end >= fim - 1 && words[i + 1].start - w.end >= PAUSA_MIN_S && w.end - fim <= ESTENDER_FIM_MAX_S);
+    if (pausa >= 0) novoFim = words[pausa].end + RESPIRO_FIM_S;
+  }
+  let novoInicio = inicio;
+  const fraseDoInicio = [...segments].reverse().find((sg) => sg.start <= inicio + 0.3);
+  if (fraseDoInicio && inicio - fraseDoInicio.start <= RECUAR_INICIO_MAX_S) novoInicio = Math.max(0, fraseDoInicio.start - 0.15);
+  novoFim = Math.min(duracao, novoFim);
+  // Passou do teto: encurta pelo fim de uma frase anterior que ainda caiba.
+  if (novoFim - novoInicio > duracaoMax) {
+    const cabe = [...segments].reverse().find((sg) => sg.end + RESPIRO_FIM_S - novoInicio <= duracaoMax && sg.end > novoInicio + 15);
+    novoFim = cabe ? cabe.end + RESPIRO_FIM_S : novoInicio + duracaoMax;
+  }
+  return { inicio: Math.round(novoInicio * 100) / 100, fim: Math.round(novoFim * 100) / 100 };
 }
 
 const SCHEMA_AJUSTE = {
@@ -67,13 +112,13 @@ const SCHEMA_AJUSTE = {
 
 const SISTEMA_AJUSTE = `Voce faz o ajuste fino de um corte de live para TikTok. Recebe a fala com o tempo (segundos) de cada trecho e o que o corte deve mostrar.
 Devolva:
-- inicio_s: o ponto em que quem assiste entende o que esta acontecendo em ate 3 segundos (o gancho). Inclua so a preparacao necessaria, nunca comece no meio de uma frase;
-- fim_s: logo depois do desfecho ou da reacao - corte seco, sem "enrolacao" depois;
+- inicio_s: o COMECO de uma frase, no ponto em que quem assiste entende o que esta acontecendo em ate 3 segundos (o gancho). Inclua so a preparacao necessaria;
+- fim_s: o FIM de uma frase, DEPOIS do desfecho - quando o assunto do corte se conclui (a resposta, a piada, a revelacao, a reacao). Nunca termine no meio de uma fala nem antes da conclusao: se o desfecho vem nas frases seguintes, estenda ate ele;
 - duracao normalmente entre 25 e 60 segundos (nunca menos de 20, nunca mais de 90): corte curto demais perde a preparacao e ninguem entende a graca;
 - titulo curto (ate 60 caracteres) e gancho (ate 100) no idioma falado, sem hashtag. Se ja vierem bons, pode manter.`;
 
 const SISTEMA_CLIPAR_AGORA = `Alguem apertou "Clipar agora" durante uma live: algo interessante acabou de acontecer nos ultimos ~2 minutos e meio (normalmente perto do fim).
-Ache o MOMENTO que motivou o clique e devolva onde o corte comeca (o gancho, entendivel em 3 segundos, nunca no meio de uma frase) e termina (logo depois da reacao), normalmente entre 25 e 60 segundos (minimo 20), com titulo curto (ate 60) e gancho (ate 100) no idioma falado, sem hashtag.`;
+Ache o MOMENTO que motivou o clique e devolva onde o corte comeca (o COMECO de uma frase, com o gancho entendivel em 3 segundos) e termina (o FIM de uma frase, depois da conclusao/reacao - nunca no meio de uma fala), normalmente entre 25 e 60 segundos (minimo 20), com titulo curto (ate 60) e gancho (ate 100) no idioma falado, sem hashtag.`;
 
 const SCHEMA_CAMERA = {
   type: 'object',
@@ -172,7 +217,7 @@ async function renderizar(clip) {
 
   const inicioPedido = Number(clip.start_offset);
   const fimPedido = Number(clip.end_offset);
-  const segmentos = await livesRepository.videoSegmentsBetween(sessao.id, inicioPedido - MARGEM_S, fimPedido + MARGEM_S);
+  const segmentos = await livesRepository.videoSegmentsBetween(sessao.id, inicioPedido - MARGEM_ANTES_S, fimPedido + MARGEM_DEPOIS_S);
   if (!segmentos.length) throw new Error('Os pedacos gravados desse trecho ja foram apagados (retencao).');
 
   const pasta = pastaDosCortes(clip.user_id);
@@ -200,8 +245,8 @@ async function renderizar(clip) {
     // pedacos de 10s inteiros que o arquivo de trabalho carrega (ate 20s a mais
     // por corte, pagos no whisper-1). Os tempos das palavras voltam pro eixo
     // do arquivo de trabalho somando o inicio do recorte.
-    const audioDe = Math.max(0, inicioPedido - origem - MARGEM_S);
-    const audioAte = Math.min(duracaoBruto, fimPedido - origem + MARGEM_S);
+    const audioDe = Math.max(0, inicioPedido - origem - MARGEM_ANTES_S);
+    const audioAte = Math.min(duracaoBruto, fimPedido - origem + MARGEM_DEPOIS_S);
     await videoEditingService.runFfmpeg([
       '-ss', String(audioDe), '-to', String(audioAte), '-i', bruto,
       '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', audio,
@@ -210,6 +255,7 @@ async function renderizar(clip) {
     const transcricao = {
       ...transcricaoDoRecorte,
       words: transcricaoDoRecorte.words.map((w) => ({ ...w, start: w.start + audioDe, end: w.end + audioDe })),
+      segments: (transcricaoDoRecorte.segments || []).map((sg) => ({ ...sg, start: sg.start + audioDe, end: sg.end + audioDe })),
     };
     await livesRepository.recordCost({
       channelId: clip.live_channel_id,
@@ -242,7 +288,9 @@ async function renderizar(clip) {
       const r = await openaiLives.pedirJson({
         nome: cliparAgora ? 'clipar_agora' : 'ajuste_fino',
         sistema: cliparAgora ? SISTEMA_CLIPAR_AGORA : SISTEMA_AJUSTE,
-        usuario: `${pedido}\n\n${linhasComTempo(transcricao.words) || '(ninguem falou nada nesse trecho)'}`,
+        usuario: `${pedido}\n\nFala, frase a frase (segundos):\n${
+          (transcricao.segments.length ? frasesComTempo(transcricao.segments) : linhasComTempo(transcricao.words)) || '(ninguem falou nada nesse trecho)'
+        }`,
         schema: SCHEMA_AJUSTE,
         modelo: openaiLives.MODELO_JUIZ,
         raciocinio: 'low',
@@ -254,7 +302,7 @@ async function renderizar(clip) {
       // corte perdia a preparacao do momento.
       const limites = cliparAgora
         ? { min: 0, max: duracaoBruto, minDuracao: 20 }
-        : { min: Math.max(0, inicioRel - 20), max: Math.min(duracaoBruto, fimRel + 20), minDuracao: 20 };
+        : { min: Math.max(0, inicioRel - 20), max: Math.min(duracaoBruto, fimRel + MARGEM_DEPOIS_S), minDuracao: 20 };
       const ajuste = ajustarIntervalo(r.dados.inicio_s, r.dados.fim_s, limites);
       if (ajuste) {
         inicioRel = ajuste.inicio;
@@ -272,6 +320,16 @@ async function renderizar(clip) {
       if (cliparAgora) inicioRel = Math.max(0, fimRel - 60);
     }
 
+    // Garantia final: comeca no inicio de uma frase e termina no fim de uma.
+    const naFala = encaixarNaFala({
+      inicio: inicioRel,
+      fim: fimRel,
+      segments: transcricao.segments,
+      words: transcricao.words,
+      duracao: duracaoBruto,
+    });
+    inicioRel = naFala.inicio;
+    fimRel = naFala.fim;
     const words = transcricao.words.filter((w) => w.end > inicioRel && w.start < fimRel);
     const { estilo, camera } = await livesUserSettings.estiloParaRender(clip.user_id);
     // Enquadramento: 'ia' = a IA monta o formato deste corte (paineis ou
@@ -293,6 +351,12 @@ async function renderizar(clip) {
       }
       await livesRepository.setClipWebcam(clip.id, webcam);
     }
+    // Legenda e titulo na mesma altura se sobrepoem (visto no corte "Janela
+    // do banheiro caiu": legenda a 60% do topo, titulo a 62%). O titulo sobe
+    // pro topo - so aqui, nas lives: o estilo salvo nao muda.
+    const legendaDoTopo = 100 - Number(estilo.caption_height_percent ?? 14);
+    const tituloDoTopo = Number(estilo.title_height_percent ?? 8);
+    const titleHeight = Math.abs(legendaDoTopo - tituloDoTopo) < 15 ? 6 : tituloDoTopo;
     await videoEditingService.renderClip({
       videoPath: bruto,
       startSeconds: inicioRel,
@@ -305,6 +369,7 @@ async function renderizar(clip) {
         ...estilo,
         show_part_label: false,
         show_title: Boolean(titulo) && estilo.show_title !== false,
+        title_height_percent: titleHeight,
         live_webcam: webcam ? { ...webcam, heightPercent: webcam.alturaPercent, position: camera.posicao } : null,
         live_formato: formato,
       },
@@ -343,4 +408,4 @@ async function renderizarProximo() {
   return true;
 }
 
-module.exports = { renderizarProximo, renderizar, linhasComTempo, pastaDosCortes, localizarCamera, pareceOverlay, iou };
+module.exports = { renderizarProximo, renderizar, encaixarNaFala, frasesComTempo, linhasComTempo, pastaDosCortes, localizarCamera, pareceOverlay, iou };
