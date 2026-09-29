@@ -242,11 +242,17 @@ tudo pronto, com gatilho. Preparado e testado (nada mudou na produção):
   para a nova — antes disso o Let's Encrypt falharia e travaria o domínio.
 
 - [x] Avisar e aguardar o "pode ir". — 29/09: marcado para 30/09 03:00.
-- [ ] **Ação do Vinicius antes das 03:00:** baixar o TTL dos registros A de
+- [x] **Ação do Vinicius antes das 03:00:** baixar o TTL dos registros A de
   `postflowclips.com` e `postflowtiktok.com` de 14400 para 300 no painel de DNS da
   Hostinger (não é obrigatório com a ponte, mas encurta a espera).
-- [ ] **Ação do Vinicius depois das 03:00:** trocar os registros A dos dois domínios
+- [x] **Ação do Vinicius depois das 03:00:** trocar os registros A dos dois domínios
   para `177.7.61.54` (não mexer em MX nem no `www`, que segue o apex).
+  — **29/09: a troca foi ANTECIPADA** a pedido do Vinicius ("quando não tiver vídeo
+  processando, vamos fazer"): virada das 18:12 às 18:16, ~4 min fora do ar, todas
+  as conferências passaram. TTL e IP trocados só no `postflowclips.com`; o
+  `postflowtiktok.com` fica esquecido apontando pra antiga (o sistema não usa mais:
+  e-mail e site oficial são `postflowclips.com`). 18:27: HTTPS Let's Encrypt ativo na
+  nova para `postflowclips.com` e `www`.
 - [ ] Depois da virada: remover a ponte e o redirecionamento do túnel da antiga
   quando o DNS estiver estável (e o programa de bandeja reiniciado).
 - [ ] Parar só os processos do Post Flow na antiga.
