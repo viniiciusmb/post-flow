@@ -43,6 +43,7 @@ const livesUserSettings = require('../../src/services/lives/livesUserSettings');
 const liveChatService = require('../../src/services/lives/liveChatService');
 const liveSignalsService = require('../../src/services/lives/liveSignalsService');
 const videoEditingService = require('../../src/services/videoEditingService');
+const liveRenderService = require('../../src/services/lives/liveRenderService');
 const { createClient } = require('../helpers/db');
 
 test.after(async () => {
@@ -467,6 +468,40 @@ test('o render escolhe o layout da camera quando o corte traz a webcam', () => {
   // E sem webcam, nada muda pros cortes do YouTube.
   const semCamera = videoEditingService.buildFilter({ w: 1080, h: 1920, subtitlesFilter: null, fundo: null });
   assert.ok(semCamera.simpleFilter && !/vstack/.test(semCamera.simpleFilter));
+});
+
+async function cameraCom(respostas) {
+  const fila = [...respostas];
+  const desfazer = [
+    trocar(videoEditingService, 'runFfmpeg', async (args) => { fs.writeFileSync(args[args.length - 1], 'jpg'); }),
+    trocar(openaiLives, 'pedirJson', async () => ({ dados: fila.shift(), inputTokens: 1, outputTokens: 1, custoUsd: 0 })),
+  ];
+  try {
+    return await liveRenderService.localizarCamera(path.join(os.tmpdir(), `bruto-${Date.now()}.mp4`), 0, 40, async () => {});
+  } finally {
+    desfazer.forEach((d) => d());
+  }
+}
+
+test('camera: aceita a webcam no canto quando os dois quadros concordam', async () => {
+  const canto = { tem_webcam: true, x: 0.02, y: 0.6, largura: 0.2, altura: 0.31, confianca: 90 };
+  const cam = await cameraCom([canto, { ...canto, x: 0.025 }]);
+  assert.ok(cam, 'devia aceitar');
+  assert.ok(cam.x < 0.02 && cam.largura > 0.2, 'com folga em volta');
+});
+
+test('camera: rosto GRANDE do video assistido (erro real de 28/09) e recusado', async () => {
+  // Numeros exatos que a IA devolveu no corte 7 do teste: o rosto do video de
+  // "react", nao a webcam.
+  const rosto = { tem_webcam: true, x: 0.2412, y: 0.0264, largura: 0.5376, altura: 0.6272, confianca: 85 };
+  assert.equal(await cameraCom([rosto, rosto]), null);
+});
+
+test('camera: quadros que discordam (algo que se mexe) sao recusados', async () => {
+  const a = { tem_webcam: true, x: 0.02, y: 0.6, largura: 0.2, altura: 0.3, confianca: 90 };
+  const b = { tem_webcam: true, x: 0.7, y: 0.05, largura: 0.2, altura: 0.3, confianca: 90 };
+  assert.equal(await cameraCom([a, b]), null);
+  assert.equal(await cameraCom([a, { ...a, tem_webcam: false }]), null);
 });
 
 test('retangulo de camera absurdo e recusado (cai no layout normal)', () => {

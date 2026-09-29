@@ -55,17 +55,18 @@ function montarTranscricao(blocos, linha = null) {
     .join('\n');
 }
 
-// Puxa o intervalo pra dentro dos limites: dentro da janela e entre 15 e 90s.
-function ajustarIntervalo(inicio, fim, { min, max }) {
+// Puxa o intervalo pra dentro dos limites: dentro da janela e entre 15 e 90s
+// (o ajuste fino do render pede 20: "minDuracao").
+function ajustarIntervalo(inicio, fim, { min, max, minDuracao = DURACAO_MIN }) {
   let a = Math.max(min, Number(inicio));
   let b = Math.min(max, Number(fim));
   if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return null;
   if (b - a > DURACAO_MAX) b = a + DURACAO_MAX;
-  if (b - a < DURACAO_MIN) {
-    const falta = DURACAO_MIN - (b - a);
+  if (b - a < minDuracao) {
+    const falta = minDuracao - (b - a);
     a = Math.max(min, a - falta / 2);
-    b = Math.min(max, a + DURACAO_MIN);
-    if (b - a < DURACAO_MIN) return null;
+    b = Math.min(max, a + minDuracao);
+    if (b - a < minDuracao) return null;
   }
   return { inicio: Math.round(a * 10) / 10, fim: Math.round(b * 10) / 10 };
 }

@@ -68,11 +68,11 @@ const SISTEMA_AJUSTE = `Voce faz o ajuste fino de um corte de live para TikTok. 
 Devolva:
 - inicio_s: o ponto em que quem assiste entende o que esta acontecendo em ate 3 segundos (o gancho). Inclua so a preparacao necessaria, nunca comece no meio de uma frase;
 - fim_s: logo depois do desfecho ou da reacao - corte seco, sem "enrolacao" depois;
-- duracao entre 15 e 90 segundos;
+- duracao normalmente entre 25 e 60 segundos (nunca menos de 20, nunca mais de 90): corte curto demais perde a preparacao e ninguem entende a graca;
 - titulo curto (ate 60 caracteres) e gancho (ate 100) no idioma falado, sem hashtag. Se ja vierem bons, pode manter.`;
 
 const SISTEMA_CLIPAR_AGORA = `Alguem apertou "Clipar agora" durante uma live: algo interessante acabou de acontecer nos ultimos ~2 minutos e meio (normalmente perto do fim).
-Ache o MOMENTO que motivou o clique e devolva onde o corte comeca (o gancho, entendivel em 3 segundos, nunca no meio de uma frase) e termina (logo depois da reacao), entre 15 e 90 segundos, com titulo curto (ate 60) e gancho (ate 100) no idioma falado, sem hashtag.`;
+Ache o MOMENTO que motivou o clique e devolva onde o corte comeca (o gancho, entendivel em 3 segundos, nunca no meio de uma frase) e termina (logo depois da reacao), normalmente entre 25 e 60 segundos (minimo 20), com titulo curto (ate 60) e gancho (ate 100) no idioma falado, sem hashtag.`;
 
 const SCHEMA_CAMERA = {
   type: 'object',
@@ -92,21 +92,42 @@ const SCHEMA_CAMERA = {
 // deteccao costuma cortar o topo da cabeca e os ombros.
 const FOLGA_CAMERA = 0.06;
 
-// Acha a webcam do streamer num quadro do trecho (gpt-5-mini com imagem;
-// testado em 28/09/2026: acertou a camera no canto, o nano errou pra mais).
-// Devolve null quando nao ha webcam separada ou a IA nao tem certeza - ai o
-// corte sai com o layout normal do estilo.
-async function localizarCamera(videoPath, instante, custo) {
-  const quadro = `${videoPath}.quadro.jpg`;
+// Webcam de verdade e uma janela SOBREPOSTA e pequena, num canto. Visto no
+// teste de 28/09/2026: numa live de "react", o video assistido tambem mostra
+// gente, e a IA marcou o rosto GRANDE do video como se fosse a webcam - o corte
+// saiu com a mesma pessoa em cima e embaixo. Retangulo maior que isto nao e
+// overlay de camera (ou e a live inteira): fica o layout normal.
+const CAMERA_LARGURA_MAX = 0.45;
+const CAMERA_ALTURA_MAX = 0.55;
+const CAMERA_AREA_MAX = 0.2;
+
+const INSTRUCAO_CAMERA =
+  'Procure a WEBCAM do streamer: uma janela pequena sobreposta, normalmente num canto, mostrando a pessoa que faz a live. ' +
+  'ATENCAO: em live de "react" o video que o streamer esta assistindo ocupa a tela e tambem tem pessoas - isso NAO e a webcam. ' +
+  'Devolva o retangulo da webcam em FRACOES da imagem (0 a 1): x,y do canto superior esquerdo, largura, altura. ' +
+  'Se nao houver webcam sobreposta (ou a tela inteira ja for a camera), tem_webcam=false. Na duvida, tem_webcam=false. confianca de 0 a 100.';
+
+function pareceOverlay(c) {
+  return c.largura <= CAMERA_LARGURA_MAX && c.altura <= CAMERA_ALTURA_MAX && c.largura * c.altura <= CAMERA_AREA_MAX;
+}
+
+// Quanto dois retangulos se sobrepoem (0 a 1, intersecao sobre uniao).
+function iou(a, b) {
+  const ix = Math.max(0, Math.min(a.x + a.largura, b.x + b.largura) - Math.max(a.x, b.x));
+  const iy = Math.max(0, Math.min(a.y + a.altura, b.y + b.altura) - Math.max(a.y, b.y));
+  const inter = ix * iy;
+  const uniao = a.largura * a.altura + b.largura * b.altura - inter;
+  return uniao > 0 ? inter / uniao : 0;
+}
+
+async function detectarNoQuadro(videoPath, instante, custo) {
+  const quadro = `${videoPath}.quadro-${Math.round(instante * 10)}.jpg`;
   try {
     await videoEditingService.runFfmpeg(['-ss', String(instante), '-i', videoPath, '-frames:v', '1', '-q:v', '3', quadro]);
     const r = await openaiLives.pedirJson({
       nome: 'camera_live',
-      sistema: 'Voce localiza a camera (webcam) do streamer sobreposta num quadro de live.',
-      usuario:
-        'Existe uma webcam do streamer sobreposta na tela (um retangulo com a pessoa, separado do jogo/video)? ' +
-        'Devolva o retangulo em FRACOES da imagem (0 a 1): x,y do canto superior esquerdo, largura, altura. ' +
-        'Se a live inteira ja for a camera (sem jogo/tela por tras) ou nao houver webcam, tem_webcam=false. confianca de 0 a 100.',
+      sistema: 'Voce localiza a webcam do streamer sobreposta num quadro de live da Twitch.',
+      usuario: INSTRUCAO_CAMERA,
       schema: SCHEMA_CAMERA,
       modelo: openaiLives.MODELO_JUIZ,
       raciocinio: 'low',
@@ -115,22 +136,40 @@ async function localizarCamera(videoPath, instante, custo) {
     await custo('camera', r);
     const c = r.dados;
     if (!c.tem_webcam || c.confianca < 60) return null;
-    const fx = c.largura * FOLGA_CAMERA;
-    const fy = c.altura * FOLGA_CAMERA;
-    const x = Math.max(0, c.x - fx);
-    const y = Math.max(0, c.y - fy);
-    const cam = {
-      x,
-      y,
-      largura: Math.min(1 - x, c.largura + 2 * fx),
-      altura: Math.min(1 - y, c.altura + 2 * fy),
-    };
+    const cam = { x: c.x, y: c.y, largura: c.largura, altura: c.altura };
+    return videoEditingService.webcamValida(cam) && pareceOverlay(cam) ? cam : null;
+  } finally {
+    fs.rm(quadro, { force: true }, () => {});
+  }
+}
+
+// Acha a webcam do streamer em DOIS quadros do trecho (a 30% e a 70%) e so
+// aceita se os dois concordarem: um rosto do video assistido muda de lugar
+// entre um quadro e outro, a webcam sobreposta nao. Devolve null quando nao da
+// pra confiar - ai o corte sai com o layout normal do estilo, que e sempre
+// melhor que uma camera errada.
+async function localizarCamera(videoPath, inicio, fim, custo) {
+  try {
+    const duracao = fim - inicio;
+    const [a, b] = await Promise.all([
+      detectarNoQuadro(videoPath, inicio + duracao * 0.3, custo),
+      detectarNoQuadro(videoPath, inicio + duracao * 0.7, custo),
+    ]);
+    if (!a || !b || iou(a, b) < 0.5) return null;
+    // Uniao dos dois (pega a camera inteira mesmo se um quadro cortou) + folga.
+    const x0 = Math.min(a.x, b.x);
+    const y0 = Math.min(a.y, b.y);
+    const x1 = Math.max(a.x + a.largura, b.x + b.largura);
+    const y1 = Math.max(a.y + a.altura, b.y + b.altura);
+    const fx = (x1 - x0) * FOLGA_CAMERA;
+    const fy = (y1 - y0) * FOLGA_CAMERA;
+    const x = Math.max(0, x0 - fx);
+    const y = Math.max(0, y0 - fy);
+    const cam = { x, y, largura: Math.min(1 - x, x1 - x0 + 2 * fx), altura: Math.min(1 - y, y1 - y0 + 2 * fy) };
     return videoEditingService.webcamValida(cam) ? cam : null;
   } catch (err) {
     logger.warn(`Lives: nao consegui localizar a camera (${err.message}) - segue com o layout normal.`);
     return null;
-  } finally {
-    fs.rm(quadro, { force: true }, () => {});
   }
 }
 
@@ -205,9 +244,11 @@ async function renderizar(clip) {
       await custo(cliparAgora ? 'clipar_agora' : 'ajuste_fino', r);
       // Fora do "Clipar agora", o ajuste fica a ate 20s do que o juiz pediu:
       // e ajuste, nao outra escolha.
+      // Minimo de 20s: no teste real o ajuste apertou demais (18s e 21s) e o
+      // corte perdia a preparacao do momento.
       const limites = cliparAgora
-        ? { min: 0, max: duracaoBruto }
-        : { min: Math.max(0, inicioRel - 20), max: Math.min(duracaoBruto, fimRel + 20) };
+        ? { min: 0, max: duracaoBruto, minDuracao: 20 }
+        : { min: Math.max(0, inicioRel - 20), max: Math.min(duracaoBruto, fimRel + 20), minDuracao: 20 };
       const ajuste = ajustarIntervalo(r.dados.inicio_s, r.dados.fim_s, limites);
       if (ajuste) {
         inicioRel = ajuste.inicio;
@@ -229,7 +270,7 @@ async function renderizar(clip) {
     const { estilo, camera } = await livesUserSettings.estiloParaRender(clip.user_id);
     let webcam = null;
     if (camera.modo === 'auto') {
-      webcam = await localizarCamera(bruto, (inicioRel + fimRel) / 2, custo);
+      webcam = await localizarCamera(bruto, inicioRel, fimRel, custo);
       await livesRepository.setClipWebcam(clip.id, webcam);
     }
     await videoEditingService.renderClip({
@@ -281,4 +322,4 @@ async function renderizarProximo() {
   return true;
 }
 
-module.exports = { renderizarProximo, renderizar, linhasComTempo, pastaDosCortes };
+module.exports = { renderizarProximo, renderizar, linhasComTempo, pastaDosCortes, localizarCamera, pareceOverlay, iou };
