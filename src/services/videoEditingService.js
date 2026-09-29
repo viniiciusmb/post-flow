@@ -862,10 +862,61 @@ function instanteDoQuadro(startSeconds, endSeconds, sortear = Math.random) {
   return inicio + sortear() * (fim - inicio);
 }
 
+// Layout "camera + conteudo" dos cortes de LIVE: a webcam do streamer,
+// recortada do proprio video, vira uma faixa (em cima ou embaixo) e o resto do
+// quadro e o conteudo (jogo, video que ele esta reagindo). E o que deixa ver
+// a REACAO de quem faz a live - sem isso a webcam fica um quadradinho no canto.
+//
+// cam vem em FRACOES do quadro (0 a 1), como a deteccao devolve: nao depende
+// da resolucao da gravacao. A faixa da camera PREENCHE a largura (amplia e
+// corta o excesso) - camera distorcida seria pior que camera cortada.
+//
+// So e usado quando settings.live_webcam existe, e so o render de lives manda
+// isso: os cortes do YouTube nunca passam por aqui.
+function buildWebcamFilter({ w, h, subtitlesFilter, cam, heightPercent, position }) {
+  const f = (v) => Math.max(0, Math.min(1, Number(v))).toFixed(4);
+  let alturaCamera = Math.round((h * Math.max(20, Math.min(60, Number(heightPercent) || 40))) / 100);
+  if (alturaCamera % 2 !== 0) alturaCamera -= 1;
+  const alturaConteudo = h - alturaCamera;
+  const chain = [
+    `[0:v]split=2[paraCamera][paraConteudo]`,
+    `[paraCamera]crop=iw*${f(cam.largura)}:ih*${f(cam.altura)}:iw*${f(cam.x)}:ih*${f(cam.y)},` +
+      `scale=${w}:${alturaCamera}:force_original_aspect_ratio=increase,crop=${w}:${alturaCamera},setsar=1[camera]`,
+    `[paraConteudo]scale=${w}:${alturaConteudo}:force_original_aspect_ratio=increase,crop=${w}:${alturaConteudo},setsar=1[conteudo]`,
+  ];
+  const ordem = position === 'bottom' ? '[conteudo][camera]' : '[camera][conteudo]';
+  const legenda = subtitlesFilter ? `,${subtitlesFilter}` : '';
+  chain.push(`${ordem}vstack=inputs=2${legenda}[outv]`);
+  return { filterComplex: chain.join(';'), outputLabel: '[outv]' };
+}
+
+// Retangulo da camera valido o bastante pra usar: dentro do quadro e com um
+// tamanho que faz sentido (camera de 2% da tela e erro de deteccao, de 90% e
+// "a live inteira e a camera", caso em que o layout normal ja serve).
+function webcamValida(cam) {
+  if (!cam || typeof cam !== 'object') return null;
+  const n = ['x', 'y', 'largura', 'altura'].map((k) => Number(cam[k]));
+  if (n.some((v) => !Number.isFinite(v))) return null;
+  const [x, y, largura, altura] = n;
+  if (x < 0 || y < 0 || largura < 0.05 || altura < 0.05 || largura > 0.8 || altura > 0.8) return null;
+  if (x + largura > 1.001 || y + altura > 1.001) return null;
+  return { x, y, largura, altura, heightPercent: cam.heightPercent, position: cam.position };
+}
+
 function buildFilter({ w, h, subtitlesFilter, cropZoomPercent, fundo }) {
   // Fundo escolhido explicitamente (template, preto, branco ou desfocado). O
   // 'blur' so entra por aqui quando ha altura definida - com o video ocupando
   // o quadro inteiro, o caminho antigo (com zoom continuo) continua valendo.
+  if (fundo && fundo.style === 'webcam') {
+    return buildWebcamFilter({
+      w,
+      h,
+      subtitlesFilter,
+      cam: fundo.cam,
+      heightPercent: fundo.heightPercent,
+      position: fundo.position,
+    });
+  }
   if (fundo) {
     // A thumbnail nao e "fundo": e uma faixa colada ao video, com layout
     // proprio (ver buildThumbnailBandFilter).
@@ -961,8 +1012,12 @@ async function renderClip({
   //
   // O instante e sorteado, pra cada corte ficar com uma imagem diferente em
   // vez de sempre a mesma pose do meio (ver instanteDoQuadro).
+  // Corte de live com a camera do streamer localizada: o layout camera +
+  // conteudo substitui o fundo escolhido (ver buildWebcamFilter).
+  const webcam = webcamValida(settings.live_webcam);
+
   let framePath = null;
-  if (estiloDeFundo === 'frame') {
+  if (estiloDeFundo === 'frame' && !webcam) {
     framePath = outputPath.replace(/\.mp4$/, '-frame.jpg');
     const instante = instanteDoQuadro(startSeconds, endSeconds);
     try {
@@ -992,8 +1047,9 @@ async function renderClip({
   // video ocupando o quadro inteiro (100%) nao sobra fundo visivel, entao o
   // caminho antigo (zoom continuo sobre o desfocado) continua valendo - e e o
   // que preserva o comportamento de quem nunca mexeu nessa configuracao.
-  const fundo =
-    settings.crop_style_mode === 'manual' && alturaDoVideo < 100
+  const fundo = webcam
+    ? { style: 'webcam', cam: webcam, heightPercent: webcam.heightPercent, position: webcam.position }
+    : settings.crop_style_mode === 'manual' && alturaDoVideo < 100
       ? {
           style: estiloDeFundo,
           heightPercent: alturaDoVideo,
@@ -1172,6 +1228,8 @@ module.exports = {
   runFfmpeg,
   runFfmpegWithProgress,
   buildBackgroundFilter,
+  buildWebcamFilter,
+  webcamValida,
   // Exportado pro teste: e o filtro que garante o encaixe exato entre a faixa
   // da capa e o video (sem essa garantia, aparece faixa branca no corte).
   buildThumbnailBandFilter,
