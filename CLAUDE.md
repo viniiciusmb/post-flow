@@ -8,6 +8,15 @@ SaaS que baixa vídeos de canais do YouTube (ou pasta do Drive) de um cliente, c
 
 **Em produção**: https://postflowtiktok.com (EasyPanel/Docker Swarm na VPS Hostinger, ver `docs/deployment-easypanel.md` e a memória `post-flow-deployment`).
 
+## PRODUÇÃO MUDOU DE VPS em 29/09/2026 ~18:16 (Brasília) — leia antes de tudo
+
+O Post Flow roda agora na **VPS nova `177.7.61.54`** (docker compose em `/opt/postflow`, sem EasyPanel). Os comandos com `72.61.219.94`/`docker service` mais abaixo são **históricos**. Equivalentes atuais:
+- migration: `ssh root@177.7.61.54 "docker exec postflow_web node scripts/migrate.js up"` (o `deploy/deploy.sh` já roda sozinho);
+- logs: `docker logs --since 1m postflow_web` (idem `postflow_worker`, `postflow_video-worker`, `postflow_live-worker`);
+- publicar: `deploy/deploy.sh` (deste Mac; não existe mais botão "Implantar").
+
+A VPS antiga ficou só como **ponte** (o serviço `postflow_web` do EasyPanel roda um Caddy que repassa tudo pra nova, e a porta 2222 é redirecionada por iptables via `/root/postflow-ponte/tunel.sh`) enquanto o DNS do `postflowclips.com` propaga. Workers da antiga em 0, banco dela parado mas intacto (caminho de volta: `deploy/virada/virada.sh voltar`). `postflowtiktok.com` ficou apontando pra antiga de propósito (decisão do Vinicius). Detalhes: `docs/CHECKLIST_MIGRACAO_E_LIVES.md`, Fase 3.
+
 ## Regra operacional nº 1 — NUNCA esquecer
 
 **Toda vez que uma migration nova é implantada, rode `node scripts/migrate.js up` na produção IMEDIATAMENTE depois que o usuário confirmar o deploy — no mesmo turno, antes de fazer qualquer outra coisa.** Isso já quebrou a produção de verdade **três vezes** nesta mesma sessão (2026-07-29/30) porque essa etapa foi adiada ou esquecida — sempre parecia "nada funciona" / uma página inteira travada, quando na verdade era só o schema desatualizado. Não existe motivo pra adiar: é um comando só.
