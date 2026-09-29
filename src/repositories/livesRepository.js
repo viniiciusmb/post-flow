@@ -430,13 +430,13 @@ async function setCandidateSignals(candidateId, signals) {
 
 // Resultado do juiz. So mexe em quem ainda esta pendente: julgar duas vezes
 // (duas voltas do laço) nao troca a nota ja dada.
-async function judgeCandidate(candidateId, { status, nota, inicio, fim, titulo, gancho, porque }) {
+async function judgeCandidate(candidateId, { status, nota, inicio, fim, titulo, gancho, porque, tipo = null }) {
   await pool.query(
     `UPDATE live_candidates
         SET status = $2, final_score = $3, final_start = $4, final_end = $5, title = $6, hook = $7,
-            reason = COALESCE(NULLIF($8, ''), reason), judged_at = now()
+            reason = COALESCE(NULLIF($8, ''), reason), moment_type = $9, judged_at = now()
       WHERE id = $1 AND status = 'pendente'`,
-    [candidateId, status, nota, inicio, fim, titulo, gancho, porque]
+    [candidateId, status, nota, inicio, fim, titulo, gancho, porque, tipo]
   );
 }
 

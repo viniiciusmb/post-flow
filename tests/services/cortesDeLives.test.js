@@ -45,6 +45,7 @@ const liveSignalsService = require('../../src/services/lives/liveSignalsService'
 const videoEditingService = require('../../src/services/videoEditingService');
 const liveRenderService = require('../../src/services/lives/liveRenderService');
 const liveFormatoService = require('../../src/services/lives/liveFormatoService');
+const tiposDeMomento = require('../../src/services/lives/tiposDeMomento');
 const { createClient } = require('../helpers/db');
 
 test.after(async () => {
@@ -419,6 +420,88 @@ test('o teto por hora do nivel vale mesmo com muitos aprovados', async () => {
   const { rows } = await pool.query('SELECT count(*)::int AS n, min(source) AS origem FROM live_clips WHERE session_id = $1', [sessao.id]);
   assert.equal(rows[0].n, 3);
   assert.equal(rows[0].origem, 'sinal');
+});
+
+// ------------------------------------------------------------------ tipos de momento
+
+test('pistas da fala: dinheiro com numero, compra e palavrao; conversa comum nao ganha pista', () => {
+  const p = tiposDeMomento.pistasDaFala;
+  assert.deepEqual(p('Mano, eu faturo uns 80 mil por mes com isso'), ['fala de dinheiro com numero']);
+  assert.deepEqual(p('paguei R$ 3.500 nesse teclado'), ['fala de dinheiro com numero', 'ganhou/comprou algo']);
+  assert.deepEqual(p('ganhei cinquenta mil numa noite'), ['fala de dinheiro com numero']);
+  assert.deepEqual(p('comprei uma Lamborghini a vista'), ['ganhou/comprou algo']);
+  assert.deepEqual(p('Que porra e essa, caralho'), ['palavrao']);
+  assert.deepEqual(p('É muito difícil, pô, vamos pra próxima fase'), []);
+  assert.deepEqual(p('comprei pão hoje de manhã'), [], 'compra sem valor nem item caro nao e ostentacao');
+  assert.deepEqual(p('boa noite chat, tudo certo?'), []);
+  assert.deepEqual(p(''), []);
+});
+
+test('a transcricao que a IA le marca o bloco onde se falou de dinheiro', () => {
+  const texto = liveAnalysisService.montarTranscricao([
+    { start_offset: 0, end_offset: 30, status: 'feito', text: 'bora jogar' },
+    { start_offset: 30, end_offset: 60, status: 'feito', text: 'eu tiro 2 mil por dia so de live' },
+  ]);
+  const [a, b] = texto.split('\n');
+  assert.doesNotMatch(a, /\{fala:/);
+  assert.match(b, /\{fala: fala de dinheiro com numero\} eu tiro/);
+});
+
+test('juiz grava o tipo do momento, e tipo inventado vira vazio', async () => {
+  const canal = await novoCanal();
+  const sessao = await novaSessao(canal, { recorded: 1800 });
+  for (let t = 0; t < 1200; t += 30) await blocoTranscrito(sessao, t, t + 30, 'fala');
+  const c1 = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: 100, fim: 140, motivo: 'dinheiro', nota: 8 });
+  const c2 = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: 300, fim: 340, motivo: 'x', nota: 8 });
+  let pedido = null;
+  const desfazer = trocar(openaiLives, 'pedirJson', async (p) => {
+    pedido = p;
+    const base = { gancho_forte: 8, desfecho_claro: 8, emocao: 7, entende_sozinho: true, gancho: '', porque: 'ok' };
+    return {
+      dados: {
+        avaliacoes: [
+          { ...base, id: Number(c1.id), tipo: 'dinheiro', nota: 8, inicio_s: 100, fim_s: 140, titulo: 'Fatura 80 mil por mes' },
+          { ...base, id: Number(c2.id), tipo: 'qualquer_coisa', nota: 7, inicio_s: 300, fim_s: 340, titulo: 't' },
+        ],
+      },
+      inputTokens: 1,
+      outputTokens: 1,
+      custoUsd: 0,
+    };
+  });
+  try {
+    await liveAnalysisService.julgarSessao(sessao);
+  } finally {
+    desfazer();
+  }
+  assert.ok(pedido.schema.properties.avaliacoes.items.required.includes('tipo'));
+  for (const palavra of ['duplo sentido', 'mancada', 'constrangedor', 'dinheiro com NUMERO', 'comprei tal carro', 'polemica', 'briga', 'ofensa']) {
+    assert.ok(pedido.sistema.includes(palavra), `o juiz precisa conhecer: ${palavra}`);
+  }
+  const { rows } = await pool.query('SELECT moment_type FROM live_candidates WHERE session_id = $1 ORDER BY id', [sessao.id]);
+  assert.deepEqual(rows.map((r) => r.moment_type), ['dinheiro', null]);
+});
+
+test('nivel alto: dinheiro/polemica passam sem reacao do chat; piada sem reacao continua barrada', async () => {
+  const canal = await novoCanal();
+  const u = await createClient();
+  await livesRepository.follow(u.id, canal.id);
+  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 5 });
+  const sessao = await novaSessao(canal, { recorded: 3600 });
+  for (const [ini, tipo] of [[100, 'dinheiro'], [300, 'piada'], [500, 'polemica']]) {
+    const c = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: ini, fim: ini + 40, nota: 8 });
+    await livesRepository.judgeCandidate(c.id, { status: 'escolhido', nota: 9, inicio: ini, fim: ini + 40, titulo: tipo, gancho: '', porque: '', tipo });
+  }
+  // Chat com sinal so aos 2000s: os tres momentos acima tiveram reacao zero.
+  const janelas = Array.from({ length: 360 }, (_, i) => ({ inicio: i * 10, forca: i === 200 ? 10 : 0 }));
+  const desfazer = trocar(liveSignalsService, 'linhaDaSessao', async () => ({ janelas }));
+  try {
+    await liveAnalysisService.distribuirSessao(sessao);
+  } finally {
+    desfazer();
+  }
+  const { rows } = await pool.query('SELECT title FROM live_clips WHERE session_id = $1 ORDER BY start_offset', [sessao.id]);
+  assert.deepEqual(rows.map((r) => r.title), ['dinheiro', 'polemica']);
 });
 
 // ------------------------------------------------------------------ sinais do publico

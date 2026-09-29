@@ -20,6 +20,7 @@ const livesRepository = require('../../repositories/livesRepository');
 const openaiLives = require('./openaiLives');
 const liveSignalsService = require('./liveSignalsService');
 const livesUserSettings = require('./livesUserSettings');
+const tiposDeMomento = require('./tiposDeMomento');
 const logger = require('../../lib/logger');
 
 const PASSO_TRIAGEM_S = 120;
@@ -52,7 +53,9 @@ function mmss(segundos) {
 }
 
 // Uma linha por bloco: tempo em SEGUNDOS da gravacao (o eixo da resposta),
-// sinais do publico naquele trecho e o texto.
+// sinais do publico naquele trecho, pistas da propria fala (dinheiro com
+// numero, compra, palavrao - o que viraliza pelo CONTEUDO mesmo sem o chat
+// reagir) e o texto.
 function montarTranscricao(blocos, linha = null) {
   return blocos
     .map((b) => {
@@ -60,7 +63,8 @@ function montarTranscricao(blocos, linha = null) {
       const fim = Number(b.end_offset);
       const texto = b.status === 'silencio' ? '(silencio)' : b.status === 'erro' ? '(nao transcrito)' : b.text || '';
       const sinais = linha ? liveSignalsService.resumoDoIntervalo(linha, ini, fim) : null;
-      return `[${ini.toFixed(0)}s-${fim.toFixed(0)}s | ${mmss(ini)}]${sinais ? ` {publico: ${sinais}}` : ''} ${texto}`;
+      const pistas = b.status === 'feito' ? tiposDeMomento.pistasDaFala(b.text) : [];
+      return `[${ini.toFixed(0)}s-${fim.toFixed(0)}s | ${mmss(ini)}]${sinais ? ` {publico: ${sinais}}` : ''}${pistas.length ? ` {fala: ${pistas.join(', ')}}` : ''} ${texto}`;
     })
     .join('\n');
 }
@@ -110,11 +114,32 @@ const SCHEMA_TRIAGEM = {
   },
 };
 
+// O catalogo do que viraliza em corte de live, compartilhado pela triagem e
+// pelo juiz (pedido de 29/09/2026). Uma lista so: se cada prompt tivesse a
+// dele, a triagem deixaria de apontar o que o juiz aprovaria.
+const O_QUE_VIRALIZA = `ENGRACADO:
+- piada ou zoeira com desfecho (a graca chega dentro do corte);
+- duplo sentido / frase que soou errado, e a reacao de quem percebeu;
+- mancada: falou besteira, errou feio, se entregou, passou vergonha, caiu, quebrou algo;
+- momento desconfortavel/constrangedor: silencio sem graca, pergunta indiscreta, alguem fica sem resposta, climao;
+- xingamento engracado, explosao de raiva exagerada, surto.
+SERIO (viraliza pelo CONTEUDO, mesmo sem o chat reagir):
+- dinheiro com NUMERO: "faco X por dia/mes/ano", "faturei X", "ganho X", "perdi X", quanto custou algo, salario, conta de quanto alguem ganha;
+- ostentacao/conquista: "ganhei tal coisa", "comprei tal carro/casa/relogio", presente caro, conquista grande;
+- polemica: opiniao forte e chocante dita sem rodeio, revelacao, fofoca, exposed, "cancelavel";
+- briga/treta: discussao, confronto, alguem batendo de frente, resposta afiada, indireta pesada;
+- ofensa: xingamento pesado dirigido a alguem, humilhacao, ataque.
+TAMBEM: reacao genuina e intensa (rir descontrolado, susto, choque), acontecimento inesperado ao vivo (alguem entrando, doacao maluca), jogada incrivel ou falha absurda.
+NAO e momento: opiniao morna, analise, explicacao, tutorial, leitura de chat, pedido de inscricao, discurso longo, conversa que so faz sentido com contexto. "Sobre um tema polemico" nao basta - tem que ter a FRASE forte.`;
+
 const SISTEMA_TRIAGEM = `Voce faz a PRIMEIRA peneira de uma live da Twitch, procurando momentos que virariam corte viral no TikTok.
 Cada linha e um bloco de ~30s: [inicio-fim em segundos] {publico: como o chat/espectadores reagiram} texto falado.
-O sinal mais forte e o PUBLICO: chat acima do normal, risadas, espectadores criando clipes. Conversa comum sem reacao do publico quase nunca e momento.
-Aponte NO MAXIMO 2 candidatos, e so se houver algo de verdade: piada com desfecho, reacao exagerada, briga/treta, fala absurda ou polemica forte, acontecimento inesperado, jogada incrivel.
-Opiniao morna, explicacao, leitura de chat, pedido de inscricao e "discurso" longo NAO sao momento, mesmo sobre tema polemico.
+Alguns blocos trazem {fala: ...}: pista automatica de que ali se falou de dinheiro com numero, de algo ganho/comprado ou houve palavrao. E so pista - leia o texto e decida.
+Dois caminhos pra ser momento: o PUBLICO reagiu (chat acima do normal, risadas, espectadores criando clipes) OU a propria FALA e forte (lista abaixo). Conversa comum sem nenhum dos dois nao e momento.
+
+${O_QUE_VIRALIZA}
+
+Aponte NO MAXIMO 3 candidatos, so se houver algo de verdade, e diga no "motivo" qual tipo e (ex.: "dinheiro: diz que fatura 80 mil por mes").
 Nota de 0 a 10 com rigor: 5 = mediano, 7 = bom, 9 = raro. Na duvida, lista vazia.`;
 
 async function triarSessao(sessao) {
@@ -154,7 +179,7 @@ async function triarSessao(sessao) {
     fim: Number(c.end_offset),
   }));
   let novos = 0;
-  for (const c of (resposta.dados.candidatos || []).slice(0, 2)) {
+  for (const c of (resposta.dados.candidatos || []).slice(0, 3)) {
     const nota = Math.max(0, Math.min(10, Math.round(Number(c.nota))));
     if (nota < NOTA_MINIMA_TRIAGEM) continue;
     const intervalo = ajustarIntervalo(c.inicio_s, c.fim_s, { min: inicioJanela, max: cobertura });
@@ -221,9 +246,12 @@ const SCHEMA_JUIZ = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['id', 'gancho_forte', 'desfecho_claro', 'emocao', 'entende_sozinho', 'nota', 'inicio_s', 'fim_s', 'titulo', 'gancho', 'porque'],
+        required: ['id', 'tipo', 'gancho_forte', 'desfecho_claro', 'emocao', 'entende_sozinho', 'nota', 'inicio_s', 'fim_s', 'titulo', 'gancho', 'porque'],
         properties: {
           id: { type: 'integer' },
+          // O tipo decide se o momento precisa de reacao do publico nos
+          // niveis altos (dinheiro/ostentacao/polemica nao precisam).
+          tipo: { type: 'string', enum: [...tiposDeMomento.TIPOS] },
           // Avaliado ANTES da nota (0-10 cada): obrigar a pensar por partes e
           // o que deixa a nota final calibrada, e o servidor usa pra aplicar
           // tetos (ver aplicarTetos).
@@ -246,14 +274,14 @@ const SCHEMA_JUIZ = {
 const SISTEMA_JUIZ = `Voce e o editor-chefe de um canal de cortes de live com milhoes de views no TikTok. Voce decide o que vira corte.
 Para cada candidato voce recebe o trecho da transcricao (blocos de ~30s, tempo em segundos) e como o PUBLICO reagiu ({publico: ...}: ritmo do chat, risadas, espectadores criando clipes, grito).
 
+Alguns blocos trazem {fala: ...}: pista automatica (dinheiro com numero, algo ganho/comprado, palavrao). E so pista - o texto decide.
+
 O que viraliza em corte de live:
-- reacao genuina e intensa (rir descontrolado, susto, raiva, choque) com o motivo visivel;
-- piada ou historia com desfecho claro;
-- treta, confronto, resposta afiada;
-- fala absurda, bizarra ou muito polemica que se entende SEM contexto;
-- acontecimento inesperado ao vivo (jogada, falha, alguem entrando, doacao maluca).
-O que NAO viraliza (nota baixa, mesmo sendo "sobre algo polemico"): opiniao morna, analise, explicacao, discurso longo, leitura de chat, conversa que precisa de contexto.
-O publico e o melhor juiz: chat explodindo, muita risada ou espectadores clipando sobem a nota; trecho sem reacao nenhuma raramente passa de 6.
+${O_QUE_VIRALIZA}
+
+Classifique cada candidato em "tipo": piada, duplo_sentido, mancada, constrangedor, xingamento (engracados); dinheiro, ostentacao, polemica, briga, ofensa (serios); reacao, inesperado, jogada; ou outro.
+O publico pesa muito nos engracados e nas reacoes: chat explodindo, muita risada ou espectadores clipando sobem a nota, e piada/reacao sem nenhuma reacao do publico raramente passa de 6.
+Dinheiro, ostentacao e polemica sao a excecao: viralizam pela frase. Um numero concreto e chamativo ("faturo 80 mil por mes", "paguei 2 milhoes nessa casa") ou uma opiniao chocante dita com todas as letras pode tirar 8+ mesmo com o chat parado - desde que a frase esteja dentro do corte e se entenda sozinha. Numero vago ("ganho bem", "uns trocados") nao conta.
 
 Nota de 0 a 10, calibrada:
 10 = obvio que viraliza (raro, no maximo 1 a cada varias horas); 9 = excelente; 8 = muito bom; 7 = bom, vale postar; 6 = fraco; 5 = so pra encher; 0-4 = nao e corte.
@@ -262,7 +290,7 @@ Seja duro: numa live comum a maioria dos candidatos fica entre 3 e 6.
 Antes da nota, avalie por partes (0 a 10): gancho_forte (os 3 primeiros segundos prendem quem esta rolando o feed?), desfecho_claro (tem conclusao - a piada, a resposta, a revelacao, a reacao?), emocao (intensidade real da reacao), e entende_sozinho (quem NUNCA viu essa live entende o corte?).
 Sem desfecho claro nao e corte bom: a pessoa assiste e fica "e ai?".
 
-Para cada candidato devolva: as notas por partes; a nota final; inicio_s e fim_s (segundos da gravacao) comecando no GANCHO - quem assiste precisa entender em 3 segundos - e terminando logo depois do desfecho/reacao, 15 a 90s; titulo curto (ate 60 caracteres) e gancho (ate 100) no idioma falado, sem hashtag; e "porque" em uma frase.
+Para cada candidato devolva: as notas por partes; a nota final; inicio_s e fim_s (segundos da gravacao) comecando no GANCHO - quem assiste precisa entender em 3 segundos - e terminando logo depois do desfecho/reacao, 15 a 90s; titulo curto (ate 60 caracteres) e gancho (ate 100) no idioma falado, sem hashtag - quando o momento e de dinheiro/ostentacao, o NUMERO ou o item vai no titulo ("Fatura 80 mil por mes jogando", "Comprou uma Lamborghini a vista"); e "porque" em uma frase.
 Avalie TODOS os candidatos recebidos, usando o id exatamente como veio.`;
 
 async function julgarSessao(sessao, { agora = Date.now() } = {}) {
@@ -339,9 +367,10 @@ async function julgarSessao(sessao, { agora = Date.now() } = {}) {
       nota,
       inicio: intervalo?.inicio ?? null,
       fim: intervalo?.fim ?? null,
+      tipo: tiposDeMomento.TIPOS.includes(a.tipo) ? a.tipo : null,
       titulo: String(a.titulo || '').slice(0, 80),
       gancho: String(a.gancho || '').slice(0, 150),
-      porque: `[gancho ${a.gancho_forte} · desfecho ${a.desfecho_claro} · emocao ${a.emocao}${a.entende_sozinho === false ? ' · precisa de contexto' : ''}] ${String(a.porque || '')}`.slice(0, 300),
+      porque: `[${a.tipo || '?'} · gancho ${a.gancho_forte} · desfecho ${a.desfecho_claro} · emocao ${a.emocao}${a.entende_sozinho === false ? ' · precisa de contexto' : ''}] ${String(a.porque || '')}`.slice(0, 300),
     });
     if (aprovado) aprovados += 1;
   }
@@ -392,8 +421,11 @@ async function distribuirSessao(sessao) {
       if (Number(c.final_score) < nivel.notaMinima) continue;
       // Niveis altos exigem tambem que o PUBLICO tenha reagido forte (no teste
       // de 29/09, no nivel maximo, sairam cortes nota 9 com reacao morna).
+      // Menos dinheiro/ostentacao/polemica: viralizam pela frase, e o chat
+      // costuma ficar parado ouvindo o numero. A nota minima do nivel vale
+      // igual pra eles.
       const percentil = percentis.get(c.id);
-      if (percentil !== null && percentil < nivel.reacaoMinima) continue;
+      if (!tiposDeMomento.ehDeConteudo(c.moment_type) && percentil !== null && percentil < nivel.reacaoMinima) continue;
       const corte = await livesRepository.insertClipOnce({
         sessionId: sessao.id,
         channelId: sessao.live_channel_id,
