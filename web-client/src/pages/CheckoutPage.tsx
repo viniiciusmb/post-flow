@@ -500,6 +500,20 @@ export function CheckoutPage() {
           </div>
         ) : concluido ? (
           <ConcluidoView concluido={concluido} item={item} planName={plano?.name ?? null} />
+        ) : item.tipo === "creditos" && !ctx.package.podeComprar ? (
+          // Link antigo ou digitado à mão: sem plano ativo, crédito avulso não
+          // é vendido (o servidor também recusa). Melhor dizer isso aqui do que
+          // deixar a pessoa preencher CPF e cartão para levar um "não" no fim.
+          <div className="mx-auto flex max-w-[520px] flex-col gap-4 rounded-xl border border-border bg-background p-6 text-center shadow-[var(--shadow-raised)]">
+            <h1 className="font-heading text-xl font-semibold tracking-tight">Assine um plano primeiro</h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Minutos avulsos são um complemento do plano: é o plano que libera conectar sua conta do TikTok e
+              seus canais, sem os quais os minutos não teriam onde ser usados.
+            </p>
+            <Button asChild className="mx-auto w-fit">
+              <a href="/client/billing">Ver planos</a>
+            </Button>
+          </div>
         ) : (
           <>
             <h1 className="font-heading mb-1 text-2xl font-semibold tracking-tight">{titulo}</h1>

@@ -782,6 +782,14 @@ export function ClientBillingPage() {
                   <IconCoins className="size-4 text-muted-foreground" />{t("plano.comprarCreditos")}</CardTitle>
                 <CardDescription>{t("plano.preferePagarAdiantado")}</CardDescription>
               </CardHeader>
+              {/* Sem plano ativo não há venda: sem plano o cliente não conecta
+                  conta do TikTok nem canal, então o minuto comprado não tinha
+                  como virar corte publicado. O servidor recusa do mesmo jeito. */}
+              {!data.package.podeComprar ? (
+                <CardContent className="flex flex-1 flex-col gap-4">
+                  <p className="text-sm leading-relaxed text-muted-foreground">{t("plano.creditoSoComPlano")}</p>
+                </CardContent>
+              ) : (
               <CardContent className="flex flex-1 flex-col gap-4">
                 <div className="rounded-lg border border-border p-4">
                   <div className="flex items-end justify-between gap-4">
@@ -843,6 +851,7 @@ export function ClientBillingPage() {
                   Comprar {minutos} min por {formatCents(totalAvulso)}
                 </Button>
               </CardContent>
+              )}
             </Card>
           </div>
 

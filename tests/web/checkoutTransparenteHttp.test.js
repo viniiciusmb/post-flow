@@ -121,7 +121,10 @@ test('assinar manda para a NOSSA tela de checkout, não para o domínio do Asaas
 
 test('comprar crédito e cadastrar cartão também abrem a tela de dentro', async () => {
   await comAsaasLigado(async () => {
-    const { agent } = await agenteLogado();
+    const { cliente, agent } = await agenteLogado();
+    // Crédito avulso só é vendido para quem tem plano (ver creditoAvulsoSoComPlano.test.js).
+    const plano = await subscriptionPlansRepository.findByKey('starter');
+    await clientSubscriptionsRepository.setPlan(cliente.id, plano.id);
 
     const pacote = await agent.post('/api/client/billing/buy-package', { minutes: 100 });
     assert.equal(pacote.body.checkoutUrl, '/client/checkout?creditos=100');

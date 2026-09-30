@@ -847,7 +847,14 @@ export interface CheckoutContexto {
   /** Cartão tokenizado no Asaas, quando já existe um salvo. */
   card: { brand: string | null; last4: string | null; exp: string | null } | null
   perfil: { nome: string; email: string; cpfCnpj: string }
-  package: { minMinutes: number; stepMinutes: number; maxMinutes: number; centsPerMinute: number }
+  package: {
+    minMinutes: number
+    stepMinutes: number
+    maxMinutes: number
+    centsPerMinute: number
+    /** false = sem plano ativo: minutos avulsos só são vendidos como complemento do plano. */
+    podeComprar: boolean
+  }
   overage: { rateCentsNormal: number; rateCentsBonus: number }
   empresa: { nome: string; cnpj: string }
   maxSlotsPorCompra: number
@@ -956,7 +963,14 @@ export interface ClientBillingOverviewResponse {
   isExempt: boolean
   plans: BillingPlan[]
   overage: { rateCentsNormal: number; rateCentsBonus: number; pendingCents: number }
-  package: { minMinutes: number; stepMinutes: number; maxMinutes: number; centsPerMinute: number }
+  package: {
+    minMinutes: number
+    stepMinutes: number
+    maxMinutes: number
+    centsPerMinute: number
+    /** false = sem plano ativo: minutos avulsos só são vendidos como complemento do plano. */
+    podeComprar: boolean
+  }
   recentPurchases: { id: number; bucket: CreditBucket; minutes: number; amountCents: number; status: string; createdAt: string }[]
   recentTransactions: CreditTransactionView[]
 }

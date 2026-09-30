@@ -62,6 +62,19 @@ function podeComprarExtras(subscription) {
   return Boolean(subscription && subscription.plan_id && subscription.extra_channel_price_cents);
 }
 
+// Pode comprar credito avulso? So quem tem plano ATIVO (decisao do fundador,
+// 29/09/2026). Sem plano o cliente nao conecta conta do TikTok nem canal
+// (limite 0), entao o minuto comprado nao tinha como virar corte publicado -
+// quatro clientes pagaram por credito que nao conseguiam usar, e um deles
+// pediu devolucao pelo MED do PIX. Inadimplente e cancelado tambem ficam de
+// fora: o plano que da sentido ao credito nao esta valendo.
+const MENSAGEM_CREDITO_SEM_PLANO =
+  'Minutos avulsos são um complemento do plano. Assine um plano para poder comprar.';
+
+function podeComprarCreditoAvulso(subscription) {
+  return Boolean(subscription && subscription.plan_id && subscription.status === 'ativo');
+}
+
 function comoConseguirMais(subscription) {
   return podeComprarExtras(subscription)
     ? 'Compre uma conexão extra em "Plano e uso" ou troque de plano.'
@@ -96,4 +109,11 @@ async function checkTiktokAccountLimit(clientUserId, currentCount) {
   return { allowed: true };
 }
 
-module.exports = { checkChannelLimit, checkTiktokAccountLimit, limitesDe, podeComprarExtras };
+module.exports = {
+  checkChannelLimit,
+  checkTiktokAccountLimit,
+  limitesDe,
+  podeComprarExtras,
+  podeComprarCreditoAvulso,
+  MENSAGEM_CREDITO_SEM_PLANO,
+};

@@ -604,6 +604,7 @@ export const en: Dicionario = {
   "plano.cartaoAtivo": "Card active",
   "plano.desligarCobranca": "Turn off automatic billing",
   "plano.cadastrarCartao": "Add a card",
+  "plano.creditoSoComPlano": "Standalone minutes are an add-on to a plan. Subscribe to a plan above to buy them.",
   "plano.comprarCreditos": "Buy credits",
   "plano.vocePaga": "You pay",
   "plano.seuPlano": "Your plan",

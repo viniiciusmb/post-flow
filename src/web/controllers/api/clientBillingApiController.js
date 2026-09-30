@@ -207,6 +207,9 @@ async function overview(req, res) {
       stepMinutes: CREDITO_PASSO_MINUTOS,
       maxMinutes: CREDITO_MAX_MINUTOS,
       centsPerMinute: taxas.normal,
+      // A tela esconde a compra quando for false; quem barra de verdade e o
+      // servidor (resolverItem/buyPackage), com a mesma regra.
+      podeComprar: planLimitsService.podeComprarCreditoAvulso(subscription),
     },
     recentPurchases: purchases.map((p) => ({
       id: p.id,
@@ -278,6 +281,9 @@ async function buyPackage(req, res) {
   const bucket = req.body.bucket === 'bonus' ? 'bonus' : 'normal';
   const clientUserId = req.session.user.id;
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
+  if (!planLimitsService.podeComprarCreditoAvulso(subscription)) {
+    return res.status(400).json({ error: planLimitsService.MENSAGEM_CREDITO_SEM_PLANO });
+  }
 
   // O valor e recalculado AQUI a partir dos minutos, nunca aceito da tela: se
   // o preco viesse no corpo da requisicao, daria pra comprar 1000 minutos por

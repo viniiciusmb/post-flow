@@ -115,6 +115,9 @@ async function contexto(req, res) {
       stepMinutes: CREDITO.PASSO_MINUTOS,
       maxMinutes: CREDITO.MAX_MINUTOS,
       centsPerMinute: taxas.normal,
+      // A tela esconde a compra quando for false; quem barra de verdade e o
+      // servidor (resolverItem/buyPackage), com a mesma regra.
+      podeComprar: planLimitsService.podeComprarCreditoAvulso(subscription),
     },
     overage: { rateCentsNormal: taxas.normal, rateCentsBonus: taxas.bonus },
     // Quem esta prestes a digitar um cartao procura saber de quem e a empresa.
@@ -162,6 +165,9 @@ async function resolverItem(req, clientUserId) {
   if (tipo === 'creditos') {
     const minutes = CREDITO.minutosPedidos(req.body.minutos);
     const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
+    if (!planLimitsService.podeComprarCreditoAvulso(subscription)) {
+      throw new DadosInvalidosError(planLimitsService.MENSAGEM_CREDITO_SEM_PLANO);
+    }
     const priceCents = minutes * creditsService.taxasDoPlano(subscription).normal;
     return { tipo, minutes, priceCents, bucket: req.body.bucket === 'bonus' ? 'bonus' : 'normal' };
   }
