@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 
 const pool = require('../../src/db/pool');
 const twitchApi = require('../../src/services/lives/twitchApi');
+const kickApi = require('../../src/services/lives/kickApi');
 const livesRepository = require('../../src/repositories/livesRepository');
 const { startServer, stopServer, createLoginableClient, createAgent } = require('../helpers/http');
 
@@ -41,12 +42,48 @@ test('cliente comum nao enxerga a funcionalidade de lives', async () => {
   assert.equal((await agent.post('/api/admin/lives/canais', { canal: 'gaules' })).status, 403);
 });
 
-test('admin ve o modulo desligado e o motivo de a Twitch nao estar pronta', async () => {
-  const { agent } = await logado('admin');
-  const r = await agent.get('/api/admin/lives');
+test('Twitch sem configuracao nao bloqueia o modulo: so avisa, e so pra quem acompanha canal da Twitch', async () => {
+  const { u, agent } = await logado('admin');
+  let r = await agent.get('/api/admin/lives');
   assert.equal(r.status, 200);
   assert.equal(r.body.ligado, false);
-  assert.ok(r.body.bloqueios.some((b) => /TWITCH_CLIENT_ID/.test(b)));
+  assert.ok(!r.body.bloqueios.some((b) => /TWITCH/.test(b)), 'a Kick funciona sem o app da Twitch');
+  assert.ok(!(r.body.avisos || []).some((a) => /TWITCH/.test(a)));
+
+  const canal = await livesRepository.upsertChannel({ login: loginNovo(), displayName: 'x', platformUserId: '1', profileImageUrl: null });
+  await livesRepository.follow(u.id, canal.id);
+  r = await agent.get('/api/admin/lives');
+  assert.ok(r.body.avisos.some((a) => /TWITCH_CLIENT_ID/.test(a)));
+});
+
+test('adicionar canal da Kick: pelo link ou pelo nome com a plataforma escolhida, sem precisar da Twitch', async () => {
+  const { agent } = await logado('admin');
+  const slug = `k${Date.now().toString(36)}`;
+  const desfazer = [
+    trocar(kickApi, 'buscarUsuario', async (l) => (l === slug ? { id: '4242', login: slug, nome: 'Canal Kick', imagem: null } : null)),
+    trocar(kickApi, 'buscarAoVivo', async (logins) => ({
+      aoVivo: new Map(logins.filter((l) => l === slug).map((l) => [l, { titulo: 'ao vivo', jogo: 'Just Chatting', espectadores: 321 }])),
+      falharam: new Set(),
+    })),
+  ];
+  try {
+    assert.equal((await agent.post('/api/admin/lives/canais', { canal: 'kick.com/nao-existe-zz' })).status, 404);
+    const r = await agent.post('/api/admin/lives/canais', { canal: `https://kick.com/${slug}?ref=x` });
+    assert.equal(r.status, 200);
+    const canal = r.body.canais.find((c) => c.login === slug);
+    assert.equal(canal.plataforma, 'kick');
+    assert.equal(canal.url, `https://kick.com/${slug}`);
+    assert.equal(canal.aoVivo, true);
+    assert.equal(canal.espectadores, 321);
+
+    // Nome solto + plataforma escolhida na tela = o mesmo canal (nao duplica).
+    const r2 = await agent.post('/api/admin/lives/canais', { canal: slug, plataforma: 'kick' });
+    assert.equal(r2.body.canais.filter((c) => c.login === slug).length, 1);
+    const { rows } = await pool.query("SELECT platform FROM live_channels WHERE login = $1", [slug]);
+    assert.deepEqual(rows.map((x) => x.platform), ['kick']);
+  } finally {
+    desfazer.forEach((d) => d());
+  }
 });
 
 test('salvar configuracao puxa os limites pra dentro da faixa', async () => {

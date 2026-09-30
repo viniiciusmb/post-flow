@@ -81,7 +81,7 @@ const SCHEMA = {
   },
 };
 
-const INSTRUCAO = `Voce e o editor que decide o ENQUADRAMENTO de um corte vertical (9:16, 1080x1920) feito de um trecho de live da Twitch (video original horizontal).
+const INSTRUCAO = `Voce e o editor que decide o ENQUADRAMENTO de um corte vertical (9:16, 1080x1920) feito de um trecho de live da Twitch ou da Kick (video original horizontal).
 Voce recebe dois quadros do mesmo trecho (inicio e fim). Monte o corte com 1 a 3 PAINEIS empilhados de cima pra baixo. Cada painel e um recorte do video original que ocupa a largura toda da tela.
 
 Para cada painel devolva:

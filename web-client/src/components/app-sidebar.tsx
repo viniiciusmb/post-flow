@@ -14,7 +14,7 @@ import {
   IconReceipt2,
   IconAlertTriangle,
   IconMicrophone,
-  IconBrandTwitch,
+  IconBroadcast,
   IconGift,
   IconBook,
   IconTrendingUp,
@@ -64,7 +64,7 @@ const ADMIN_GROUPS: Grupo[] = [
       { title: "menu.comissoes", url: "/admin/commissions", icon: IconGift },
       { title: "menu.erros", url: "/admin/errors", icon: IconAlertTriangle },
       { title: "menu.narrado", url: "/admin/narrated", icon: IconMicrophone },
-      { title: "menu.lives", url: "/admin/lives", icon: IconBrandTwitch },
+      { title: "menu.lives", url: "/admin/lives", icon: IconBroadcast },
     ],
   },
   {

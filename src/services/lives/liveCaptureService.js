@@ -1,5 +1,6 @@
-// Gravacao de UMA live: streamlink (baixa a transmissao, pulando os anuncios
-// da Twitch - padrao no 8.x) com a saida ligada direto no ffmpeg, que grava em pedacos:
+// Gravacao de UMA live (Twitch ou Kick - o streamlink tem as duas):
+// streamlink (baixa a transmissao, pulando os anuncios da Twitch - padrao no
+// 8.x) com a saida ligada direto no ffmpeg, que grava em pedacos:
 //
 //   seg_NNNNNN.ts  - video+audio COPIADOS (sem recodificar), 10s cada
 //   aud_NNNNN.ogg  - so o audio, mono 16 kHz opus 32 kbps, 30s cada - e o que
@@ -26,7 +27,8 @@ const logger = require('../../lib/logger');
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 
 // Ordem de preferencia de qualidade. A Twitch nomeia as variantes com a
-// taxa de quadros ("480p30", "720p60") e nem todo canal tem todas; a lista
+// taxa de quadros ("480p30", "720p60") e nem todo canal tem todas; a Kick
+// oferece 160p/360p/480p/720p60/1080p60 (conferido em 30/09/2026). A lista
 // termina em "worst" pra NUNCA falhar por falta da qualidade exata.
 const QUALIDADES = {
   '360p': '360p,360p30,160p,worst',
@@ -38,7 +40,7 @@ const QUALIDADES = {
 
 const emAndamento = new Map(); // sessionId -> { parar, terminou }
 
-function argsStreamlink(login, qualidade) {
+function argsStreamlink(url, qualidade) {
   // Sem --twitch-disable-ads: no streamlink 8.x pular os anuncios virou o
   // padrao e a opcao antiga so gera aviso de obsoleta (o log confirma "Will
   // skip ad segments" sem ela).
@@ -48,7 +50,7 @@ function argsStreamlink(login, qualidade) {
     // Queda de rede curta nao encerra a gravacao: o streamlink tenta de novo
     // antes de desistir.
     '--stream-segment-attempts', '5',
-    `https://twitch.tv/${login}`,
+    url,
     QUALIDADES[qualidade] || QUALIDADES['480p'],
   ];
 }
@@ -82,11 +84,12 @@ function matarGrupo(filho, sinal) {
 
 // Inicia a gravacao. onFim({ motivo, codigo, pedidoParar, ultimasLinhas }) e
 // chamado exatamente uma vez, quando os dois processos terminarem.
-function iniciar({ sessionId, login, dir, qualidade, onFim, spawnImpl = spawn }) {
+// url: endereco da live (plataformas.urlDaLive) - twitch.tv/... ou kick.com/...
+function iniciar({ sessionId, url, dir, qualidade, onFim, spawnImpl = spawn }) {
   if (emAndamento.has(sessionId)) throw new Error(`Sessao ${sessionId} ja esta gravando.`);
   fs.mkdirSync(dir, { recursive: true });
 
-  const streamlink = spawnImpl(config.lives.streamlinkPath, argsStreamlink(login, qualidade), {
+  const streamlink = spawnImpl(config.lives.streamlinkPath, argsStreamlink(url, qualidade), {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -171,7 +174,7 @@ function iniciar({ sessionId, login, dir, qualidade, onFim, spawnImpl = spawn })
   }
 
   emAndamento.set(sessionId, { parar, terminou });
-  logger.info(`Lives: gravando twitch.tv/${login} (sessao ${sessionId}, ${qualidade}).`);
+  logger.info(`Lives: gravando ${url} (sessao ${sessionId}, ${qualidade}).`);
   return { parar, terminou };
 }
 

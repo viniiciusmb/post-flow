@@ -4,7 +4,6 @@
 
 const config = require('../../config');
 const settingsRepository = require('../../repositories/settingsRepository');
-const twitchApi = require('./twitchApi');
 
 // Padrao pensado pra VPS de 2 nucleos / 96 GB (decisao de 28/09/2026: validar
 // nela antes de pensar em servidor maior).
@@ -56,11 +55,12 @@ async function salvarConfig(entrada) {
   return nova;
 }
 
-// Tres coisas precisam ser verdade: o servidor nao forcou desligado
-// (LIVES_ENABLED=false), a Twitch esta configurada, e o painel ligou.
+// Duas coisas precisam ser verdade: o servidor nao forcou desligado
+// (LIVES_ENABLED=false) e o painel ligou. A Twitch sem configuracao nao
+// desliga mais o modulo (a Kick nao precisa dela): so os canais da Twitch
+// ficam sem vigia (plataformas.statusDosCanais os deixa de fora).
 async function estaLigado() {
   if (config.lives.forcarDesligado) return false;
-  if (!twitchApi.configurado()) return false;
   return (await settingsRepository.getValue('lives_enabled', false)) === true;
 }
 

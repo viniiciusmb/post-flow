@@ -31,6 +31,7 @@ const pool = require('../../src/db/pool');
 const livesRepository = require('../../src/repositories/livesRepository');
 const livesSettings = require('../../src/services/lives/livesSettings');
 const twitchApi = require('../../src/services/lives/twitchApi');
+const kickApi = require('../../src/services/lives/kickApi');
 const openaiLives = require('../../src/services/lives/openaiLives');
 const liveSegmentsService = require('../../src/services/lives/liveSegmentsService');
 const liveTranscriptionService = require('../../src/services/lives/liveTranscriptionService');
@@ -85,14 +86,15 @@ async function blocoTranscrito(sessao, inicio, fim, texto, status = 'feito') {
 
 // ------------------------------------------------------------------ 1
 
-test('o modulo nasce desligado e nao liga sem a Twitch configurada', async () => {
+test('o modulo nasce desligado, e liga pelo painel mesmo sem a Twitch configurada (a Kick nao precisa dela)', async () => {
   assert.equal(await settingsRepository.getValue('lives_enabled', null), false);
   assert.equal(await livesSettings.estaLigado(), false);
   await livesSettings.ligar(true);
   try {
-    // Ligado no painel, mas sem TWITCH_CLIENT_ID/SECRET no ambiente de teste.
+    // Sem TWITCH_CLIENT_ID/SECRET no ambiente de teste: antes isso segurava o
+    // modulo inteiro; agora so os canais da Twitch ficam sem vigia.
     assert.equal(twitchApi.configurado(), false);
-    assert.equal(await livesSettings.estaLigado(), false);
+    assert.equal(await livesSettings.estaLigado(), true);
   } finally {
     await livesSettings.ligar(false);
   }
@@ -912,9 +914,11 @@ test('retangulo de camera absurdo e recusado (cai no layout normal)', () => {
 function capturaFalsa() {
   const iniciadas = [];
   const paradas = [];
+  const urls = [];
+  const chats = [];
   const ativas = new Set();
   const desfazer = [
-    trocar(liveCaptureService, 'iniciar', ({ sessionId, login }) => { iniciadas.push(login); ativas.add(sessionId); }),
+    trocar(liveCaptureService, 'iniciar', ({ sessionId, url }) => { iniciadas.push(url.replace(/^https:\/\/(twitch\.tv|kick\.com)\//, '')); urls.push(url); ativas.add(sessionId); }),
     trocar(liveCaptureService, 'parar', async (sessionId, motivo) => { paradas.push(motivo); ativas.delete(sessionId); await livesRepository.endSession(sessionId, { status: 'encerrada', motivo }); }),
     trocar(liveCaptureService, 'pararTodas', async () => {}),
     trocar(liveCaptureService, 'gravando', (id) => ativas.has(id)),
@@ -922,10 +926,10 @@ function capturaFalsa() {
     trocar(liveCleanupService, 'usoDoDiscoPercent', () => 30),
     // Sem isto o teste conecta de verdade no chat da Twitch e o processo
     // nunca termina (a conexao se reabre sozinha quando cai).
-    trocar(liveChatService, 'acompanhar', () => {}),
+    trocar(liveChatService, 'acompanhar', (o) => { chats.push(o); }),
     trocar(liveChatService, 'parar', async () => {}),
   ];
-  return { iniciadas, paradas, desfazer: () => desfazer.forEach((d) => d()) };
+  return { iniciadas, paradas, urls, chats, desfazer: () => desfazer.forEach((d) => d()) };
 }
 
 async function limparVigiados() {
@@ -965,6 +969,7 @@ test('supervisor grava quem esta ao vivo ate o limite de canais, e para quando a
   const desfazer = [
     trocar(livesSettings, 'estaLigado', async () => true),
     trocar(livesSettings, 'obterConfig', async () => ({ ...livesSettings.PADRAO, maxCanais: 2 })),
+    trocar(twitchApi, 'configurado', () => true),
     trocar(twitchApi, 'buscarAoVivo', async () => aoVivo),
   ];
   try {
@@ -984,6 +989,42 @@ test('supervisor grava quem esta ao vivo ate o limite de canais, e para quando a
   assert.ok(rows.every((r) => r.is_live === false));
 });
 
+test('Kick: grava pelo endereco da Kick, ouve o chat da sala certa, e a Kick fora do ar NAO para a gravacao', async () => {
+  await limparVigiados();
+  const u = await createClient();
+  const login = `kick_${Date.now().toString(36)}`;
+  const canal = await livesRepository.upsertChannel({ platform: 'kick', login, displayName: login, platformUserId: '77', profileImageUrl: null });
+  await livesRepository.follow(u.id, canal.id);
+  const cap = capturaFalsa();
+  let resposta = { aoVivo: new Map([[login, { streamId: '9', titulo: 't', jogo: 'j', espectadores: 5, chatroomId: '555' }]]), falharam: new Set() };
+  let perguntouTwitch = false;
+  const desfazer = [
+    trocar(livesSettings, 'estaLigado', async () => true),
+    trocar(kickApi, 'buscarAoVivo', async () => resposta),
+    trocar(twitchApi, 'buscarAoVivo', async () => { perguntouTwitch = true; return new Map(); }),
+  ];
+  try {
+    await liveSupervisor.monitorar();
+    assert.deepEqual(cap.urls, [`https://kick.com/${login}`]);
+    assert.equal(cap.chats[0].plataforma, 'kick');
+    assert.equal(cap.chats[0].chatroomId, '555');
+    assert.equal(perguntouTwitch, false, 'canal da Kick nao consulta a Twitch');
+
+    // A Kick nao respondeu sobre este canal: estado desconhecido, nao "offline".
+    resposta = { aoVivo: new Map(), falharam: new Set([login]) };
+    await liveSupervisor.monitorar();
+    assert.deepEqual(cap.paradas, [], 'falha da Kick nao pode parar a gravacao no meio da live');
+
+    // Agora sim, offline de verdade.
+    resposta = { aoVivo: new Map(), falharam: new Set() };
+    await liveSupervisor.monitorar();
+    assert.deepEqual(cap.paradas, ['live terminou']);
+  } finally {
+    desfazer.forEach((d) => d());
+    cap.desfazer();
+  }
+});
+
 test('captura avisa o fim UMA vez so, mesmo com error e close no mesmo processo', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-'));
   const filhos = [];
@@ -1000,7 +1041,7 @@ test('captura avisa o fim UMA vez so, mesmo com error e close no mesmo processo'
     return f;
   };
   const avisos = [];
-  const g = liveCaptureService.iniciar({ sessionId: 424242, login: 'x', dir, qualidade: '480p', onFim: (i) => avisos.push(i), spawnImpl: spawnFalso });
+  const g = liveCaptureService.iniciar({ sessionId: 424242, url: 'https://twitch.tv/x', dir, qualidade: '480p', onFim: (i) => avisos.push(i), spawnImpl: spawnFalso });
   const [streamlink, ffmpeg] = filhos;
   streamlink.stderr.emit('data', '[cli][info] Stream ended\n');
   streamlink.emit('error', new Error('ENOENT'));

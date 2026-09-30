@@ -170,7 +170,7 @@ async function detectarNoQuadro(videoPath, instante, custo) {
     await videoEditingService.runFfmpeg(['-ss', String(instante), '-i', videoPath, '-frames:v', '1', '-q:v', '3', quadro]);
     const r = await openaiLives.pedirJson({
       nome: 'camera_live',
-      sistema: 'Voce localiza a webcam do streamer sobreposta num quadro de live da Twitch.',
+      sistema: 'Voce localiza a webcam do streamer sobreposta num quadro de live (Twitch ou Kick).',
       usuario: INSTRUCAO_CAMERA,
       schema: SCHEMA_CAMERA,
       modelo: openaiLives.MODELO_JUIZ,

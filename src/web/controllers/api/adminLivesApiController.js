@@ -1,4 +1,4 @@
-// Tela "Lives" (cortes de lives da Twitch) - MODO DE VALIDACAO, so admin.
+// Tela "Lives" (cortes de lives da Twitch e da Kick) - MODO DE VALIDACAO, so admin.
 // Tudo aqui opera sobre o usuario logado: os canais que ELE acompanha e os
 // cortes feitos pra ELE. Quando o modulo for aberto a clientes, a mesma API
 // serve, trocando so a rota/permissao.
@@ -8,6 +8,7 @@ const fs = require('fs');
 const livesRepository = require('../../../repositories/livesRepository');
 const livesSettings = require('../../../services/lives/livesSettings');
 const twitchApi = require('../../../services/lives/twitchApi');
+const plataformas = require('../../../services/lives/plataformas');
 const liveCleanupService = require('../../../services/lives/liveCleanupService');
 const config = require('../../../config');
 const { resolveRange } = require('../../../lib/dateRanges');
@@ -26,7 +27,9 @@ function numero(v) {
 function canalParaApi(c) {
   return {
     id: Number(c.id),
+    plataforma: c.platform || 'twitch',
     login: c.login,
+    url: plataformas.urlDaLive(c),
     nome: c.display_name || c.login,
     imagem: c.profile_image_url,
     aoVivo: c.is_live,
@@ -81,28 +84,32 @@ function opcoesParaApi(c) {
   };
 }
 
-// Status ao vivo/offline dos canais direto da Twitch. Com o modulo DESLIGADO
+// Status ao vivo/offline dos canais direto da Twitch/Kick. Com o modulo DESLIGADO
 // o monitor nao roda, e a tela mostrava "Offline" pra canal que estava ao vivo
 // (visto em 29/09/2026 com o thimagroo: nunca tinha sido consultado). A
 // consulta e gratuita; so e refeita se a ultima tiver mais de 60s.
 async function atualizarStatus(canais, { forcar = false } = {}) {
-  if (!twitchApi.configurado()) return;
   const velhos = canais.filter((c) => forcar || !c.last_checked_at || Date.now() - new Date(c.last_checked_at).getTime() > 60_000);
   if (!velhos.length) return;
   try {
-    const aoVivo = await twitchApi.buscarAoVivo(velhos.map((c) => c.login));
+    // Canal fora do mapa = plataforma fora do ar: a tela mostra o ultimo
+    // status conhecido dele.
+    const status = await plataformas.statusDosCanais(velhos);
     for (const c of velhos) {
-      const st = aoVivo.get(c.login);
+      if (!status.has(Number(c.id))) continue;
+      const st = status.get(Number(c.id));
       await livesRepository.updateChannelStatus(c.id, { isLive: Boolean(st), titulo: st?.titulo, jogo: st?.jogo, espectadores: st?.espectadores });
     }
   } catch {
-    // Twitch fora do ar: a tela mostra o ultimo status conhecido.
+    // Consulta falhou por inteiro: idem.
   }
 }
 
 async function estado(req, res) {
   const userId = req.session.user.id;
-  await atualizarStatus(await livesRepository.listChannelsForUser(userId));
+  const canaisAntes = await livesRepository.listChannelsForUser(userId);
+  await atualizarStatus(canaisAntes);
+  const temTwitch = canaisAntes.some((c) => (c.platform || 'twitch') === 'twitch');
   const [ligadoNoPainel, cfg, canais, custoHoje, custo7d, opcoes] = await Promise.all([
     require('../../../repositories/settingsRepository').getValue('lives_enabled', false),
     livesSettings.obterConfig(),
@@ -123,8 +130,15 @@ async function estado(req, res) {
     // mostra em vez de o botao parecer ligado e nada acontecer.
     bloqueios: [
       ...(config.lives.forcarDesligado ? ['O servidor esta com LIVES_ENABLED=false.'] : []),
-      ...(twitchApi.configurado() ? [] : ['TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET nao configurados no servidor.']),
     ],
+    // Nao impedem o modulo de rodar, so uma parte dele: sem o app da Twitch,
+    // os canais da Kick seguem normais e os da Twitch ficam sem vigia.
+    avisos: [
+      ...(temTwitch && !twitchApi.configurado()
+        ? ['TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET nao configurados no servidor: os canais da Twitch nao sao vigiados.']
+        : []),
+    ],
+    plataformas: plataformas.PLATAFORMAS.map((p) => ({ id: p, nome: plataformas.NOMES[p], disponivel: plataformas.disponivel(p) })),
     config: cfg,
     limites: { faixas: livesSettings.FAIXAS, qualidades: livesSettings.QUALIDADES },
     discoPercent,
@@ -217,18 +231,24 @@ async function salvarConfig(req, res) {
   return estado(req, res);
 }
 
+// O link colado decide a plataforma; nome solto usa a escolhida na tela
+// (req.body.plataforma), com Twitch como padrao (era a unica antes).
 async function adicionarCanal(req, res) {
-  const login = twitchApi.normalizarLogin(req.body?.canal);
-  if (!login) return res.status(400).json({ error: 'Nome de canal da Twitch invalido. Use o nome que aparece em twitch.tv/nome.' });
-  if (!twitchApi.configurado()) return res.status(503).json({ error: 'A Twitch nao esta configurada no servidor.' });
+  const alvo = plataformas.identificar(req.body?.canal, req.body?.plataforma);
+  const escolhida = alvo?.plataforma || (req.body?.plataforma === 'kick' ? 'kick' : 'twitch');
+  const nome = plataformas.NOMES[escolhida];
+  const dominio = escolhida === 'kick' ? 'kick.com' : 'twitch.tv';
+  if (!alvo) return res.status(400).json({ error: `Nome de canal da ${nome} invalido. Use o nome que aparece em ${dominio}/nome.` });
+  if (!plataformas.disponivel(alvo.plataforma)) return res.status(503).json({ error: `A ${nome} nao esta configurada no servidor.` });
   let usuario;
   try {
-    usuario = await twitchApi.buscarUsuario(login);
+    usuario = await plataformas.buscarUsuario(alvo.plataforma, alvo.login);
   } catch (err) {
-    return res.status(502).json({ error: `Nao consegui consultar a Twitch agora: ${err.message}` });
+    return res.status(502).json({ error: `Nao consegui consultar a ${nome} agora: ${err.message}` });
   }
-  if (!usuario) return res.status(404).json({ error: `Nao existe canal twitch.tv/${login}.` });
+  if (!usuario) return res.status(404).json({ error: `Nao existe canal ${dominio}/${alvo.login}.` });
   const canal = await livesRepository.upsertChannel({
+    platform: alvo.plataforma,
     login: usuario.login,
     displayName: usuario.nome,
     platformUserId: usuario.id,

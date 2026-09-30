@@ -132,7 +132,7 @@ SERIO (viraliza pelo CONTEUDO, mesmo sem o chat reagir):
 TAMBEM: reacao genuina e intensa (rir descontrolado, susto, choque), acontecimento inesperado ao vivo (alguem entrando, doacao maluca), jogada incrivel ou falha absurda.
 NAO e momento: opiniao morna, analise, explicacao, tutorial, leitura de chat, pedido de inscricao, discurso longo, conversa que so faz sentido com contexto. "Sobre um tema polemico" nao basta - tem que ter a FRASE forte.`;
 
-const SISTEMA_TRIAGEM = `Voce faz a PRIMEIRA peneira de uma live da Twitch, procurando momentos que virariam corte viral no TikTok.
+const SISTEMA_TRIAGEM = `Voce faz a PRIMEIRA peneira de uma live (Twitch ou Kick), procurando momentos que virariam corte viral no TikTok.
 Cada linha e um bloco de ~30s: [inicio-fim em segundos] {publico: como o chat/espectadores reagiram} texto falado.
 Alguns blocos trazem {fala: ...}: pista automatica de que ali se falou de dinheiro com numero, de algo ganho/comprado ou houve palavrao. E so pista - leia o texto e decida.
 Dois caminhos pra ser momento: o PUBLICO reagiu (chat acima do normal, risadas, espectadores criando clipes) OU a propria FALA e forte (lista abaixo). Conversa comum sem nenhum dos dois nao e momento.

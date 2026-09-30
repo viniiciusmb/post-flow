@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
+  IconBrandKick,
   IconBrandTwitch,
   IconScissors,
   IconTrash,
@@ -38,8 +39,17 @@ type Opcoes = {
 
 type Nivel = { notaMinima: number; porHora: number; nome: string }
 
+type Plataforma = "twitch" | "kick"
+
+// Ícone de cada plataforma (as marcas vêm do conjunto de ícones que o painel já usa).
+function IconePlataforma({ plataforma, className }: { plataforma: Plataforma; className?: string }) {
+  return plataforma === "kick" ? <IconBrandKick className={className} /> : <IconBrandTwitch className={className} />
+}
+
 type Canal = {
   id: number
+  plataforma: Plataforma
+  url: string
   login: string
   nome: string
   imagem: string | null
@@ -62,6 +72,7 @@ type ResumoCusto = {
 type Estado = {
   ligado: boolean
   bloqueios: string[]
+  avisos?: string[]
   config: Config
   limites: { faixas: Record<string, [number, number]>; qualidades: string[] }
   discoPercent: number | null
@@ -187,6 +198,7 @@ export function AdminLivesPage() {
   const [cortes, setCortes] = useState<Corte[]>([])
   const [erro, setErro] = useState<string | null>(null)
   const [novoCanal, setNovoCanal] = useState("")
+  const [plataforma, setPlataforma] = useState<Plataforma>("twitch")
   const [adicionando, setAdicionando] = useState(false)
   const [rascunho, setRascunho] = useState<Partial<Record<keyof Config, string>>>({})
   const [ordem, setOrdem] = useState<"recentes" | "nota">("nota")
@@ -264,7 +276,7 @@ export function AdminLivesPage() {
     setAdicionando(true)
     setErro(null)
     try {
-      setEstado(await api.post<Estado>("/api/admin/lives/canais", { canal: novoCanal }))
+      setEstado(await api.post<Estado>("/api/admin/lives/canais", { canal: novoCanal, plataforma }))
       setNovoCanal("")
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não consegui adicionar o canal.")
@@ -314,7 +326,7 @@ export function AdminLivesPage() {
   return (
     <DashboardLayout user={user} onLogout={logout} title="Lives">
       <p className="text-sm text-muted-foreground">
-        O sistema vigia canais da Twitch, grava a live, acha os melhores momentos com IA e entrega os cortes
+        O sistema vigia canais da Twitch e da Kick, grava a live, acha os melhores momentos com IA e entrega os cortes
         verticais prontos. Em <strong>modo de validação</strong>: só você vê esta tela, e o custo é registrado
         por canal pra medir quanto custa uma hora de live.
       </p>
@@ -354,6 +366,9 @@ export function AdminLivesPage() {
               </div>
               {estado.bloqueios.map((b) => (
                 <p key={b} className="text-sm text-destructive">{b}</p>
+              ))}
+              {(estado.avisos || []).map((a) => (
+                <p key={a} className="text-sm text-muted-foreground">{a}</p>
               ))}
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -511,9 +526,10 @@ export function AdminLivesPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Canais da Twitch</CardTitle>
+              <CardTitle>Canais</CardTitle>
               <CardDescription>
-                Cole o nome ou o link do canal. O streamer não precisa fazer nada, e você não precisa entrar na Twitch.
+                Cole o nome ou o link do canal da Twitch ou da Kick. O streamer não precisa fazer nada, e você não
+                precisa entrar em nenhuma das duas.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
@@ -524,10 +540,30 @@ export function AdminLivesPage() {
                   void adicionar()
                 }}
               >
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  value={plataforma}
+                  onValueChange={(v) => v && setPlataforma(v as Plataforma)}
+                  aria-label="Plataforma do canal"
+                >
+                  <ToggleGroupItem value="twitch" aria-label="Twitch">
+                    <IconBrandTwitch className="size-4" /> Twitch
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="kick" aria-label="Kick">
+                    <IconBrandKick className="size-4" /> Kick
+                  </ToggleGroupItem>
+                </ToggleGroup>
                 <Input
-                  placeholder="twitch.tv/nome-do-canal"
+                  placeholder={plataforma === "kick" ? "kick.com/nome-do-canal" : "twitch.tv/nome-do-canal"}
                   value={novoCanal}
-                  onChange={(e) => setNovoCanal(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setNovoCanal(v)
+                    // Link colado já diz a plataforma: o botão acompanha, pra não mostrar uma e adicionar outra.
+                    if (/kick\.com\//i.test(v)) setPlataforma("kick")
+                    else if (/twitch\.tv\//i.test(v)) setPlataforma("twitch")
+                  }}
                   className="min-w-0 flex-1"
                 />
                 <Button type="submit" disabled={adicionando || !novoCanal.trim()}>
@@ -545,11 +581,20 @@ export function AdminLivesPage() {
                         {c.imagem ? (
                           <img src={c.imagem} alt="" className="size-10 shrink-0 rounded-full" />
                         ) : (
-                          <IconBrandTwitch className="size-10 shrink-0 text-muted-foreground" />
+                          <IconePlataforma plataforma={c.plataforma} className="size-10 shrink-0 text-muted-foreground" />
                         )}
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="truncate font-medium">{c.nome}</span>
+                            <a
+                              href={c.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex min-w-0 items-center gap-1 font-medium hover:underline"
+                              title={c.plataforma === "kick" ? "Canal na Kick" : "Canal na Twitch"}
+                            >
+                              <IconePlataforma plataforma={c.plataforma} className="size-4 shrink-0 text-muted-foreground" />
+                              <span className="truncate">{c.nome}</span>
+                            </a>
                             {c.gravacao ? (
                               <TonePill tone="danger">
                                 <IconPlayerRecordFilled className="size-3" /> Gravando há {duracao(c.gravacao.segundosGravados)}

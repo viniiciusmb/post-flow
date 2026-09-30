@@ -6,16 +6,16 @@ const pool = require('../db/pool');
 
 // ---------------------------------------------------------------- canais
 
-async function upsertChannel({ login, displayName, platformUserId, profileImageUrl }) {
+async function upsertChannel({ platform = 'twitch', login, displayName, platformUserId, profileImageUrl }) {
   const { rows } = await pool.query(
     `INSERT INTO live_channels (platform, login, display_name, platform_user_id, profile_image_url)
-     VALUES ('twitch', $1, $2, $3, $4)
+     VALUES ($5, $1, $2, $3, $4)
      ON CONFLICT (platform, login) DO UPDATE
        SET display_name = EXCLUDED.display_name,
            platform_user_id = EXCLUDED.platform_user_id,
            profile_image_url = EXCLUDED.profile_image_url
      RETURNING *`,
-    [login, displayName, platformUserId, profileImageUrl]
+    [login, displayName, platformUserId, profileImageUrl, platform]
   );
   return rows[0];
 }
@@ -189,7 +189,7 @@ async function markSelection(sessionId) {
 // encerradas ha pouco (a ultima triagem/selecao acontece depois do fim).
 async function listSessionsForAnalysis() {
   const { rows } = await pool.query(
-    `SELECT s.*, c.login, c.platform_user_id FROM live_sessions s JOIN live_channels c ON c.id = s.live_channel_id
+    `SELECT s.*, c.login, c.platform, c.platform_user_id FROM live_sessions s JOIN live_channels c ON c.id = s.live_channel_id
       WHERE s.status = 'gravando' OR s.ended_at > now() - interval '30 minutes'
       ORDER BY s.id`
   );

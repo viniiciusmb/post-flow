@@ -10,7 +10,7 @@
 const path = require('path');
 const livesRepository = require('../repositories/livesRepository');
 const livesSettings = require('../services/lives/livesSettings');
-const twitchApi = require('../services/lives/twitchApi');
+const plataformas = require('../services/lives/plataformas');
 const liveCaptureService = require('../services/lives/liveCaptureService');
 const liveSegmentsService = require('../services/lives/liveSegmentsService');
 const liveTranscriptionService = require('../services/lives/liveTranscriptionService');
@@ -55,13 +55,18 @@ async function comecarGravacao(canal, stream, cfg) {
   try {
     liveCaptureService.iniciar({
       sessionId: Number(sessao.id),
-      login: canal.login,
+      url: plataformas.urlDaLive(canal),
       dir,
       qualidade: cfg.qualidade,
       onFim: (info) => encerrarSessao(completa, info),
     });
     // O chat e sinal de apoio: se nao conectar, a gravacao segue igual.
-    liveChatService.acompanhar({ sessionId: Number(sessao.id), login: canal.login });
+    liveChatService.acompanhar({
+      sessionId: Number(sessao.id),
+      plataforma: canal.platform || 'twitch',
+      login: canal.login,
+      chatroomId: stream.chatroomId,
+    });
   } catch (err) {
     await livesRepository.endSession(sessao.id, { status: 'erro', motivo: err.message });
     throw err;
@@ -103,10 +108,13 @@ async function monitorar() {
     }
   }
 
-  const aoVivo = await twitchApi.buscarAoVivo(canais.map((c) => c.login));
+  const status = await plataformas.statusDosCanais(canais);
   for (const canal of canais) {
+    // Estado desconhecido (plataforma fora do ar, Twitch sem configuracao):
+    // nao mexe - tratar como offline pararia uma gravacao no meio da live.
+    if (!status.has(Number(canal.id))) continue;
     try {
-      await cuidarDoCanal(canal, aoVivo.get(canal.login), cfg, discoPercent);
+      await cuidarDoCanal(canal, status.get(Number(canal.id)) || undefined, cfg, discoPercent);
     } catch (err) {
       // Um canal com problema nao pode impedir os outros de serem olhados.
       logger.error(`Lives: canal ${canal.login} falhou nesta volta:`, err.message);
@@ -188,7 +196,7 @@ async function coletarClipes() {
   if (!(await livesSettings.estaLigado())) return;
   for (const s of await livesRepository.listSessionsForAnalysis()) {
     try {
-      await liveViewerClipsService.coletar(s, s.platform_user_id);
+      await liveViewerClipsService.coletar(s);
     } catch (err) {
       logger.warn(`Lives: clipes dos espectadores de ${s.login} falharam: ${err.message}`);
     }
