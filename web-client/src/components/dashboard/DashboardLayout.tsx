@@ -3,6 +3,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { GuidedTour } from "@/components/tour/GuidedTour"
+import { ClientNoticeDialog } from "@/components/dashboard/ClientNoticeDialog"
 import { useAuth } from "@/hooks/useAuth"
 import type { SessionUser } from "@/types/api"
 
@@ -48,6 +49,9 @@ export function DashboardLayout({
       {/* Montado no layout, e não em cada página: o tour atravessa telas, e
           precisa existir na tela de destino pra retomar depois da navegação. */}
       <GuidedTour autoIniciar={autoIniciarTour} />
+      {/* Admin não recebe aviso de cliente: a rota é de cliente, e o painel
+          dele não tem nada para mostrar aqui. */}
+      {user.role === "client" && <ClientNoticeDialog />}
     </SidebarProvider>
   )
 }

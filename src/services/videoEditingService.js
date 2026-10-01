@@ -497,8 +497,14 @@ function runFfmpegWithProgress(args, totalDurationSeconds, onProgress, checkCanc
 
 // Extrai so o audio, comprimido e mono - fica bem abaixo do limite de 25MB
 // da API de transcricao mesmo em videos longos (~40-50min nesse bitrate).
+// 32 kbps mono a 16 kHz: e o que o Whisper usa por dentro (ele reamostra tudo
+// pra 16 kHz), entao mais que isso so aumenta o arquivo. A 64 kbps o audio
+// passava do limite de 25 MB da OpenAI em qualquer video acima de ~54 min, e a
+// transcricao falhava sempre (01/10/2026, cliente cobrado sem receber o video).
+// Video mais longo que ~1h50 ainda passa do limite mesmo assim; esse caso e
+// resolvido dividindo o audio em partes (ver openaiTranscriptionService).
 async function extractAudio(videoPath, audioPath) {
-  await runFfmpeg(['-i', videoPath, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', audioPath]);
+  await runFfmpeg(['-i', videoPath, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '32k', audioPath]);
   return audioPath;
 }
 

@@ -3,6 +3,7 @@
 const express = require('express');
 const clientApiController = require('../../controllers/api/clientApiController');
 const onboardingApiController = require('../../controllers/api/onboardingApiController');
+const clientNoticesApiController = require('../../controllers/api/clientNoticesApiController');
 const requireAuthApi = require('../../middleware/requireAuthApi');
 const requireRoleApi = require('../../middleware/requireRoleApi');
 const asyncHandler = require('../../lib/asyncHandler');
@@ -18,5 +19,7 @@ router.put('/profile', asyncHandler(clientApiController.updateProfile));
 router.put('/password', asyncHandler(clientApiController.updatePassword));
 router.get('/usage', asyncHandler(clientApiController.usage));
 router.get('/onboarding', asyncHandler(onboardingApiController.status));
+router.get('/notices', asyncHandler(clientNoticesApiController.list));
+router.post('/notices/:id/dismiss', asyncHandler(clientNoticesApiController.dismiss));
 
 module.exports = router;

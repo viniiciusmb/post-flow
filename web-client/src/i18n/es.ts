@@ -605,6 +605,7 @@ export const es: Dicionario = {
   "plano.desligarCobranca": "Desactivar cobro automático",
   "plano.cadastrarCartao": "Añadir tarjeta",
   "plano.creditoSoComPlano": "Los minutos sueltos son un complemento del plan. Suscríbete a un plan arriba para poder comprarlos.",
+  "aviso.entendi": "Entendido",
   "plano.comprarCreditos": "Comprar créditos",
   "plano.vocePaga": "Pagas",
   "plano.seuPlano": "Tu plan",

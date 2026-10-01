@@ -613,6 +613,7 @@ export const pt = {
   "plano.desligarCobranca": "Desligar cobrança automática",
   "plano.cadastrarCartao": "Cadastrar cartão",
   "plano.creditoSoComPlano": "Minutos avulsos são um complemento do plano. Assine um plano acima para poder comprar.",
+  "aviso.entendi": "Entendi",
   "plano.comprarCreditos": "Comprar créditos",
   "plano.vocePaga": "Você paga",
   "plano.seuPlano": "Seu plano",
