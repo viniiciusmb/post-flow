@@ -7,6 +7,8 @@ import {
   IconDownload,
   IconPlayerRecordFilled,
   IconAlertTriangle,
+  IconPlayerPauseFilled,
+  IconPlayerPlayFilled,
 } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Button } from "@/components/ui/button"
@@ -35,7 +37,10 @@ type Opcoes = {
   cameraModo: "ia" | "auto" | "desligado"
   cameraPosicao: "top" | "bottom"
   cameraAlturaPercent: number
+  categorias: string[] | null
 }
+
+type Categoria = { id: string; nome: string; descricao: string }
 
 type Nivel = { notaMinima: number; porHora: number; nome: string }
 
@@ -54,6 +59,7 @@ type Canal = {
   nome: string
   imagem: string | null
   aoVivo: boolean
+  pausado: boolean
   tituloDaLive: string | null
   jogo: string | null
   espectadores: number | null
@@ -80,6 +86,7 @@ type Estado = {
   custos: { hoje: ResumoCusto; seteDias: ResumoCusto }
   opcoes: Opcoes
   niveis: Record<string, Nivel>
+  categorias: Categoria[]
 }
 
 type Corte = {
@@ -90,6 +97,9 @@ type Corte = {
   titulo: string | null
   gancho: string | null
   nota: number | null
+  tipo: string | null
+  categoria: string | null
+  revisao: { veredito: "aprovado" | "corrigido" | "descartar"; notaHistoria: number | null; problemas: string } | null
   status: "na_fila" | "renderizando" | "pronto" | "erro"
   progresso: number
   erro: string | null
@@ -203,6 +213,8 @@ export function AdminLivesPage() {
   const [rascunho, setRascunho] = useState<Partial<Record<keyof Config, string>>>({})
   const [ordem, setOrdem] = useState<"recentes" | "nota">("nota")
   const [filtroCanal, setFiltroCanal] = useState<number | null>(null)
+  const [filtroTipo, setFiltroTipo] = useState<string>("todos")
+  const [pausando, setPausando] = useState<number | null>(null)
   const [confirmando, setConfirmando] = useState<string | null>(null)
   const [clipando, setClipando] = useState<number | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
@@ -294,6 +306,31 @@ export function AdminLivesPage() {
     }
   }
 
+  async function pausarOuRetomar(c: Canal) {
+    setPausando(c.id)
+    setErro(null)
+    try {
+      setEstado(await api.post<Estado>(`/api/admin/lives/canais/${c.id}/${c.pausado ? "retomar" : "pausar"}`))
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não consegui mudar o canal.")
+    } finally {
+      setPausando(null)
+    }
+  }
+
+  // Liga/desliga um tipo de corte. Nenhum marcado = todos (mandado como null).
+  function alternarCategoria(id: string) {
+    if (!estado) return
+    const todos = estado.categorias.map((c) => c.id)
+    const atuais = estado.opcoes.categorias ?? todos
+    const novas = atuais.includes(id) ? atuais.filter((x) => x !== id) : [...atuais, id]
+    if (!novas.length) {
+      setErro("Escolha pelo menos um tipo de corte.")
+      return
+    }
+    void salvarOpcoes({ categorias: novas.length === todos.length ? null : novas })
+  }
+
   async function cliparAgora(id: number) {
     setClipando(id)
     setErro(null)
@@ -321,6 +358,8 @@ export function AdminLivesPage() {
   if (authLoading || !user) return null
 
   const hoje = estado ? somaCusto(estado.custos.hoje) : null
+  const nomeCategoria = new Map((estado?.categorias ?? []).map((c) => [c.id, c.nome]))
+  const cortesFiltrados = filtroTipo === "todos" ? cortes : cortes.filter((k) => k.categoria === filtroTipo)
   const semana = estado ? somaCusto(estado.custos.seteDias) : null
 
   return (
@@ -451,6 +490,32 @@ export function AdminLivesPage() {
                   niveis={estado.niveis}
                   onSalvar={(q) => void salvarOpcoes({ qualidade: q })}
                 />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label>Tipos de corte</Label>
+                <p className="text-xs text-muted-foreground">
+                  A IA classifica cada momento. Você recebe só os tipos marcados — desmarque o que não combina com o seu canal.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {estado.categorias.map((cat) => {
+                    const marcada = !estado.opcoes.categorias || estado.opcoes.categorias.includes(cat.id)
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        aria-pressed={marcada}
+                        title={cat.descricao}
+                        onClick={() => alternarCategoria(cat.id)}
+                        className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                          marcada ? "border-primary bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {cat.nome}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
 
               <div className="flex flex-col gap-2">
@@ -595,16 +660,21 @@ export function AdminLivesPage() {
                               <IconePlataforma plataforma={c.plataforma} className="size-4 shrink-0 text-muted-foreground" />
                               <span className="truncate">{c.nome}</span>
                             </a>
-                            {c.gravacao ? (
+                            {c.gravacao && !c.pausado ? (
                               <TonePill tone="danger">
                                 <IconPlayerRecordFilled className="size-3" /> Gravando há {duracao(c.gravacao.segundosGravados)}
                               </TonePill>
                             ) : c.aoVivo ? (
                               <TonePill tone="indigo">
-                                {estado.ligado ? "Ao vivo" : "Ao vivo · não está gravando"}
+                                {estado.ligado && !c.pausado ? "Ao vivo" : "Ao vivo · não está gravando"}
                               </TonePill>
                             ) : (
                               <TonePill tone="neutral">Offline</TonePill>
+                            )}
+                            {c.pausado && (
+                              <TonePill tone="violet">
+                                <IconPlayerPauseFilled className="size-3" /> Pausado
+                              </TonePill>
                             )}
                           </div>
                           <div className="truncate text-xs text-muted-foreground">
@@ -622,7 +692,17 @@ export function AdminLivesPage() {
                       <div className="flex flex-wrap gap-2">
                         <Button
                           size="sm"
-                          disabled={!c.gravacao || clipando === c.id}
+                          variant="outline"
+                          disabled={pausando === c.id}
+                          onClick={() => void pausarOuRetomar(c)}
+                          title={c.pausado ? "Volta a gravar e cortar quando o canal estiver ao vivo" : "Para de gravar este canal, sem tirar ele da lista"}
+                        >
+                          {c.pausado ? <IconPlayerPlayFilled className="size-4" /> : <IconPlayerPauseFilled className="size-4" />}
+                          {pausando === c.id ? "..." : c.pausado ? "Retomar" : "Pausar"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={!c.gravacao || c.pausado || clipando === c.id}
                           onClick={() => void cliparAgora(c.id)}
                           title={c.gravacao ? "Corta o momento dos últimos ~2,5 minutos" : "Só dá pra clipar enquanto o canal está sendo gravado"}
                         >
@@ -655,6 +735,17 @@ export function AdminLivesPage() {
                   <ToggleGroupItem value="nota">Maior nota</ToggleGroupItem>
                   <ToggleGroupItem value="recentes">Mais recentes</ToggleGroupItem>
                 </ToggleGroup>
+                <select
+                  aria-label="Filtrar por tipo de corte"
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={filtroTipo}
+                  onChange={(e) => setFiltroTipo(e.target.value)}
+                >
+                  <option value="todos">Todos os tipos</option>
+                  {estado.categorias.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.nome}</option>
+                  ))}
+                </select>
                 {estado.canais.length > 1 && (
                   <select
                     className="h-9 rounded-md border bg-background px-2 text-sm"
@@ -669,13 +760,13 @@ export function AdminLivesPage() {
                 )}
               </div>
 
-              {cortes.length === 0 ? (
+              {cortesFiltrados.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   Nenhum corte ainda. Eles aparecem aqui alguns minutos depois de um canal começar a ser gravado.
                 </p>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {cortes.map((k) => (
+                  {cortesFiltrados.map((k) => (
                     <div key={k.id} className="flex min-w-0 flex-col gap-2 rounded-lg border p-3">
                       {k.status === "pronto" && k.temArquivo ? (
                         <video
@@ -695,6 +786,10 @@ export function AdminLivesPage() {
                         {k.nota !== null && <TonePill tone={k.nota >= 8 ? "success" : "cyan"}>Nota {k.nota}</TonePill>}
                         {k.origem === "clipar_agora" && <TonePill tone="violet">Clipar agora</TonePill>}
                         {k.origem === "sinal" && <TonePill tone="indigo">Reação do público</TonePill>}
+                        {k.categoria && nomeCategoria.get(k.categoria) && <TonePill tone="neutral">{nomeCategoria.get(k.categoria)}</TonePill>}
+                        {k.revisao?.veredito === "corrigido" && (
+                          <TonePill tone="cyan">Ajustado na revisão</TonePill>
+                        )}
                         <span className="text-xs text-muted-foreground">{duracao(k.duracao)} · {k.canal.nome}</span>
                       </div>
                       <div className="font-medium leading-snug">{k.titulo || "(sem título ainda)"}</div>

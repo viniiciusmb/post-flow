@@ -13,6 +13,7 @@ const liveCleanupService = require('../../../services/lives/liveCleanupService')
 const config = require('../../../config');
 const { resolveRange } = require('../../../lib/dateRanges');
 const livesUserSettings = require('../../../services/lives/livesUserSettings');
+const tiposDeMomento = require('../../../services/lives/tiposDeMomento');
 const clientVideoSettingsRepository = require('../../../repositories/clientVideoSettingsRepository');
 const { toApiWithOptions, validarEstilo } = require('./clientVideoSettingsApiController');
 
@@ -33,6 +34,8 @@ function canalParaApi(c) {
     nome: c.display_name || c.login,
     imagem: c.profile_image_url,
     aoVivo: c.is_live,
+    pausado: Boolean(c.paused_at),
+    pausadoDesde: c.paused_at || null,
     tituloDaLive: c.stream_title,
     jogo: c.game_name,
     espectadores: numero(c.viewer_count),
@@ -64,6 +67,12 @@ function corteParaApi(k) {
     titulo: k.title,
     gancho: k.hook,
     nota: numero(k.score),
+    tipo: k.moment_type || null,
+    categoria: k.source === 'clipar_agora' ? null : tiposDeMomento.categoriaDoTipo(k.moment_type),
+    // O que a revisao final achou (null em corte anterior a ela).
+    revisao: k.review
+      ? { veredito: k.review.veredito, notaHistoria: numero(k.review.notaHistoria), problemas: k.review.problemas || '' }
+      : null,
     status: k.status,
     progresso: k.render_progress,
     erro: k.error_message,
@@ -81,6 +90,7 @@ function opcoesParaApi(c) {
     cameraModo: c.camera_modo,
     cameraPosicao: c.camera_posicao,
     cameraAlturaPercent: c.camera_altura_percent,
+    categorias: Array.isArray(c.categorias) && c.categorias.length ? c.categorias : null,
   };
 }
 
@@ -146,6 +156,7 @@ async function estado(req, res) {
     custos: { hoje: custoHoje, seteDias: custo7d },
     opcoes: opcoesParaApi(opcoes),
     niveis: livesUserSettings.NIVEIS,
+    categorias: tiposDeMomento.CATEGORIAS.map(({ id, nome, descricao }) => ({ id, nome, descricao })),
   });
 }
 
@@ -173,6 +184,14 @@ async function salvarOpcoes(req, res) {
     const a = Number(b.cameraAlturaPercent);
     if (!Number.isInteger(a) || a < 20 || a > 60) return res.status(400).json({ error: 'Altura da camera vai de 20% a 60%.' });
     nova.camera_altura_percent = a;
+  }
+  if (b.categorias !== undefined) {
+    // null ou lista vazia = todos os tipos. Id desconhecido e recusado, nao
+    // ignorado: gravar lixo faria o filtro barrar tudo sem ninguem entender.
+    if (b.categorias === null) nova.categorias = null;
+    else if (!Array.isArray(b.categorias) || b.categorias.some((x) => !tiposDeMomento.IDS_CATEGORIAS.includes(x))) {
+      return res.status(400).json({ error: 'Tipo de corte invalido.' });
+    } else nova.categorias = b.categorias.length ? [...new Set(b.categorias)] : null;
   }
   if (b.usarEstiloDosVideos !== undefined) {
     nova.usar_estilo_dos_videos = Boolean(b.usarEstiloDosVideos);
@@ -268,6 +287,21 @@ async function removerCanal(req, res) {
   return estado(req, res);
 }
 
+// Pausar/retomar: o canal continua salvo (e com o status ao vivo/offline na
+// tela), so nao e gravado pra essa pessoa enquanto pausado. A gravacao em
+// andamento para na proxima volta do supervisor se ninguem mais acompanha.
+async function pausarCanal(req, res) {
+  const ok = await livesRepository.setPaused(req.session.user.id, Number(req.params.id), true);
+  if (!ok) return res.status(404).json({ error: 'Voce nao acompanha esse canal.' });
+  return estado(req, res);
+}
+
+async function retomarCanal(req, res) {
+  const ok = await livesRepository.setPaused(req.session.user.id, Number(req.params.id), false);
+  if (!ok) return res.status(404).json({ error: 'Voce nao acompanha esse canal.' });
+  return estado(req, res);
+}
+
 async function cliparAgora(req, res) {
   const userId = req.session.user.id;
   const id = Number(req.params.id);
@@ -324,4 +358,4 @@ async function apagarCorte(req, res) {
   res.json({ ok: true });
 }
 
-module.exports = { estado, salvarConfig, salvarOpcoes, obterEstilo, salvarEstilo, adicionarCanal, removerCanal, cliparAgora, listarCortes, arquivoDoCorte, apagarCorte, JANELA_CLIPAR_AGORA_S };
+module.exports = { estado, salvarConfig, salvarOpcoes, obterEstilo, salvarEstilo, adicionarCanal, removerCanal, pausarCanal, retomarCanal, cliparAgora, listarCortes, arquivoDoCorte, apagarCorte, JANELA_CLIPAR_AGORA_S };

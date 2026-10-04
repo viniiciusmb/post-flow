@@ -166,7 +166,40 @@ test('opcoes de live: qualidade fora de 1 a 5 e recusada, dentro e salva', async
   assert.equal((await agent.put('/api/admin/lives/opcoes', { cameraModo: 'qualquer' })).status, 400);
   const r2 = await agent.put('/api/admin/lives/opcoes', { cameraModo: 'desligado' });
   assert.equal(r2.body.opcoes.qualidade, 4);
-  assert.equal(r2.body.niveis['5'].notaMinima, 9);
+  // 04/10/2026: o nivel maximo passou de nota 9 / 2 por hora pra nota 8 / 6
+  // por hora - com 2 por hora quase nada saia.
+  assert.equal(r2.body.niveis['5'].notaMinima, 8);
+  assert.equal(r2.body.niveis['5'].porHora, 6);
+});
+
+test('tipos de corte: id desconhecido e recusado, lista vazia vira "todos", e a escolha volta na resposta', async () => {
+  const { agent } = await logado('admin');
+  assert.equal((await agent.put('/api/admin/lives/opcoes', { categorias: ['humor', 'nao-existe'] })).status, 400);
+  assert.equal((await agent.put('/api/admin/lives/opcoes', { categorias: 'humor' })).status, 400);
+  let r = await agent.put('/api/admin/lives/opcoes', { categorias: ['dinheiro', 'humor', 'humor'] });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.opcoes.categorias, ['dinheiro', 'humor']);
+  assert.ok(r.body.categorias.some((c) => c.id === 'historias' && c.nome));
+  // Mexer em outra opcao nao apaga a escolha.
+  r = await agent.put('/api/admin/lives/opcoes', { qualidade: 2 });
+  assert.deepEqual(r.body.opcoes.categorias, ['dinheiro', 'humor']);
+  r = await agent.put('/api/admin/lives/opcoes', { categorias: [] });
+  assert.equal(r.body.opcoes.categorias, null);
+});
+
+test('pausar e retomar canal: continua na lista, so muda o "pausado"; canal de outra pessoa e 404', async () => {
+  const { u, agent } = await logado('admin');
+  const outro = await logado('admin');
+  const canal = await livesRepository.upsertChannel({ login: loginNovo(), displayName: 'x', platformUserId: '1', profileImageUrl: null });
+  await livesRepository.follow(u.id, canal.id);
+  let r = await agent.post(`/api/admin/lives/canais/${canal.id}/pausar`);
+  assert.equal(r.status, 200);
+  let c = r.body.canais.find((x) => x.id === Number(canal.id));
+  assert.equal(c.pausado, true, 'pausado continua na lista');
+  assert.equal((await outro.agent.post(`/api/admin/lives/canais/${canal.id}/pausar`)).status, 404);
+  r = await agent.post(`/api/admin/lives/canais/${canal.id}/retomar`);
+  c = r.body.canais.find((x) => x.id === Number(canal.id));
+  assert.equal(c.pausado, false);
 });
 
 test('estilo proprio de live nasce igual ao de video e editar ele NAO mexe no estilo de video', async () => {

@@ -20,10 +20,11 @@ async function upsertChannel({ platform = 'twitch', login, displayName, platform
   return rows[0];
 }
 
+// Adicionar o canal de novo (inclusive um pausado) volta a acompanhar.
 async function follow(userId, channelId) {
   await pool.query(
     `INSERT INTO live_channel_follows (user_id, live_channel_id) VALUES ($1, $2)
-     ON CONFLICT (user_id, live_channel_id) DO UPDATE SET is_active = true`,
+     ON CONFLICT (user_id, live_channel_id) DO UPDATE SET is_active = true, paused_at = NULL`,
     [userId, channelId]
   );
 }
@@ -36,6 +37,18 @@ async function unfollow(userId, channelId) {
   return rowCount > 0;
 }
 
+// Pausar: o canal fica salvo na tela (com o status ao vivo/offline), mas nao
+// e gravado pra essa pessoa. So muda quem acompanha (is_active) - remover
+// continua sendo outra coisa.
+async function setPaused(userId, channelId, pausado) {
+  const { rowCount } = await pool.query(
+    `UPDATE live_channel_follows SET paused_at = CASE WHEN $3 THEN COALESCE(paused_at, now()) ELSE NULL END
+      WHERE user_id = $1 AND live_channel_id = $2 AND is_active`,
+    [userId, channelId, Boolean(pausado)]
+  );
+  return rowCount > 0;
+}
+
 async function isFollowing(userId, channelId) {
   const { rows } = await pool.query(
     'SELECT 1 FROM live_channel_follows WHERE user_id = $1 AND live_channel_id = $2 AND is_active',
@@ -44,8 +57,19 @@ async function isFollowing(userId, channelId) {
   return rows.length > 0;
 }
 
-// Canais que alguem acompanha - os unicos que o supervisor vigia e grava.
+// Canais que alguem acompanha SEM pausa - os unicos que o supervisor grava.
 async function listWatchedChannels() {
+  const { rows } = await pool.query(
+    `SELECT c.* FROM live_channels c
+      WHERE EXISTS (SELECT 1 FROM live_channel_follows f WHERE f.live_channel_id = c.id AND f.is_active AND f.paused_at IS NULL)
+      ORDER BY c.id`
+  );
+  return rows;
+}
+
+// Todo canal acompanhado, pausado ou nao: a vigia atualiza o status ao
+// vivo/offline de todos (consulta gratis), pra tela mostrar certo mesmo pausado.
+async function listFollowedChannels() {
   const { rows } = await pool.query(
     `SELECT c.* FROM live_channels c
       WHERE EXISTS (SELECT 1 FROM live_channel_follows f WHERE f.live_channel_id = c.id AND f.is_active)
@@ -56,7 +80,7 @@ async function listWatchedChannels() {
 
 async function activeFollowerIds(channelId) {
   const { rows } = await pool.query(
-    'SELECT user_id FROM live_channel_follows WHERE live_channel_id = $1 AND is_active ORDER BY user_id',
+    'SELECT user_id FROM live_channel_follows WHERE live_channel_id = $1 AND is_active AND paused_at IS NULL ORDER BY user_id',
     [channelId]
   );
   return rows.map((r) => Number(r.user_id));
@@ -83,7 +107,8 @@ async function listChannelsForUser(userId) {
             s.recorded_seconds AS session_recorded_seconds, s.bytes AS session_bytes,
             (SELECT count(*) FROM live_clips k WHERE k.live_channel_id = c.id AND k.user_id = $1 AND k.status = 'pronto') AS clips_prontos,
             (SELECT count(*) FROM live_clips k WHERE k.live_channel_id = c.id AND k.user_id = $1 AND k.status IN ('na_fila','renderizando')) AS clips_em_andamento,
-            (SELECT max(started_at) FROM live_sessions x WHERE x.live_channel_id = c.id) AS ultima_gravacao
+            (SELECT max(started_at) FROM live_sessions x WHERE x.live_channel_id = c.id) AS ultima_gravacao,
+            f.paused_at
        FROM live_channel_follows f
        JOIN live_channels c ON c.id = f.live_channel_id
        LEFT JOIN live_sessions s ON s.live_channel_id = c.id AND s.status = 'gravando'
@@ -451,24 +476,27 @@ async function approvedCandidates(sessionId) {
   return rows;
 }
 
-// Quem acompanha o canal, com o nivel de qualidade de cada um (padrao 3).
+// Quem acompanha o canal (sem pausa), com o nivel de qualidade (padrao 3) e
+// os tipos de corte escolhidos (null = todos). Quem pausou nao recebe corte
+// novo nem de uma gravacao que outra pessoa mantem ligada.
 async function followersWithQuality(channelId) {
   const { rows } = await pool.query(
-    `SELECT f.user_id, COALESCE(s.qualidade, 3) AS qualidade
+    `SELECT f.user_id, COALESCE(s.qualidade, 3) AS qualidade, s.categorias
        FROM live_channel_follows f
        LEFT JOIN live_clip_settings s ON s.user_id = f.user_id
-      WHERE f.live_channel_id = $1 AND f.is_active
+      WHERE f.live_channel_id = $1 AND f.is_active AND f.paused_at IS NULL
       ORDER BY f.user_id`,
     [channelId]
   );
-  return rows.map((r) => ({ user_id: Number(r.user_id), qualidade: Number(r.qualidade) }));
+  return rows.map((r) => ({ user_id: Number(r.user_id), qualidade: Number(r.qualidade), categorias: r.categorias || null }));
 }
 
 // Cortes que o juiz ja deu pra este usuario nesta sessao (o "Clipar agora" nao
 // conta: foi pedido a mao, nao entra no teto do nivel).
 async function countUserClipsFromJudge(sessionId, userId) {
   const { rows } = await pool.query(
-    "SELECT count(*) AS n FROM live_clips WHERE session_id = $1 AND user_id = $2 AND source <> 'clipar_agora'",
+    // Descartado pela revisao final nao ocupa vaga: o proximo candidato entra.
+    "SELECT count(*) AS n FROM live_clips WHERE session_id = $1 AND user_id = $2 AND source <> 'clipar_agora' AND status <> 'descartado'",
     [sessionId, userId]
   );
   return Number(rows[0].n);
@@ -492,15 +520,17 @@ async function getClipSettings(userId) {
 async function upsertClipSettings(userId, c) {
   const { rows } = await pool.query(
     `INSERT INTO live_clip_settings
-       (user_id, usar_estilo_dos_videos, estilo, qualidade, camera_modo, camera_posicao, camera_altura_percent, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+       (user_id, usar_estilo_dos_videos, estilo, qualidade, camera_modo, camera_posicao, camera_altura_percent, categorias, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
      ON CONFLICT (user_id) DO UPDATE SET
        usar_estilo_dos_videos = EXCLUDED.usar_estilo_dos_videos, estilo = EXCLUDED.estilo,
        qualidade = EXCLUDED.qualidade, camera_modo = EXCLUDED.camera_modo,
        camera_posicao = EXCLUDED.camera_posicao, camera_altura_percent = EXCLUDED.camera_altura_percent,
+       categorias = EXCLUDED.categorias,
        updated_at = now()
      RETURNING *`,
-    [userId, c.usar_estilo_dos_videos, JSON.stringify(c.estilo || {}), c.qualidade, c.camera_modo, c.camera_posicao, c.camera_altura_percent]
+    [userId, c.usar_estilo_dos_videos, JSON.stringify(c.estilo || {}), c.qualidade, c.camera_modo, c.camera_posicao, c.camera_altura_percent,
+      Array.isArray(c.categorias) && c.categorias.length ? c.categorias : null]
   );
   return rows[0];
 }
@@ -546,7 +576,7 @@ async function claimClipToRender() {
            AND (k2.source <> 'clipar_agora' OR s.recorded_seconds >= k2.end_offset OR s.status <> 'gravando')
          ORDER BY (k2.source = 'clipar_agora') DESC, k2.created_at
          LIMIT 1 FOR UPDATE OF k2 SKIP LOCKED)
-      RETURNING k.*`
+      RETURNING k.*, (SELECT moment_type FROM live_candidates c WHERE c.id = k.candidate_id) AS moment_type`
   );
   return rows[0] || null;
 }
@@ -566,6 +596,18 @@ async function finishClip(clipId, { inicio, fim, titulo, gancho, clipPath, thumb
   );
 }
 
+// Revisao final reprovou: nao vira video e nao ocupa a vaga de ninguem.
+async function discardClip(clipId, { motivo, review }) {
+  await pool.query(
+    "UPDATE live_clips SET status = 'descartado', error_message = $2, review = $3 WHERE id = $1",
+    [clipId, String(motivo || '').slice(0, 500), review ? JSON.stringify(review) : null]
+  );
+}
+
+async function setClipReview(clipId, review) {
+  await pool.query('UPDATE live_clips SET review = $2 WHERE id = $1', [clipId, review ? JSON.stringify(review) : null]);
+}
+
 async function failClip(clipId, erro) {
   await pool.query("UPDATE live_clips SET status = 'erro', error_message = $2 WHERE id = $1", [clipId, String(erro).slice(0, 500)]);
 }
@@ -579,8 +621,11 @@ async function requeueInterruptedRenders() {
 async function listClipsForUser(userId, { channelId = null, ordem = 'recentes', limite = 100 } = {}) {
   const ordenacao = ordem === 'nota' ? 'k.score DESC NULLS LAST, k.created_at DESC' : 'k.created_at DESC';
   const { rows } = await pool.query(
-    `SELECT k.*, c.login, c.display_name FROM live_clips k JOIN live_channels c ON c.id = k.live_channel_id
+    `SELECT k.*, c.login, c.display_name, c.platform,
+            (SELECT moment_type FROM live_candidates x WHERE x.id = k.candidate_id) AS moment_type
+       FROM live_clips k JOIN live_channels c ON c.id = k.live_channel_id
       WHERE k.user_id = $1 AND ($2::bigint IS NULL OR k.live_channel_id = $2)
+        AND k.status <> 'descartado'
       ORDER BY ${ordenacao} LIMIT $3`,
     [userId, channelId, limite]
   );
@@ -640,6 +685,10 @@ module.exports = {
   unfollow,
   isFollowing,
   listWatchedChannels,
+  listFollowedChannels,
+  setPaused,
+  discardClip,
+  setClipReview,
   activeFollowerIds,
   updateChannelStatus,
   listChannelsForUser,

@@ -412,15 +412,15 @@ test('o teto por hora do nivel vale mesmo com muitos aprovados', async () => {
   const canal = await novoCanal();
   const u = await createClient();
   await livesRepository.follow(u.id, canal.id);
-  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 4 }); // ate 3 por hora
+  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 4 }); // ate 8 por hora
   const sessao = await novaSessao(canal, { recorded: 1800 });
-  for (let i = 0; i < 6; i += 1) {
+  for (let i = 0; i < 11; i += 1) {
     const c = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'sinal', inicio: i * 100, fim: i * 100 + 40 });
     await livesRepository.judgeCandidate(c.id, { status: 'escolhido', nota: 9, inicio: i * 100, fim: i * 100 + 40, titulo: 'x', gancho: '', porque: '' });
   }
   await liveAnalysisService.distribuirSessao(sessao);
   const { rows } = await pool.query('SELECT count(*)::int AS n, min(source) AS origem FROM live_clips WHERE session_id = $1', [sessao.id]);
-  assert.equal(rows[0].n, 3);
+  assert.equal(rows[0].n, 8);
   assert.equal(rows[0].origem, 'sinal');
 });
 
@@ -1023,6 +1023,140 @@ test('Kick: grava pelo endereco da Kick, ouve o chat da sala certa, e a Kick for
     desfazer.forEach((d) => d());
     cap.desfazer();
   }
+});
+
+test('canal PAUSADO: fica salvo, nao e gravado, mas o status ao vivo/offline continua sendo atualizado', async () => {
+  await limparVigiados();
+  const u = await createClient();
+  const canal = await novoCanal();
+  await livesRepository.follow(u.id, canal.id);
+  assert.equal(await livesRepository.setPaused(u.id, canal.id, true), true);
+  assert.ok(!(await livesRepository.listWatchedChannels()).some((c) => c.id === canal.id), 'pausado nao e gravado');
+  assert.ok((await livesRepository.listFollowedChannels()).some((c) => c.id === canal.id), 'mas continua acompanhado');
+  assert.deepEqual(await livesRepository.followersWithQuality(canal.id), [], 'e nao recebe corte novo');
+
+  const cap = capturaFalsa();
+  const desfazer = [
+    trocar(livesSettings, 'estaLigado', async () => true),
+    trocar(twitchApi, 'configurado', () => true),
+    trocar(twitchApi, 'buscarAoVivo', async () => new Map([[canal.login, { streamId: '1', titulo: 'ao vivo agora', jogo: 'j', espectadores: 77 }]])),
+  ];
+  try {
+    await liveSupervisor.monitorar();
+  } finally {
+    desfazer.forEach((d) => d());
+    cap.desfazer();
+  }
+  assert.deepEqual(cap.iniciadas, [], 'pausado: nao grava');
+  const { rows } = await pool.query('SELECT is_live, viewer_count FROM live_channels WHERE id = $1', [canal.id]);
+  assert.equal(rows[0].is_live, true, 'mas o status ao vivo aparece');
+  assert.equal(rows[0].viewer_count, 77);
+
+  // Adicionar o canal de novo (ou retomar) volta a acompanhar de verdade.
+  await livesRepository.follow(u.id, canal.id);
+  assert.ok((await livesRepository.listWatchedChannels()).some((c) => c.id === canal.id));
+});
+
+test('pausar no meio da gravacao para de gravar na proxima volta', async () => {
+  await limparVigiados();
+  const u = await createClient();
+  const canal = await novoCanal();
+  await livesRepository.follow(u.id, canal.id);
+  const cap = capturaFalsa();
+  const desfazer = [
+    trocar(livesSettings, 'estaLigado', async () => true),
+    trocar(twitchApi, 'configurado', () => true),
+    trocar(twitchApi, 'buscarAoVivo', async () => new Map([[canal.login, { streamId: '1', titulo: 't', jogo: 'j', espectadores: 5 }]])),
+  ];
+  try {
+    await liveSupervisor.monitorar();
+    assert.equal(cap.iniciadas.length, 1);
+    await livesRepository.setPaused(u.id, canal.id, true);
+    await liveSupervisor.monitorar();
+    assert.deepEqual(cap.paradas, ['canal pausado ou removido']);
+  } finally {
+    desfazer.forEach((d) => d());
+    cap.desfazer();
+  }
+});
+
+test('tipos de corte: cada pessoa recebe so as categorias que escolheu (nenhuma escolhida = todas)', async () => {
+  const canal = await novoCanal();
+  const soDinheiro = await createClient();
+  const todos = await createClient();
+  for (const u of [soDinheiro, todos]) await livesRepository.follow(u.id, canal.id);
+  await livesRepository.upsertClipSettings(soDinheiro.id, { ...livesUserSettings.PADRAO, qualidade: 1, categorias: ['dinheiro', 'historias'] });
+  await livesRepository.upsertClipSettings(todos.id, { ...livesUserSettings.PADRAO, qualidade: 1 });
+  const sessao = await novaSessao(canal, { recorded: 3600 });
+  for (const [ini, tipo] of [[100, 'piada'], [300, 'ostentacao'], [500, 'historia'], [700, 'briga'], [900, null]]) {
+    const c = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: ini, fim: ini + 40, nota: 8 });
+    await livesRepository.judgeCandidate(c.id, { status: 'escolhido', nota: 8, inicio: ini, fim: ini + 40, titulo: tipo || 'sem tipo', gancho: '', porque: '', tipo });
+  }
+  await liveAnalysisService.distribuirSessao(sessao);
+  const titulos = async (u) =>
+    (await pool.query('SELECT title FROM live_clips WHERE session_id = $1 AND user_id = $2 ORDER BY start_offset', [sessao.id, u.id])).rows.map((r) => r.title);
+  assert.deepEqual(await titulos(soDinheiro), ['ostentacao', 'historia']);
+  assert.deepEqual(await titulos(todos), ['piada', 'ostentacao', 'historia', 'briga', 'sem tipo']);
+});
+
+test('corte descartado pela revisao final nao ocupa vaga: o proximo candidato entra no lugar', async () => {
+  const canal = await novoCanal();
+  const u = await createClient();
+  await livesRepository.follow(u.id, canal.id);
+  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 5 }); // ate 6 por hora
+  const sessao = await novaSessao(canal, { recorded: 600 });
+  for (let i = 0; i < 8; i += 1) {
+    const c = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: i * 100, fim: i * 100 + 40, nota: 8 });
+    await livesRepository.judgeCandidate(c.id, { status: 'escolhido', nota: 9, inicio: i * 100, fim: i * 100 + 40, titulo: `c${i}`, gancho: '', porque: '', tipo: 'piada' });
+  }
+  await liveAnalysisService.distribuirSessao(sessao);
+  const contar = async () => (await pool.query("SELECT count(*)::int AS n FROM live_clips WHERE session_id = $1 AND status <> 'descartado'", [sessao.id])).rows[0].n;
+  assert.equal(await contar(), 6);
+  const { rows } = await pool.query('SELECT id FROM live_clips WHERE session_id = $1 ORDER BY id LIMIT 2', [sessao.id]);
+  for (const r of rows) await livesRepository.discardClip(r.id, { motivo: 'nao se sustenta', review: { veredito: 'descartar' } });
+  await liveAnalysisService.distribuirSessao(sessao);
+  assert.equal(await contar(), 6, 'as 2 vagas foram preenchidas pelos proximos');
+  // E o descartado some da lista da tela.
+  const lista = await livesRepository.listClipsForUser(u.id, { channelId: canal.id });
+  assert.equal(lista.length, 6);
+});
+
+test('juiz: historia sem comeco/fim nao passa de 6, e historia pode ter ate 150s (piada fica em 90s)', async () => {
+  const { aplicarTetos } = liveAnalysisService;
+  const base = { nota: 9, gancho_forte: 9, desfecho_claro: 9, emocao: 9, entende_sozinho: true };
+  assert.equal(aplicarTetos({ ...base, historia_completa: 9 }), 9);
+  assert.equal(aplicarTetos({ ...base, historia_completa: 4 }), 6);
+
+  const canal = await novoCanal();
+  const sessao = await novaSessao(canal, { recorded: 3600 });
+  for (let t = 0; t < 1800; t += 30) await blocoTranscrito(sessao, t, t + 30, 'fala');
+  const c1 = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: 400, fim: 440, nota: 8 });
+  const c2 = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: 1000, fim: 1040, nota: 8 });
+  let pedido = null;
+  const desfazer = trocar(openaiLives, 'pedirJson', async (p) => {
+    pedido = p;
+    const ok = { gancho_forte: 8, desfecho_claro: 8, emocao: 7, historia_completa: 8, entende_sozinho: true, contexto: '', gancho: '', porque: 'ok' };
+    return {
+      dados: {
+        avaliacoes: [
+          // As duas pedem 140s comecando 80s antes do candidato.
+          { ...ok, id: Number(c1.id), tipo: 'historia', nota: 8, inicio_s: 320, fim_s: 460, titulo: 'Causo' },
+          { ...ok, id: Number(c2.id), tipo: 'piada', nota: 8, inicio_s: 920, fim_s: 1060, titulo: 'Piada' },
+        ],
+      },
+      inputTokens: 1, outputTokens: 1, custoUsd: 0,
+    };
+  });
+  try {
+    await liveAnalysisService.julgarSessao(sessao);
+  } finally {
+    desfazer();
+  }
+  assert.ok(pedido.usuario.includes('[270s-300s'), 'o juiz ve 2 minutos ANTES do candidato (400s - 120s)');
+  assert.ok(!pedido.usuario.includes('[240s-270s'), 'e nao mais que isso');
+  assert.ok(pedido.schema.properties.avaliacoes.items.required.includes('historia_completa'));
+  const { rows } = await pool.query('SELECT final_start, final_end FROM live_candidates WHERE id = ANY($1::bigint[]) ORDER BY id', [[c1.id, c2.id]]);
+  assert.deepEqual(rows.map((r) => [Number(r.final_start), Number(r.final_end)]), [[320, 460], [920, 1010]]);
 });
 
 test('captura avisa o fim UMA vez so, mesmo com error e close no mesmo processo', async () => {

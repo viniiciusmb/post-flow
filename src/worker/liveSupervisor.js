@@ -85,6 +85,7 @@ async function monitorar() {
   }
   const cfg = await livesSettings.obterConfig();
   const canais = await livesRepository.listWatchedChannels();
+  const seguidos = await livesRepository.listFollowedChannels();
   const recording = await livesRepository.listRecordingSessions();
 
   // Sessao "gravando" no banco sem processo neste worker (canal que perdeu
@@ -93,10 +94,20 @@ async function monitorar() {
   for (const s of recording) {
     if (vigiados.has(Number(s.live_channel_id))) continue;
     if (liveCaptureService.gravando(Number(s.id))) {
-      await liveCaptureService.parar(Number(s.id), 'ninguem acompanha mais o canal');
+      await liveCaptureService.parar(Number(s.id), 'canal pausado ou removido');
     } else {
       await livesRepository.endSession(s.id, { status: 'interrompida', motivo: 'processo sumiu' });
     }
+  }
+  if (!seguidos.length) return;
+
+  // Status de TODO canal acompanhado, inclusive pausado: a tela mostra ao
+  // vivo/offline mesmo sem gravar (pedido de 04/10/2026). Consulta gratis.
+  const status = await plataformas.statusDosCanais(seguidos);
+  for (const c of seguidos) {
+    if (vigiados.has(Number(c.id)) || !status.has(Number(c.id))) continue;
+    const st = status.get(Number(c.id));
+    await livesRepository.updateChannelStatus(c.id, { isLive: Boolean(st), titulo: st?.titulo, jogo: st?.jogo, espectadores: st?.espectadores });
   }
   if (!canais.length) return;
 
@@ -108,7 +119,6 @@ async function monitorar() {
     }
   }
 
-  const status = await plataformas.statusDosCanais(canais);
   for (const canal of canais) {
     // Estado desconhecido (plataforma fora do ar, Twitch sem configuracao):
     // nao mexe - tratar como offline pararia uma gravacao no meio da live.

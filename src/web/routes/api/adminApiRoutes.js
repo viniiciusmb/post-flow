@@ -55,6 +55,8 @@ router.get('/lives/estilo', asyncHandler(adminLivesApiController.obterEstilo));
 router.put('/lives/estilo', asyncHandler(adminLivesApiController.salvarEstilo));
 router.post('/lives/canais', asyncHandler(adminLivesApiController.adicionarCanal));
 router.delete('/lives/canais/:id', asyncHandler(adminLivesApiController.removerCanal));
+router.post('/lives/canais/:id/pausar', asyncHandler(adminLivesApiController.pausarCanal));
+router.post('/lives/canais/:id/retomar', asyncHandler(adminLivesApiController.retomarCanal));
 router.post('/lives/canais/:id/clipar-agora', asyncHandler(adminLivesApiController.cliparAgora));
 router.get('/lives/cortes', asyncHandler(adminLivesApiController.listarCortes));
 router.get('/lives/cortes/:id/arquivo', asyncHandler(adminLivesApiController.arquivoDoCorte));

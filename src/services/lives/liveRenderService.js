@@ -26,6 +26,7 @@ const videoEditingService = require('../videoEditingService');
 const openaiTranscriptionService = require('../openaiTranscriptionService');
 const openaiLives = require('./openaiLives');
 const { ajustarIntervalo } = require('./liveAnalysisService');
+const tiposDeMomento = require('./tiposDeMomento');
 const logger = require('../../lib/logger');
 
 // Quanto de video em volta do trecho pedido entra no arquivo de trabalho: e o
@@ -36,6 +37,13 @@ const logger = require('../../lib/logger');
 // fora. Custa ~30s a mais de transcricao por corte (~US$ 0,003).
 const MARGEM_ANTES_S = 15;
 const MARGEM_DEPOIS_S = 30;
+// Historia/intriga/briga: o ajuste fino pode precisar voltar mais pra pegar
+// o comeco do assunto. Custa ~30s a mais de transcricao so nesses cortes.
+const MARGEM_ANTES_LONGA_S = 45;
+
+function margemAntes(tipo) {
+  return tiposDeMomento.duracaoMaxDoTipo(tipo) > tiposDeMomento.DURACAO_MAX_PADRAO ? MARGEM_ANTES_LONGA_S : MARGEM_ANTES_S;
+}
 
 function pastaDosCortes(userId) {
   return path.join(config.videoProcessing.workDir, 'lives', 'cortes', String(userId));
@@ -75,7 +83,7 @@ const PAUSA_MIN_S = 0.45;
 const ESTENDER_FIM_MAX_S = 10;
 const RECUAR_INICIO_MAX_S = 8;
 
-function encaixarNaFala({ inicio, fim, segments = [], words = [], duracao, duracaoMax = 90 }) {
+function encaixarNaFala({ inicio, fim, segments = [], words = [], duracao, duracaoMax = tiposDeMomento.DURACAO_MAX_PADRAO }) {
   let novoFim = fim;
   const fraseDoFim = segments.find((sg) => sg.end >= fim - 0.3);
   if (fraseDoFim && fraseDoFim.end - fim <= ESTENDER_FIM_MAX_S) {
@@ -116,11 +124,107 @@ Devolva:
 - fim_s: o FIM da frase em que o ASSUNTO DO TITULO se conclui (a resposta, a piada, a revelacao, a reacao a ela). Duas regras, as duas valem:
   1. nunca termine antes da conclusao nem no meio de uma fala - se o desfecho vem nas frases seguintes, estenda ate ele;
   2. nunca continue num assunto NOVO - quando alguem muda de assunto (outra pergunta, outro tema, "e o fulano?"), o corte termina na frase ANTERIOR a essa mudanca;
-- duracao normalmente entre 25 e 60 segundos (nunca menos de 20, nunca mais de 90): corte curto demais perde a preparacao e ninguem entende a graca;
+- o corte tem que fazer sentido do comeco ao fim pra quem NUNCA viu a live: a primeira frase situa (do que se trata, quem fala com quem), o meio desenvolve, o fim conclui;
+- duracao: momento rapido (piada, reacao, mancada) normalmente entre 25 e 60 segundos, nunca menos de 20; historia, intriga, reflexao, briga e polemica podem ir ate o limite informado se precisarem disso pra ter comeco, meio e fim. Corte curto demais perde a preparacao e ninguem entende a graca; longo demais perde quem assiste;
 - titulo curto (ate 60 caracteres) e gancho (ate 100) no idioma falado, sem hashtag. Se ja vierem bons, pode manter.`;
 
 const SISTEMA_CLIPAR_AGORA = `Alguem apertou "Clipar agora" durante uma live: algo interessante acabou de acontecer nos ultimos ~2 minutos e meio (normalmente perto do fim).
 Ache o MOMENTO que motivou o clique e devolva onde o corte comeca (o COMECO de uma frase, com o gancho entendivel em 3 segundos) e termina (o FIM de uma frase, depois da conclusao/reacao - nunca no meio de uma fala), normalmente entre 25 e 60 segundos (minimo 20), com titulo curto (ate 60) e gancho (ate 100) no idioma falado, sem hashtag.`;
+
+// ------------------------------------------------------------------ revisao final
+//
+// Ultima camada antes do video existir (pedido de 04/10/2026: "o corte fazer
+// sentido do comeco ao fim"). O juiz e o ajuste fino escolhem olhando a live
+// em volta; a revisao le SO o que ficou dentro do corte, como quem esta
+// rolando o feed e nunca viu a live, e responde: da pra entender do que se
+// trata logo no comeco? termina na conclusao? o titulo promete o que o corte
+// entrega? Pode corrigir inicio/fim (dentro do que foi transcrito), reescrever
+// o titulo, ou descartar - corte descartado nao renderiza e abre vaga pro
+// proximo candidato. No "Clipar agora" nunca descarta: alguem pediu o corte.
+const SCHEMA_REVISAO = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['entende_sozinho', 'comeco_ok', 'fim_ok', 'nota_historia', 'problemas', 'veredito', 'inicio_s', 'fim_s', 'titulo', 'gancho'],
+  properties: {
+    entende_sozinho: { type: 'boolean' },
+    comeco_ok: { type: 'boolean' },
+    fim_ok: { type: 'boolean' },
+    nota_historia: { type: 'integer' },
+    problemas: { type: 'string' },
+    veredito: { type: 'string', enum: ['aprovado', 'corrigido', 'descartar'] },
+    inicio_s: { type: 'number' },
+    fim_s: { type: 'number' },
+    titulo: { type: 'string' },
+    gancho: { type: 'string' },
+  },
+};
+
+const SISTEMA_REVISAO = `Voce e o revisor final de um canal de cortes de live no TikTok. O corte ja foi escolhido e recortado; voce decide se ele se sustenta SOZINHO.
+Voce recebe a fala frase a frase (segundos) em tres partes: ANTES DO CORTE (fica de fora), DENTRO DO CORTE (e o que a pessoa vai ver) e DEPOIS DO CORTE (fica de fora). Leia DENTRO DO CORTE como alguem rolando o feed que nunca viu essa live.
+
+Responda:
+- comeco_ok: nas primeiras frases da pra entender do que se trata? Comecar no meio de uma conversa ("e ai ele falou que..." sem saber quem e ele), responder uma pergunta que ficou de fora, ou continuar um assunto que comecou antes = false;
+- fim_ok: termina na conclusao (a piada, a resposta, a revelacao, o desfecho da historia, a reacao)? Parar antes do desfecho, ou emendar um assunto novo depois dele = false;
+- entende_sozinho: quem nunca viu a live entende o corte do comeco ao fim (o titulo pode dar o contexto de uma linha)?
+- nota_historia (0 a 10): o quanto o corte funciona como uma peca fechada - comeco que situa, meio que prende, fim que entrega;
+- problemas: em uma frase, o que esta errado (vazio se nada).
+
+veredito:
+- "aprovado": comeco e fim ja estao certos. Devolva inicio_s/fim_s iguais aos atuais;
+- "corrigido": da pra consertar mexendo no inicio e/ou no fim usando o que esta ANTES ou DEPOIS (ex.: puxar o inicio pra pergunta que gerou a resposta; estender o fim ate a conclusao; cortar o assunto novo que comecou no final). Devolva os novos inicio_s/fim_s - sempre no comeco de uma frase e no fim de outra;
+- "descartar": nem mexendo no inicio/fim vira uma peca que se entende sozinha (precisa de contexto demais, nao tem desfecho em lugar nenhum, e conversa morna). Seja honesto: e melhor descartar do que publicar corte sem sentido.
+
+titulo (ate 60 caracteres) e gancho (ate 100), no idioma falado, sem hashtag: reescreva pra descrever EXATAMENTE o que acontece dentro do corte final - nunca prometa algo que o corte nao mostra. O titulo pode dar o contexto que falta em uma linha ("Contou como perdeu 50 mil num dia"). Dinheiro/ostentacao: o numero ou o item vai no titulo.`;
+
+function frasesEntre(segments, de, ate) {
+  return segments.filter((sg) => sg.end > de + 0.05 && sg.start < ate - 0.05);
+}
+
+async function revisarCorte({ transcricao, inicio, fim, duracao, tipo, titulo, gancho, cliparAgora, custo }) {
+  const segs = transcricao.segments || [];
+  if (!segs.length) return null;
+  const texto = (lista) => (lista.length ? frasesComTempo(lista) : '(nada)');
+  const r = await openaiLives.pedirJson({
+    nome: 'revisao_corte',
+    sistema: SISTEMA_REVISAO,
+    usuario:
+      `Tipo do momento: ${tipo || 'nao classificado'}. Limite de duracao: ${tiposDeMomento.duracaoMaxDoTipo(tipo)}s.
+` +
+      `Titulo atual: "${titulo || ''}". Gancho atual: "${gancho || ''}".
+` +
+      `Corte atual: ${inicio.toFixed(1)}s a ${fim.toFixed(1)}s.
+
+` +
+      `ANTES DO CORTE (fica de fora):
+${texto(frasesEntre(segs, Math.max(0, inicio - 60), inicio))}
+
+` +
+      `DENTRO DO CORTE:
+${texto(frasesEntre(segs, inicio, fim))}
+
+` +
+      `DEPOIS DO CORTE (fica de fora):
+${texto(frasesEntre(segs, fim, Math.min(duracao, fim + 30)))}`,
+    schema: SCHEMA_REVISAO,
+    modelo: openaiLives.MODELO_JUIZ,
+    raciocinio: 'medium',
+  });
+  await custo('revisao', r);
+  const d = r.dados;
+  const veredito = cliparAgora && d.veredito === 'descartar' ? 'corrigido' : d.veredito;
+  return {
+    veredito,
+    entendeSozinho: d.entende_sozinho,
+    comecoOk: d.comeco_ok,
+    fimOk: d.fim_ok,
+    notaHistoria: Math.max(0, Math.min(10, Math.round(Number(d.nota_historia) || 0))),
+    problemas: String(d.problemas || '').slice(0, 300),
+    inicio: Number(d.inicio_s),
+    fim: Number(d.fim_s),
+    titulo: String(d.titulo || '').slice(0, 80),
+    gancho: String(d.gancho || '').slice(0, 150),
+  };
+}
 
 const SCHEMA_CAMERA = {
   type: 'object',
@@ -219,7 +323,10 @@ async function renderizar(clip) {
 
   const inicioPedido = Number(clip.start_offset);
   const fimPedido = Number(clip.end_offset);
-  const segmentos = await livesRepository.videoSegmentsBetween(sessao.id, inicioPedido - MARGEM_ANTES_S, fimPedido + MARGEM_DEPOIS_S);
+  const tipo = clip.moment_type || null;
+  const antes = margemAntes(tipo);
+  const duracaoMax = tiposDeMomento.duracaoMaxDoTipo(tipo);
+  const segmentos = await livesRepository.videoSegmentsBetween(sessao.id, inicioPedido - antes, fimPedido + MARGEM_DEPOIS_S);
   if (!segmentos.length) throw new Error('Os pedacos gravados desse trecho ja foram apagados (retencao).');
 
   const pasta = pastaDosCortes(clip.user_id);
@@ -247,7 +354,7 @@ async function renderizar(clip) {
     // pedacos de 10s inteiros que o arquivo de trabalho carrega (ate 20s a mais
     // por corte, pagos no whisper-1). Os tempos das palavras voltam pro eixo
     // do arquivo de trabalho somando o inicio do recorte.
-    const audioDe = Math.max(0, inicioPedido - origem - MARGEM_ANTES_S);
+    const audioDe = Math.max(0, inicioPedido - origem - antes);
     const audioAte = Math.min(duracaoBruto, fimPedido - origem + MARGEM_DEPOIS_S);
     await videoEditingService.runFfmpeg([
       '-ss', String(audioDe), '-to', String(audioAte), '-i', bruto,
@@ -285,7 +392,7 @@ async function renderizar(clip) {
     const cliparAgora = clip.source === 'clipar_agora';
     const pedido = cliparAgora
       ? 'Momento: o que motivou o clique.'
-      : `Trecho escolhido pelo juiz: ${inicioRel.toFixed(0)}s a ${fimRel.toFixed(0)}s. Titulo proposto: "${titulo || ''}". Gancho proposto: "${gancho || ''}".`;
+      : `Trecho escolhido pelo juiz: ${inicioRel.toFixed(0)}s a ${fimRel.toFixed(0)}s. Tipo do momento: ${tipo || 'nao classificado'} (limite de ${duracaoMax}s). Titulo proposto: "${titulo || ''}". Gancho proposto: "${gancho || ''}".`;
     try {
       const r = await openaiLives.pedirJson({
         nome: cliparAgora ? 'clipar_agora' : 'ajuste_fino',
@@ -295,16 +402,19 @@ async function renderizar(clip) {
         }`,
         schema: SCHEMA_AJUSTE,
         modelo: openaiLives.MODELO_JUIZ,
-        raciocinio: 'low',
+        // 'medium': achar onde o assunto comeca e termina e o que faz o
+        // corte ter sentido; custa ~US$ 0,002 a mais por corte.
+        raciocinio: 'medium',
       });
       await custo(cliparAgora ? 'clipar_agora' : 'ajuste_fino', r);
       // Fora do "Clipar agora", o ajuste fica a ate 20s do que o juiz pediu:
       // e ajuste, nao outra escolha.
       // Minimo de 20s: no teste real o ajuste apertou demais (18s e 21s) e o
       // corte perdia a preparacao do momento.
+      // Historia pode voltar ate o comeco da margem pra pegar a preparacao.
       const limites = cliparAgora
-        ? { min: 0, max: duracaoBruto, minDuracao: 20 }
-        : { min: Math.max(0, inicioRel - 20), max: Math.min(duracaoBruto, fimRel + MARGEM_DEPOIS_S), minDuracao: 20 };
+        ? { min: 0, max: duracaoBruto, minDuracao: 20, duracaoMax }
+        : { min: Math.max(0, inicioRel - (antes > MARGEM_ANTES_S ? antes : 20)), max: Math.min(duracaoBruto, fimRel + MARGEM_DEPOIS_S), minDuracao: 20, duracaoMax };
       const ajuste = ajustarIntervalo(r.dados.inicio_s, r.dados.fim_s, limites);
       if (ajuste) {
         inicioRel = ajuste.inicio;
@@ -322,16 +432,46 @@ async function renderizar(clip) {
       if (cliparAgora) inicioRel = Math.max(0, fimRel - 60);
     }
 
-    // Garantia final: comeca no inicio de uma frase e termina no fim de uma.
+    // Garantia: comeca no inicio de uma frase e termina no fim de uma.
     const naFala = encaixarNaFala({
       inicio: inicioRel,
       fim: fimRel,
       segments: transcricao.segments,
       words: transcricao.words,
       duracao: duracaoBruto,
+      duracaoMax,
     });
     inicioRel = naFala.inicio;
     fimRel = naFala.fim;
+
+    // Revisao final: le so o que ficou dentro do corte. Falha da IA nao
+    // segura o corte (e melhoria, nao requisito).
+    let revisao = null;
+    try {
+      revisao = await revisarCorte({ transcricao, inicio: inicioRel, fim: fimRel, duracao: duracaoBruto, tipo, titulo, gancho, cliparAgora, custo });
+    } catch (err) {
+      logger.warn(`Lives: revisao do corte ${clip.id} falhou (${err.message}) - seguindo sem ela.`);
+    }
+    if (revisao) {
+      if (revisao.veredito === 'descartar') {
+        await livesRepository.discardClip(clip.id, { motivo: revisao.problemas || 'A revisao final achou que o corte nao se sustenta sozinho.', review: revisao });
+        logger.info(`Lives: corte ${clip.id} descartado na revisao (${revisao.problemas}).`);
+        return;
+      }
+      if (revisao.veredito === 'corrigido') {
+        // So dentro do que foi transcrito (o arquivo de trabalho), e de novo
+        // encaixado na fala.
+        const corrigido = ajustarIntervalo(revisao.inicio, revisao.fim, { min: 0, max: duracaoBruto, minDuracao: 20, duracaoMax });
+        if (corrigido) {
+          const ok = encaixarNaFala({ ...corrigido, segments: transcricao.segments, words: transcricao.words, duracao: duracaoBruto, duracaoMax });
+          inicioRel = ok.inicio;
+          fimRel = ok.fim;
+        }
+      }
+      titulo = revisao.titulo || titulo;
+      gancho = revisao.gancho || gancho;
+      await livesRepository.setClipReview(clip.id, { ...revisao, inicioFinal: inicioRel, fimFinal: fimRel });
+    }
     const words = transcricao.words.filter((w) => w.end > inicioRel && w.start < fimRel);
     const { estilo, camera } = await livesUserSettings.estiloParaRender(clip.user_id);
     // Enquadramento: 'ia' = a IA monta o formato deste corte (paineis ou
@@ -410,4 +550,4 @@ async function renderizarProximo() {
   return true;
 }
 
-module.exports = { renderizarProximo, renderizar, encaixarNaFala, frasesComTempo, linhasComTempo, pastaDosCortes, localizarCamera, pareceOverlay, iou };
+module.exports = { renderizarProximo, renderizar, revisarCorte, margemAntes, encaixarNaFala, frasesComTempo, linhasComTempo, pastaDosCortes, localizarCamera, pareceOverlay, iou };

@@ -11,12 +11,18 @@ const clientVideoSettingsRepository = require('../../repositories/clientVideoSet
 // reacaoMinima: em que posicao o momento precisa estar entre as reacoes do
 // publico daquela live (0,9 = entre os 10% de maior reacao). Ignorado em live
 // sem chat (sem sinal nao ha como comparar).
+//
+// 04/10/2026 (pedido do Vinicius: "2 por hora e muito pouco - mais cortes,
+// mais chance de um bom"): os tetos subiram. Medido nas lives reais antes de
+// mexer - live de 5h da Kick: 5 momentos nota 9, 35 nota 8, 58 nota 7. O
+// nivel maximo antigo (nota 9 + top 10% de reacao) dava 1-2 por hora; agora
+// ele pega nota 8+ com reacao acima da media, ~4-6 por hora.
 const NIVEIS = Object.freeze({
-  1: { notaMinima: 5, porHora: 12, reacaoMinima: 0, nome: 'Mais cortes' },
-  2: { notaMinima: 6, porHora: 8, reacaoMinima: 0, nome: 'Muitos cortes' },
-  3: { notaMinima: 7, porHora: 5, reacaoMinima: 0.5, nome: 'Equilibrado' },
-  4: { notaMinima: 8, porHora: 3, reacaoMinima: 0.75, nome: 'Seletivo' },
-  5: { notaMinima: 9, porHora: 2, reacaoMinima: 0.9, nome: 'Só o que tem cara de viral' },
+  1: { notaMinima: 5, porHora: 30, reacaoMinima: 0, nome: 'Máximo de cortes' },
+  2: { notaMinima: 6, porHora: 20, reacaoMinima: 0, nome: 'Muitos cortes' },
+  3: { notaMinima: 7, porHora: 12, reacaoMinima: 0, nome: 'Equilibrado' },
+  4: { notaMinima: 7, porHora: 8, reacaoMinima: 0.5, nome: 'Seletivo' },
+  5: { notaMinima: 8, porHora: 6, reacaoMinima: 0.5, nome: 'Só os melhores' },
 });
 
 const PADRAO = Object.freeze({
@@ -27,6 +33,9 @@ const PADRAO = Object.freeze({
   camera_modo: 'ia',
   camera_posicao: 'top',
   camera_altura_percent: 40,
+  // Tipos de corte (tiposDeMomento.CATEGORIAS) que a pessoa quer receber.
+  // null = todos.
+  categorias: null,
 });
 
 function nivel(qualidade) {
