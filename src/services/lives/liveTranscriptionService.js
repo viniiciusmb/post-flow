@@ -9,16 +9,25 @@ const { spawn } = require('child_process');
 const livesRepository = require('../../repositories/livesRepository');
 const openaiLives = require('./openaiLives');
 const logger = require('../../lib/logger');
+const { similaridade } = require('../../lib/similaridadeDeTexto');
 
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
-// A transcricao corrida vai ACELERADA em 1,5x: a OpenAI cobra por minuto de
-// audio enviado, entao 30s viram 20s cobrados (-33% no maior custo do modulo).
-// Medido em 28/09/2026 com blocos reais: em 1,5x o texto mantem o sentido
-// (perde uma palavra ou outra nas pontas), que e o que a triagem e o juiz
-// precisam. Em 2x a transcricao QUEBRA ("(musica acelerada)") - nao subir.
+// A transcricao corrida vai ACELERADA: a OpenAI cobra pelo audio enviado.
+// 04/10/2026: de 1,5x pra 1,25x. Medido contra uma transcricao independente
+// (whisper-1) em audio real: fala limpa 96,3% (1,0x) / 95,3% (1,25x) / 94,7%
+// (1,5x); live barulhenta (festa com musica) 45,2% / 47,4% / 36,3%. Em 1,5x o
+// texto de live barulhenta piora de verdade; 1,25x fica igual ao normal e
+// custa ~US$ 0,01 a mais por hora (custo real: ~US$ 0,068/h contra 0,056/h).
+// Em 2x a transcricao QUEBRA ("(musica acelerada)") - nao subir.
 // A legenda do corte nao passa por aqui: e feita a parte, em velocidade
 // normal (liveRenderService). Custo de CPU: ~0,4s por bloco.
-const VELOCIDADE_TRANSCRICAO = 1.5;
+const VELOCIDADE_TRANSCRICAO = 1.25;
+
+// Vigia da economia: 1 bloco a cada N tambem e transcrito em velocidade
+// normal, e o quanto os dois textos concordam fica no banco e na tela. Custa
+// ~4% a mais na transcricao. Se a concordancia cair, a aceleracao esta
+// piorando o texto (ex.: lives mais barulhentas) e vale baixar a velocidade.
+const AMOSTRAR_A_CADA = 25;
 
 // Acima de 90% de silencio o bloco e pulado. Nao 100%: live tem ruido de
 // fundo (musica baixa, clique de teclado) que nunca e silencio absoluto.
@@ -107,6 +116,29 @@ function interpretarAnalise(saida, duracao) {
   };
 }
 
+function amostrar(bloco) {
+  return Number(bloco.id) % AMOSTRAR_A_CADA === 0;
+}
+
+// Transcreve o mesmo bloco em velocidade normal e guarda a concordancia com
+// o texto acelerado. Falha aqui nunca derruba o bloco: e so medicao.
+async function conferirVelocidade(bloco, textoAcelerado, segundos) {
+  try {
+    const normal = await openaiLives.transcreverBloco(bloco.file_path, { segundos });
+    const pct = Math.round(similaridade(normal.texto, textoAcelerado) * 10000) / 100;
+    await livesRepository.setTranscriptCheck(bloco.id, pct);
+    await livesRepository.recordCost({
+      channelId: bloco.live_channel_id,
+      sessionId: bloco.session_id,
+      kind: 'monitor_transcricao',
+      audioSeconds: segundos,
+      custoUsd: normal.custoUsd,
+    });
+  } catch (err) {
+    logger.warn(`Lives: conferencia da transcricao do bloco ${bloco.id} falhou: ${err.message}`);
+  }
+}
+
 // Processa UM bloco pendente. Devolve false quando nao ha nada na fila.
 async function processarProximo() {
   const bloco = await livesRepository.claimPendingTranscript();
@@ -139,6 +171,7 @@ async function processarProximo() {
       fs.rm(acelerado, { force: true }, () => {});
     }
     const { texto, custoUsd } = resultado;
+    if (module.exports.amostrar(bloco)) await module.exports.conferirVelocidade(bloco, texto, segundos);
     await livesRepository.finishTranscript(bloco.id, {
       status: 'feito',
       texto,
@@ -163,4 +196,4 @@ async function processarProximo() {
   return true;
 }
 
-module.exports = { processarProximo, analisarAudio, acelerarAudio, interpretarAnalise, LIMITE_SILENCIO, VELOCIDADE_TRANSCRICAO };
+module.exports = { processarProximo, analisarAudio, acelerarAudio, interpretarAnalise, conferirVelocidade, amostrar, LIMITE_SILENCIO, VELOCIDADE_TRANSCRICAO, AMOSTRAR_A_CADA };

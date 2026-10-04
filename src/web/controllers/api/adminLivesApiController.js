@@ -120,13 +120,14 @@ async function estado(req, res) {
   const canaisAntes = await livesRepository.listChannelsForUser(userId);
   await atualizarStatus(canaisAntes);
   const temTwitch = canaisAntes.some((c) => (c.platform || 'twitch') === 'twitch');
-  const [ligadoNoPainel, cfg, canais, custoHoje, custo7d, opcoes] = await Promise.all([
+  const [ligadoNoPainel, cfg, canais, custoHoje, custo7d, opcoes, monitor] = await Promise.all([
     require('../../../repositories/settingsRepository').getValue('lives_enabled', false),
     livesSettings.obterConfig(),
     livesRepository.listChannelsForUser(userId),
     livesRepository.costSummary(resolveRange('today').since),
     livesRepository.costSummary(resolveRange('last7days').since),
     livesUserSettings.obter(userId),
+    livesRepository.qualityMonitor(resolveRange('last7days').since),
   ]);
   let discoPercent = null;
   try {
@@ -154,6 +155,8 @@ async function estado(req, res) {
     discoPercent,
     canais: canais.map(canalParaApi),
     custos: { hoje: custoHoje, seteDias: custo7d },
+    // Vigia das economias (transcricao acelerada e flex), ultimos 7 dias.
+    monitor,
     opcoes: opcoesParaApi(opcoes),
     niveis: livesUserSettings.NIVEIS,
     categorias: tiposDeMomento.CATEGORIAS.map(({ id, nome, descricao }) => ({ id, nome, descricao })),

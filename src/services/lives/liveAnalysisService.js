@@ -32,9 +32,10 @@ const DURACAO_MAX = tiposDeMomento.DURACAO_MAX_PADRAO;
 // mover o corte. Historia comeca bem antes do momento que chamou atencao
 // (a piada final de um causo vem 1-2 min depois do "deixa eu contar"): com
 // 45s antes o juiz nunca via o comeco e o corte nascia sem contexto.
-const CONTEXTO_ANTES_S = 120;
+// 04/10/2026: 2 min -> 3 min (pedido do Vinicius).
+const CONTEXTO_ANTES_S = 180;
 const CONTEXTO_DEPOIS_S = 45;
-const MOVER_INICIO_MAX_S = 90;
+const MOVER_INICIO_MAX_S = 150;
 const MOVER_FIM_MAX_S = 45;
 // A triagem so descarta o obvio; o corte de verdade e do juiz.
 const NOTA_MINIMA_TRIAGEM = 6;
@@ -187,6 +188,7 @@ async function triarSessao(sessao) {
     inputTokens: resposta.inputTokens,
     outputTokens: resposta.outputTokens,
     custoUsd: resposta.custoUsd,
+    tier: resposta.tier || null,
   });
 
   const existentes = (await livesRepository.candidatesForSession(sessao.id)).map((c) => ({
@@ -289,7 +291,7 @@ const SCHEMA_JUIZ = {
 };
 
 const SISTEMA_JUIZ = `Voce e o editor-chefe de um canal de cortes de live com milhoes de views no TikTok. Voce decide o que vira corte.
-Para cada candidato voce recebe o trecho da transcricao (blocos de ~30s, tempo em segundos) e como o PUBLICO reagiu ({publico: ...}: ritmo do chat, risadas, espectadores criando clipes, grito).
+Os candidatos vem agrupados por TRECHO de conversa: cada trecho lista os candidatos que caem nele (com o tempo, como o publico reagiu e o motivo apontado) e depois a conversa do trecho em blocos de ~30s (tempo em segundos, com {publico: ...}: ritmo do chat, risadas, espectadores criando clipes, grito). Avalie cada candidato separadamente, mesmo os do mesmo trecho.
 
 Alguns blocos trazem {fala: ...}: pista automatica (dinheiro com numero, algo ganho/comprado, palavrao). E so pista - o texto decide.
 
@@ -307,11 +309,28 @@ Seja duro: numa live comum a maioria dos candidatos fica entre 3 e 6.
 Antes da nota, avalie por partes (0 a 10): gancho_forte (os 3 primeiros segundos prendem quem esta rolando o feed?), desfecho_claro (tem conclusao - a piada, a resposta, a revelacao, a reacao?), emocao (intensidade real da reacao), historia_completa (o trecho que voce marcou tem COMECO, MEIO e FIM do assunto: a preparacao que faz o final ter graca/sentido, o desenvolvimento e a conclusao - sem comecar no meio de uma conversa e sem parar antes do desfecho), e entende_sozinho (quem NUNCA viu essa live entende o corte?).
 Sem desfecho claro nao e corte bom: a pessoa assiste e fica "e ai?". Comecar no meio do assunto e o mesmo problema ao contrario: a pessoa nao entende do que estao falando.
 
-O texto de cada candidato vem com ate 2 minutos ANTES e 45s DEPOIS: use isso pra achar onde o assunto realmente comeca (a pergunta, o "deixa eu contar", a situacao que gerou a piada) e onde ele se conclui. Voce pode mover o corte ate 90s antes e 45s depois do trecho do candidato.
+O texto de cada candidato vem com ate 3 minutos ANTES e 45s DEPOIS: use isso pra achar onde o assunto realmente comeca (a pergunta, o "deixa eu contar", a situacao que gerou a piada) e onde ele se conclui. Voce pode mover o corte ate 150s antes e 45s depois do trecho do candidato.
 "contexto": em uma frase curta, o que quem assiste PRECISA saber pra entender o corte e que NAO esta dito dentro dele (ex.: "ele esta jogando com o irmao"). Vazio se o corte se explica sozinho. Se precisar de contexto que nao cabe no titulo, entende_sozinho=false.
 
 Para cada candidato devolva: as notas por partes; a nota final; inicio_s e fim_s (segundos da gravacao) comecando onde o ASSUNTO comeca, com o gancho logo no inicio - quem assiste precisa entender em 3 segundos do que se trata - e terminando logo depois do desfecho/reacao. Duracao: momento rapido (piada, reacao, mancada) de 15 a 60s; historia, intriga, reflexao, briga e polemica podem ir ate 150s se precisarem disso pra ter comeco, meio e fim (nunca encha linguica: se cabe em 50s, 50s); titulo curto (ate 60 caracteres) e gancho (ate 100) no idioma falado, sem hashtag - quando o momento e de dinheiro/ostentacao, o NUMERO ou o item vai no titulo ("Fatura 80 mil por mes jogando", "Comprou uma Lamborghini a vista"); e "porque" em uma frase.
 Avalie TODOS os candidatos recebidos, usando o id exatamente como veio.`;
+
+// Junta candidatos cujas janelas de contexto (3 min antes, 45s depois) se
+// encostam: o texto do trecho vai uma vez so pro juiz.
+function agruparPorContexto(candidatos) {
+  const janelas = candidatos
+    .map((c) => ({ c, de: Math.max(0, Number(c.start_offset) - CONTEXTO_ANTES_S), ate: Number(c.end_offset) + CONTEXTO_DEPOIS_S }))
+    .sort((a, b) => a.de - b.de);
+  const grupos = [];
+  for (const j of janelas) {
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && j.de <= ultimo.ate) {
+      ultimo.ate = Math.max(ultimo.ate, j.ate);
+      ultimo.candidatos.push(j.c);
+    } else grupos.push({ de: j.de, ate: j.ate, candidatos: [j.c] });
+  }
+  return grupos;
+}
 
 async function julgarSessao(sessao, { agora = Date.now() } = {}) {
   const encerrada = sessao.status !== 'gravando';
@@ -329,17 +348,23 @@ async function julgarSessao(sessao, { agora = Date.now() } = {}) {
   if (!pendentes.length) return 0;
 
   const linha = await liveSignalsService.linhaDaSessao(sessao.id, Math.max(cobertura, Number(sessao.recorded_seconds)));
+  // Candidatos proximos dividem a mesma conversa em volta: com 3 min de
+  // contexto, mandar o texto por candidato repetia o mesmo trecho 2-4 vezes
+  // (o juiz e ~30% do custo das lives). Cada TRECHO de conversa vai uma vez,
+  // com os candidatos dele listados em cima.
   const partes = [];
-  for (const c of pendentes) {
-    const ini = Number(c.start_offset);
-    const fim = Number(c.end_offset);
-    const contexto = await livesRepository.transcriptsBetween(sessao.id, Math.max(0, ini - CONTEXTO_ANTES_S), fim + CONTEXTO_DEPOIS_S);
-    const origem = c.source === 'sinal' ? 'pico de reacao do publico' : `triagem (nota ${c.score})`;
-    partes.push(
-      `### Candidato id=${c.id} | ${ini.toFixed(0)}s-${fim.toFixed(0)}s | origem: ${origem}\n` +
-        `Publico no trecho: ${liveSignalsService.resumoDoIntervalo(linha, ini, fim)}\n` +
-        `${c.reason ? `Motivo apontado: ${c.reason}\n` : ''}${montarTranscricao(contexto, linha)}`
-    );
+  for (const grupo of agruparPorContexto(pendentes)) {
+    const contexto = await livesRepository.transcriptsBetween(sessao.id, grupo.de, grupo.ate);
+    const cabecalhos = grupo.candidatos.map((c) => {
+      const ini = Number(c.start_offset);
+      const fim = Number(c.end_offset);
+      const origem = c.source === 'sinal' ? 'pico de reacao do publico' : `triagem (nota ${c.score})`;
+      return (
+        `- Candidato id=${c.id} | ${ini.toFixed(0)}s-${fim.toFixed(0)}s | origem: ${origem} | publico: ${liveSignalsService.resumoDoIntervalo(linha, ini, fim)}` +
+        `${c.reason ? ` | motivo apontado: ${c.reason}` : ''}`
+      );
+    });
+    partes.push(`### Trecho ${grupo.de.toFixed(0)}s-${grupo.ate.toFixed(0)}s\n${cabecalhos.join('\n')}\n\nConversa:\n${montarTranscricao(contexto, linha)}`);
   }
 
   // Referencia: os melhores ja aprovados nesta live. Nota absoluta deriva
@@ -366,6 +391,7 @@ async function julgarSessao(sessao, { agora = Date.now() } = {}) {
     inputTokens: resposta.inputTokens,
     outputTokens: resposta.outputTokens,
     custoUsd: resposta.custoUsd,
+    tier: resposta.tier || null,
   });
 
   const porId = new Map(pendentes.map((c) => [Number(c.id), c]));
@@ -474,6 +500,7 @@ async function distribuirSessao(sessao) {
 
 module.exports = {
   aplicarTetos,
+  agruparPorContexto,
   percentilDeReacao,
   triarSessao,
   candidatosDeSinal,

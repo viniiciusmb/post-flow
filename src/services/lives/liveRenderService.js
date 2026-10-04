@@ -386,6 +386,7 @@ async function renderizar(clip) {
         inputTokens: r.inputTokens,
         outputTokens: r.outputTokens,
         custoUsd: r.custoUsd,
+        tier: r.tier || null,
       });
 
     // Ajuste fino em TODO corte (nao so no "Clipar agora").

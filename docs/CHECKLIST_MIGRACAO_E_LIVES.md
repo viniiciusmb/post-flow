@@ -350,6 +350,22 @@ Começa agora na VPS nova (decisão de 28/09), visível só para o admin.
   - **Revisão final (camada nova)**: depois do ajuste e do encaixe na fala, gpt-5-mini lê só o que ficou DENTRO do corte (com o antes/depois marcados como "fica de fora") e aprova, corrige início/fim (re-encaixado na fala) ou descarta. Reescreve o título pra descrever o que acontece no corte. Descartado não renderiza (`live_clips.status='descartado'`, parecer em `review`) e não ocupa vaga — o próximo candidato entra. "Clipar agora" nunca é descartado. Falha da IA não segura o corte. Custo esperado ~US$ 0,003/corte (kind `revisao` no livro).
   - Migration testada contra o banco de produção dentro de transação desfeita. 4 mutações validadas (revisão que não descarta, filtro de tipo removido, descartado ocupando vaga, pausado sendo gravado). **Ainda não visto numa live real.**
 
+- [x] **Até 15 cortes/h em qualquer nível, 3 min de contexto e redução de custo medida (04/10/2026; migration 097).**
+  - Tetos: níveis 3, 4 e 5 vão até **15 cortes/h** (o filtro de nota/reação continua decidindo quantos passam). Juiz vê **3 min antes** e pode mover o início até 150 s.
+  - **Experimento com áudio real na VPS** (script fora do repo, scratchpad `experimento.js`): 180 s da live `thimagroo` (festa com música) e 400 s de fala de cortes do YouTube (vídeo 102126), comparados com uma transcrição independente (`whisper-1` 1,0x):
+    | `gpt-4o-mini-transcribe` | fala limpa | festa com música | custo real/h |
+    |---|---|---|---|
+    | 1,0x | 96,3% | 45,2% | US$ 0,079 |
+    | 1,25x | 95,3% | 47,4% | US$ 0,068 |
+    | 1,5x (antigo) | 94,7% | 36,3% | US$ 0,056 |
+    → transcrição corrida passou a **1,25x** (1,5x piorava live barulhenta; +US$ 0,01/h).
+  - **O custo da transcrição corrida estava superestimado ~2x**: o modelo é cobrado por TOKEN (US$ 1,25/M áudio + 5/M texto); medido US$ 0,0014/min real contra a estimativa de 0,003. Agora o custo vem do `usage` da resposta (`miniTranscribeCostFromUsage`).
+  - **Flex** (`service_tier: "flex"`, preço do Batch = metade) em todas as chamadas de texto das lives (triagem, juiz, ajuste, revisão, formato). Conferido na VPS: o gpt-5-mini aceita e devolve `service_tier: "flex"`. Sem capacidade (429, não cobrado) ou fila > 180 s → a mesma pergunta vai no modo normal. Desligável com `LIVES_OPENAI_FLEX=false`. Custo agora conta tokens em cache (10%) e o tier real (`live_costs.service_tier`).
+  - **Juiz sem texto repetido**: candidatos com contexto encostado viram um trecho só (`agruparPorContexto`) — a conversa vai uma vez pra IA.
+  - **Monitor contínuo**: 1 bloco a cada 25 é transcrito também em 1,0x e a concordância fica em `live_transcripts.check_similarity` (custo ~4%, kind `monitor_transcricao`); a tela mostra a concordância média e quanto das chamadas saiu pelo flex nos últimos 7 dias.
+  - **YouTube — nada mudou, de propósito**: `whisper-1` em 1,25x concorda 96,3% com o 1,0x (o 1,0x é 100% repetível), com diferenças de grafia e um trecho com sentido trocado — legenda queimada no vídeo do cliente, não vale o risco por −20%. `gpt-transcribe` (US$ 0,0045/min) não dá tempo por palavra. Transcrever em 2 etapas / baixar só os trechos não compensa: nos últimos 30 dias 71% do tempo dos vídeos virou corte (37 de 51 vídeos no modo "vídeo inteiro em partes"). O maior custo evitável do YouTube é a **banda paga** (US$ 7,15/30 dias), que só acontece quando o túnel do fundador está fora.
+  - 3 mutações novas validadas (flex sem volta ao normal, juiz repetindo texto, monitor desligado).
+
 ## FASE 5 — depois da validação
 - [x] Kick (30/09/2026). O streamlink 8.6.1 já tinha o plugin (qualidades 160p/360p/480p/720p60/1080p60). Status/canal/clipes pela API do site (`kick.com/api/v2`, sem conta; **sem User-Agent de navegador**, que a Kick bloqueia com 403, medido na VPS), chat pelo Pusher público da Kick (pacote `ws`, o Node 20 do container não tem WebSocket embutido). `plataformas.js` é a porta única Twitch/Kick; plataforma fora do ar = estado desconhecido, nunca "offline" (não para gravação no meio). Reprise ("RERUN:") não é gravada. Twitch sem configuração deixou de desligar o módulo inteiro. Migration 094 (CHECK da plataforma). **Prova real em produção**: xQc na Kick gravado 45s em 720p60 com os blocos de áudio, chat contou 52 mensagens/6 risadas, sem gravar nada no banco. Ainda não visto gerando corte de uma live inteira da Kick.
 - [ ] Liberar para mais usuários.

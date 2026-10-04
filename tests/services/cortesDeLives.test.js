@@ -189,7 +189,7 @@ test('bloco quase todo silencioso nao e mandado pra OpenAI e nao custa nada', as
 
 // Medido na 1a live real: com o texto anterior no "prompt", a OpenAI copiava
 // esse texto pra dentro da resposta e todo bloco repetia o fim do anterior.
-test('bloco com fala e transcrito acelerado em 1,5x, sem o texto anterior como prompt, e o custo e registrado', async () => {
+test('bloco com fala e transcrito acelerado em 1,25x, sem o texto anterior como prompt, e o custo e registrado', async () => {
   const canal = await novoCanal();
   const sessao = await novaSessao(canal);
   await blocoTranscrito(sessao, 0, 30, 'e ai galera, bora comecar a partida');
@@ -200,6 +200,7 @@ test('bloco com fala e transcrito acelerado em 1,5x, sem o texto anterior como p
   const desfazer = [
     trocar(liveTranscriptionService, 'analisarAudio', async () => ({ silencioSegundos: 2, loudness: -18, pico: -1 })),
     trocar(liveTranscriptionService, 'acelerarAudio', async (_orig, destino) => destino),
+    trocar(liveTranscriptionService, 'amostrar', () => false),
     trocar(openaiLives, 'transcreverBloco', async (f, { contexto, segundos }) => {
       contextoRecebido = contexto;
       arquivoEnviado = f;
@@ -213,17 +214,76 @@ test('bloco com fala e transcrito acelerado em 1,5x, sem o texto anterior como p
     desfazer.forEach((d) => d());
   }
   assert.ok(!contextoRecebido, 'o texto do bloco anterior nao pode ir como prompt');
-  // Economia de 28/09: vai o audio ACELERADO em 1,5x - 30s de live cobrados
-  // como 20s.
+  // Vai o audio ACELERADO em 1,25x (04/10/2026; antes 1,5x, que piorava o
+  // texto de live barulhenta) - 30s de live cobrados como 24s.
   assert.match(arquivoEnviado, /\.rapido\.ogg$/);
-  assert.equal(segundosEnviados, 20);
+  assert.equal(segundosEnviados, 24);
   const { rows } = await pool.query("SELECT text, loudness_lufs FROM live_transcripts WHERE session_id = $1 AND start_offset = 30", [sessao.id]);
   assert.equal(rows[0].text, 'que jogada absurda');
   const { rows: custo } = await pool.query("SELECT kind, audio_seconds, cost_usd FROM live_costs WHERE session_id = $1", [sessao.id]);
   assert.equal(custo.length, 1);
   assert.equal(custo[0].kind, 'transcricao');
-  assert.equal(Number(custo[0].audio_seconds), 20);
-  assert.ok(Math.abs(Number(custo[0].cost_usd) - 0.001) < 1e-9, 'US$ 0,001 em vez de 0,0015');
+  assert.equal(Number(custo[0].audio_seconds), 24);
+  assert.ok(Math.abs(Number(custo[0].cost_usd) - 0.0012) < 1e-9, 'US$ 0,0012 em vez de 0,0015');
+});
+
+test('amostra de conferencia: o mesmo bloco em velocidade normal, a concordancia fica no banco e o custo no livro', async () => {
+  const canal = await novoCanal();
+  const sessao = await novaSessao(canal);
+  await livesRepository.insertSegments(sessao.id, 'audio', [{ seq: 77, file_path: '/x/aud77.ogg', start_offset: 0, end_offset: 30, bytes: 1 }]);
+  const enviados = [];
+  const desfazer = [
+    trocar(liveTranscriptionService, 'analisarAudio', async () => ({ silencioSegundos: 1, loudness: -18, pico: -1 })),
+    trocar(liveTranscriptionService, 'acelerarAudio', async (_orig, destino) => destino),
+    trocar(liveTranscriptionService, 'amostrar', () => true),
+    trocar(openaiLives, 'transcreverBloco', async (f, { segundos }) => {
+      enviados.push([f, segundos]);
+      // acelerado perdeu 1 palavra de 4
+      return { texto: f.endsWith('.rapido.ogg') ? 'que jogada absurda' : 'que jogada absurda mano', custoUsd: 0.0007 };
+    }),
+  ];
+  try {
+    while (await liveTranscriptionService.processarProximo()) { /* esvazia a fila */ }
+  } finally {
+    desfazer.forEach((d) => d());
+  }
+  assert.deepEqual(enviados.map(([f, s]) => [f.endsWith('.rapido.ogg'), s]), [[true, 24], [false, 30]], 'acelerado e depois o original, em 30s');
+  const { rows } = await pool.query('SELECT text, check_similarity FROM live_transcripts WHERE session_id = $1', [sessao.id]);
+  assert.equal(rows[0].text, 'que jogada absurda', 'o texto usado continua sendo o acelerado');
+  assert.equal(Number(rows[0].check_similarity), 75);
+  const { rows: custo } = await pool.query('SELECT kind FROM live_costs WHERE session_id = $1 ORDER BY id', [sessao.id]);
+  assert.deepEqual(custo.map((c) => c.kind).sort(), ['monitor_transcricao', 'transcricao']);
+  const m = await livesRepository.qualityMonitor(new Date(Date.now() - 60_000));
+  assert.ok(m.amostrasTranscricao >= 1);
+});
+
+test('juiz: dois candidatos vizinhos mandam a conversa em volta UMA vez so pra IA', async () => {
+  const canal = await novoCanal();
+  const sessao = await novaSessao(canal, { recorded: 1200 });
+  for (let t = 0; t < 900; t += 30) await blocoTranscrito(sessao, t, t + 30, `fala ${t}`);
+  await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: 400, fim: 440, nota: 8 });
+  await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'sinal', inicio: 500, fim: 530 });
+  let pedido = null;
+  const desfazer = trocar(openaiLives, 'pedirJson', async (p) => {
+    pedido = p;
+    return { dados: { avaliacoes: [] }, inputTokens: 1, outputTokens: 1, custoUsd: 0 };
+  });
+  try {
+    await liveAnalysisService.julgarSessao(sessao);
+  } finally {
+    desfazer();
+  }
+  assert.equal(pedido.usuario.split('fala 420').length - 1, 1, 'o bloco comum aos dois vai uma vez');
+  assert.match(pedido.usuario, /Candidato id=\d+ \| 400s-440s[\s\S]*Candidato id=\d+ \| 500s-530s/);
+});
+
+test('juiz: candidatos com contexto encostado viram UM trecho (a conversa vai uma vez so)', async () => {
+  const g = liveAnalysisService.agruparPorContexto([
+    { id: 1, start_offset: 400, end_offset: 440 },
+    { id: 2, start_offset: 500, end_offset: 530 }, // janela 320-575, encosta na do 1 (220-485)
+    { id: 3, start_offset: 2000, end_offset: 2040 }, // longe
+  ]);
+  assert.deepEqual(g.map((x) => [x.de, x.ate, x.candidatos.map((c) => c.id)]), [[220, 575, [1, 2]], [1820, 2085, [3]]]);
 });
 
 test('a leitura da analise de audio bate com a saida REAL do ffmpeg 5.1 do servidor', () => {
@@ -412,15 +472,15 @@ test('o teto por hora do nivel vale mesmo com muitos aprovados', async () => {
   const canal = await novoCanal();
   const u = await createClient();
   await livesRepository.follow(u.id, canal.id);
-  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 4 }); // ate 8 por hora
+  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 4 }); // ate 15 por hora
   const sessao = await novaSessao(canal, { recorded: 1800 });
-  for (let i = 0; i < 11; i += 1) {
+  for (let i = 0; i < 18; i += 1) {
     const c = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'sinal', inicio: i * 100, fim: i * 100 + 40 });
     await livesRepository.judgeCandidate(c.id, { status: 'escolhido', nota: 9, inicio: i * 100, fim: i * 100 + 40, titulo: 'x', gancho: '', porque: '' });
   }
   await liveAnalysisService.distribuirSessao(sessao);
   const { rows } = await pool.query('SELECT count(*)::int AS n, min(source) AS origem FROM live_clips WHERE session_id = $1', [sessao.id]);
-  assert.equal(rows[0].n, 8);
+  assert.equal(rows[0].n, 15);
   assert.equal(rows[0].origem, 'sinal');
 });
 
@@ -1103,22 +1163,22 @@ test('corte descartado pela revisao final nao ocupa vaga: o proximo candidato en
   const canal = await novoCanal();
   const u = await createClient();
   await livesRepository.follow(u.id, canal.id);
-  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 5 }); // ate 6 por hora
+  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 5 }); // ate 15 por hora
   const sessao = await novaSessao(canal, { recorded: 600 });
-  for (let i = 0; i < 8; i += 1) {
+  for (let i = 0; i < 18; i += 1) {
     const c = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: i * 100, fim: i * 100 + 40, nota: 8 });
     await livesRepository.judgeCandidate(c.id, { status: 'escolhido', nota: 9, inicio: i * 100, fim: i * 100 + 40, titulo: `c${i}`, gancho: '', porque: '', tipo: 'piada' });
   }
   await liveAnalysisService.distribuirSessao(sessao);
   const contar = async () => (await pool.query("SELECT count(*)::int AS n FROM live_clips WHERE session_id = $1 AND status <> 'descartado'", [sessao.id])).rows[0].n;
-  assert.equal(await contar(), 6);
+  assert.equal(await contar(), 15);
   const { rows } = await pool.query('SELECT id FROM live_clips WHERE session_id = $1 ORDER BY id LIMIT 2', [sessao.id]);
   for (const r of rows) await livesRepository.discardClip(r.id, { motivo: 'nao se sustenta', review: { veredito: 'descartar' } });
   await liveAnalysisService.distribuirSessao(sessao);
-  assert.equal(await contar(), 6, 'as 2 vagas foram preenchidas pelos proximos');
+  assert.equal(await contar(), 15, 'as 2 vagas foram preenchidas pelos proximos');
   // E o descartado some da lista da tela.
   const lista = await livesRepository.listClipsForUser(u.id, { channelId: canal.id });
-  assert.equal(lista.length, 6);
+  assert.equal(lista.length, 15);
 });
 
 test('juiz: historia sem comeco/fim nao passa de 6, e historia pode ter ate 150s (piada fica em 90s)', async () => {
@@ -1152,8 +1212,10 @@ test('juiz: historia sem comeco/fim nao passa de 6, e historia pode ter ate 150s
   } finally {
     desfazer();
   }
-  assert.ok(pedido.usuario.includes('[270s-300s'), 'o juiz ve 2 minutos ANTES do candidato (400s - 120s)');
-  assert.ok(!pedido.usuario.includes('[240s-270s'), 'e nao mais que isso');
+  assert.ok(pedido.usuario.includes('[210s-240s'), 'o juiz ve 3 minutos ANTES do candidato (400s - 180s)');
+  assert.ok(!pedido.usuario.includes('[180s-210s'), 'e nao mais que isso');
+  // Cada bloco de conversa vai uma vez so, mesmo com dois candidatos no trecho.
+  assert.equal(pedido.usuario.split('[420s-450s').length - 1, 1);
   assert.ok(pedido.schema.properties.avaliacoes.items.required.includes('historia_completa'));
   const { rows } = await pool.query('SELECT final_start, final_end FROM live_candidates WHERE id = ANY($1::bigint[]) ORDER BY id', [[c1.id, c2.id]]);
   assert.deepEqual(rows.map((r) => [Number(r.final_start), Number(r.final_end)]), [[320, 460], [920, 1010]]);

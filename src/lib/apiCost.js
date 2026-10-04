@@ -73,6 +73,39 @@ const GPT5_NANO_USD_PER_MTOK_OUTPUT = 0.4;
 const GPT5_MINI_USD_PER_MTOK_INPUT = 0.25;
 const GPT5_MINI_USD_PER_MTOK_OUTPUT = 2.0;
 
+// Entrada repetida (o mesmo comeco de prompt em chamadas seguidas) a OpenAI
+// cobra a 10% - conferido na tabela em 04/10/2026 (mini 0,025 / nano 0,005).
+const FRACAO_ENTRADA_EM_CACHE = 0.1;
+// Flex ("service_tier": "flex"): preco do Batch, metade do normal, em troca de
+// resposta mais lenta e de um 429 ocasional (que nao e cobrado).
+const FRACAO_FLEX = 0.5;
+
+// gpt-4o-mini-transcribe e cobrado por TOKEN, nao por minuto: US$ 1,25 por
+// milhao de tokens de audio e US$ 5 por milhao de texto devolvido. Medido em
+// 04/10/2026 com a resposta da propria API: ~US$ 0,0014 por minuto real - a
+// conta antiga (0,003/min, a "estimativa" da tabela) mostrava mais que o
+// dobro do que de fato se paga.
+const MINI_TRANSCRIBE_USD_PER_MTOK_AUDIO = 1.25;
+const MINI_TRANSCRIBE_USD_PER_MTOK_OUTPUT = 5.0;
+
+function miniTranscribeCostFromUsage(usage, audioSeconds) {
+  if (usage && usage.type === 'tokens' && Number.isFinite(usage.input_tokens)) {
+    return ((usage.input_tokens || 0) / 1_000_000) * MINI_TRANSCRIBE_USD_PER_MTOK_AUDIO
+      + ((usage.output_tokens || 0) / 1_000_000) * MINI_TRANSCRIBE_USD_PER_MTOK_OUTPUT;
+  }
+  return miniTranscribeCostUsd(audioSeconds);
+}
+
+// Custo de uma chamada de texto pelo que a resposta diz: tokens em cache saem
+// a 10%, e Flex sai pela metade.
+function textoCostFromUsage({ precoEntrada, precoSaida, entrada = 0, emCache = 0, saida = 0, flex = false }) {
+  const normal = Math.max(0, entrada - emCache);
+  const usd = (normal / 1_000_000) * precoEntrada
+    + (emCache / 1_000_000) * precoEntrada * FRACAO_ENTRADA_EM_CACHE
+    + (saida / 1_000_000) * precoSaida;
+  return flex ? usd * FRACAO_FLEX : usd;
+}
+
 function gpt5MiniCostUsd(inputTokens, outputTokens) {
   return ((inputTokens || 0) / 1_000_000) * GPT5_MINI_USD_PER_MTOK_INPUT
     + ((outputTokens || 0) / 1_000_000) * GPT5_MINI_USD_PER_MTOK_OUTPUT;
@@ -90,6 +123,10 @@ function gpt5NanoCostUsd(inputTokens, outputTokens) {
 
 module.exports = {
   whisperCostUsd,
+  miniTranscribeCostFromUsage,
+  textoCostFromUsage,
+  FRACAO_FLEX,
+  FRACAO_ENTRADA_EM_CACHE,
   miniTranscribeCostUsd,
   gpt5NanoCostUsd,
   gpt5MiniCostUsd,

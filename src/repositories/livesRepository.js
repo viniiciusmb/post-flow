@@ -644,12 +644,37 @@ async function deleteClip(clipId, userId) {
 
 // ---------------------------------------------------------------- custos
 
-async function recordCost({ channelId, sessionId, kind, audioSeconds = 0, inputTokens = 0, outputTokens = 0, custoUsd = 0 }) {
+async function recordCost({ channelId, sessionId, kind, audioSeconds = 0, inputTokens = 0, outputTokens = 0, custoUsd = 0, tier = null }) {
   await pool.query(
-    `INSERT INTO live_costs (live_channel_id, session_id, kind, audio_seconds, input_tokens, output_tokens, cost_usd)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [channelId, sessionId, kind, audioSeconds, inputTokens, outputTokens, custoUsd]
+    `INSERT INTO live_costs (live_channel_id, session_id, kind, audio_seconds, input_tokens, output_tokens, cost_usd, service_tier)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [channelId, sessionId, kind, audioSeconds, inputTokens, outputTokens, custoUsd, tier]
   );
+}
+
+async function setTranscriptCheck(id, similaridade) {
+  await pool.query('UPDATE live_transcripts SET check_similarity = $2 WHERE id = $1', [id, similaridade]);
+}
+
+// O que a tela mostra pra vigiar a economia: quanto a transcricao acelerada
+// concorda com a normal nas amostras, e quanto das chamadas de texto saiu
+// pelo flex (metade do preco).
+async function qualityMonitor(desde) {
+  const { rows } = await pool.query(
+    `SELECT
+       (SELECT avg(check_similarity) FROM live_transcripts WHERE check_similarity IS NOT NULL AND created_at >= $1) AS concordancia,
+       (SELECT count(*) FROM live_transcripts WHERE check_similarity IS NOT NULL AND created_at >= $1) AS amostras,
+       (SELECT count(*) FILTER (WHERE service_tier = 'flex') FROM live_costs WHERE service_tier IS NOT NULL AND created_at >= $1) AS chamadas_flex,
+       (SELECT count(*) FROM live_costs WHERE service_tier IS NOT NULL AND created_at >= $1) AS chamadas_texto`,
+    [desde]
+  );
+  const r = rows[0];
+  return {
+    concordanciaTranscricao: r.concordancia === null ? null : Number(r.concordancia),
+    amostrasTranscricao: Number(r.amostras),
+    chamadasFlex: Number(r.chamadas_flex),
+    chamadasTexto: Number(r.chamadas_texto),
+  };
 }
 
 // Custo e horas gravadas por canal num periodo, e o total - pra tela medir
@@ -743,4 +768,6 @@ module.exports = {
   deleteClip,
   recordCost,
   costSummary,
+  setTranscriptCheck,
+  qualityMonitor,
 };

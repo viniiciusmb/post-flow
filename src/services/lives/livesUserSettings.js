@@ -17,12 +17,16 @@ const clientVideoSettingsRepository = require('../../repositories/clientVideoSet
 // mexer - live de 5h da Kick: 5 momentos nota 9, 35 nota 8, 58 nota 7. O
 // nivel maximo antigo (nota 9 + top 10% de reacao) dava 1-2 por hora; agora
 // ele pega nota 8+ com reacao acima da media, ~4-6 por hora.
+//
+// 04/10/2026, segundo pedido: mesmo no "so os melhores" a IA pode entregar
+// ATE 15 por hora se achar tantos momentos bons - o teto e um limite, nao uma
+// meta: o filtro de nota e reacao continua decidindo quantos passam.
 const NIVEIS = Object.freeze({
   1: { notaMinima: 5, porHora: 30, reacaoMinima: 0, nome: 'Máximo de cortes' },
   2: { notaMinima: 6, porHora: 20, reacaoMinima: 0, nome: 'Muitos cortes' },
-  3: { notaMinima: 7, porHora: 12, reacaoMinima: 0, nome: 'Equilibrado' },
-  4: { notaMinima: 7, porHora: 8, reacaoMinima: 0.5, nome: 'Seletivo' },
-  5: { notaMinima: 8, porHora: 6, reacaoMinima: 0.5, nome: 'Só os melhores' },
+  3: { notaMinima: 7, porHora: 15, reacaoMinima: 0, nome: 'Equilibrado' },
+  4: { notaMinima: 7, porHora: 15, reacaoMinima: 0.5, nome: 'Seletivo' },
+  5: { notaMinima: 8, porHora: 15, reacaoMinima: 0.5, nome: 'Só os melhores' },
 });
 
 const PADRAO = Object.freeze({

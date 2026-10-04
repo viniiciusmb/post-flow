@@ -84,6 +84,7 @@ type Estado = {
   discoPercent: number | null
   canais: Canal[]
   custos: { hoje: ResumoCusto; seteDias: ResumoCusto }
+  monitor?: { concordanciaTranscricao: number | null; amostrasTranscricao: number; chamadasFlex: number; chamadasTexto: number }
   opcoes: Opcoes
   niveis: Record<string, Nivel>
   categorias: Categoria[]
@@ -471,6 +472,17 @@ export function AdminLivesPage() {
                     )
                   })}
                 </div>
+              )}
+              {estado.monitor && (estado.monitor.amostrasTranscricao > 0 || estado.monitor.chamadasTexto > 0) && (
+                <p className="text-xs text-muted-foreground">
+                  Economias, últimos 7 dias:
+                  {estado.monitor.amostrasTranscricao > 0 && estado.monitor.concordanciaTranscricao !== null && (
+                    <> a transcrição acelerada concordou <strong className="text-foreground">{estado.monitor.concordanciaTranscricao.toFixed(0)}%</strong> com a normal ({estado.monitor.amostrasTranscricao} amostras);</>
+                  )}
+                  {estado.monitor.chamadasTexto > 0 && (
+                    <> {Math.round((100 * estado.monitor.chamadasFlex) / estado.monitor.chamadasTexto)}% das chamadas de IA saíram pela fila econômica (metade do preço).</>
+                  )}
+                </p>
               )}
             </CardContent>
           </Card>
