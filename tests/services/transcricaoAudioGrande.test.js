@@ -107,3 +107,36 @@ test('as partes temporarias sao apagadas no fim', async () => {
   const depois = fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith('postflow-partes-')).length;
   assert.equal(depois, antes);
 });
+
+// 06/10/2026: video de 97 min, audio de 23 MB - ABAIXO do limite de tamanho -
+// falhou 8 vezes com "fetch failed" (o Node desiste de esperar a resposta em
+// 300 s). Tamanho sozinho nao protege: audio longo tem que ser dividido pela
+// duracao tambem.
+test('audio longo mas pequeno e dividido pela duracao (caso dos 97 min)', async () => {
+  const probe = path.join(pasta, 'ffprobe');
+  fs.writeFileSync(probe, '#!/bin/sh\necho 5808\n', { mode: 0o755 });
+  try {
+    await servico.transcribeAudio(audioDeTamanho(23 * 1024 * 1024));
+    assert.ok(23 * 1024 * 1024 < servico.TAMANHO_SEGURO_BYTES, 'o caso real cabia no limite de tamanho');
+    assert.equal(chamadas.length, Math.ceil(5808 / servico.MAX_SEGUNDOS_POR_CHAMADA));
+    const cortes = fs.readFileSync(logFfmpeg, 'utf8').trim().split('\n');
+    for (const c of cortes) {
+      const dur = Number(c.match(/-t ([0-9.]+)/)[1]);
+      assert.ok(dur <= servico.MAX_SEGUNDOS_POR_CHAMADA, `parte de ${dur}s passa do teto`);
+    }
+  } finally {
+    fs.writeFileSync(probe, '#!/bin/sh\necho 3277\n', { mode: 0o755 });
+  }
+});
+
+test('audio curto acima de 6 MB continua numa chamada so', async () => {
+  const probe = path.join(pasta, 'ffprobe');
+  fs.writeFileSync(probe, '#!/bin/sh\necho 1200\n', { mode: 0o755 });
+  try {
+    await servico.transcribeAudio(audioDeTamanho(8 * 1024 * 1024));
+    assert.equal(chamadas.length, 1);
+    assert.equal(fs.existsSync(logFfmpeg), false, 'nao dividiu');
+  } finally {
+    fs.writeFileSync(probe, '#!/bin/sh\necho 3277\n', { mode: 0o755 });
+  }
+});

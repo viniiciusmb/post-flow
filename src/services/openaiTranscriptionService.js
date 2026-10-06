@@ -23,6 +23,18 @@ const TAMANHO_SEGURO_BYTES = 24 * 1024 * 1024;
 // derrubaria o video inteiro do mesmo jeito.
 const ALVO_POR_PARTE_BYTES = 18 * 1024 * 1024;
 
+// Tamanho nao e o unico limite: o fetch do Node desiste de esperar a resposta
+// depois de 300 s (UND_ERR_HEADERS_TIMEOUT, que chega como "fetch failed"), e a
+// OpenAI leva mais que isso pra devolver um audio muito longo de uma vez so.
+// Visto em 06/10/2026: um video de 97 min (23 MB a 32 kbps, ABAIXO do limite de
+// tamanho) falhou 8 vezes seguidas, sempre ~5,5 min depois de enviar, e o
+// retry automatico repetia uma falha que nunca ia passar. Video de 46 min numa
+// chamada so ja passou em producao; 30 min por chamada deixa folga.
+const MAX_SEGUNDOS_POR_CHAMADA = 30 * 60;
+// Abaixo disto o audio nao chega perto de 30 min (a 32 kbps, 30 min = 7,2 MB),
+// entao nem vale chamar o ffprobe pra medir.
+const TAMANHO_PRA_MEDIR_DURACAO = 6 * 1024 * 1024;
+
 function rodar(cmd, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args);
@@ -60,9 +72,7 @@ async function duracaoDoAudio(arquivo) {
 // transcreve cada uma e junta tudo com os tempos deslocados pro inicio de cada
 // parte - quem recebe (legenda, escolha de cortes) ve uma transcricao unica,
 // como se tivesse sido uma chamada so.
-async function transcreverEmPartes(audioFilePath, tamanhoBytes, { language, checkCancelled }) {
-  const duracao = await duracaoDoAudio(audioFilePath);
-  const quantidade = Math.max(2, Math.ceil(tamanhoBytes / ALVO_POR_PARTE_BYTES));
+async function transcreverEmPartes(audioFilePath, { duracao, quantidade }, { language, checkCancelled }) {
   const duracaoDaParte = duracao / quantidade;
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'postflow-partes-'));
 
@@ -103,8 +113,14 @@ async function transcreverEmPartes(audioFilePath, tamanhoBytes, { language, chec
 
 async function transcribeAudio(audioFilePath, opcoes = {}) {
   const tamanho = fs.statSync(audioFilePath).size;
-  if (tamanho > TAMANHO_SEGURO_BYTES) return transcreverEmPartes(audioFilePath, tamanho, opcoes);
-  return transcreverUmArquivo(audioFilePath, opcoes);
+  if (tamanho <= TAMANHO_PRA_MEDIR_DURACAO) return transcreverUmArquivo(audioFilePath, opcoes);
+
+  const duracao = await duracaoDoAudio(audioFilePath);
+  const porTamanho = tamanho > TAMANHO_SEGURO_BYTES ? Math.ceil(tamanho / ALVO_POR_PARTE_BYTES) : 1;
+  const porDuracao = Math.ceil(duracao / MAX_SEGUNDOS_POR_CHAMADA);
+  const quantidade = Math.max(porTamanho, porDuracao);
+  if (quantidade <= 1) return transcreverUmArquivo(audioFilePath, opcoes);
+  return transcreverEmPartes(audioFilePath, { duracao, quantidade }, opcoes);
 }
 
 async function transcreverUmArquivo(audioFilePath, { language, checkCancelled } = {}) {
@@ -165,4 +181,4 @@ async function transcreverUmArquivo(audioFilePath, { language, checkCancelled } 
   };
 }
 
-module.exports = { transcribeAudio, LIMITE_DA_OPENAI_BYTES, TAMANHO_SEGURO_BYTES };
+module.exports = { transcribeAudio, LIMITE_DA_OPENAI_BYTES, TAMANHO_SEGURO_BYTES, MAX_SEGUNDOS_POR_CHAMADA };

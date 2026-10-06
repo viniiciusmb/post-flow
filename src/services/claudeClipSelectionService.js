@@ -8,10 +8,13 @@ const { claudeCostUsd } = require('../lib/apiCost');
 const MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-5';
 
+// Marcacao em SEGUNDOS, na mesma unidade que a resposta tem que usar
+// (startSeconds/endSeconds). Era "MM:SS", e a IA as vezes lia "12:34" como
+// 1234 segundos: na auditoria de 06/10/2026, 7 videos da semana perderam
+// trechos "que comecavam depois do fim do video" (um de 47 min ficou com 1
+// corte de 4), e os trechos que sobravam podiam estar no lugar errado.
 function formatTimestamp(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${Math.floor(seconds)}s`;
 }
 
 // Agrupa as palavras em blocos de alguns segundos, com o timestamp na
@@ -80,8 +83,8 @@ const SELECT_CLIPS_TOOL = {
           properties: {
             title: { type: 'string', description: 'Titulo curto e chamativo pro corte, estilo TikTok, NO MESMO IDIOMA falado no video.' },
             description: { type: 'string', description: 'Legenda curta pra usar na postagem (1-2 frases), com 2-4 hashtags relevantes ao final, NO MESMO IDIOMA falado no video.' },
-            startSeconds: { type: 'number' },
-            endSeconds: { type: 'number' },
+            startSeconds: { type: 'number', description: 'Inicio do trecho em segundos desde o comeco do video, na mesma unidade das marcacoes [123s] da transcricao.' },
+            endSeconds: { type: 'number', description: 'Fim do trecho em segundos desde o comeco do video.' },
           },
           required: ['title', 'description', 'startSeconds', 'endSeconds'],
         },
@@ -104,11 +107,14 @@ async function selectClips(transcriptWords, { maxClips = 4, minDuration = 25, ma
     ? `Escolha exatamente ${maxClips} trechos`
     : `Escolha quantos trechos bons voce encontrar (sem numero fixo - nao force conteudo fraco so pra preencher, mas tambem nao deixe passar um momento forte). No maximo ${maxClips}`;
 
-  const prompt = `Aqui esta a transcricao de um video do YouTube, com marcacoes de tempo a cada poucos segundos:
+  const ultimaPalavra = transcriptWords[transcriptWords.length - 1];
+  const duracao = Math.ceil(Number(ultimaPalavra && ultimaPalavra.end) || 0);
+
+  const prompt = `Aqui esta a transcricao de um video do YouTube. Cada linha comeca com o tempo em SEGUNDOS desde o inicio do video (ex: [754s] = 754 segundos = 12 min 34 s). A fala termina em ${duracao}s.
 
 ${transcript}
 
-${countInstruction} que funcionariam bem como cortes verticais pro TikTok: momentos com potencial viral, respostas completas, historias com gancho, ou insights fortes - cada um durando entre ${minDuration} e ${maxDuration} segundos. Cada corte precisa comecar e terminar em um ponto que faca sentido sozinho (nunca no meio de uma frase). Sugira um titulo curto e chamativo, e uma legenda pronta pra postar (com hashtags) pra cada um. Use a ferramenta select_clips pra registrar sua escolha.
+${countInstruction} que funcionariam bem como cortes verticais pro TikTok: momentos com potencial viral, respostas completas, historias com gancho, ou insights fortes - cada um durando entre ${minDuration} e ${maxDuration} segundos. Cada corte precisa comecar e terminar em um ponto que faca sentido sozinho (nunca no meio de uma frase). Sugira um titulo curto e chamativo, e uma legenda pronta pra postar (com hashtags) pra cada um. Informe startSeconds e endSeconds em segundos, copiando a unidade das marcacoes acima (nunca minutos), sempre entre 0 e ${duracao}. Use a ferramenta select_clips pra registrar sua escolha.
 
 ${instrucaoDeIdioma(language)}`;
 
@@ -194,7 +200,7 @@ async function titleParts(transcriptWords, partes, { language = null } = {}) {
     .map((p, i) => `Parte ${i + 1}: de ${formatTimestamp(p.startSeconds)} ate ${formatTimestamp(p.endSeconds)}`)
     .join('\n');
 
-  const prompt = `Aqui esta a transcricao de um video, com marcacoes de tempo a cada poucos segundos:
+  const prompt = `Aqui esta a transcricao de um video. Cada linha comeca com o tempo em SEGUNDOS desde o inicio do video:
 
 ${transcript}
 
