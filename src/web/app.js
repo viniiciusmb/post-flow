@@ -219,6 +219,7 @@ app.use(
   rateLimits.billing
 );
 app.use('/api/client/source-videos/upload', rateLimits.upload);
+app.use('/api/client/support/messages', rateLimits.suporte);
 // Os webhooks ficam fora do limite de requisicoes: os dois provedores mandam
 // eventos em rajada, e no caso do Asaas 15 recusas seguidas PAUSAM a fila da
 // conta inteira (os eventos somem em 14 dias). Um 429 nosso viraria perda de

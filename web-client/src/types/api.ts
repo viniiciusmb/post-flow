@@ -1242,3 +1242,62 @@ export interface OnboardingStatus {
 
 /** Ordenação da lista de clientes do admin. */
 export type OrdemDeCliente = "recentes" | "antigos" | "maior_custo"
+
+// --- Suporte com IA ---
+
+export interface SupportMessage {
+  id: number
+  autor: "cliente" | "suporte"
+  texto: string
+  criadaEm: string
+}
+
+export type SupportConversationStatus = "aberta" | "encaminhada" | "resolvida"
+
+export interface SupportConversation {
+  id: number
+  status: SupportConversationStatus
+  mensagens: SupportMessage[]
+}
+
+export interface SupportCurrentResponse {
+  conversation: SupportConversation | null
+  limits: { maxChars: number }
+}
+
+export type SupportAction =
+  | { tipo: "devolucao"; videoId: number; minutos: number }
+  | { tipo: "reprocessamento"; videoId: number }
+  | { tipo: "encaminhado" }
+
+export interface SupportSendResponse {
+  conversationId: number
+  resposta: string
+  acoes: SupportAction[]
+  status: SupportConversationStatus
+}
+
+export interface AdminSupportConversation {
+  id: number
+  clientUserId: number
+  email: string
+  businessName: string | null
+  status: SupportConversationStatus
+  escalationSummary: string | null
+  messages: number
+  costUsd: number
+  minutesRefunded: number
+  firstMessage: string | null
+  updatedAt: string
+}
+
+export type AdminSupportBlock =
+  | { tipo: "texto"; texto: string }
+  | { tipo: "ferramenta"; nome: string; entrada: unknown }
+  | { tipo: "resultado"; conteudo: string }
+
+export interface AdminSupportDetail {
+  conversation: { id: number; email: string; status: SupportConversationStatus; escalationSummary: string | null }
+  messages: { id: number; role: "user" | "assistant"; createdAt: string; blocks: AdminSupportBlock[] }[]
+  refunds: { videoId: number | null; title: string | null; minutes: number; reason: string; createdAt: string }[]
+}

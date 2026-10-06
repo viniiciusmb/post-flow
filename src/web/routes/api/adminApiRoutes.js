@@ -14,12 +14,16 @@ const requireRoleApi = require('../../middleware/requireRoleApi');
 const asyncHandler = require('../../lib/asyncHandler');
 const { ROLES } = require('../../../config/constants');
 const adminRevenueApiController = require('../../controllers/api/adminRevenueApiController');
+const adminSupportApiController = require('../../controllers/api/adminSupportApiController');
 
 const router = express.Router();
 
 router.use(requireAuthApi, requireRoleApi(ROLES.ADMIN));
 
 router.get('/dashboard', asyncHandler(adminApiController.dashboard));
+router.get('/support', asyncHandler(adminSupportApiController.list));
+router.get('/support/:id', asyncHandler(adminSupportApiController.detail));
+router.post('/support/:id/status', asyncHandler(adminSupportApiController.setStatus));
 router.get('/clients', asyncHandler(adminApiController.clients));
 // Canais do YouTube e contas do TikTok de UM cliente - ver clientConnections.
 router.get('/clients/:id/connections', asyncHandler(adminApiController.clientConnections));

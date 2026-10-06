@@ -18,6 +18,7 @@ import {
   IconGift,
   IconBook,
   IconTrendingUp,
+  IconMessageCircle,
 } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
@@ -63,6 +64,7 @@ const ADMIN_GROUPS: Grupo[] = [
       { title: "menu.assinaturas", url: "/admin/billing", icon: IconReceipt2 },
       { title: "menu.comissoes", url: "/admin/commissions", icon: IconGift },
       { title: "menu.erros", url: "/admin/errors", icon: IconAlertTriangle },
+      { title: "menu.suporte", url: "/admin/support", icon: IconMessageCircle },
       { title: "menu.narrado", url: "/admin/narrated", icon: IconMicrophone },
       { title: "menu.lives", url: "/admin/lives", icon: IconBroadcast },
     ],
@@ -93,6 +95,7 @@ const CLIENT_GROUPS: Grupo[] = [
       // Por último de propósito: quem já sabe usar não tropeça nele todo dia,
       // e quem está perdido encontra pelo nome sem precisar de destaque.
       { title: "menu.tutorial", url: "/client/tutorial", icon: IconBook },
+      { title: "menu.suporte", url: "/client/support", icon: IconMessageCircle },
     ],
   },
 ]

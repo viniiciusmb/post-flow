@@ -70,4 +70,12 @@ const geral = build({
   message: 'Muitas requisicoes em pouco tempo. Aguarde um instante.',
 });
 
-module.exports = { auth, publicApi, billing, upload, geral };
+// Suporte com IA: cada mensagem custa uma chamada ao Claude. O teto diario de
+// mensagens fica no servico; este segura rajada (script, clique repetido).
+const suporte = build({
+  windowMs: 10 * 60 * 1000,
+  max: 15,
+  message: 'Muitas mensagens em pouco tempo. Aguarde alguns minutos.',
+});
+
+module.exports = { auth, publicApi, billing, upload, geral, suporte };
