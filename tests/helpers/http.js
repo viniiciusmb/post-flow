@@ -58,8 +58,8 @@ function createAgent(url) {
     }
   }
 
-  async function request(method, path, body) {
-    const headers = { cookie: cookieHeader() };
+  async function request(method, path, body, extraHeaders = {}) {
+    const headers = { cookie: cookieHeader(), ...extraHeaders };
     if (body !== undefined) headers['content-type'] = 'application/json';
     // Mesmo comportamento do web-client/src/lib/api.ts: reenvia no cabecalho o
     // token que o servidor deixou no cookie legivel.
@@ -89,6 +89,8 @@ function createAgent(url) {
   return {
     get: (path) => request('GET', path),
     post: (path, body) => request('POST', path, body ?? {}),
+    // POST com cabecalhos a mais (ex: Accept: text/event-stream).
+    postCom: (path, body, headers) => request('POST', path, body ?? {}, headers),
     put: (path, body) => request('PUT', path, body ?? {}),
     delete: (path) => request('DELETE', path),
     // Envia SEM o cabecalho de CSRF - e assim que um site malicioso mandaria.

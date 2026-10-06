@@ -76,3 +76,22 @@ test('cliente nao acessa a lista de conversas do admin; o admin acessa', async (
   assert.equal(r.status, 200);
   assert.ok(Array.isArray(r.body.conversations));
 });
+
+test('com Accept text/event-stream a resposta chega em etapas e termina com a resposta', async () => {
+  const { agent } = await logado('admin');
+  const r = await agent.postCom('/api/client/support/messages', { message: 'oi' }, { accept: 'text/event-stream' });
+
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /text\/event-stream/);
+  const eventos = r.text.split('\n\n').filter(Boolean).map((b) => JSON.parse(b.replace(/^data: /, '')));
+  assert.equal(eventos[0].etapa, 'pensando');
+  assert.equal(eventos.at(-1).etapa, 'fim');
+  assert.equal(eventos.at(-1).resposta, 'Oi, posso ajudar.');
+});
+
+test('erro de validacao continua saindo como JSON com status, mesmo pedindo etapas', async () => {
+  const { agent } = await logado('admin');
+  const r = await agent.postCom('/api/client/support/messages', { message: '   ' }, { accept: 'text/event-stream' });
+  assert.equal(r.status, 400);
+  assert.ok(r.body.error);
+});

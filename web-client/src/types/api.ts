@@ -1265,10 +1265,29 @@ export interface SupportCurrentResponse {
   limits: { maxChars: number }
 }
 
+export type SupportShortcut =
+  | "tour_guiado"
+  | "tutorial"
+  | "cortes"
+  | "canais"
+  | "publicacao"
+  | "plano_e_uso"
+  | "configuracoes"
+  | "comissoes"
+
 export type SupportAction =
   | { tipo: "devolucao"; videoId: number; minutos: number }
-  | { tipo: "reprocessamento"; videoId: number }
+  | { tipo: "reprocessamento"; videoId: number; cobraDeNovo?: boolean }
   | { tipo: "encaminhado" }
+  | { tipo: "atalho"; destino: SupportShortcut }
+
+/** Eventos do envio em etapas (text/event-stream). */
+export type SupportStreamEvent =
+  | { etapa: "pensando" }
+  | { etapa: "ferramenta"; nome: string }
+  | { etapa: "elaborando" }
+  | ({ etapa: "fim" } & SupportSendResponse)
+  | { etapa: "erro"; error: string }
 
 export interface SupportSendResponse {
   conversationId: number

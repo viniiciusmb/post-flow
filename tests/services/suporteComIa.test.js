@@ -226,7 +226,9 @@ test('caminho feliz: cliente reclama, IA diagnostica, devolve e conta quanto', a
   assert.deepEqual(r.acoes, [{ tipo: 'devolucao', videoId: Number(video.id), minutos: 97 }]);
   assert.equal((await readCredits(user.id)).used_normal, 0);
   // O prompt de sistema vai em toda chamada.
-  assert.equal(falso.chamadas[0].system, suporteService.PROMPT_DE_SISTEMA);
+  assert.equal(falso.chamadas[0].system[0].text, suporteService.PROMPT_DE_SISTEMA);
+  assert.match(falso.chamadas[0].system[1].text, /Como deixar o sistema 100% automático/, 'o manual vai junto');
+  assert.match(falso.chamadas[0].system[1].text, /Planos atuais/, 'os planos vem do banco');
 
   // A conversa continua com o historico inteiro, sem edicao.
   const falso2 = claudeFalso([responde('de nada')]);
@@ -290,4 +292,50 @@ test('mensagem longa demais e recusada antes de chamar a IA', async () => {
     (e) => e.status === 400
   );
   assert.equal(falso.chamadas.length, 0);
+});
+
+test('depois de devolver, processar de novo so acontece com o "sim" do cliente (cobra de novo)', async () => {
+  const { user, video } = await clienteComVideoQueFalhou();
+  await reembolso.devolverMinutosDoVideo({ clientUserId: user.id, sourceVideoId: video.id });
+  const enviados = [];
+  const queueService = require('../../src/services/queueService');
+  const original = queueService.getBoss;
+  queueService.getBoss = async () => ({ send: async (fila, dados) => { enviados.push(dados); return 'x'; } });
+  try {
+    const sem = claudeFalso([pedeFerramenta('processar_video_de_novo', { video_id: video.id, cliente_confirmou_cobranca: false }), responde('ok')]);
+    suporteService._definirClienteParaTeste(sem);
+    await suporteService.enviarMensagem({ clientUserId: user.id, texto: 'e agora?' });
+    const r1 = JSON.parse(sem.chamadas[1].messages.at(-1).content[0].content);
+    assert.equal(r1.reiniciado, false);
+    assert.equal(r1.precisaConfirmar, true);
+    assert.equal(enviados.length, 0, 'nao mandou processar sem o sim');
+
+    const com = claudeFalso([pedeFerramenta('processar_video_de_novo', { video_id: video.id, cliente_confirmou_cobranca: true }), responde('enviado')]);
+    suporteService._definirClienteParaTeste(com);
+    const r = await suporteService.enviarMensagem({ clientUserId: user.id, texto: 'sim, pode enviar' });
+    assert.deepEqual(r.acoes, [{ tipo: 'reprocessamento', videoId: Number(video.id), cobraDeNovo: true }]);
+    assert.equal(enviados.length, 1);
+  } finally {
+    queueService.getBoss = original;
+  }
+});
+
+test('atalho so leva a destinos da lista fechada', async () => {
+  const user = await createClient();
+  const falso = claudeFalso([
+    pedeFerramenta('mostrar_atalho', { destino: 'https://site-malicioso.example' }, 'a1'),
+    pedeFerramenta('mostrar_atalho', { destino: 'tour_guiado' }, 'a2'),
+    responde('pronto'),
+  ]);
+  suporteService._definirClienteParaTeste(falso);
+  const r = await suporteService.enviarMensagem({ clientUserId: user.id, texto: 'como funciona?' });
+  assert.deepEqual(r.acoes, [{ tipo: 'atalho', destino: 'tour_guiado' }]);
+});
+
+test('o progresso avisa cada etapa, na ordem', async () => {
+  const user = await createClient();
+  const eventos = [];
+  suporteService._definirClienteParaTeste(claudeFalso([pedeFerramenta('ver_minha_conta', {}), responde('ok')]));
+  await suporteService.enviarMensagem({ clientUserId: user.id, texto: 'meus creditos?', aoProgresso: (e) => eventos.push(e) });
+  assert.deepEqual(eventos, [{ etapa: 'pensando' }, { etapa: 'ferramenta', nome: 'ver_minha_conta' }, { etapa: 'elaborando' }]);
 });

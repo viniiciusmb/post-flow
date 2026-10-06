@@ -25,6 +25,10 @@ const reembolsoDeCreditoService = require('./reembolsoDeCreditoService');
 
 const QUEUE_VIDEO_PROCESSING = 'video-processing';
 
+// Os unicos lugares para onde um atalho pode levar. A tela traduz cada um num
+// endereco fixo; a IA nunca escreve um link.
+const DESTINOS_DE_ATALHO = new Set(['tour_guiado', 'tutorial', 'cortes', 'canais', 'publicacao', 'plano_e_uso', 'configuracoes', 'comissoes']);
+
 // Texto que veio de fora (titulo do YouTube, nome de canal) entra na conversa
 // como DADO. Corta o tamanho e tira quebras de linha pra ninguem montar um
 // "paragrafo de instrucoes" dentro de um titulo de video.
@@ -74,11 +78,33 @@ const DEFINICOES = [
   {
     name: 'processar_video_de_novo',
     description:
-      'Manda um vídeo que terminou em erro ser processado de novo SEM cobrar outra vez. Só funciona quando o diagnóstico diz podeTentarDeNovoSemCobrar=true. Pergunte ao cliente antes se ele prefere tentar de novo ou receber os minutos de volta - não faça os dois.',
+      'Manda um vídeo do cliente que terminou em erro ser processado de novo. Se a cobrança original ainda vale (podeTentarDeNovoSemCobrar=true), não cobra de novo. Se os minutos já foram devolvidos, processar de novo desconta os minutos outra vez: nesse caso só chame depois que o cliente disser claramente que quer, e passe cliente_confirmou_cobranca=true.',
     input_schema: {
       type: 'object',
-      properties: { video_id: { type: 'integer' } },
-      required: ['video_id'],
+      properties: {
+        video_id: { type: 'integer' },
+        cliente_confirmou_cobranca: {
+          type: 'boolean',
+          description: 'true somente se o cliente já confirmou nesta conversa que aceita descontar os minutos de novo. Se não houver cobrança nova, passe false.',
+        },
+      },
+      required: ['video_id', 'cliente_confirmou_cobranca'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'mostrar_atalho',
+    description:
+      'Mostra ao cliente um botão para abrir uma tela do painel ou iniciar o tour guiado. Use quando ajudar o cliente a chegar onde precisa (no máximo 2 por resposta). "tour_guiado" inicia o passeio interativo que apresenta o sistema inteiro.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        destino: {
+          type: 'string',
+          enum: ['tour_guiado', 'tutorial', 'cortes', 'canais', 'publicacao', 'plano_e_uso', 'configuracoes', 'comissoes'],
+        },
+      },
+      required: ['destino'],
       additionalProperties: false,
     },
   },
@@ -166,20 +192,39 @@ const EXECUTORES = {
     if (!id) return { erro: 'Número de vídeo inválido.' };
     const linha = await supportRepository.findVideoForClient(id, clientUserId);
     if (!linha) return { erro: 'Não encontrei esse vídeo na conta do cliente.' };
-    const d = diagnosticoDaLinha(linha);
-    if (!d.podeTentarDeNovoSemCobrar) {
-      return { reiniciado: false, explicacao: 'Esse vídeo não pode ser processado de novo sem cobrança por aqui. Se o cliente quiser, ele pode clicar em "Tentar de novo" na tela Cortes (isso cobra os minutos normalmente).' };
+    if (!['error', 'cancelled'].includes(linha.status)) {
+      return { reiniciado: false, explicacao: 'Só dá para processar de novo um vídeo que terminou em erro.' };
     }
-    // Mesmo caminho do botao "Tentar de novo" da tela: a cobranca continua
-    // 'confirmado', entao o pipeline nao cobra de novo (already_charged).
+    // A cobranca original de pe = o pipeline nao cobra de novo
+    // (creditsService devolve 'already_charged'). Sem ela (devolvida, ou nunca
+    // houve), processar desconta os minutos normalmente - o mesmo que o
+    // cliente pagaria clicando em "Tentar novamente".
+    const cobraDeNovo = linha.tx_status !== 'confirmado';
+    if (cobraDeNovo && (!entrada || entrada.cliente_confirmou_cobranca !== true)) {
+      const minutos = linha.duration_seconds ? Math.ceil(Number(linha.duration_seconds) / 60) : null;
+      return {
+        reiniciado: false,
+        precisaConfirmar: true,
+        explicacao: `Processar de novo vai descontar ${minutos ? `${minutos} minutos` : 'os minutos do vídeo'} outra vez. Pergunte ao cliente se ele quer.`,
+      };
+    }
+    // Mesmo caminho do botao "Tentar novamente" da tela.
     await clipsRepository.deleteBySourceVideoId(id);
     const atualizado = await sourceVideosRepository.resetForRetry(id);
     if (!atualizado) return { reiniciado: false, explicacao: 'O vídeo mudou de situação agora há pouco; confira de novo.' };
     const boss = await queueService.getBoss();
     const priority = await queuePriorityService.resolveQueuePriorityForClient(clientUserId);
     await boss.send(QUEUE_VIDEO_PROCESSING, { sourceVideoId: id }, { priority });
-    acoes.push({ tipo: 'reprocessamento', videoId: id });
-    return { reiniciado: true };
+    acoes.push({ tipo: 'reprocessamento', videoId: id, cobraDeNovo });
+    return { reiniciado: true, cobraDeNovo };
+  },
+
+  async mostrar_atalho({ acoes }, entrada) {
+    const destino = entrada && entrada.destino;
+    if (!DESTINOS_DE_ATALHO.has(destino)) return { erro: 'Destino desconhecido.' };
+    if (acoes.filter((a) => a.tipo === 'atalho').length >= 3) return { mostrado: false, explicacao: 'Limite de atalhos nesta resposta.' };
+    if (!acoes.some((a) => a.tipo === 'atalho' && a.destino === destino)) acoes.push({ tipo: 'atalho', destino });
+    return { mostrado: true };
   },
 
   async ver_minhas_postagens({ clientUserId }) {
@@ -217,4 +262,4 @@ async function executar(nome, entrada, contexto) {
   return fn(contexto, entrada || {});
 }
 
-module.exports = { DEFINICOES, executar, categoriaDoErroDePostagem, textoExterno };
+module.exports = { DEFINICOES, executar, categoriaDoErroDePostagem, textoExterno, DESTINOS_DE_ATALHO };
