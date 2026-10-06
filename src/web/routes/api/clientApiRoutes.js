@@ -22,10 +22,8 @@ router.get('/usage', asyncHandler(clientApiController.usage));
 router.get('/onboarding', asyncHandler(onboardingApiController.status));
 router.get('/notices', asyncHandler(clientNoticesApiController.list));
 router.post('/notices/:id/dismiss', asyncHandler(clientNoticesApiController.dismiss));
-// Flora (suporte com IA) so para o admin enquanto esta em teste. Para abrir
-// aos clientes: tirar o requireRoleApi destas duas linhas e da rota da pagina
-// (clientRoutes.js), e devolver o item "menu.flora" ao CLIENT_GROUPS do menu.
-router.get('/support', requireRoleApi(ROLES.ADMIN), asyncHandler(clientSupportApiController.current));
-router.post('/support/messages', requireRoleApi(ROLES.ADMIN), asyncHandler(clientSupportApiController.send));
+// Flora (suporte com IA). Aberta a todo cliente logado desde 06/10/2026.
+router.get('/support', asyncHandler(clientSupportApiController.current));
+router.post('/support/messages', asyncHandler(clientSupportApiController.send));
 
 module.exports = router;

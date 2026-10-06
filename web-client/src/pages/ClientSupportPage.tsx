@@ -382,7 +382,7 @@ export function ClientSupportPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title={t("suporte.titulo")}>
-      <div className="mx-auto -mb-12 flex h-[calc(100svh-var(--header-height)-2rem)] min-h-[480px] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border bg-card shadow-sm lg:mb-0 lg:h-[calc(100svh-var(--header-height)-3.5rem)]">
+      <div className="-mx-1 -mb-12 flex h-[calc(100svh-var(--header-height)-2rem)] min-h-[480px] flex-col overflow-hidden rounded-2xl border bg-card shadow-sm lg:-mx-4 lg:-my-3 lg:h-[calc(100svh-var(--header-height)-3rem)]">
         {/* Cabeçalho */}
         <div className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
@@ -413,18 +413,18 @@ export function ClientSupportPage() {
               <div className="flora-entrar">
                 <AvatarDaFlora grande />
               </div>
-              <div className="flora-entrar max-w-lg" style={{ animationDelay: "80ms" }}>
+              <div className="flora-entrar max-w-xl" style={{ animationDelay: "80ms" }}>
                 <h1 className="font-heading text-2xl font-semibold">{t("flora.ola")}</h1>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{t("flora.olaTexto")}</p>
               </div>
-              <div className="grid w-full max-w-2xl grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="grid w-full max-w-4xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {PERGUNTAS_RAPIDAS.map((q, i) => (
                   <button
                     key={q.chave}
                     type="button"
                     onClick={() => enviar(t(q.chave))}
                     style={{ animationDelay: `${140 + i * 50}ms` }}
-                    className="flora-entrar group flex items-center gap-3 rounded-xl border bg-background px-4 py-3 text-left text-sm transition-colors hover:border-foreground/30 hover:bg-muted"
+                    className="flora-entrar group flex items-center gap-3 rounded-xl border bg-background px-4 py-3.5 text-left text-sm transition-colors hover:border-foreground/30 hover:bg-muted"
                   >
                     <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-background group-hover:text-foreground">
                       {q.icone}
@@ -436,7 +436,7 @@ export function ClientSupportPage() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
+            <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">
               {carregando && <div className="h-6 w-1/2 animate-pulse rounded bg-muted" />}
               {linhas.map((l) =>
                 l.autor === "cliente" ? (
@@ -463,7 +463,7 @@ export function ClientSupportPage() {
               e.preventDefault()
               enviar()
             }}
-            className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-3xl border bg-background px-3 py-2 shadow-sm transition-shadow focus-within:border-foreground/30 focus-within:shadow-md"
+            className="mx-auto flex w-full max-w-5xl items-end gap-2 rounded-3xl border bg-background px-3 py-2 shadow-sm transition-shadow focus-within:border-foreground/30 focus-within:shadow-md"
           >
             <textarea
               ref={campoRef}
@@ -489,8 +489,8 @@ export function ClientSupportPage() {
               <IconArrowUp className="size-5" />
             </button>
           </form>
-          {erro && <p className="mx-auto mt-2 max-w-3xl px-2 text-sm text-destructive">{erro}</p>}
-          <div className="mx-auto mt-2 flex max-w-3xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-2 text-xs text-muted-foreground">
+          {erro && <p className="mx-auto mt-2 max-w-5xl px-2 text-sm text-destructive">{erro}</p>}
+          <div className="mx-auto mt-2 flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-2 text-xs text-muted-foreground">
             <span>{t("suporte.aviso")}</span>
             <span className="hidden sm:inline">
               {texto.length > maxChars * 0.8 ? t("suporte.caracteres", { usados: texto.length, max: maxChars }) : t("flora.enviarDica")}

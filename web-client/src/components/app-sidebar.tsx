@@ -96,8 +96,7 @@ const CLIENT_GROUPS: Grupo[] = [
       // Por último de propósito: quem já sabe usar não tropeça nele todo dia,
       // e quem está perdido encontra pelo nome sem precisar de destaque.
       { title: "menu.tutorial", url: "/client/tutorial", icon: IconBook },
-      // "menu.flora" (/client/support) volta pra cá quando a Flora sair do
-      // teste - hoje a rota só aceita admin.
+      { title: "menu.flora", url: "/client/support", icon: IconMessageCircle },
     ],
   },
 ]
