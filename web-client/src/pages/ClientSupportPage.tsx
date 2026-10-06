@@ -118,7 +118,21 @@ function TextoDigitado({ texto, digitar, aoTerminar }: { texto: string; digitar:
   }, [digitar, texto])
 
   const digitando = mostrados < texto.length
-  return <span className={cn(digitando && "flora-cursor")}>{texto.slice(0, mostrados)}</span>
+  return <span className={cn(digitando && "flora-cursor")}>{comNegrito(texto.slice(0, mostrados))}</span>
+}
+
+// Os modelos às vezes marcam destaque com **texto**. Vira <strong> de verdade
+// (componente React, nada de HTML montado a partir do texto da IA).
+function comNegrito(texto: string): ReactNode[] {
+  return texto.split(/(\*\*[^*\n]+\*\*)/g).map((parte, i) =>
+    parte.startsWith("**") && parte.endsWith("**") && parte.length > 4 ? (
+      <strong key={i} className="font-semibold">
+        {parte.slice(2, -2)}
+      </strong>
+    ) : (
+      parte
+    ),
+  )
 }
 
 function Acoes({ acoes, visiveis }: { acoes: SupportAction[]; visiveis: boolean }) {
