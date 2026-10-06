@@ -37,13 +37,22 @@ test('sem login nao conversa', async () => {
 });
 
 test('sem o token de CSRF a mensagem e recusada', async () => {
-  const { agent } = await logado();
+  const { agent } = await logado('admin');
   const r = await agent.postSemCsrf('/api/client/support/messages', { message: 'oi' });
   assert.equal(r.status, 403);
 });
 
-test('cliente conversa e ve a propria conversa; outro cliente nao ve', async () => {
+// Flora em teste: so o admin conversa (06/10/2026). Quando abrir para os
+// clientes, este teste muda junto com as rotas.
+test('enquanto esta em teste, cliente nao abre a Flora - nem a pagina nem a API', async () => {
   const { agent } = await logado();
+  assert.equal((await agent.post('/api/client/support/messages', { message: 'oi' })).status, 403);
+  assert.equal((await agent.get('/api/client/support')).status, 403);
+  assert.notEqual((await agent.get('/client/support')).status, 200);
+});
+
+test('admin conversa e ve a propria conversa; outro admin nao ve', async () => {
+  const { agent } = await logado('admin');
   const r = await agent.post('/api/client/support/messages', { message: 'meu video nao cortou' });
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.resposta, 'Oi, posso ajudar.');
@@ -51,7 +60,7 @@ test('cliente conversa e ve a propria conversa; outro cliente nao ve', async () 
   const minha = await agent.get('/api/client/support');
   assert.deepEqual(minha.body.conversation.mensagens.map((m) => m.autor), ['cliente', 'suporte']);
 
-  const { agent: outro } = await logado();
+  const { agent: outro } = await logado('admin');
   const alheia = await outro.get(`/api/client/support?conversationId=${r.body.conversationId}`);
   assert.equal(alheia.body.conversation, null);
   const continuar = await outro.post('/api/client/support/messages', { conversationId: r.body.conversationId, message: 'oi' });

@@ -39,9 +39,12 @@ class SuporteError extends Error {
   }
 }
 
-const PROMPT_DE_SISTEMA = `Você é o assistente de suporte do Post Flow, um serviço que baixa vídeos de canais do YouTube, corta em vídeos verticais com IA e publica no TikTok do cliente. Os minutos (créditos) do cliente são descontados por minuto de vídeo processado, no momento em que o download termina.
+const NOME_DA_ASSISTENTE = 'Flora';
+
+const PROMPT_DE_SISTEMA = `Você é a ${NOME_DA_ASSISTENTE}, a assistente de suporte do Post Flow, um serviço que baixa vídeos de canais do YouTube, corta em vídeos verticais com IA e publica no TikTok do cliente. Os minutos (créditos) do cliente são descontados por minuto de vídeo processado, no momento em que o download termina.
 
 Como trabalhar:
+- Se apresentar, use o nome ${NOME_DA_ASSISTENTE}. Você é uma assistente virtual (IA); se perguntarem, diga isso com naturalidade.
 - Responda na língua em que o cliente escrever, em frases curtas e simples, sem termos técnicos. Texto corrido, sem tabelas nem títulos.
 - Antes de afirmar qualquer coisa sobre a conta, os vídeos ou as postagens do cliente, consulte as ferramentas. Nunca invente o que aconteceu.
 - Para descobrir de qual vídeo o cliente fala, use listar_meus_videos e confirme pelo título. Se houver dúvida entre vídeos, pergunte.
@@ -252,6 +255,7 @@ module.exports = {
   conversaAtual,
   SuporteError,
   PROMPT_DE_SISTEMA,
+  NOME_DA_ASSISTENTE,
   MODELO,
   MAX_CARACTERES_POR_MENSAGEM,
   MAX_MENSAGENS_POR_DIA,

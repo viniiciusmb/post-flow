@@ -77,6 +77,7 @@ const ADMIN_GROUPS: Grupo[] = [
       { title: "menu.publicacao", url: "/client/tiktok-account", icon: IconBrandTiktok },
       { title: "menu.configuracoes", url: "/client/settings", icon: IconSettings },
       { title: "menu.tutorial", url: "/client/tutorial", icon: IconBook },
+      { title: "menu.flora", url: "/client/support", icon: IconMessageCircle },
     ],
   },
 ]
@@ -95,7 +96,8 @@ const CLIENT_GROUPS: Grupo[] = [
       // Por último de propósito: quem já sabe usar não tropeça nele todo dia,
       // e quem está perdido encontra pelo nome sem precisar de destaque.
       { title: "menu.tutorial", url: "/client/tutorial", icon: IconBook },
-      { title: "menu.suporte", url: "/client/support", icon: IconMessageCircle },
+      // "menu.flora" (/client/support) volta pra cá quando a Flora sair do
+      // teste - hoje a rota só aceita admin.
     ],
   },
 ]

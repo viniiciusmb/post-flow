@@ -40,6 +40,7 @@ router.get('/billing', serveSpaPage('client-billing'));
 router.get('/checkout', serveSpaPage('client-checkout'));
 router.get('/commissions', serveSpaPage('client-commissions'));
 router.get('/tutorial', serveSpaPage('tutorial'));
-router.get('/support', serveSpaPage('client-support'));
+// Flora so para o admin enquanto esta em teste (ver clientApiRoutes.js).
+router.get('/support', requireRole(ROLES.ADMIN), serveSpaPage('client-support'));
 
 module.exports = router;
