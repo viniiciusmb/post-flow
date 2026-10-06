@@ -1317,6 +1317,6 @@ export type AdminSupportBlock =
 
 export interface AdminSupportDetail {
   conversation: { id: number; email: string; status: SupportConversationStatus; escalationSummary: string | null }
-  messages: { id: number; role: "user" | "assistant"; createdAt: string; blocks: AdminSupportBlock[] }[]
+  messages: { id: number; role: "user" | "assistant"; model: string | null; costUsd: number; createdAt: string; blocks: AdminSupportBlock[] }[]
   refunds: { videoId: number | null; title: string | null; minutes: number; reason: string; createdAt: string }[]
 }

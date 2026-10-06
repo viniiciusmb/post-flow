@@ -270,6 +270,9 @@ test('falha da API no meio de uma ferramenta fecha o turno sem quebrar o histori
   const user = await createClient();
   const falso = claudeFalso([
     pedeFerramenta('ver_minha_conta', {}, 'x1'),
+    // Falha nos tres modelos: so assim o cliente fica sem resposta da IA.
+    () => { throw new Error('overloaded'); },
+    () => { throw new Error('overloaded'); },
     () => { throw new Error('overloaded'); },
   ]);
   suporteService._definirClienteParaTeste(falso);
@@ -338,4 +341,57 @@ test('o progresso avisa cada etapa, na ordem', async () => {
   suporteService._definirClienteParaTeste(claudeFalso([pedeFerramenta('ver_minha_conta', {}), responde('ok')]));
   await suporteService.enviarMensagem({ clientUserId: user.id, texto: 'meus creditos?', aoProgresso: (e) => eventos.push(e) });
   assert.deepEqual(eventos, [{ etapa: 'pensando' }, { etapa: 'ferramenta', nome: 'ver_minha_conta' }, { etapa: 'elaborando' }]);
+});
+
+test('pergunta simples vai pro Haiku sem esforco nem fallback; problema vai pro Sonnet', async () => {
+  const user = await createClient();
+  const f1 = claudeFalso([responde('renova toda semana')]);
+  suporteService._definirClienteParaTeste(f1);
+  const r1 = await suporteService.enviarMensagem({ clientUserId: user.id, texto: 'Quando meus minutos renovam?' });
+  assert.equal(f1.chamadas[0].model, 'claude-haiku-4-5');
+  assert.equal(f1.chamadas[0].output_config, undefined, 'o Haiku recusa esforco');
+  assert.equal(f1.chamadas[0].fallbacks, undefined);
+  assert.equal(r1.modelo, 'claude-haiku-4-5');
+
+  const f2 = claudeFalso([responde('vou olhar')]);
+  suporteService._definirClienteParaTeste(f2);
+  await suporteService.enviarMensagem({ clientUserId: user.id, texto: 'meu video nao foi processado' });
+  assert.equal(f2.chamadas[0].model, 'claude-sonnet-5-5');
+
+  // O modelo fica gravado em cada resposta, pra auditar a economia.
+  const { rows } = await pool.query(
+    `SELECT m.model FROM support_messages m JOIN support_conversations c ON c.id = m.conversation_id
+     WHERE c.client_user_id = $1 AND m.role = 'assistant' ORDER BY m.id`,
+    [user.id]
+  );
+  assert.deepEqual(rows.map((x) => x.model), ['claude-haiku-4-5', 'claude-sonnet-5-5']);
+});
+
+test('se o modelo barato falha, a mesma pergunta vai pro degrau de cima', async () => {
+  const user = await createClient();
+  const falso = claudeFalso([() => { throw new Error('overloaded'); }, responde('respondi pelo Sonnet')]);
+  suporteService._definirClienteParaTeste(falso);
+  const r = await suporteService.enviarMensagem({ clientUserId: user.id, texto: 'como funciona?' });
+  assert.equal(r.resposta, 'respondi pelo Sonnet');
+  assert.deepEqual(falso.chamadas.map((c) => c.model), ['claude-haiku-4-5', 'claude-sonnet-5-5']);
+});
+
+test('chamada de ferramenta falsa escrita no texto nunca chega a tela', async () => {
+  const user = await createClient();
+  suporteService._definirClienteParaTeste(claudeFalso([
+    responde('Vou verificar sua conta.\n<function_calls>\n<invoke name="ver_minha_conta">\n</invoke>'),
+  ]));
+  const r = await suporteService.enviarMensagem({ clientUserId: user.id, texto: 'como funciona?' });
+  assert.equal(r.resposta, 'Vou verificar sua conta.');
+});
+
+test('a volta final (so texto) nunca usa o Haiku', async () => {
+  const user = await createClient();
+  const roteiro = Array.from({ length: suporteService.MAX_VOLTAS - 1 }, (_, i) => pedeFerramenta('ver_minha_conta', {}, `h${i}`));
+  roteiro.push(responde('resumo'));
+  const falso = claudeFalso(roteiro);
+  suporteService._definirClienteParaTeste(falso);
+  await suporteService.enviarMensagem({ clientUserId: user.id, texto: 'oi' });
+  assert.equal(falso.chamadas[0].model, 'claude-haiku-4-5');
+  assert.equal(falso.chamadas.at(-1).model, 'claude-sonnet-5-5');
 });

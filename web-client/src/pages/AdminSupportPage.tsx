@@ -21,6 +21,13 @@ const TOM: Record<SupportConversationStatus, "danger" | "indigo" | "success"> = 
   resolvida: "success",
 }
 
+// Qual modelo respondeu (a Flora escolhe pela complexidade da pergunta).
+const NOME_DO_MODELO: Record<string, string> = {
+  "claude-haiku-4-5": "Haiku (simples)",
+  "claude-sonnet-5-5": "Sonnet (investigação)",
+  "claude-opus-5-5": "Opus (caso difícil)",
+}
+
 function Detalhe({ id }: { id: number }) {
   const t = useT()
   const [d, setD] = useState<AdminSupportDetail | null>(null)
@@ -30,8 +37,13 @@ function Detalhe({ id }: { id: number }) {
   if (!d) return <Skeleton className="h-24 w-full" />
   return (
     <div className="flex flex-col gap-2 border-t pt-3">
-      {d.messages.map((m) =>
-        m.blocks.map((b, i) => (
+      {d.messages.map((m) => [
+        m.model && (
+          <p key={`${m.id}-modelo`} className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            {NOME_DO_MODELO[m.model] ?? m.model} · US$ {m.costUsd.toFixed(4)}
+          </p>
+        ),
+        ...m.blocks.map((b, i) => (
           <div key={`${m.id}-${i}`} className="text-sm">
             {b.tipo === "texto" && (
               <p className="whitespace-pre-wrap break-words">
@@ -52,7 +64,7 @@ function Detalhe({ id }: { id: number }) {
             )}
           </div>
         )),
-      )}
+      ])}
       {d.refunds.length > 0 && (
         <ul className="mt-2 text-sm">
           {d.refunds.map((r, i) => (

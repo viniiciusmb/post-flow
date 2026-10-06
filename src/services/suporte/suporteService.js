@@ -20,10 +20,8 @@ const logger = require('../../lib/logger');
 const supportRepository = require('../../repositories/supportRepository');
 const { DEFINICOES, executar } = require('./ferramentasDoSuporte');
 const { MANUAL, textoDosPlanos } = require('./conhecimentoDoSistema');
+const { escolherModelo, dadosDoNivel, nivelDoModelo } = require('./escolhaDoModelo');
 
-const MODELO = 'claude-opus-5-5';
-// Preco do Claude Opus 5.5 por milhao de tokens (US$).
-const PRECO = { entrada: 4, saida: 20, cacheLeitura: 0.2, cacheEscrita: 5 };
 
 const MAX_CARACTERES_POR_MENSAGEM = 1500;
 const MAX_MENSAGENS_POR_DIA = 40;
@@ -79,22 +77,44 @@ function _definirClienteParaTeste(cliente) {
   clienteAnthropic = cliente;
 }
 
-function custoUsd(usage = {}) {
+function custoUsd(usage = {}, preco) {
   return (
-    (Number(usage.input_tokens || 0) * PRECO.entrada +
-      Number(usage.output_tokens || 0) * PRECO.saida +
-      Number(usage.cache_read_input_tokens || 0) * PRECO.cacheLeitura +
-      Number(usage.cache_creation_input_tokens || 0) * PRECO.cacheEscrita) /
+    (Number(usage.input_tokens || 0) * preco.entrada +
+      Number(usage.output_tokens || 0) * preco.saida +
+      Number(usage.cache_read_input_tokens || 0) * preco.cacheLeitura +
+      Number(usage.cache_creation_input_tokens || 0) * preco.cacheEscrita) /
     1_000_000
   );
 }
 
+// O pedido muda um pouco por modelo: o Haiku 4.5 nao aceita esforco
+// (output_config.effort) nem o fallback do servidor; os de nivel acima aceitam
+// os dois. Esforco 'medium' nos dois de cima: suporte nao e tarefa longa.
+function pedidoPara(nivel, base) {
+  const { modelo } = dadosDoNivel(nivel);
+  if (nivel === 0) return { model: modelo, max_tokens: 4000, ...base };
+  return {
+    model: modelo,
+    max_tokens: 8000,
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    output_config: { effort: 'medium' },
+    ...base,
+  };
+}
+
+// Visto em 06/10/2026: com tool_choice 'none', o Haiku escreveu chamadas de
+// ferramenta FALSAS no meio do texto ("<function_calls><invoke ..."). Isso
+// nunca pode chegar a tela - corta do primeiro marcador em diante.
+const MARCADOR_DE_FERRAMENTA_FALSA = /<\/?(function_calls|invoke|parameter|tool_use)\b/i;
+
 function textoVisivel(content) {
-  return (content || [])
+  const texto = (content || [])
     .filter((b) => b.type === 'text' && b.text)
     .map((b) => b.text)
-    .join('\n\n')
-    .trim();
+    .join('\n\n');
+  const corte = texto.search(MARCADOR_DE_FERRAMENTA_FALSA);
+  return (corte >= 0 ? texto.slice(0, corte) : texto).trim();
 }
 
 const RESPOSTA_DE_FALHA =
@@ -165,6 +185,13 @@ async function processarMensagem({ clientUserId, conversationId = null, texto, a
     }
   };
   avisar({ etapa: 'pensando' });
+
+  // Modelo pela complexidade: o nivel da resposta anterior desta conversa
+  // entra na conta (nao desce no meio de uma investigacao; sobe se o cliente
+  // diz que nao resolveu).
+  const ultimaDaFlora = [...historico].reverse().find((m) => m.role === 'assistant' && m.model);
+  const escolha = escolherModelo({ texto: mensagem, nivelAnterior: ultimaDaFlora ? nivelDoModelo(ultimaDaFlora.model) : null });
+  let nivel = escolha.nivel;
   // Instrucoes + manual + planos: o mesmo prefixo em toda chamada, entao o
   // cache da API cobre os ~8 mil tokens do manual depois da primeira.
   const system = [
@@ -175,18 +202,30 @@ async function processarMensagem({ clientUserId, conversationId = null, texto, a
   try {
     for (let volta = 1; volta <= MAX_VOLTAS; volta++) {
       const ultima = volta === MAX_VOLTAS;
-      const r = await anthropic().beta.messages.create({
-        model: MODELO,
-        max_tokens: 8000,
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        output_config: { effort: 'medium' },
+      const base = {
         cache_control: { type: 'ephemeral' },
         system,
         tools: DEFINICOES,
         tool_choice: ultima ? { type: 'none' } : { type: 'auto' },
         messages,
-      });
+      };
+      // A volta final e obrigada a responder em texto (tool_choice none), e o
+      // Haiku inventa chamada de ferramenta no texto nessa situacao: ela vai
+      // pelo menos pro Sonnet.
+      if (ultima && nivel === 0) nivel = 1;
+      let r;
+      for (;;) {
+        try {
+          r = await anthropic().beta.messages.create(pedidoPara(nivel, base));
+          break;
+        } catch (err) {
+          // Falha tecnica (sobrecarga, limite) no modelo mais barato: tenta o
+          // degrau de cima em vez de deixar o cliente sem resposta.
+          if (nivel >= 2) throw err;
+          logger.warn(`Suporte: ${dadosDoNivel(nivel).modelo} falhou (${err.message}); subindo de modelo.`);
+          nivel += 1;
+        }
+      }
 
       let content = Array.isArray(r.content) ? r.content : [];
       if (r.stop_reason === 'refusal' || content.length === 0) {
@@ -195,7 +234,10 @@ async function processarMensagem({ clientUserId, conversationId = null, texto, a
         content = [{ type: 'text', text: 'Não consigo ajudar com esse pedido por aqui. Se for um problema com seus vídeos, créditos ou postagens, me conte o que aconteceu.' }];
       }
 
-      const visivel = textoVisivel(content);
+      let visivel = textoVisivel(content);
+      if (!visivel && r.stop_reason !== 'tool_use') {
+        visivel = 'Desculpe, não consegui concluir a resposta agora. Pode repetir a pergunta?';
+      }
       const usouFerramenta = r.stop_reason === 'tool_use';
       await supportRepository.addMessage(conversa.id, {
         role: 'assistant',
@@ -203,7 +245,8 @@ async function processarMensagem({ clientUserId, conversationId = null, texto, a
         visibleText: usouFerramenta ? null : visivel,
         inputTokens: Number(r.usage?.input_tokens || 0),
         outputTokens: Number(r.usage?.output_tokens || 0),
-        costUsd: custoUsd(r.usage),
+        costUsd: custoUsd(r.usage, dadosDoNivel(nivel).preco),
+        model: dadosDoNivel(nivel).modelo,
       });
       messages.push({ role: 'assistant', content });
 
@@ -253,7 +296,7 @@ async function processarMensagem({ clientUserId, conversationId = null, texto, a
   }
 
   const atual = await supportRepository.findConversationForClient(conversa.id, clientUserId);
-  return { conversationId: Number(conversa.id), resposta, acoes, status: atual.status };
+  return { conversationId: Number(conversa.id), resposta, acoes, status: atual.status, modelo: dadosDoNivel(nivel).modelo };
 }
 
 async function conversaAtual(clientUserId, conversationId = null) {
@@ -277,7 +320,6 @@ module.exports = {
   SuporteError,
   PROMPT_DE_SISTEMA,
   NOME_DA_ASSISTENTE,
-  MODELO,
   MAX_CARACTERES_POR_MENSAGEM,
   MAX_MENSAGENS_POR_DIA,
   MAX_VOLTAS,

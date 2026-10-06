@@ -46,6 +46,8 @@ async function detail(req, res) {
     messages: mensagens.map((m) => ({
       id: Number(m.id),
       role: m.role,
+      model: m.model,
+      costUsd: Number(m.cost_usd),
       createdAt: m.created_at,
       blocks: (m.content || []).map(resumoDoBloco).filter(Boolean),
     })),

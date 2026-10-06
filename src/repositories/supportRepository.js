@@ -136,11 +136,11 @@ async function listMessages(conversationId) {
   return rows;
 }
 
-async function addMessage(conversationId, { role, content, visibleText = null, inputTokens = 0, outputTokens = 0, costUsd = 0 }) {
+async function addMessage(conversationId, { role, content, visibleText = null, inputTokens = 0, outputTokens = 0, costUsd = 0, model = null }) {
   const { rows } = await pool.query(
-    `INSERT INTO support_messages (conversation_id, role, content, visible_text, input_tokens, output_tokens, cost_usd)
-     VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7) RETURNING *`,
-    [conversationId, role, JSON.stringify(content), visibleText, inputTokens, outputTokens, costUsd]
+    `INSERT INTO support_messages (conversation_id, role, content, visible_text, input_tokens, output_tokens, cost_usd, model)
+     VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8) RETURNING *`,
+    [conversationId, role, JSON.stringify(content), visibleText, inputTokens, outputTokens, costUsd, model]
   );
   await pool.query('UPDATE support_conversations SET updated_at = now() WHERE id = $1', [conversationId]);
   return rows[0];
