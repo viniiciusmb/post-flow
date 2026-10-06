@@ -57,6 +57,7 @@ export const pt = {
   "menu.receita": "Receita",
   "menu.narrado": "Vídeo narrado",
   "menu.lives": "Lives",
+  "menu.livesAdmin": "Lives Admin",
   "menu.faturamento": "Faturamento",
   "menu.erros": "Erros",
   "menu.grupoOperacao": "Operação",

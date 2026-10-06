@@ -57,11 +57,12 @@ async function isFollowing(userId, channelId) {
   return rows.length > 0;
 }
 
-// Canais que alguem acompanha SEM pausa - os unicos que o supervisor grava.
+// Canais que alguem acompanha SEM pausa (o "clipar sempre" ligado) ou que
+// alguem mandou clipar SO esta live - os unicos que o supervisor grava.
 async function listWatchedChannels() {
   const { rows } = await pool.query(
     `SELECT c.* FROM live_channels c
-      WHERE EXISTS (SELECT 1 FROM live_channel_follows f WHERE f.live_channel_id = c.id AND f.is_active AND f.paused_at IS NULL)
+      WHERE EXISTS (SELECT 1 FROM live_channel_follows f WHERE f.live_channel_id = c.id AND f.is_active AND (f.paused_at IS NULL OR f.clip_this_live_at IS NOT NULL))
       ORDER BY c.id`
   );
   return rows;
@@ -80,7 +81,7 @@ async function listFollowedChannels() {
 
 async function activeFollowerIds(channelId) {
   const { rows } = await pool.query(
-    'SELECT user_id FROM live_channel_follows WHERE live_channel_id = $1 AND is_active AND paused_at IS NULL ORDER BY user_id',
+    'SELECT user_id FROM live_channel_follows f WHERE live_channel_id = $1 AND f.is_active AND (f.paused_at IS NULL OR f.clip_this_live_at IS NOT NULL) ORDER BY user_id',
     [channelId]
   );
   return rows.map((r) => Number(r.user_id));
@@ -95,6 +96,31 @@ async function updateChannelStatus(channelId, { isLive, titulo, jogo, espectador
       WHERE id = $1`,
     [channelId, isLive, titulo || null, jogo || null, isLive ? espectadores ?? null : null]
   );
+  // "Clipar esta live" vale so pra live em que foi pedido: acabou, apaga. Sem
+  // isto o canal voltaria a gravar sozinho na live seguinte, que e justamente
+  // o que quem deixou o automatico desligado nao quer.
+  if (!isLive) {
+    await pool.query(
+      'UPDATE live_channel_follows SET clip_this_live_at = NULL WHERE live_channel_id = $1 AND clip_this_live_at IS NOT NULL',
+      [channelId]
+    );
+  }
+}
+
+// Liga/desliga "clipar esta live" pra UMA pessoa. Ligar so vale com o canal ao
+// vivo (conferido na propria escrita, nao numa leitura antes): com o canal offline a marca
+// ficaria esperando e gravaria a proxima live sozinha.
+async function setClipThisLive(userId, channelId, ligar) {
+  const { rowCount } = await pool.query(
+    ligar
+      ? `UPDATE live_channel_follows f SET clip_this_live_at = COALESCE(f.clip_this_live_at, now())
+           FROM live_channels c
+          WHERE c.id = f.live_channel_id AND f.user_id = $1 AND f.live_channel_id = $2 AND f.is_active AND c.is_live`
+      : `UPDATE live_channel_follows SET clip_this_live_at = NULL
+          WHERE user_id = $1 AND live_channel_id = $2 AND is_active`,
+    [userId, channelId]
+  );
+  return rowCount > 0;
 }
 
 // Canais de UM usuario, com a sessao em andamento e contagens - e o que a
@@ -108,7 +134,8 @@ async function listChannelsForUser(userId) {
             (SELECT count(*) FROM live_clips k WHERE k.live_channel_id = c.id AND k.user_id = $1 AND k.status = 'pronto') AS clips_prontos,
             (SELECT count(*) FROM live_clips k WHERE k.live_channel_id = c.id AND k.user_id = $1 AND k.status IN ('na_fila','renderizando')) AS clips_em_andamento,
             (SELECT max(started_at) FROM live_sessions x WHERE x.live_channel_id = c.id) AS ultima_gravacao,
-            f.paused_at
+            f.paused_at, f.clip_this_live_at,
+            f.created_at AS followed_at
        FROM live_channel_follows f
        JOIN live_channels c ON c.id = f.live_channel_id
        LEFT JOIN live_sessions s ON s.live_channel_id = c.id AND s.status = 'gravando'
@@ -484,7 +511,7 @@ async function followersWithQuality(channelId) {
     `SELECT f.user_id, COALESCE(s.qualidade, 3) AS qualidade, s.categorias
        FROM live_channel_follows f
        LEFT JOIN live_clip_settings s ON s.user_id = f.user_id
-      WHERE f.live_channel_id = $1 AND f.is_active AND f.paused_at IS NULL
+      WHERE f.live_channel_id = $1 AND f.is_active AND (f.paused_at IS NULL OR f.clip_this_live_at IS NOT NULL)
       ORDER BY f.user_id`,
     [channelId]
   );
@@ -621,7 +648,7 @@ async function requeueInterruptedRenders() {
 async function listClipsForUser(userId, { channelId = null, ordem = 'recentes', limite = 100 } = {}) {
   const ordenacao = ordem === 'nota' ? 'k.score DESC NULLS LAST, k.created_at DESC' : 'k.created_at DESC';
   const { rows } = await pool.query(
-    `SELECT k.*, c.login, c.display_name, c.platform,
+    `SELECT k.*, c.login, c.display_name, c.platform, c.profile_image_url,
             (SELECT moment_type FROM live_candidates x WHERE x.id = k.candidate_id) AS moment_type
        FROM live_clips k JOIN live_channels c ON c.id = k.live_channel_id
       WHERE k.user_id = $1 AND ($2::bigint IS NULL OR k.live_channel_id = $2)
@@ -716,6 +743,7 @@ module.exports = {
   setClipReview,
   activeFollowerIds,
   updateChannelStatus,
+  setClipThisLive,
   listChannelsForUser,
   createSession,
   setSessionDir,

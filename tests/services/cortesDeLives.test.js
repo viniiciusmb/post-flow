@@ -1284,6 +1284,7 @@ test('nenhum codigo do modulo de lives escreve em tabela do fluxo do YouTube', (
     ...fs.readdirSync(path.join(raiz, 'services', 'lives')).map((f) => path.join(raiz, 'services', 'lives', f)),
     path.join(raiz, 'worker', 'liveSupervisor.js'),
     path.join(raiz, 'web', 'controllers', 'api', 'adminLivesApiController.js'),
+    path.join(raiz, 'web', 'controllers', 'api', 'livesApiController.js'),
   ];
   const escritas = [];
   for (const arq of arquivos) {

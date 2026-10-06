@@ -66,7 +66,7 @@ const ADMIN_GROUPS: Grupo[] = [
       { title: "menu.erros", url: "/admin/errors", icon: IconAlertTriangle },
       { title: "menu.suporte", url: "/admin/support", icon: IconMessageCircle },
       { title: "menu.narrado", url: "/admin/narrated", icon: IconMicrophone },
-      { title: "menu.lives", url: "/admin/lives", icon: IconBroadcast },
+      { title: "menu.livesAdmin", url: "/admin/lives", icon: IconBroadcast },
     ],
   },
   {
@@ -74,6 +74,10 @@ const ADMIN_GROUPS: Grupo[] = [
     items: [
       { title: "menu.canais", url: "/client/youtube-channels", icon: IconBrandYoutube },
       { title: "menu.cortes", url: "/client/videos-clips", icon: IconScissors },
+      // Tela "Lives" que vai pros clientes - em teste, só o admin vê. Para
+      // abrir: pôr este item também no CLIENT_GROUPS e trocar a trava em
+      // routes/api/livesApiRoutes.js e routes/clientRoutes.js.
+      { title: "menu.lives", url: "/client/lives", icon: IconBroadcast },
       { title: "menu.publicacao", url: "/client/tiktok-account", icon: IconBrandTiktok },
       { title: "menu.configuracoes", url: "/client/settings", icon: IconSettings },
       { title: "menu.tutorial", url: "/client/tutorial", icon: IconBook },

@@ -59,7 +59,13 @@ function corteParaApi(k) {
   const temArquivo = Boolean(k.local_clip_path) && fs.existsSync(k.local_clip_path);
   return {
     id: Number(k.id),
-    canal: { id: Number(k.live_channel_id), login: k.login, nome: k.display_name || k.login },
+    canal: {
+      id: Number(k.live_channel_id),
+      login: k.login,
+      nome: k.display_name || k.login,
+      imagem: k.profile_image_url || null,
+      plataforma: k.platform || 'twitch',
+    },
     origem: k.source,
     inicio: Number(k.start_offset),
     fim: Number(k.end_offset),
@@ -165,27 +171,27 @@ async function estado(req, res) {
 
 // Opcoes dos cortes de live do usuario: qualidade, camera e se o estilo
 // visual e o mesmo dos cortes de video. Campo ausente preserva o salvo.
-async function salvarOpcoes(req, res) {
-  const userId = req.session.user.id;
+// Devolve { error } (400) ou grava e devolve {}. Compartilhado com a tela
+// "Lives" dos clientes.
+async function validarOpcoes(userId, b = {}) {
   const atual = await livesUserSettings.obter(userId);
-  const b = req.body || {};
   const nova = { ...atual };
   if (b.qualidade !== undefined) {
     const q = Number(b.qualidade);
-    if (!Number.isInteger(q) || q < 1 || q > 5) return res.status(400).json({ error: 'Qualidade vai de 1 a 5.' });
+    if (!Number.isInteger(q) || q < 1 || q > 5) return { error: 'Qualidade vai de 1 a 5.' };
     nova.qualidade = q;
   }
   if (b.cameraModo !== undefined) {
-    if (!['ia', 'auto', 'desligado'].includes(b.cameraModo)) return res.status(400).json({ error: 'Opcao de enquadramento invalida.' });
+    if (!['ia', 'auto', 'desligado'].includes(b.cameraModo)) return { error: 'Opcao de enquadramento invalida.' };
     nova.camera_modo = b.cameraModo;
   }
   if (b.cameraPosicao !== undefined) {
-    if (!['top', 'bottom'].includes(b.cameraPosicao)) return res.status(400).json({ error: 'Posicao da camera invalida.' });
+    if (!['top', 'bottom'].includes(b.cameraPosicao)) return { error: 'Posicao da camera invalida.' };
     nova.camera_posicao = b.cameraPosicao;
   }
   if (b.cameraAlturaPercent !== undefined) {
     const a = Number(b.cameraAlturaPercent);
-    if (!Number.isInteger(a) || a < 20 || a > 60) return res.status(400).json({ error: 'Altura da camera vai de 20% a 60%.' });
+    if (!Number.isInteger(a) || a < 20 || a > 60) return { error: 'Altura da camera vai de 20% a 60%.' };
     nova.camera_altura_percent = a;
   }
   if (b.categorias !== undefined) {
@@ -193,7 +199,7 @@ async function salvarOpcoes(req, res) {
     // ignorado: gravar lixo faria o filtro barrar tudo sem ninguem entender.
     if (b.categorias === null) nova.categorias = null;
     else if (!Array.isArray(b.categorias) || b.categorias.some((x) => !tiposDeMomento.IDS_CATEGORIAS.includes(x))) {
-      return res.status(400).json({ error: 'Tipo de corte invalido.' });
+      return { error: 'Tipo de corte invalido.' };
     } else nova.categorias = b.categorias.length ? [...new Set(b.categorias)] : null;
   }
   if (b.usarEstiloDosVideos !== undefined) {
@@ -205,6 +211,12 @@ async function salvarOpcoes(req, res) {
     }
   }
   await livesRepository.upsertClipSettings(userId, nova);
+  return {};
+}
+
+async function salvarOpcoes(req, res) {
+  const r = await validarOpcoes(req.session.user.id, req.body || {});
+  if (r.error) return res.status(400).json({ error: r.error });
   return estado(req, res);
 }
 
@@ -254,21 +266,23 @@ async function salvarConfig(req, res) {
 }
 
 // O link colado decide a plataforma; nome solto usa a escolhida na tela
-// (req.body.plataforma), com Twitch como padrao (era a unica antes).
-async function adicionarCanal(req, res) {
-  const alvo = plataformas.identificar(req.body?.canal, req.body?.plataforma);
-  const escolhida = alvo?.plataforma || (req.body?.plataforma === 'kick' ? 'kick' : 'twitch');
+// (corpo.plataforma), com Twitch como padrao (era a unica antes). Compartilhado
+// pela tela do admin e pela tela "Lives" dos clientes: devolve o canal salvo
+// (ja seguido por quem pediu) ou { status, error } pra rota responder.
+async function seguirCanal(userId, corpo) {
+  const alvo = plataformas.identificar(corpo?.canal, corpo?.plataforma);
+  const escolhida = alvo?.plataforma || (corpo?.plataforma === 'kick' ? 'kick' : 'twitch');
   const nome = plataformas.NOMES[escolhida];
   const dominio = escolhida === 'kick' ? 'kick.com' : 'twitch.tv';
-  if (!alvo) return res.status(400).json({ error: `Nome de canal da ${nome} invalido. Use o nome que aparece em ${dominio}/nome.` });
-  if (!plataformas.disponivel(alvo.plataforma)) return res.status(503).json({ error: `A ${nome} nao esta configurada no servidor.` });
+  if (!alvo) return { status: 400, error: `Nome de canal da ${nome} invalido. Use o nome que aparece em ${dominio}/nome.` };
+  if (!plataformas.disponivel(alvo.plataforma)) return { status: 503, error: `A ${nome} nao esta configurada no servidor.` };
   let usuario;
   try {
     usuario = await plataformas.buscarUsuario(alvo.plataforma, alvo.login);
   } catch (err) {
-    return res.status(502).json({ error: `Nao consegui consultar a ${nome} agora: ${err.message}` });
+    return { status: 502, error: `Nao consegui consultar a ${nome} agora: ${err.message}` };
   }
-  if (!usuario) return res.status(404).json({ error: `Nao existe canal ${dominio}/${alvo.login}.` });
+  if (!usuario) return { status: 404, error: `Nao existe canal ${dominio}/${alvo.login}.` };
   const canal = await livesRepository.upsertChannel({
     platform: alvo.plataforma,
     login: usuario.login,
@@ -276,8 +290,14 @@ async function adicionarCanal(req, res) {
     platformUserId: usuario.id,
     profileImageUrl: usuario.imagem,
   });
-  await livesRepository.follow(req.session.user.id, canal.id);
+  await livesRepository.follow(userId, canal.id);
   await atualizarStatus([canal], { forcar: true });
+  return { canal };
+}
+
+async function adicionarCanal(req, res) {
+  const r = await seguirCanal(req.session.user.id, req.body);
+  if (r.error) return res.status(r.status).json({ error: r.error });
   return estado(req, res);
 }
 
@@ -361,4 +381,7 @@ async function apagarCorte(req, res) {
   res.json({ ok: true });
 }
 
-module.exports = { estado, salvarConfig, salvarOpcoes, obterEstilo, salvarEstilo, adicionarCanal, removerCanal, pausarCanal, retomarCanal, cliparAgora, listarCortes, arquivoDoCorte, apagarCorte, JANELA_CLIPAR_AGORA_S };
+module.exports = {
+  // Compartilhados com a tela "Lives" dos clientes (livesApiController).
+  atualizarStatus, canalParaApi, corteParaApi, opcoesParaApi, estiloSoVisual, seguirCanal, validarOpcoes,
+  estado, salvarConfig, salvarOpcoes, obterEstilo, salvarEstilo, adicionarCanal, removerCanal, pausarCanal, retomarCanal, cliparAgora, listarCortes, arquivoDoCorte, apagarCorte, JANELA_CLIPAR_AGORA_S };

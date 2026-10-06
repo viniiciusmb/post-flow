@@ -41,5 +41,8 @@ router.get('/checkout', serveSpaPage('client-checkout'));
 router.get('/commissions', serveSpaPage('client-commissions'));
 router.get('/tutorial', serveSpaPage('tutorial'));
 router.get('/support', serveSpaPage('client-support'));
+// Tela "Lives" (a que vai pros clientes) - em teste, so o admin abre. Ver
+// routes/api/livesApiRoutes.js para o que trocar quando abrir.
+router.get('/lives', requireRole(ROLES.ADMIN), serveSpaPage('client-lives'));
 
 module.exports = router;

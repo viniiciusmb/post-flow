@@ -46,6 +46,7 @@ export default defineConfig({
         'admin-errors': path.resolve(__dirname, 'admin-errors.html'),
         'admin-narrated': path.resolve(__dirname, 'admin-narrated.html'),
         'admin-lives': path.resolve(__dirname, 'admin-lives.html'),
+        'client-lives': path.resolve(__dirname, 'client-lives.html'),
         tutorial: path.resolve(__dirname, 'tutorial.html'),
         'client-support': path.resolve(__dirname, 'client-support.html'),
         'admin-support': path.resolve(__dirname, 'admin-support.html'),
