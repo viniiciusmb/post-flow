@@ -177,6 +177,26 @@ function CropZoomEditor({
   )
 }
 
+// Miniatura dos modelos "destaque_*": a última palavra na cor (no vídeo, a IA
+// do render escolhe a palavra - número primeiro, senão a mais longa).
+function PalavraDestacada({ text, cor }: { text: string; cor: string }) {
+  const palavras = text.toUpperCase().split(" ")
+  return (
+    <span style={{ fontFamily: "Anton, Arial Black, sans-serif", color: "#fff", fontSize: 15, WebkitTextStroke: "2px #000", paintOrder: "stroke fill" }}>
+      {palavras.slice(0, -1).join(" ")} <span style={{ color: cor }}>{palavras[palavras.length - 1]}</span>
+    </span>
+  )
+}
+
+// Miniatura dos modelos "faixa_*": barra de ponta a ponta atrás do texto.
+function Faixa({ text, fundo, letra }: { text: string; fundo: string; letra: string }) {
+  return (
+    <span className="block w-full text-center" style={{ background: fundo, color: letra, fontFamily: "Anton, Arial Black, sans-serif", fontSize: 14, padding: "4px 0" }}>
+      {text}
+    </span>
+  )
+}
+
 const STYLE_PREVIEW: Record<VideoCaptionStyle, { label: ChaveDeTraducao; render: (text: string) => React.ReactNode }> = {
   classic: {
     label: "ce.classica",
@@ -374,6 +394,68 @@ const STYLE_PREVIEW: Record<VideoCaptionStyle, { label: ChaveDeTraducao; render:
         {text}
       </span>
     ),
+  },
+  simples: {
+    label: "ce.simples",
+    render: (text) => (
+      <span style={{ fontFamily: "Anton, Arial Black, sans-serif", color: "#fff", fontSize: 15, textShadow: "0 2px 4px rgba(0,0,0,.7)" }}>{text}</span>
+    ),
+  },
+  sombra_dura: {
+    label: "ce.sombraDura",
+    render: (text) => (
+      <span style={{ fontFamily: "Anton, Arial Black, sans-serif", color: "#fff", fontSize: 15, textShadow: "3px 3px 0 #000" }}>{text}</span>
+    ),
+  },
+  amarelo_fino: {
+    label: "ce.amareloFino",
+    render: (text) => (
+      <span style={{ fontFamily: "Anton, Arial Black, sans-serif", color: "#ffd700", fontSize: 15, WebkitTextStroke: "1px #000", paintOrder: "stroke fill" }}>{text}</span>
+    ),
+  },
+  preto_borda_branca: {
+    label: "ce.pretoBordaBranca",
+    render: (text) => (
+      <span style={{ fontFamily: "Anton, Arial Black, sans-serif", color: "#000", fontSize: 15, WebkitTextStroke: "3px #fff", paintOrder: "stroke fill" }}>{text}</span>
+    ),
+  },
+  espacado: {
+    label: "ce.espacado",
+    render: (text) => (
+      <span style={{ fontFamily: "Anton, Arial Black, sans-serif", color: "#fff", fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", textShadow: "0 1px 2px rgba(0,0,0,.7)" }}>{text}</span>
+    ),
+  },
+  brilho_rosa: {
+    label: "ce.brilhoRosa",
+    render: (text) => (
+      <span style={{ fontFamily: "Anton, Arial Black, sans-serif", color: "#fff", fontSize: 15, textShadow: "0 0 6px #ff69b4, 0 0 12px #ff69b4" }}>{text}</span>
+    ),
+  },
+  brilho_azul: {
+    label: "ce.brilhoAzul",
+    render: (text) => (
+      <span style={{ fontFamily: "Anton, Arial Black, sans-serif", color: "#fff", fontSize: 15, textShadow: "0 0 6px #00e1ff, 0 0 12px #00e1ff" }}>{text}</span>
+    ),
+  },
+  destaque_amarelo: {
+    label: "ce.destaqueAmarelo",
+    render: (text) => <PalavraDestacada text={text} cor="#ffd700" />,
+  },
+  destaque_verde: {
+    label: "ce.destaqueVerde",
+    render: (text) => <PalavraDestacada text={text} cor="#00e676" />,
+  },
+  faixa_preta: {
+    label: "ce.faixaPreta",
+    render: (text) => <Faixa text={text} fundo="rgba(0,0,0,.88)" letra="#fff" />,
+  },
+  faixa_branca: {
+    label: "ce.faixaBranca",
+    render: (text) => <Faixa text={text} fundo="#fff" letra="#000" />,
+  },
+  faixa_colorida: {
+    label: "ce.faixaColorida",
+    render: (text) => <Faixa text={text} fundo="var(--cor-da-caixa, #D92323)" letra="var(--cor-da-letra-cartao, #fff)" />,
   },
   none: {
     label: "ce.semLegenda",
@@ -1428,7 +1510,7 @@ export function ClipStyleEditorCard({
                     opcoes={settings.options.fonts}
                     onChange={(v) => save({ ...settings, titleFont: v })}
                   />
-                  {["caixa_colorida", "papel_rasgado", "cartao"].includes(settings.titleStyle) && (
+                  {["caixa_colorida", "papel_rasgado", "cartao", "faixa_colorida"].includes(settings.titleStyle) && (
                     <CorSelect
                       label={settings.titleStyle === "papel_rasgado" ? t("ce.corDoPapel") : t("ce.corDaCaixa")}
                       valor={settings.titleBoxColor}

@@ -467,6 +467,10 @@ export type VideoCaptionStyle =
   | "caixa_colorida" | "papel_rasgado"
   // "cartao" tambem so existe para titulo (caixa arredondada com sombra).
   | "cartao"
+  // Modelos de título de 06/10/2026 (só título): simples, brilho, destaque, faixa.
+  | "simples" | "sombra_dura" | "amarelo_fino" | "preto_borda_branca" | "espacado"
+  | "brilho_rosa" | "brilho_azul" | "destaque_amarelo" | "destaque_verde"
+  | "faixa_preta" | "faixa_branca" | "faixa_colorida"
 export type VideoClipLength = "short" | "balanced" | "long" | "extra_long"
 /** "full_parts" = fatiar o vídeo inteiro em partes sequenciais (Parte 1, Parte 2...). */
 export type VideoClipMode = "ai_choice" | "full_parts" | "fixed_count"

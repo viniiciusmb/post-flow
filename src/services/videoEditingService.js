@@ -83,7 +83,51 @@ const TITLE_STYLES = {
   // contorno (texto limpo), e a cor da LETRA segue a da caixa: branca em
   // caixa escura, preta em caixa clara.
   cartao: { tamanho: 76, corLetra: BRANCO, caixa: false, contorno: 0, corLetraPelaCaixa: true },
+  // Modelos novos (06/10/2026, pedido do fundador depois de comparar com
+  // OpusClip/Cut.pro/Submagic): titulos SIMPLES, sem balao, e os efeitos que
+  // os concorrentes usam - sombra, brilho, palavra em destaque, faixa larga.
+  // Campos extras (todos opcionais): sombra (profundidade, campo Shadow do
+  // ASS), corSombra, corContorno (contorno colorido - com blur vira brilho),
+  // blur, espacamento (entre letras), maiusculas, destaque (cor da palavra
+  // principal) e faixa (barra da largura do quadro atras do texto).
+  simples: { tamanho: 72, corLetra: BRANCO, caixa: false, contorno: 0, sombra: 4, corSombra: '&H70000000' },
+  sombra_dura: { tamanho: 76, corLetra: BRANCO, caixa: false, contorno: 0, sombra: 7, corSombra: '&H00000000' },
+  amarelo_fino: { tamanho: 74, corLetra: '&H0000D7FF', caixa: false, contorno: 3 },
+  preto_borda_branca: { tamanho: 76, corLetra: PRETO, caixa: false, contorno: 6, corContorno: BRANCO },
+  espacado: { tamanho: 58, corLetra: BRANCO, caixa: false, contorno: 2, espacamento: 6, maiusculas: true, sombra: 2, corSombra: '&H80000000' },
+  brilho_rosa: { tamanho: 76, corLetra: BRANCO, caixa: false, contorno: 7, corContorno: '&H00B469FF', blur: 7 },
+  brilho_azul: { tamanho: 76, corLetra: BRANCO, caixa: false, contorno: 7, corContorno: '&H00FFE100', blur: 7 },
+  destaque_amarelo: { tamanho: 78, corLetra: BRANCO, caixa: false, contorno: 6, destaque: '&H0000D7FF', maiusculas: true },
+  destaque_verde: { tamanho: 78, corLetra: BRANCO, caixa: false, contorno: 6, destaque: '&H0000E676', maiusculas: true },
+  faixa_preta: { tamanho: 68, corLetra: BRANCO, caixa: false, contorno: 0, faixa: '&H20000000' },
+  faixa_branca: { tamanho: 68, corLetra: PRETO, caixa: false, contorno: 0, faixa: '&H00FFFFFF' },
+  faixa_colorida: { tamanho: 68, corLetra: BRANCO, caixa: false, contorno: 0, faixa: 'escolhida', corLetraPelaCaixa: true },
 };
+
+// Preset do titulo com a escala pedida aplicada (settings.title_scale_percent,
+// 60-100). Nos cortes de live o liveTextoService diminui o titulo quando o
+// espaco livre do layout e pequeno - melhor um titulo menor do que um titulo
+// em cima do rosto do streamer. Sem escala, e o preset de sempre.
+function presetDoTitulo(titleStyle, escalaPercent) {
+  const base = TITLE_STYLES[titleStyle] || TITLE_STYLES.classic;
+  const escala = Math.min(100, Math.max(60, Number(escalaPercent) || 100)) / 100;
+  if (escala === 1) return base;
+  return { ...base, tamanho: Math.round(base.tamanho * escala), contorno: Math.max(0, Math.round(base.contorno * escala)) };
+}
+
+// Palavra que leva a cor de destaque nos modelos "destaque_*": numero primeiro
+// (dinheiro, quantidade - e o que segura o olho), senao a palavra mais longa.
+// Devolve o indice na lista de palavras, ou -1.
+function palavraDeDestaque(palavras) {
+  const limpa = (p) => p.replace(/[^\p{L}\p{N}$%]/gu, '');
+  const comNumero = palavras.findIndex((p) => /\d/.test(p));
+  if (comNumero >= 0) return comNumero;
+  let melhor = -1;
+  palavras.forEach((p, i) => {
+    if (limpa(p).length >= 4 && (melhor < 0 || limpa(p).length > limpa(palavras[melhor]).length)) melhor = i;
+  });
+  return melhor;
+}
 
 // Fontes que existem DENTRO do container (ver assets/fonts/LEIA-ME.md e o
 // Dockerfile). Pedir uma que nao esta instalada nao da erro: o libass troca
@@ -196,8 +240,8 @@ function linhaDeEstilo({ nome, preset, fonte, alinhamento, margemV, corEscolhida
     ? preset.corPersonalizada
       ? hexParaAss(corEscolhida)
       : preset.corCaixa
-    : PRETO;
-  const corDeFundo = preset.caixa ? '&H80000000' : PRETO;
+    : preset.corContorno || PRETO;
+  const corDeFundo = preset.caixa ? '&H80000000' : preset.corSombra || PRETO;
 
   return [
     `Style: ${nome}`,
@@ -208,10 +252,10 @@ function linhaDeEstilo({ nome, preset, fonte, alinhamento, margemV, corEscolhida
     corDoContorno,
     corDeFundo,
     1, 0, 0, 0,
-    100, 100, 0, 0,
+    100, 100, preset.espacamento || 0, 0,
     borderStyle,
     preset.contorno,
-    0,
+    preset.sombra || 0,
     alinhamento,
     80, 80,
     margemV,
@@ -572,6 +616,7 @@ function buildAssSubtitles(
     captionBoxColor,
     titleBoxColor,
     partLabelSizePercent,
+    titleScalePercent,
   } = {}
 ) {
   const partAlignment = PART_LABEL_ALIGNMENT[partLabelPosition] || PART_LABEL_ALIGNMENT.top_right;
@@ -579,7 +624,7 @@ function buildAssSubtitles(
   const respiroNumeracao = Math.max(4, Math.round(tamanhoNumeracao * RESPIRO_DA_CAIXA_DA_NUMERACAO));
 
   const presetLegenda = CAPTION_STYLES[captionStyle] || CAPTION_STYLES.classic;
-  const presetTitulo = TITLE_STYLES[titleStyle] || TITLE_STYLES.classic;
+  const presetTitulo = presetDoTitulo(titleStyle, titleScalePercent);
 
   // Alignment 2 = baixo-centro (legenda), 8 = topo-centro (titulo). Com esses
   // alinhamentos, MarginV e a distancia ate a borda de baixo e de cima
@@ -629,17 +674,44 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   });
 
   if (title && titleSeconds > 0) {
-    const titleText = title.trim().replace(/[{}]/g, '');
+    let titleText = title.trim().replace(/[{}]/g, '');
+    if (presetTitulo.maiusculas) titleText = titleText.toLocaleUpperCase('pt-BR');
     // \an5 + \pos: o bloco inteiro fica centrado NO PONTO, e nao pendurado
     // pelo topo. E o que mantem um titulo de duas linhas dentro do fundo
     // escolhido pra ele - antes a segunda linha crescia pra baixo e escapava.
-    const linhasDoTitulo = quebrarTitulo(titleText, fonteDoTitulo, presetTitulo.tamanho);
+    // Maiuscula e letra espacada ocupam mais largura: a quebra conta com isso
+    // (estimar pra menos faria o texto passar da borda).
+    const larguraUtil = (SAIDA.w - 2 * MARGEM_LATERAL) / (presetTitulo.maiusculas || presetTitulo.espacamento ? 1.2 : 1);
+    const linhasDoTitulo = quebrarTitulo(titleText, fonteDoTitulo, presetTitulo.tamanho, larguraUtil);
     const centro = centroDoTitulo(margemDoTitulo, presetTitulo.tamanho);
-    const texto = linhasDoTitulo.join('\\N');
+    let texto = linhasDoTitulo.join('\\N');
+    if (presetTitulo.destaque) {
+      // Pinta UMA palavra e devolve a cor do estilo logo depois.
+      const palavras = linhasDoTitulo.map((l) => l.split(' '));
+      const alvo = palavraDeDestaque(palavras.flat());
+      let i = 0;
+      texto = palavras
+        .map((linha) => linha.map((p) => (i++ === alvo ? `{\\1c&H${presetTitulo.destaque.slice(4)}&}${p}{\\1c&H${presetTitulo.corLetra.slice(4)}&}` : p)).join(' '))
+        .join('\\N');
+    }
+    const blur = presetTitulo.blur ? `\\blur${presetTitulo.blur}` : '';
     lines.unshift(
       `Dialogue: 1,0:00:00.00,${formatAssTimestamp(titleSeconds)},Title,,0,0,0,,` +
-        `{\\an5\\pos(${Math.round(SAIDA.w / 2)},${centro})}${texto}`
+        `{\\an5\\pos(${Math.round(SAIDA.w / 2)},${centro})${blur}}${texto}`
     );
+    if (presetTitulo.faixa) {
+      // Barra da largura do quadro, desenhada (\p1) numa camada abaixo do
+      // texto e centrada no mesmo ponto - cresce junto com 2 ou 3 linhas.
+      const respiro = Math.round(presetTitulo.tamanho * 0.45);
+      const altura = alturaDoTitulo(linhasDoTitulo.length, presetTitulo.tamanho) + 2 * respiro;
+      const cor = presetTitulo.faixa === 'escolhida' ? hexParaAss(titleBoxColor) : presetTitulo.faixa;
+      const alfa = cor.slice(2, 4);
+      const bgr = cor.slice(4);
+      lines.unshift(
+        `Dialogue: 0,0:00:00.00,${formatAssTimestamp(titleSeconds)},Title,,0,0,0,,` +
+          `{\\an7\\pos(0,${Math.round(centro - altura / 2)})\\p1\\bord0\\shad0\\1c&H${bgr}&\\1a&H${alfa}&}m 0 0 l ${SAIDA.w} 0 l ${SAIDA.w} ${altura} l 0 ${altura}{\\p0}`
+      );
+    }
   }
 
   if (partLabel) {
@@ -1034,6 +1106,34 @@ function buildFilter({ w, h, subtitlesFilter, cropZoomPercent, fundo }) {
   return { simpleFilter: simple };
 }
 
+// Um QUADRO do corte de live ja montado (paineis da IA ou camera + conteudo),
+// sem legenda nem titulo, em dois formatos: JPEG pra IA olhar e cinza 54x96
+// (uma linha de pixels por ~1% da altura) pra medir onde a tela esta vazia.
+// Usado pelo liveTextoService pra decidir onde o titulo e a legenda nao
+// cobrem a camera do streamer nem o video que esta passando. O layout e o
+// MESMO do render (buildFilter), entao o que a IA ve e o que vai sair.
+// Devolve null quando o corte nao tem layout de live.
+async function quadroDoLayoutDeLive({ videoPath, segundo, settings, saidaJpg, saidaCinza }) {
+  const webcam = webcamValida(settings.live_webcam);
+  const formato = settings.live_formato && (settings.live_formato.tipo === 'quadro_inteiro' || settings.live_formato.paineis?.length) ? settings.live_formato : null;
+  const fundo = formato
+    ? { style: 'formato_ia', formato }
+    : webcam
+      ? { style: 'webcam', cam: webcam, heightPercent: webcam.heightPercent, position: webcam.position }
+      : null;
+  if (!fundo) return null;
+  const { w, h } = SAIDA;
+  const { filterComplex, outputLabel } = buildFilter({ w, h, subtitlesFilter: null, fundo });
+  const grafo = `${filterComplex};${outputLabel}split=2[paraJpg][paraCinza];[paraJpg]scale=540:960[jpg];[paraCinza]scale=54:96,format=gray[cinza]`;
+  await runFfmpeg([
+    '-ss', String(Math.max(0, segundo)), '-i', videoPath,
+    '-filter_complex', grafo,
+    '-map', '[jpg]', '-frames:v', '1', '-q:v', '3', saidaJpg,
+    '-map', '[cinza]', '-frames:v', '1', '-f', 'rawvideo', saidaCinza,
+  ]);
+  return { w: 54, h: 96 };
+}
+
 // Corta [startSeconds, endSeconds] do video original, reenquadra, queima a
 // legenda e (opcional) o titulo conforme as preferencias do cliente
 // (settings) - as "words" ja devem vir filtradas pro intervalo do corte, com
@@ -1189,6 +1289,7 @@ async function renderClip({
           titleFont: settings.title_font,
           captionHeightPercent: settings.caption_height_percent,
           titleHeightPercent: settings.title_height_percent,
+          titleScalePercent: settings.title_scale_percent,
           captionBoxColor: settings.caption_box_color,
           titleBoxColor: settings.title_box_color,
           partLabelSizePercent: settings.part_label_size_percent,
@@ -1200,12 +1301,12 @@ async function renderClip({
 
   // Papel rasgado atras do titulo. So entra quando o estilo pede E o titulo
   // vai aparecer - papel sem titulo seria uma faixa de cor no meio do video.
+  const tamanhoDoTitulo = presetDoTitulo(titleStyle, settings.title_scale_percent).tamanho;
   const linhasDoTitulo = quebrarTitulo(
     String(title || '').trim().replace(/[{}]/g, ''),
     fonteValida(settings.title_font),
-    (TITLE_STYLES[titleStyle] || TITLE_STYLES.classic).tamanho
+    tamanhoDoTitulo
   ).length;
-  const tamanhoDoTitulo = (TITLE_STYLES[titleStyle] || TITLE_STYLES.classic).tamanho;
   let imagemDoTitulo = IMAGEM_ATRAS_DO_TITULO[titleStyle] || null;
   // O cartao e desenhado NO TAMANHO EXATO deste titulo: esticar uma imagem
   // fixa pra caber duas linhas deformava os cantos arredondados.
@@ -1360,4 +1461,6 @@ module.exports = {
   centroDoTitulo,
   tamanhoDaNumeracao,
   margemVertical,
+  quadroDoLayoutDeLive,
+  alturaDoTitulo,
 };

@@ -22,6 +22,7 @@ const config = require('../../config');
 const livesRepository = require('../../repositories/livesRepository');
 const livesUserSettings = require('./livesUserSettings');
 const liveFormatoService = require('./liveFormatoService');
+const liveTextoService = require('./liveTextoService');
 const videoEditingService = require('../videoEditingService');
 const openaiTranscriptionService = require('../openaiTranscriptionService');
 const openaiLives = require('./openaiLives');
@@ -494,12 +495,41 @@ async function renderizar(clip) {
       }
       await livesRepository.setClipWebcam(clip.id, webcam);
     }
-    // Legenda e titulo na mesma altura se sobrepoem (visto no corte "Janela
-    // do banheiro caiu": legenda a 60% do topo, titulo a 62%). O titulo sobe
-    // pro topo - so aqui, nas lives: o estilo salvo nao muda.
-    const legendaDoTopo = 100 - Number(estilo.caption_height_percent ?? 14);
-    const tituloDoTopo = Number(estilo.title_height_percent ?? 8);
-    const titleHeight = Math.abs(legendaDoTopo - tituloDoTopo) < 15 ? 6 : tituloDoTopo;
+    // ONDE vai o texto. Com layout de live (formato da IA ou camera em
+    // faixa), cada corte decide o seu: a IA olha o quadro montado e o
+    // servidor escolhe um lugar que nao cobre a webcam do streamer nem o
+    // video que esta passando (liveTextoService). Antes era uma altura fixa
+    // - e o titulo no topo caia em cima do rosto do streamer (cortes do
+    // coringa, 06/10/2026). So aqui, nas lives: o estilo salvo nao muda.
+    const layout = { live_webcam: webcam ? { ...webcam, heightPercent: webcam.alturaPercent, position: camera.posicao } : null, live_formato: formato };
+    const mostrarTitulo = Boolean(titulo) && estilo.show_title !== false;
+    const posicao = layout.live_webcam || layout.live_formato
+      ? await liveTextoService.posicionar({
+          videoPath: bruto,
+          inicio: inicioRel,
+          fim: fimRel,
+          settings: layout,
+          estilo,
+          titulo: mostrarTitulo ? titulo : '',
+          custo,
+        })
+      : null;
+    let titleHeight;
+    let titleScale = 100;
+    let captionHeight = estilo.caption_height_percent;
+    if (posicao) {
+      titleHeight = posicao.title_height_percent ?? estilo.title_height_percent;
+      captionHeight = posicao.caption_height_percent ?? captionHeight;
+      titleScale = posicao.title_scale_percent;
+      await livesRepository.setClipWebcam(clip.id, { ...(formato ? { formato } : webcam || {}), texto: posicao.decisao });
+    } else {
+      // Sem layout de live (enquadramento "estilo normal"): a regra antiga.
+      // Legenda e titulo na mesma altura se sobrepoem (visto no corte "Janela
+      // do banheiro caiu": legenda a 60% do topo, titulo a 62%) - o titulo sobe.
+      const legendaDoTopo = 100 - Number(estilo.caption_height_percent ?? 14);
+      const tituloDoTopo = Number(estilo.title_height_percent ?? 8);
+      titleHeight = Math.abs(legendaDoTopo - tituloDoTopo) < 15 ? 6 : tituloDoTopo;
+    }
     await videoEditingService.renderClip({
       videoPath: bruto,
       startSeconds: inicioRel,
@@ -511,10 +541,12 @@ async function renderizar(clip) {
       settings: {
         ...estilo,
         show_part_label: false,
-        show_title: Boolean(titulo) && estilo.show_title !== false,
+        show_title: mostrarTitulo,
         title_height_percent: titleHeight,
-        live_webcam: webcam ? { ...webcam, heightPercent: webcam.alturaPercent, position: camera.posicao } : null,
-        live_formato: formato,
+        title_scale_percent: titleScale,
+        caption_height_percent: captionHeight,
+        live_webcam: layout.live_webcam,
+        live_formato: layout.live_formato,
       },
       partIndex: 1,
       partTotal: 1,
