@@ -231,6 +231,7 @@ async function renderizar() {
 async function limpar() {
   const cfg = await livesSettings.obterConfig();
   await liveCleanupService.apagarPedacosAntigos(cfg.retencaoHoras);
+  await liveCleanupService.apagarCortesVencidos();
 }
 
 // Laço com trava: se a volta anterior ainda nao terminou (render longo,

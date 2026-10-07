@@ -101,7 +101,9 @@ test('os modelos novos existem e são distintos entre si', () => {
   }
   // Dois modelos que renderizam igual são uma escolha sem sentido na tela.
   const assinaturas = Object.entries(v.CAPTION_STYLES).map(([, p]) =>
-    [p.tamanho, p.corLetra, p.caixa, p.corCaixa, p.contorno].join('|')
+    // Sombra, cor do contorno, brilho e maiusculas tambem mudam o desenho
+    // (modelos de 07/10/2026): entram na comparacao.
+    [p.tamanho, p.corLetra, p.caixa, p.corCaixa, p.contorno, p.sombra, p.corSombra, p.corContorno, p.blur, p.maiusculas].join('|')
   );
   assert.equal(new Set(assinaturas).size, assinaturas.length, 'há dois modelos de legenda idênticos');
 });

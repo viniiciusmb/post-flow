@@ -11,6 +11,7 @@ const twitchApi = require('../../../services/lives/twitchApi');
 const plataformas = require('../../../services/lives/plataformas');
 const liveCleanupService = require('../../../services/lives/liveCleanupService');
 const config = require('../../../config');
+const { RETENCAO_CORTE_LIVE_HORAS } = require('../../../config/constants');
 const { resolveRange } = require('../../../lib/dateRanges');
 const livesUserSettings = require('../../../services/lives/livesUserSettings');
 const liveCreditosService = require('../../../services/lives/liveCreditosService');
@@ -85,6 +86,8 @@ function corteParaApi(k) {
     erro: k.error_message,
     criadoEm: k.created_at,
     prontoEm: k.ready_at,
+    // Quando o corte some sozinho (RETENCAO_CORTE_LIVE_HORAS) - a tela avisa.
+    apagaEm: new Date(new Date(k.ready_at || k.created_at).getTime() + RETENCAO_CORTE_LIVE_HORAS * 3600 * 1000).toISOString(),
     temArquivo,
     temCapa: Boolean(k.thumbnail_path) && fs.existsSync(k.thumbnail_path),
   };

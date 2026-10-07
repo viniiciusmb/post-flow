@@ -59,6 +59,24 @@ const CAPTION_STYLES = {
   // em linhaDeEstilo) - um modelo so cobre qualquer cor, em vez de um modelo
   // por cor.
   caixa_colorida: { tamanho: 96, corLetra: BRANCO, caixa: true, corPersonalizada: true, contorno: 16 },
+  // Modelos novos de legenda (07/10/2026, pedido do fundador: "tem poucos").
+  // Mesmos campos extras dos titulos (sombra, corContorno, blur, maiusculas).
+  simples: { tamanho: 96, corLetra: BRANCO, caixa: false, contorno: 0, sombra: 5, corSombra: '&H60000000' },
+  sombra_dura: { tamanho: 100, corLetra: BRANCO, caixa: false, contorno: 0, sombra: 8, corSombra: '&H00000000' },
+  amarelo_fino: { tamanho: 100, corLetra: '&H0000D7FF', caixa: false, contorno: 4 },
+  preto_borda_branca: { tamanho: 100, corLetra: PRETO, caixa: false, contorno: 8, corContorno: BRANCO },
+  caixa_alta: { tamanho: 104, corLetra: BRANCO, caixa: false, contorno: 9, maiusculas: true },
+  maiusculo_amarelo: { tamanho: 108, corLetra: '&H0000D7FF', caixa: false, contorno: 9, maiusculas: true },
+  gigante: { tamanho: 140, corLetra: BRANCO, caixa: false, contorno: 12, maiusculas: true },
+  verde_contorno: { tamanho: 104, corLetra: '&H0076E600', caixa: false, contorno: 9 },
+  rosa_contorno: { tamanho: 104, corLetra: '&H00B469FF', caixa: false, contorno: 9 },
+  azul_contorno: { tamanho: 104, corLetra: '&H00FFC84D', caixa: false, contorno: 9 },
+  laranja_contorno: { tamanho: 104, corLetra: '&H00008CFF', caixa: false, contorno: 9 },
+  brilho_rosa: { tamanho: 100, corLetra: BRANCO, caixa: false, contorno: 8, corContorno: '&H00B469FF', blur: 8 },
+  brilho_azul: { tamanho: 100, corLetra: BRANCO, caixa: false, contorno: 8, corContorno: '&H00FFE100', blur: 8 },
+  brilho_verde: { tamanho: 100, corLetra: BRANCO, caixa: false, contorno: 8, corContorno: '&H0076E600', blur: 8 },
+  roxo_caixa: { tamanho: 96, corLetra: BRANCO, caixa: true, corCaixa: '&H00D43F7C', contorno: 16 },
+  verde_caixa: { tamanho: 96, corLetra: PRETO, caixa: true, corCaixa: '&H0076E600', contorno: 16 },
 };
 
 const TITLE_STYLES = {
@@ -666,11 +684,14 @@ Style: Part,${fonteValida(captionFont)},${tamanhoNumeracao},&H00FFFFFF,&H000000F
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
+  // Brilho (contorno colorido borrado) e maiusculas valem por palavra.
+  const blurLegenda = presetLegenda.blur ? `{\\blur${presetLegenda.blur}}` : '';
   const lines = words.map((w) => {
     const start = formatAssTimestamp(w.start);
     const end = formatAssTimestamp(w.end);
-    const text = w.word.trim().replace(/[{}]/g, '');
-    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${text}`;
+    let text = w.word.trim().replace(/[{}]/g, '');
+    if (presetLegenda.maiusculas) text = text.toLocaleUpperCase('pt-BR');
+    return `Dialogue: 0,${start},${end},Default,,0,0,0,,${blurLegenda}${text}`;
   });
 
   if (title && titleSeconds > 0) {

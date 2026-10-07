@@ -68,6 +68,12 @@ const COMPANY = Object.freeze({
 // Drive rodando a cada 15 minutos.
 const RETENCAO_CORTE_POSTADO_HORAS = 72;
 
+// Cortes de LIVE (arquivo e linha) somem 3 dias depois de gerados, pedido do
+// fundador em 07/10/2026 - e a tela diz isso. Uma live rende dezenas de
+// cortes por hora: sem prazo o disco enche em dias. Contado de quando o
+// corte ficou pronto (ou de quando foi criado, se nunca ficou).
+const RETENCAO_CORTE_LIVE_HORAS = 72;
+
 module.exports = {
   ROLES,
   POSTING_STATUS,
@@ -75,4 +81,5 @@ module.exports = {
   CONTACT,
   COMPANY,
   RETENCAO_CORTE_POSTADO_HORAS,
+  RETENCAO_CORTE_LIVE_HORAS,
 };

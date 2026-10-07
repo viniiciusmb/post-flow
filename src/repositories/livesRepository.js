@@ -671,6 +671,22 @@ async function listClipsForUser(userId, { channelId = null, ordem = 'recentes', 
   return rows;
 }
 
+// Cortes vencidos (ver RETENCAO_CORTE_LIVE_HORAS): apaga a linha e devolve os
+// caminhos dos arquivos pra quem chamou apagar do disco. Em lote, pra uma
+// limpeza atrasada nao virar uma consulta gigante.
+async function deleteClipsOlderThan(horas, limite = 200) {
+  const { rows } = await pool.query(
+    `DELETE FROM live_clips WHERE id IN (
+       SELECT id FROM live_clips
+        WHERE COALESCE(ready_at, created_at) < now() - make_interval(hours => $1)
+          AND status NOT IN ('na_fila', 'renderizando')
+        ORDER BY id LIMIT $2)
+     RETURNING id, local_clip_path, thumbnail_path`,
+    [horas, limite]
+  );
+  return rows;
+}
+
 async function findClipForUser(clipId, userId) {
   const { rows } = await pool.query('SELECT * FROM live_clips WHERE id = $1 AND user_id = $2', [clipId, userId]);
   return rows[0] || null;
@@ -832,6 +848,7 @@ module.exports = {
   clearOutOfCredit,
   creditUsageForUser,
   setClipCredits,
+  deleteClipsOlderThan,
   listChannelsForUser,
   createSession,
   setSessionDir,

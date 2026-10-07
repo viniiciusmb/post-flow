@@ -471,6 +471,9 @@ export type VideoCaptionStyle =
   | "simples" | "sombra_dura" | "amarelo_fino" | "preto_borda_branca" | "espacado"
   | "brilho_rosa" | "brilho_azul" | "destaque_amarelo" | "destaque_verde"
   | "faixa_preta" | "faixa_branca" | "faixa_colorida"
+  // Modelos de legenda de 07/10/2026.
+  | "caixa_alta" | "maiusculo_amarelo" | "gigante" | "verde_contorno" | "rosa_contorno"
+  | "azul_contorno" | "laranja_contorno" | "brilho_verde" | "roxo_caixa" | "verde_caixa"
 export type VideoClipLength = "short" | "balanced" | "long" | "extra_long"
 /** "full_parts" = fatiar o vídeo inteiro em partes sequenciais (Parte 1, Parte 2...). */
 export type VideoClipMode = "ai_choice" | "full_parts" | "fixed_count"

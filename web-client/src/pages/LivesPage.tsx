@@ -13,7 +13,6 @@ import {
   IconPlayerPlayFilled,
   IconPlus,
   IconScissors,
-  IconSettings,
   IconStarFilled,
   IconTrash,
   IconX,
@@ -21,7 +20,8 @@ import {
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader, SectionLabel } from "@/components/dashboard/PageHeader"
 import { EmptyState } from "@/components/dashboard/EmptyState"
-import { ClipStyleEditorCard } from "@/components/dashboard/ClipStyleEditorCard"
+import { CenaDePrevia, GaleriaDeEstilos, TextoNoModelo, letraPelaCaixa } from "@/components/estilos/estilosDeTexto"
+import type { ClientVideoSettingsResponse } from "@/types/api"
 import { BarraDeQualidade, IconePlataforma, type Nivel, type Plataforma } from "@/components/lives/comum"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -97,6 +97,7 @@ type Corte = {
   criadoEm: string
   temArquivo: boolean
   temCapa: boolean
+  apagaEm: string
 }
 
 // Corte pedido no botão não tem categoria (ninguém classificou): ganha uma
@@ -153,6 +154,16 @@ function haQuanto(iso: string | null) {
     divisor = limite
   }
   return relativo.format(Math.round(seg / 31557600), "year")
+}
+
+// "apaga hoje", "apaga amanhã", "apaga em 2 dias" - pra quem quer guardar o
+// corte saber quanto tempo tem pra baixar.
+function quandoApaga(iso: string) {
+  const horas = (new Date(iso).getTime() - Date.now()) / 3600000
+  if (horas <= 0) return "apaga em instantes"
+  if (horas < 24) return `apaga em ${Math.max(1, Math.round(horas))}h`
+  const dias = Math.round(horas / 24)
+  return dias === 1 ? "apaga amanhã" : `apaga em ${dias} dias`
 }
 
 function nota(n: number) {
@@ -302,25 +313,34 @@ function SaldoDeCreditos({ creditos }: { creditos: Estado["creditos"] }) {
 
 // ---------------------------------------------------------------- cartão do canal
 
+// Tudo do canal mora no próprio cartão (pedido de 07/10/2026): clipar sempre,
+// ver clipes, abrir e remover - sem engrenagem nem janela escondendo opção.
 function CartaoCanal({
   canal: c,
   servicoAtivo,
   ocupado,
+  salvando,
   onClipar,
-  onConfigurar,
+  onAutomatico,
+  onPararEstaLive,
+  onRemover,
   onVerCortes,
 }: {
   canal: Canal
   servicoAtivo: boolean
   ocupado: boolean
+  salvando: boolean
   onClipar: () => void
-  onConfigurar: () => void
+  onAutomatico: (ligado: boolean) => void
+  onPararEstaLive: () => void
+  onRemover: () => void
   onVerCortes: () => void
 }) {
+  const [confirmandoRemover, setConfirmandoRemover] = useState(false)
   const sit = situacao(c, servicoAtivo)
   const marca = MARCA[c.plataforma]
   const clipandoAgora = c.aoVivo && c.recebendoCortes && Boolean(c.gravacao)
-  const preparando = c.aoVivo && c.recebendoCortes && !c.gravacao
+  const preparando = c.aoVivo && c.recebendoCortes && !c.gravacao && !c.semCredito
 
   let rotuloClipar = "Clipar"
   let ajuda = "Disponível quando o canal estiver ao vivo"
@@ -337,27 +357,19 @@ function CartaoCanal({
     rotuloClipar = "Começando…"
     ajuda = "A gravação começa em até 1 minuto"
   }
+  const totalDeCortes = c.cortesProntos + c.cortesEmAndamento
 
   return (
     <article
       className={cn(
-        "group relative flex min-w-0 flex-col overflow-hidden rounded-2xl bg-card shadow-[var(--shadow-flat)] transition-shadow hover:shadow-[var(--shadow-raised)] dark:border dark:border-border",
+        "relative flex min-w-0 flex-col overflow-hidden rounded-2xl bg-card shadow-[var(--shadow-flat)] transition-shadow hover:shadow-[var(--shadow-raised)] dark:border dark:border-border",
         c.aoVivo && "ring-1 ring-red-500/40",
       )}
     >
       {/* Faixa com a cor da plataforma, por trás da foto. */}
       <div className={cn("h-20 bg-gradient-to-br", marca.faixa)} aria-hidden />
-      <button
-        type="button"
-        onClick={onConfigurar}
-        className="absolute top-3 right-3 flex size-8 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur transition-colors hover:bg-background hover:text-foreground"
-        aria-label={`Configurar ${c.nome}`}
-        title="Configurar"
-      >
-        <IconSettings className="size-4" />
-      </button>
 
-      <div className="-mt-12 flex flex-col items-center px-5 text-center">
+      <div className="-mt-12 flex flex-col items-center px-4 text-center sm:px-5">
         <div className="relative">
           <span
             className={cn(
@@ -376,17 +388,11 @@ function CartaoCanal({
           {c.aoVivo && <SeloAoVivo className="absolute -bottom-2 left-1/2 -translate-x-1/2" />}
         </div>
 
-        <a
-          href={c.url}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-4 flex max-w-full items-center gap-1 font-heading text-lg font-semibold tracking-[-0.01em] hover:underline"
-          title={`Abrir na ${marca.nome}`}
-        >
-          <span className="truncate">{c.nome}</span>
-        </a>
-        <div className="flex flex-wrap items-center justify-center gap-x-2 text-xs text-muted-foreground">
-          <span>@{c.login}</span>
+        <h3 className="mt-4 max-w-full truncate font-heading text-lg font-semibold tracking-[-0.01em]" title={c.nome}>
+          {c.nome}
+        </h3>
+        <div className="flex max-w-full flex-wrap items-center justify-center gap-x-2 text-xs text-muted-foreground">
+          <span className="max-w-full truncate">@{c.login}</span>
           {c.aoVivo ? (
             c.espectadores !== null && (
               <span className="inline-flex items-center gap-1">
@@ -398,37 +404,51 @@ function CartaoCanal({
           )}
         </div>
 
-        <div className="mt-3 min-h-[2.5rem] w-full text-sm">
-          {c.aoVivo ? (
-            <>
-              <p className="line-clamp-1 font-medium" title={c.tituloDaLive || undefined}>
-                {c.tituloDaLive || "Ao vivo"}
-              </p>
-              {c.jogo && <p className="line-clamp-1 text-xs text-muted-foreground">{c.jogo}</p>}
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {c.cortesProntos > 0 ? "Os cortes das lives anteriores estão logo abaixo." : "Nenhum corte deste canal ainda."}
+        {c.aoVivo && (
+          <div className="mt-3 w-full text-sm">
+            <p className="line-clamp-1 font-medium" title={c.tituloDaLive || undefined}>
+              {c.tituloDaLive || "Ao vivo"}
             </p>
-          )}
-        </div>
+            {c.jogo && <p className="line-clamp-1 text-xs text-muted-foreground">{c.jogo}</p>}
+          </div>
+        )}
       </div>
 
-      <div className="mx-5 mt-3 flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-xs">
+      <div className="mx-4 mt-3 flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-xs sm:mx-5">
         <span className="relative flex size-2 shrink-0">
           {sit.tom === "vermelho" && (
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-60 motion-reduce:animate-none" />
           )}
           <span className={cn("relative inline-flex size-2 rounded-full", COR_SITUACAO[sit.tom])} />
         </span>
-        <span className="min-w-0 flex-1 truncate text-left" title={sit.texto}>{sit.texto}</span>
+        <span className="min-w-0 flex-1 text-left">{sit.texto}</span>
       </div>
 
-      <div className="mt-auto flex items-center gap-2 p-5 pt-3">
+      {/* Clipar sempre: a escolha principal do canal, sempre à vista. */}
+      <label className="mx-4 mt-2 flex cursor-pointer items-center justify-between gap-3 rounded-lg px-1 py-2 sm:mx-5">
+        <span className="min-w-0 text-left">
+          <span className="block text-sm font-medium">Clipar sempre que estiver ao vivo</span>
+          <span className="block text-xs text-muted-foreground">
+            {c.autoClipar ? "Toda live deste canal vira cortes sozinha" : "Você clipa só quando apertar o botão"}
+          </span>
+        </span>
+        <Interruptor ligado={c.autoClipar} disabled={salvando} onChange={onAutomatico} rotulo={`Clipar ${c.nome} sempre que estiver ao vivo`} />
+      </label>
+
+      {c.clipandoEstaLive && !c.autoClipar && c.aoVivo && (
+        <div className="mx-4 flex items-center justify-between gap-3 rounded-lg border border-dashed px-3 py-2 text-xs sm:mx-5">
+          <span className="min-w-0 text-left text-muted-foreground">Clipando só esta live — para sozinho quando ela acabar</span>
+          <Button size="sm" variant="ghost" className="h-7 shrink-0 px-2" disabled={salvando} onClick={onPararEstaLive}>
+            Parar
+          </Button>
+        </div>
+      )}
+
+      <div className="mt-auto flex flex-col gap-2 p-4 pt-3 sm:p-5 sm:pt-3">
         <Button
           variant={c.aoVivo ? "default" : "outline"}
           className={cn(
-            "min-w-0 flex-1",
+            "w-full",
             c.aoVivo && !preparando && !c.semCredito && "bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:text-white dark:hover:bg-red-700",
           )}
           disabled={!c.aoVivo || preparando || ocupado || c.semCredito}
@@ -438,17 +458,43 @@ function CartaoCanal({
           {ocupado || preparando ? <IconLoader2 className="size-4 animate-spin" /> : <IconScissors className="size-4" />}
           <span className="truncate">{ocupado ? "Enviando…" : rotuloClipar}</span>
         </Button>
-        <Button
-          variant="outline"
-          className="shrink-0 gap-1.5 px-3"
-          onClick={onVerCortes}
-          disabled={!c.cortesProntos && !c.cortesEmAndamento}
-          title={`${c.cortesProntos} ${c.cortesProntos === 1 ? "corte pronto" : "cortes prontos"}${c.cortesEmAndamento ? `, ${c.cortesEmAndamento} sendo cortado(s)` : ""} — ver`}
-          aria-label="Ver os cortes deste canal"
-        >
-          {c.cortesEmAndamento > 0 ? <IconLoader2 className="size-4 animate-spin" /> : <IconPlayerPlayFilled className="size-3.5" />}
-          <span className="tabular-nums">{c.cortesProntos}</span>
-        </Button>
+
+        {confirmandoRemover ? (
+          <div className="flex flex-col gap-2 rounded-lg bg-destructive/5 p-2 text-left">
+            <p className="text-xs">Remover {c.nome}? Os cortes já feitos continuam na lista até apagarem sozinhos.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button size="sm" variant="destructive" disabled={salvando} onClick={onRemover}>
+                Remover
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmandoRemover(false)}>
+                Voltar
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-[1fr_auto_auto] gap-2">
+            <Button variant="outline" size="sm" className="min-w-0" onClick={onVerCortes} disabled={!totalDeCortes} title="Ver os clipes deste canal">
+              {c.cortesEmAndamento > 0 ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconPlayerPlayFilled className="size-3.5" />}
+              <span className="truncate">Ver clipes{totalDeCortes ? ` (${c.cortesProntos})` : ""}</span>
+            </Button>
+            <Button variant="outline" size="sm" asChild title={`Abrir o canal na ${marca.nome}`}>
+              <a href={c.url} target="_blank" rel="noreferrer" aria-label={`Abrir ${c.nome} na ${marca.nome}`}>
+                <IconExternalLink className="size-3.5" />
+                <span className="hidden sm:inline">Abrir</span>
+              </a>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setConfirmandoRemover(true)}
+              aria-label={`Remover ${c.nome}`}
+              title="Remover canal"
+            >
+              <IconTrash className="size-3.5" />
+            </Button>
+          </div>
+        )}
       </div>
     </article>
   )
@@ -539,6 +585,11 @@ function CartaoCorte({
           <span aria-hidden>·</span>
           <span className="shrink-0">{haQuanto(k.criadoEm)}</span>
         </div>
+        {k.status === "pronto" && (
+          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+            <IconClock className="size-3" /> {quandoApaga(k.apagaEm)}
+          </p>
+        )}
       </div>
     </button>
   )
@@ -599,7 +650,7 @@ export function LivesPage() {
   const [filtroCanal, setFiltroCanal] = useState<number | null>(null)
   const [filtroTipo, setFiltroTipo] = useState<string>("todos")
   const [clipando, setClipando] = useState<number | null>(null)
-  const [configurando, setConfigurando] = useState<number | null>(null)
+  const [salvandoCanal, setSalvandoCanal] = useState<number | null>(null)
   const [adicionarAberto, setAdicionarAberto] = useState(false)
   const [corteAberto, setCorteAberto] = useState<number | null>(null)
   const secaoCortes = useRef<HTMLDivElement>(null)
@@ -668,6 +719,12 @@ export function LivesPage() {
     }
   }
 
+  async function acaoNoCanal(id: number, acao: () => Promise<Estado>) {
+    setSalvandoCanal(id)
+    await salvar(acao, "Não consegui salvar.")
+    setSalvandoCanal(null)
+  }
+
   async function clipar(c: Canal) {
     setClipando(c.id)
     setErro(null)
@@ -730,7 +787,6 @@ export function LivesPage() {
   const listaDoFiltro = filtroTipo === "todos" ? [] : grupos.get(filtroTipo) || []
   const canalFiltrado = estado?.canais.find((c) => c.id === filtroCanal) || null
   const corteSelecionado = cortes.find((k) => k.id === corteAberto) || null
-  const canalConfigurando = estado?.canais.find((c) => c.id === configurando) || null
   const aoVivo = estado?.canais.filter((c) => c.aoVivo).length ?? 0
   const prontos = cortes.filter((k) => k.status === "pronto").length
 
@@ -748,13 +804,24 @@ export function LivesPage() {
         description="Acompanhe canais da Twitch e da Kick e receba os melhores momentos das lives já cortados na vertical, com legenda."
         action={
           <>
-            {estado && <SaldoDeCreditos creditos={estado.creditos} />}
+            {/* No celular o saldo desce pra linha de baixo (ver abaixo): lado a lado com o botão não cabe em 320px. */}
+            {estado && (
+              <span className="hidden sm:inline-flex">
+                <SaldoDeCreditos creditos={estado.creditos} />
+              </span>
+            )}
             <Button onClick={() => setAdicionarAberto(true)}>
               <IconPlus className="size-4" /> Adicionar canal
             </Button>
           </>
         }
       />
+
+      {estado && (
+        <div className="-mt-2 sm:hidden">
+          <SaldoDeCreditos creditos={estado.creditos} />
+        </div>
+      )}
 
       {estado && !estado.servicoAtivo && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
@@ -830,8 +897,11 @@ export function LivesPage() {
                     canal={c}
                     servicoAtivo={estado.servicoAtivo}
                     ocupado={clipando === c.id}
+                    salvando={salvandoCanal === c.id}
                     onClipar={() => void clipar(c)}
-                    onConfigurar={() => setConfigurando(c.id)}
+                    onAutomatico={(v) => void acaoNoCanal(c.id, () => api.put<Estado>(`${API}/canais/${c.id}/automatico`, { ligado: v }))}
+                    onPararEstaLive={() => void acaoNoCanal(c.id, () => api.delete<Estado>(`${API}/canais/${c.id}/clipar-esta-live`))}
+                    onRemover={() => void acaoNoCanal(c.id, () => api.delete<Estado>(`${API}/canais/${c.id}`)).then(() => filtroCanal === c.id && setFiltroCanal(null))}
                     onVerCortes={() => verCortesDoCanal(c.id)}
                   />
                 ))}
@@ -858,6 +928,14 @@ export function LivesPage() {
               >
                 Cortes {prontos > 0 && <span className="normal-case tracking-normal">· {prontos} prontos</span>}
               </SectionLabel>
+
+              <p className="-mt-2 flex items-start gap-2 text-xs text-muted-foreground">
+                <IconClock className="mt-px size-3.5 shrink-0" />
+                <span>
+                  Os cortes de live ficam aqui por <strong className="text-foreground">3 dias</strong> depois de prontos e são apagados
+                  sozinhos. Baixe os que quiser guardar.
+                </span>
+              </p>
 
               {canalFiltrado && (
                 <div className="flex w-fit max-w-full items-center gap-2 rounded-full border bg-card py-1 pr-1 pl-1.5 text-sm">
@@ -956,18 +1034,6 @@ export function LivesPage() {
           setAviso(`${nome} adicionado.`)
         }}
       />
-
-      {canalConfigurando && (
-        <DialogConfigurar
-          canal={canalConfigurando}
-          onFechar={() => setConfigurando(null)}
-          salvar={salvar}
-          onRemovido={() => {
-            setConfigurando(null)
-            if (filtroCanal === canalConfigurando.id) setFiltroCanal(null)
-          }}
-        />
-      )}
 
       <DialogCorte
         corte={corteSelecionado}
@@ -1110,115 +1176,6 @@ function DialogAdicionar({
   )
 }
 
-function DialogConfigurar({
-  canal: c,
-  onFechar,
-  salvar,
-  onRemovido,
-}: {
-  canal: Canal
-  onFechar: () => void
-  salvar: (acao: () => Promise<Estado>, padrao: string) => Promise<boolean>
-  onRemovido: () => void
-}) {
-  const [salvando, setSalvando] = useState(false)
-  const [confirmandoRemover, setConfirmandoRemover] = useState(false)
-  const marca = MARCA[c.plataforma]
-
-  async function rodar(acao: () => Promise<Estado>, padrao: string) {
-    setSalvando(true)
-    const ok = await salvar(acao, padrao)
-    setSalvando(false)
-    return ok
-  }
-
-  return (
-    <Dialog open onOpenChange={(v) => !v && onFechar()}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-2xl sm:max-w-md">
-        <DialogHeader className="flex-row items-center gap-3 text-left">
-          <Avatar canal={c} className="size-12 text-lg" />
-          <div className="min-w-0">
-            <DialogTitle className="truncate">{c.nome}</DialogTitle>
-            <DialogDescription className="flex items-center gap-1.5">
-              <IconePlataforma plataforma={c.plataforma} className="size-3.5" /> @{c.login} · {c.aoVivo ? "ao vivo agora" : "offline"}
-            </DialogDescription>
-          </div>
-        </DialogHeader>
-
-        <LinhaOpcao
-          titulo="Clipar sempre que estiver ao vivo"
-          descricao={
-            c.autoClipar
-              ? "Ligado: toda live deste canal é gravada e os melhores momentos viram cortes, sem você fazer nada. Cada 3 minutos de live usam 1 crédito."
-              : "Desligado: o canal fica aqui só para você acompanhar, e você clipa a live que quiser no botão Clipar."
-          }
-          controle={
-            <Interruptor
-              ligado={c.autoClipar}
-              disabled={salvando}
-              rotulo="Clipar sempre que estiver ao vivo"
-              onChange={(v) =>
-                void rodar(() => api.put<Estado>(`${API}/canais/${c.id}/automatico`, { ligado: v }), "Não consegui salvar.")
-              }
-            />
-          }
-        />
-
-        {c.clipandoEstaLive && !c.autoClipar && (
-          <LinhaOpcao
-            titulo="Clipando só esta live"
-            descricao="Termina sozinho quando a live acabar. Pare antes se já tiver o que precisa."
-            controle={
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={salvando}
-                onClick={() => void rodar(() => api.delete<Estado>(`${API}/canais/${c.id}/clipar-esta-live`), "Não consegui parar.")}
-              >
-                Parar
-              </Button>
-            }
-          />
-        )}
-
-        <a
-          href={c.url}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center justify-between rounded-xl border p-4 text-sm font-medium transition-colors hover:bg-muted"
-        >
-          Abrir o canal na {marca.nome}
-          <IconExternalLink className="size-4 text-muted-foreground" />
-        </a>
-
-        <div className="flex flex-col gap-2 border-t pt-4">
-          {confirmandoRemover ? (
-            <>
-              <p className="text-sm">Remover {c.nome}? Os cortes que já foram feitos continuam na sua lista.</p>
-              <div className="flex gap-2">
-                <Button
-                  variant="destructive"
-                  disabled={salvando}
-                  onClick={async () => {
-                    if (await rodar(() => api.delete<Estado>(`${API}/canais/${c.id}`), "Não consegui remover.")) onRemovido()
-                  }}
-                >
-                  Sim, remover
-                </Button>
-                <Button variant="ghost" onClick={() => setConfirmandoRemover(false)}>Voltar</Button>
-              </div>
-            </>
-          ) : (
-            <Button variant="ghost" className="w-fit text-destructive hover:text-destructive" onClick={() => setConfirmandoRemover(true)}>
-              <IconTrash className="size-4" /> Remover canal
-            </Button>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 function DialogCorte({
   corte: k,
   categoria,
@@ -1301,6 +1258,19 @@ function DialogCorte({
                 </div>
               </div>
 
+              {k.status === "pronto" && (
+                <p className="flex items-start gap-2 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
+                  <IconClock className="mt-px size-3.5 shrink-0" />
+                  <span>
+                    Este corte é apagado sozinho em{" "}
+                    <strong className="text-foreground">
+                      {new Date(k.apagaEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    </strong>{" "}
+                    (3 dias depois de pronto). Baixe se quiser guardar.
+                  </span>
+                </p>
+              )}
+
               <div className="mt-auto flex flex-col gap-2 pt-2 sm:flex-row">
                 {k.status === "pronto" && k.temArquivo && (
                   <Button asChild className="sm:flex-1">
@@ -1330,24 +1300,6 @@ function DialogCorte({
 
 // ---------------------------------------------------------------- ajustes
 
-const ENQUADRAMENTOS: { id: Opcoes["cameraModo"]; titulo: string; descricao: string }[] = [
-  {
-    id: "ia",
-    titulo: "A IA escolhe",
-    descricao: "Em cada corte a IA olha a live e monta o melhor formato: a câmera numa faixa e o jogo na outra, ou o quadro inteiro quando cortar deixaria alguém de fora.",
-  },
-  {
-    id: "auto",
-    titulo: "Destacar a câmera",
-    descricao: "A câmera do streamer vai sempre numa faixa própria. Sem câmera separada, sai no estilo normal.",
-  },
-  {
-    id: "desligado",
-    titulo: "Estilo normal",
-    descricao: "Segue só o estilo visual escolhido abaixo, sem enquadramento especial.",
-  },
-]
-
 function Ajustes({
   estado,
   salvar,
@@ -1355,7 +1307,6 @@ function Ajustes({
   estado: Estado
   salvar: (acao: () => Promise<Estado>, padrao: string) => Promise<boolean>
 }) {
-  const [altura, setAltura] = useState<string | null>(null)
   const op = estado.opcoes
   const salvarOpcoes = (parcial: Partial<Opcoes>) => void salvar(() => api.put<Estado>(`${API}/opcoes`, parcial), "Não consegui salvar.")
 
@@ -1428,87 +1379,146 @@ function Ajustes({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Enquadramento</CardTitle>
-          <CardDescription>Como a live (que é deitada) vira um vídeo em pé.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="grid gap-2 md:grid-cols-3">
-            {ENQUADRAMENTOS.map((e) => (
-              <button
-                key={e.id}
-                type="button"
-                aria-pressed={op.cameraModo === e.id}
-                onClick={() => op.cameraModo !== e.id && salvarOpcoes({ cameraModo: e.id })}
-                className={cn(
-                  "flex flex-col gap-1 rounded-xl border p-4 text-left transition-colors",
-                  op.cameraModo === e.id ? "border-foreground ring-1 ring-foreground" : "hover:bg-muted",
-                )}
-              >
-                <span className="flex items-center justify-between gap-2 text-sm font-medium">
-                  {e.titulo}
-                  {op.cameraModo === e.id && <IconCheck className="size-4" />}
-                </span>
-                <span className="text-xs text-muted-foreground">{e.descricao}</span>
-              </button>
-            ))}
-          </div>
-          {op.cameraModo === "auto" && (
-            <div className="flex flex-wrap items-center gap-3">
-              <ToggleGroup
-                type="single"
-                variant="outline"
-                value={op.cameraPosicao}
-                onValueChange={(v) => v && salvarOpcoes({ cameraPosicao: v as Opcoes["cameraPosicao"] })}
-                aria-label="Posição da câmera"
-              >
-                <ToggleGroupItem value="top">Câmera em cima</ToggleGroupItem>
-                <ToggleGroupItem value="bottom">Câmera embaixo</ToggleGroupItem>
-              </ToggleGroup>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min={20}
-                  max={60}
-                  className="w-20"
-                  aria-label="Altura da câmera"
-                  value={altura ?? String(op.cameraAlturaPercent)}
-                  onChange={(e) => setAltura(e.target.value)}
-                  onBlur={(e) => {
-                    if (altura === null) return
-                    setAltura(null)
-                    salvarOpcoes({ cameraAlturaPercent: Number(e.target.value) })
-                  }}
-                />
-                <span className="text-sm text-muted-foreground">% da altura do vídeo</span>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Estilo visual</CardTitle>
-          <CardDescription>Legenda, título e fundo dos cortes de live.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <LinhaOpcao
-            titulo="Usar o mesmo estilo dos cortes de vídeo"
-            descricao="Igual aos seus cortes do YouTube. Desligue para ter um estilo só para as lives."
-            controle={
-              <Interruptor
-                ligado={op.usarEstiloDosVideos}
-                rotulo="Usar o mesmo estilo dos cortes de vídeo"
-                onChange={(v) => salvarOpcoes({ usarEstiloDosVideos: v })}
-              />
-            }
-          />
-        </CardContent>
-      </Card>
-
-      {!op.usarEstiloDosVideos && <ClipStyleEditorCard key="estilo-live" endpoint={`${API}/estilo`} modoLive />}
+      <EstiloDosTextos />
     </>
+  )
+}
+
+// Modelo do título e da legenda dos cortes de live. O ENQUADRAMENTO não é
+// escolha aqui: a IA monta o formato de cada corte (câmera, câmera + vídeo,
+// metade/metade) - um editor de enquadramento só brigaria com ela. O que a
+// pessoa escolhe é o visual do texto, e é isso que esta caixa mostra.
+function EstiloDosTextos() {
+  const [estilo, setEstilo] = useState<ClientVideoSettingsResponse | null>(null)
+  const [erro, setErro] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.get<ClientVideoSettingsResponse>(`${API}/estilo`).then(setEstilo, (e) => setErro(mensagem(e, "Não consegui carregar o estilo.")))
+  }, [])
+
+  async function salvar(parcial: Partial<ClientVideoSettingsResponse>) {
+    if (!estilo) return
+    const anterior = estilo
+    setEstilo({ ...estilo, ...parcial })
+    setErro(null)
+    try {
+      setEstilo(await api.put<ClientVideoSettingsResponse>(`${API}/estilo`, parcial))
+    } catch (e) {
+      setEstilo(anterior)
+      setErro(mensagem(e, "Não consegui salvar."))
+    }
+  }
+
+  if (!estilo) return erro ? <p className="text-sm text-destructive">{erro}</p> : <Skeleton className="h-64 w-full" />
+  const usaCorNoTitulo = ["caixa_colorida", "papel_rasgado", "cartao", "faixa_colorida"].includes(estilo.titleStyle)
+  const usaCorNaLegenda = estilo.captionStyle === "caixa_colorida"
+  const opcoesDeLegenda = estilo.options.captionStyles.filter((x) => x !== "none")
+
+  return (
+    <>
+      {erro && <p className="text-sm text-destructive">{erro}</p>}
+      <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+        {/* Prévia dos dois juntos, no formato de um corte de live. */}
+        <div className="lg:sticky lg:top-20 lg:self-start">
+          <p className="mb-2 text-sm font-medium">Prévia</p>
+          <CenaDePrevia
+            cena="live"
+            className="mx-auto w-full max-w-[240px] rounded-2xl shadow-[var(--shadow-raised)]"
+            style={{
+              ["--cor-da-caixa" as string]: estilo.titleBoxColor,
+              ["--cor-da-letra-cartao" as string]: letraPelaCaixa(estilo.titleBoxColor),
+            }}
+          >
+            {estilo.showTitle !== false && (
+              <div className="absolute inset-x-0 top-[33%] flex justify-center px-[6%] text-center" style={{ fontSize: "7.5cqw" }}>
+                <TextoNoModelo modelo={estilo.titleStyle} texto="Comprei um carro de 2 milhões" fonte={estilo.titleFont} />
+              </div>
+            )}
+            <div
+              className="absolute inset-x-0 bottom-[20%] flex justify-center text-center"
+              style={{ fontSize: "11cqw", ["--cor-da-caixa" as string]: estilo.captionBoxColor }}
+            >
+              <TextoNoModelo modelo={estilo.captionStyle} texto="olha isso" fonte={estilo.captionFont} />
+            </div>
+          </CenaDePrevia>
+          <p className="mx-auto mt-2 max-w-[240px] text-center text-xs text-muted-foreground">
+            Em cada corte a IA escolhe o formato e põe o título e a legenda onde não cobrem o streamer nem o vídeo.
+          </p>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Modelo do título</CardTitle>
+              <CardDescription>Aparece nos primeiros segundos de cada corte.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {usaCorNoTitulo && <SeletorDeCor rotulo="Cor do fundo do título" valor={estilo.titleBoxColor} onChange={(v) => void salvar({ titleBoxColor: v })} />}
+              <GaleriaDeEstilos
+                tipo="titulo"
+                cena="live"
+                options={estilo.options.titleStyles}
+                value={estilo.titleStyle}
+                onChange={(v) => void salvar({ titleStyle: v })}
+                sampleText="Título do corte"
+                corDaCaixa={estilo.titleBoxColor}
+                fonte={estilo.titleFont}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Modelo da legenda</CardTitle>
+              <CardDescription>A fala do streamer, palavra por palavra, durante o corte todo.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {usaCorNaLegenda && <SeletorDeCor rotulo="Cor da caixa da legenda" valor={estilo.captionBoxColor} onChange={(v) => void salvar({ captionBoxColor: v })} />}
+              <GaleriaDeEstilos
+                tipo="legenda"
+                cena="live"
+                options={opcoesDeLegenda}
+                value={estilo.captionStyle}
+                onChange={(v) => void salvar({ captionStyle: v })}
+                sampleText="olha"
+                corDaCaixa={estilo.captionBoxColor}
+                fonte={estilo.captionFont}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// Cor da caixa: as do painel de sempre + qualquer outra pelo seletor do sistema.
+const CORES_RAPIDAS = ["#D92323", "#7C3FD4", "#2F54EB", "#0B8EA8", "#15803D", "#F59E0B", "#111111", "#FFFFFF"]
+function SeletorDeCor({ rotulo, valor, onChange }: { rotulo: string; valor: string; onChange: (v: string) => void }) {
+  // O seletor do sistema dispara a cada movimento do arraste: salvar cada um
+  // mandaria dezenas de pedidos, e o mais lento podia vencer com a cor velha.
+  const espera = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const depois = (v: string) => {
+    if (espera.current) clearTimeout(espera.current)
+    espera.current = setTimeout(() => onChange(v), 400)
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-sm text-muted-foreground">{rotulo}</span>
+      {CORES_RAPIDAS.map((cor) => (
+        <button
+          key={cor}
+          type="button"
+          aria-label={`Cor ${cor}`}
+          aria-pressed={valor.toUpperCase() === cor}
+          onClick={() => onChange(cor)}
+          className={cn("size-7 rounded-full border shadow-sm", valor.toUpperCase() === cor && "ring-2 ring-foreground ring-offset-2 ring-offset-card")}
+          style={{ background: cor }}
+        />
+      ))}
+      <label className="relative size-7 cursor-pointer overflow-hidden rounded-full border bg-[conic-gradient(red,yellow,lime,cyan,blue,magenta,red)]" title="Outra cor">
+        <input type="color" defaultValue={valor} onChange={(e) => depois(e.target.value.toUpperCase())} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Outra cor" />
+      </label>
+    </div>
   )
 }
