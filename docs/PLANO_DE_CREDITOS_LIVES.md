@@ -1,6 +1,6 @@
 # Plano: cortes de live consumindo o mesmo crédito dos cortes do YouTube
 
-Proposta de 06/10/2026. **Ainda não implementado** — falta o fundador escolher a taxa (seção 3).
+Proposta de 06/10/2026. **Decidido pelo fundador: 1 crédito = 3 minutos de live** (a "alternativa mais agressiva" da seção 3). **Implementado em 07/10/2026** (`liveCreditosService`, migration `102`) — ver a seção 6.
 Custos medidos em produção, não estimados. Dólar a R$ 5,50.
 
 ## 1. Quanto custa hoje
@@ -87,3 +87,23 @@ Starter (90). Para não virar frustração:
 4. Tela: "esta live já usou X créditos" no cartão do canal; limite por live na engrenagem.
 5. Testes: idempotência por bloco, 10 blocos simultâneos contra saldo curto, corte parando quando o
    crédito acaba, admin isento. Teste de mutação em cada trava.
+
+## 6. O que foi implementado (07/10/2026)
+
+- **3 minutos de live = 1 crédito**, cobrado adiantado a cada bloco de 3 min, só de quem está recebendo
+  cortes daquela gravação. "Clipar este momento" = **1 crédito** por clique (402 sem saldo, devolvido
+  se o corte não chegar a ser criado).
+- Tabela `live_credit_usage` (uma linha por sessão × pessoa), cobrança a cada minuto no `liveSupervisor`
+  (laço `creditos`), trava otimista em `paid_until_seconds` (volta que perde a corrida devolve o crédito).
+- Pausou e voltou na mesma live (mais de 5 min sem a volta passar pela pessoa): o buraco não é cobrado.
+- **Sem crédito: para de receber cortes daquela live** (`out_of_credit_at`, regra `RECEBE_CORTES` nas
+  3 consultas de quem grava/recebe). Se ninguém mais recebe, a gravação para. Comprou crédito, volta
+  sozinha dali pra frente.
+- Admin isento, mas o contador mostra quanto teria custado.
+- Tela Lives: saldo no topo ("N créditos · ≈ X h de live"), créditos gastos na live em andamento no
+  cartão do canal, aviso de "créditos acabaram".
+
+**Ainda NÃO feito** (decisões pendentes): cobrar **excedente** no cartão quando o crédito acaba no meio da
+live (hoje simplesmente para), **limite de lives simultâneas por plano** (1/2/3 sugerido), lançamento
+do gasto de live no extrato "Consumo recente" de Plano e uso, e limite de créditos por live escolhido
+pelo cliente.

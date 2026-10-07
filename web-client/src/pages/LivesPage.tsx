@@ -67,6 +67,8 @@ type Canal = {
   autoClipar: boolean
   clipandoEstaLive: boolean
   recebendoCortes: boolean
+  creditosNestaLive: number
+  semCredito: boolean
 }
 
 type Estado = {
@@ -76,6 +78,7 @@ type Estado = {
   opcoes: Opcoes
   niveis: Record<string, Nivel>
   categorias: Categoria[]
+  creditos: { disponiveis: number; isento: boolean; minutosDeLivePorCredito: number; cliparAgora: number }
 }
 
 type Corte = {
@@ -250,9 +253,11 @@ function Interruptor({
 
 // O que está acontecendo com o canal, em uma linha.
 function situacao(c: Canal, servicoAtivo: boolean): { texto: string; tom: "vermelho" | "ambar" | "verde" | "neutro" } {
+  if (c.aoVivo && c.semCredito) return { texto: "Seus créditos acabaram — esta live parou de ser clipada", tom: "ambar" }
   if (c.aoVivo && c.recebendoCortes && c.gravacao) {
+    const gasto = c.creditosNestaLive ? ` · ${c.creditosNestaLive} ${c.creditosNestaLive === 1 ? "crédito" : "créditos"}` : ""
     return {
-      texto: `${c.clipandoEstaLive && !c.autoClipar ? "Clipando esta live" : "Clipando"} há ${duracaoCurta(c.gravacao.segundosGravados)}`,
+      texto: `${c.clipandoEstaLive && !c.autoClipar ? "Clipando esta live" : "Clipando"} há ${duracaoCurta(c.gravacao.segundosGravados)}${gasto}`,
       tom: "vermelho",
     }
   }
@@ -269,6 +274,30 @@ const COR_SITUACAO = {
   ambar: "bg-amber-500",
   verde: "bg-emerald-500",
   neutro: "bg-muted-foreground/40",
+}
+
+// Saldo no topo: os mesmos créditos dos cortes do YouTube, traduzidos em
+// horas de live - "120 créditos" sozinho não diz quanto de live dá pra clipar.
+function SaldoDeCreditos({ creditos }: { creditos: Estado["creditos"] }) {
+  if (creditos.isento) {
+    return (
+      <span className="rounded-full border bg-card px-3 py-1.5 text-xs text-muted-foreground" title="Conta de administrador: as lives não consomem crédito">
+        Créditos: isento (admin)
+      </span>
+    )
+  }
+  const minutos = creditos.disponiveis * creditos.minutosDeLivePorCredito
+  const horas = minutos >= 60 ? `${(minutos / 60).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} h` : `${minutos} min`
+  return (
+    <a
+      href="/client/billing"
+      className="rounded-full border bg-card px-3 py-1.5 text-xs transition-colors hover:bg-muted"
+      title={`Cada ${creditos.minutosDeLivePorCredito} minutos de live clipada usam 1 crédito — os mesmos créditos dos cortes do YouTube`}
+    >
+      <strong className="tabular-nums">{creditos.disponiveis}</strong> créditos
+      <span className="text-muted-foreground"> · ≈ {horas} de live</span>
+    </a>
+  )
 }
 
 // ---------------------------------------------------------------- cartão do canal
@@ -295,7 +324,10 @@ function CartaoCanal({
 
   let rotuloClipar = "Clipar"
   let ajuda = "Disponível quando o canal estiver ao vivo"
-  if (c.aoVivo && !c.recebendoCortes) {
+  if (c.aoVivo && c.semCredito) {
+    rotuloClipar = "Sem créditos"
+    ajuda = "Compre créditos em Plano e uso pra voltar a clipar"
+  } else if (c.aoVivo && !c.recebendoCortes) {
     rotuloClipar = "Clipar esta live"
     ajuda = "Grava e corta os melhores momentos desta live, até ela acabar"
   } else if (clipandoAgora) {
@@ -397,9 +429,9 @@ function CartaoCanal({
           variant={c.aoVivo ? "default" : "outline"}
           className={cn(
             "min-w-0 flex-1",
-            c.aoVivo && !preparando && "bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:text-white dark:hover:bg-red-700",
+            c.aoVivo && !preparando && !c.semCredito && "bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:text-white dark:hover:bg-red-700",
           )}
-          disabled={!c.aoVivo || preparando || ocupado}
+          disabled={!c.aoVivo || preparando || ocupado || c.semCredito}
           onClick={onClipar}
           title={ajuda}
         >
@@ -642,10 +674,16 @@ export function LivesPage() {
     try {
       if (c.aoVivo && !c.recebendoCortes) {
         setEstado(await api.post<Estado>(`${API}/canais/${c.id}/clipar-esta-live`))
-        setAviso(`Pronto! A live de ${c.nome} está sendo clipada. Os primeiros cortes aparecem aqui em uns 15 minutos.`)
+        setAviso(
+          `Pronto! A live de ${c.nome} está sendo clipada (cada ${estado?.creditos.minutosDeLivePorCredito ?? 3} minutos usam 1 crédito). Os primeiros cortes aparecem aqui em uns 15 minutos.`,
+        )
       } else {
         await api.post(`${API}/canais/${c.id}/clipar-agora`)
-        setAviso("Momento clipado! O corte dos últimos ~2,5 minutos fica pronto em alguns minutos.")
+        setAviso(
+          estado?.creditos.isento
+            ? "Momento clipado! O corte dos últimos ~2,5 minutos fica pronto em alguns minutos."
+            : `Momento clipado (${estado?.creditos.cliparAgora ?? 1} crédito)! O corte dos últimos ~2,5 minutos fica pronto em alguns minutos.`,
+        )
         await carregar()
       }
     } catch (e) {
@@ -709,9 +747,12 @@ export function LivesPage() {
         title="Lives"
         description="Acompanhe canais da Twitch e da Kick e receba os melhores momentos das lives já cortados na vertical, com legenda."
         action={
-          <Button onClick={() => setAdicionarAberto(true)}>
-            <IconPlus className="size-4" /> Adicionar canal
-          </Button>
+          <>
+            {estado && <SaldoDeCreditos creditos={estado.creditos} />}
+            <Button onClick={() => setAdicionarAberto(true)}>
+              <IconPlus className="size-4" /> Adicionar canal
+            </Button>
+          </>
         }
       />
 
@@ -1052,7 +1093,7 @@ function DialogAdicionar({
           />
           <LinhaOpcao
             titulo="Clipar sempre que estiver ao vivo"
-            descricao="Toda live deste canal é cortada sozinha. Desligado, você clipa só quando apertar Clipar."
+            descricao="Toda live deste canal é cortada sozinha. Desligado, você clipa só quando apertar Clipar. Cada 3 minutos de live clipada usam 1 crédito."
             controle={<Interruptor ligado={auto} onChange={setAuto} rotulo="Clipar sempre que estiver ao vivo" />}
           />
           {erro && <p className="text-sm text-destructive">{erro}</p>}
@@ -1108,7 +1149,7 @@ function DialogConfigurar({
           titulo="Clipar sempre que estiver ao vivo"
           descricao={
             c.autoClipar
-              ? "Ligado: toda live deste canal é gravada e os melhores momentos viram cortes, sem você fazer nada."
+              ? "Ligado: toda live deste canal é gravada e os melhores momentos viram cortes, sem você fazer nada. Cada 3 minutos de live usam 1 crédito."
               : "Desligado: o canal fica aqui só para você acompanhar, e você clipa a live que quiser no botão Clipar."
           }
           controle={

@@ -19,6 +19,7 @@ const liveRenderService = require('../services/lives/liveRenderService');
 const liveCleanupService = require('../services/lives/liveCleanupService');
 const liveChatService = require('../services/lives/liveChatService');
 const liveViewerClipsService = require('../services/lives/liveViewerClipsService');
+const liveCreditosService = require('../services/lives/liveCreditosService');
 const logger = require('../lib/logger');
 
 // Ate este tanto de blocos transcritos por volta do laço: da conta de uma
@@ -213,6 +214,13 @@ async function coletarClipes() {
   }
 }
 
+// Credito: 3 minutos de live clipada = 1 credito, cobrado adiantado de quem
+// esta recebendo cortes (ver liveCreditosService).
+async function cobrarCreditos() {
+  if (!(await livesSettings.estaLigado())) return;
+  await liveCreditosService.cobrarSessoes();
+}
+
 async function renderizar() {
   if (!(await livesSettings.estaLigado())) return;
   // Um corte por volta: o render e a unica parte pesada, e com 2 nucleos
@@ -254,6 +262,7 @@ async function iniciar() {
   if (reenfileirados) logger.info(`Lives: ${reenfileirados} corte(s) que estavam renderizando voltaram pra fila.`);
 
   timers.push(laco('monitorar', monitorar, 60_000));
+  timers.push(laco('creditos', cobrarCreditos, 60_000));
   timers.push(laco('segmentos', sincronizarSegmentos, 5_000));
   timers.push(laco('transcrever', transcrever, 5_000));
   timers.push(laco('analisar', analisar, 30_000));
@@ -268,4 +277,4 @@ async function parar() {
   await liveChatService.pararTodos();
 }
 
-module.exports = { iniciar, parar, monitorar, analisar, coletarClipes, encerrarSessao };
+module.exports = { iniciar, parar, monitorar, analisar, coletarClipes, encerrarSessao, cobrarCreditos };

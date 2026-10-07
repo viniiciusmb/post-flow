@@ -13,6 +13,7 @@ const liveCleanupService = require('../../../services/lives/liveCleanupService')
 const config = require('../../../config');
 const { resolveRange } = require('../../../lib/dateRanges');
 const livesUserSettings = require('../../../services/lives/livesUserSettings');
+const liveCreditosService = require('../../../services/lives/liveCreditosService');
 const tiposDeMomento = require('../../../services/lives/tiposDeMomento');
 const clientVideoSettingsRepository = require('../../../repositories/clientVideoSettingsRepository');
 const { toApiWithOptions, validarEstilo } = require('./clientVideoSettingsApiController');
@@ -334,6 +335,22 @@ async function cliparAgora(req, res) {
   const fim = Number(sessao.recorded_seconds);
   if (fim < 20) return res.status(409).json({ error: 'A gravacao acabou de comecar - espere alguns segundos.' });
   const inicio = Math.max(0, fim - JANELA_CLIPAR_AGORA_S);
+  // 1 credito por clique, cobrado ANTES de criar o corte (admin isento). Se
+  // criar o corte falhar, devolve.
+  const cobranca = await liveCreditosService.cobrarCliparAgora(userId);
+  if (!cobranca.ok) return res.status(402).json({ error: 'Seus creditos acabaram. Compre mais em Plano e uso pra clipar este momento.' });
+  let corte;
+  try {
+    corte = await criarCorteClipado({ sessao, id, userId, inicio, fim });
+  } catch (err) {
+    await cobranca.desfazer();
+    throw err;
+  }
+  if (cobranca.creditos) await livesRepository.setClipCredits(corte.id, cobranca.creditos);
+  res.status(201).json({ id: Number(corte.id), creditos: cobranca.creditos });
+}
+
+async function criarCorteClipado({ sessao, id, userId, inicio, fim }) {
   const candidato = await livesRepository.insertCandidate({
     sessionId: sessao.id,
     source: 'clipar_agora',
@@ -351,7 +368,7 @@ async function cliparAgora(req, res) {
     inicio,
     fim,
   });
-  res.status(201).json({ id: Number(corte.id) });
+  return corte;
 }
 
 async function listarCortes(req, res) {

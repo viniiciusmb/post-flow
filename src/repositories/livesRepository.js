@@ -4,6 +4,18 @@
 
 const pool = require('../db/pool');
 
+// Quem RECEBE cortes de um canal (e por isso faz ele ser gravado): segue o
+// canal, com o "clipar sempre" ligado ou o "clipar esta live" pedido, e nao
+// ficou sem credito na gravacao em andamento. Usado com o alias "f" pra
+// live_channel_follows. Uma regra so pras tres consultas que decidem quem
+// grava e quem recebe - se uma delas esquecesse a parte do credito, a pessoa
+// sem credito continuaria recebendo corte (ou mantendo a gravacao ligada).
+const RECEBE_CORTES = `f.is_active AND (f.paused_at IS NULL OR f.clip_this_live_at IS NOT NULL)
+  AND NOT EXISTS (
+    SELECT 1 FROM live_credit_usage u JOIN live_sessions s ON s.id = u.session_id
+     WHERE u.user_id = f.user_id AND s.live_channel_id = f.live_channel_id
+       AND s.status = 'gravando' AND u.out_of_credit_at IS NOT NULL)`;
+
 // ---------------------------------------------------------------- canais
 
 async function upsertChannel({ platform = 'twitch', login, displayName, platformUserId, profileImageUrl }) {
@@ -62,7 +74,7 @@ async function isFollowing(userId, channelId) {
 async function listWatchedChannels() {
   const { rows } = await pool.query(
     `SELECT c.* FROM live_channels c
-      WHERE EXISTS (SELECT 1 FROM live_channel_follows f WHERE f.live_channel_id = c.id AND f.is_active AND (f.paused_at IS NULL OR f.clip_this_live_at IS NOT NULL))
+      WHERE EXISTS (SELECT 1 FROM live_channel_follows f WHERE f.live_channel_id = c.id AND ${RECEBE_CORTES})
       ORDER BY c.id`
   );
   return rows;
@@ -81,7 +93,7 @@ async function listFollowedChannels() {
 
 async function activeFollowerIds(channelId) {
   const { rows } = await pool.query(
-    'SELECT user_id FROM live_channel_follows f WHERE live_channel_id = $1 AND f.is_active AND (f.paused_at IS NULL OR f.clip_this_live_at IS NOT NULL) ORDER BY user_id',
+    `SELECT user_id FROM live_channel_follows f WHERE f.live_channel_id = $1 AND ${RECEBE_CORTES} ORDER BY user_id`,
     [channelId]
   );
   return rows.map((r) => Number(r.user_id));
@@ -511,7 +523,7 @@ async function followersWithQuality(channelId) {
     `SELECT f.user_id, COALESCE(s.qualidade, 3) AS qualidade, s.categorias
        FROM live_channel_follows f
        LEFT JOIN live_clip_settings s ON s.user_id = f.user_id
-      WHERE f.live_channel_id = $1 AND f.is_active AND (f.paused_at IS NULL OR f.clip_this_live_at IS NOT NULL)
+      WHERE f.live_channel_id = $1 AND ${RECEBE_CORTES}
       ORDER BY f.user_id`,
     [channelId]
   );
@@ -669,6 +681,75 @@ async function deleteClip(clipId, userId) {
   return rows[0] || null;
 }
 
+// ---------------------------------------------------------------- creditos
+
+async function getCreditUsage(sessionId, userId) {
+  const { rows } = await pool.query('SELECT * FROM live_credit_usage WHERE session_id = $1 AND user_id = $2', [sessionId, userId]);
+  return rows[0] || null;
+}
+
+// Cria a linha na primeira vez que a pessoa aparece recebendo cortes desta
+// sessao: nada pago ainda, a partir do segundo atual da gravacao.
+async function startCreditUsage({ sessionId, userId, channelId, segundo, isento }) {
+  await pool.query(
+    `INSERT INTO live_credit_usage (session_id, user_id, live_channel_id, paid_until_seconds, last_seen_seconds, isento)
+     VALUES ($1, $2, $3, $4, $4, $5) ON CONFLICT (session_id, user_id) DO NOTHING`,
+    [sessionId, userId, channelId, segundo, isento]
+  );
+  return getCreditUsage(sessionId, userId);
+}
+
+// Avanca o que foi pago. Condicionado ao paid_until lido antes (trava
+// otimista): se outra volta mexeu na linha no meio, nao grava e devolve
+// false - quem chamou devolve o credito que tinha tirado.
+async function advanceCreditUsage({ sessionId, userId, paidUntilAntes, paidUntil, lastSeen, creditos, semCredito }) {
+  const { rowCount } = await pool.query(
+    `UPDATE live_credit_usage
+        SET paid_until_seconds = $4, last_seen_seconds = $5, credits_charged = credits_charged + $6,
+            out_of_credit_at = CASE WHEN $7 THEN COALESCE(out_of_credit_at, now()) ELSE out_of_credit_at END,
+            updated_at = now()
+      WHERE session_id = $1 AND user_id = $2 AND paid_until_seconds = $3`,
+    [sessionId, userId, paidUntilAntes, paidUntil, lastSeen, creditos, Boolean(semCredito)]
+  );
+  return rowCount > 0;
+}
+
+// Quem ficou sem credito numa gravacao ainda em andamento - candidatos a
+// voltar a receber se compraram credito.
+async function outOfCreditInRecordingSessions() {
+  const { rows } = await pool.query(
+    `SELECT u.*, s.recorded_seconds FROM live_credit_usage u JOIN live_sessions s ON s.id = u.session_id
+      WHERE s.status = 'gravando' AND u.out_of_credit_at IS NOT NULL`
+  );
+  return rows;
+}
+
+// Voltou a ter credito: volta a receber a partir de AGORA (o tempo sem
+// credito nao e cobrado depois).
+async function clearOutOfCredit(sessionId, userId, segundo) {
+  await pool.query(
+    `UPDATE live_credit_usage SET out_of_credit_at = NULL, paid_until_seconds = GREATEST(paid_until_seconds, $3),
+            last_seen_seconds = $3, updated_at = now()
+      WHERE session_id = $1 AND user_id = $2`,
+    [sessionId, userId, segundo]
+  );
+}
+
+// O que a tela mostra: creditos desta live (gravacao em andamento) por canal.
+async function creditUsageForUser(userId) {
+  const { rows } = await pool.query(
+    `SELECT u.live_channel_id, u.credits_charged, u.isento, u.out_of_credit_at
+       FROM live_credit_usage u JOIN live_sessions s ON s.id = u.session_id
+      WHERE u.user_id = $1 AND s.status = 'gravando'`,
+    [userId]
+  );
+  return rows;
+}
+
+async function setClipCredits(clipId, creditos) {
+  await pool.query('UPDATE live_clips SET credits_charged = $2 WHERE id = $1', [clipId, creditos]);
+}
+
 // ---------------------------------------------------------------- custos
 
 async function recordCost({ channelId, sessionId, kind, audioSeconds = 0, inputTokens = 0, outputTokens = 0, custoUsd = 0, tier = null }) {
@@ -744,6 +825,13 @@ module.exports = {
   activeFollowerIds,
   updateChannelStatus,
   setClipThisLive,
+  getCreditUsage,
+  startCreditUsage,
+  advanceCreditUsage,
+  outOfCreditInRecordingSessions,
+  clearOutOfCredit,
+  creditUsageForUser,
+  setClipCredits,
   listChannelsForUser,
   createSession,
   setSessionDir,

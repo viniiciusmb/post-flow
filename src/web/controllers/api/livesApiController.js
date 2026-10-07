@@ -14,10 +14,11 @@ const tiposDeMomento = require('../../../services/lives/tiposDeMomento');
 const plataformas = require('../../../services/lives/plataformas');
 const config = require('../../../config');
 const admin = require('./adminLivesApiController');
+const liveCreditosService = require('../../../services/lives/liveCreditosService');
 
 // O canal como o usuario enxerga: alem do que a tela do admin mostra, se o
 // automatico esta ligado PRA ELE e se ele mandou clipar so esta live.
-function canalDoUsuario(c) {
+function canalDoUsuario(c, usoDaLive) {
   const base = admin.canalParaApi(c);
   const autoClipar = !c.paused_at;
   const clipandoEstaLive = Boolean(c.clip_this_live_at) && Boolean(c.is_live);
@@ -29,23 +30,38 @@ function canalDoUsuario(c) {
     // Recebe corte desta live: automatico ligado ou "clipar esta live" pedido.
     recebendoCortes: autoClipar || clipandoEstaLive,
     seguindoDesde: c.followed_at || null,
+    // Creditos que a gravacao EM ANDAMENTO ja usou pra esta pessoa, e se o
+    // credito acabou nela (a pessoa parou de receber cortes desta live).
+    creditosNestaLive: usoDaLive ? Number(usoDaLive.credits_charged) : 0,
+    semCredito: Boolean(usoDaLive?.out_of_credit_at),
   };
 }
 
 async function estado(req, res) {
   const userId = req.session.user.id;
   await admin.atualizarStatus(await livesRepository.listChannelsForUser(userId));
-  const [ligado, canais, opcoes] = await Promise.all([
+  const [ligado, canais, opcoes, usos, saldo, isento] = await Promise.all([
     settingsRepository.getValue('lives_enabled', false),
     livesRepository.listChannelsForUser(userId),
     livesUserSettings.obter(userId),
+    livesRepository.creditUsageForUser(userId),
+    liveCreditosService.saldo(userId),
+    liveCreditosService.isento(userId),
   ]);
+  const usoPorCanal = new Map(usos.map((u) => [Number(u.live_channel_id), u]));
   res.json({
     // Desligado pelo admin: a tela avisa que nada esta sendo gravado agora, em
     // vez de o botao "Clipar" parecer quebrado.
     servicoAtivo: ligado === true && !config.lives.forcarDesligado,
     plataformas: plataformas.PLATAFORMAS.map((p) => ({ id: p, nome: plataformas.NOMES[p], disponivel: plataformas.disponivel(p) })),
-    canais: canais.map(canalDoUsuario),
+    canais: canais.map((c) => canalDoUsuario(c, usoPorCanal.get(Number(c.id)))),
+    // O mesmo credito dos cortes do YouTube: 3 minutos de live = 1 credito.
+    creditos: {
+      disponiveis: saldo,
+      isento,
+      minutosDeLivePorCredito: liveCreditosService.SEGUNDOS_POR_CREDITO / 60,
+      cliparAgora: liveCreditosService.CREDITOS_CLIPAR_AGORA,
+    },
     opcoes: admin.opcoesParaApi(opcoes),
     niveis: livesUserSettings.NIVEIS,
     categorias: tiposDeMomento.CATEGORIAS.map(({ id, nome, descricao }) => ({ id, nome, descricao })),
