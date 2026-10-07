@@ -27,7 +27,7 @@ const ttsService = require('../../src/services/ttsService');
 const renderService = require('../../src/services/narratedVideoRenderService');
 const imageSearchService = require('../../src/services/imageSearchService');
 const imageGenerationService = require('../../src/services/imageGenerationService');
-const openaiTranscriptionService = require('../../src/services/openaiTranscriptionService');
+const openaiTranscriptionService = require('../../src/services/transcricaoService');
 const { createClient } = require('../helpers/db');
 
 test.after(async () => {

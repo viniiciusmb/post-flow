@@ -40,6 +40,9 @@ router.get('/costs', asyncHandler(adminCostsApiController.overview));
 router.get('/revenue', asyncHandler(adminRevenueApiController.overview));
 router.post('/costs/cotacao', asyncHandler(adminCostsApiController.setCotacao));
 router.post('/costs/infra', asyncHandler(adminCostsApiController.setInfra));
+// Saldo das contas de IA - ver saldoDasIasService.
+router.get('/costs/ai-balances', asyncHandler(adminCostsApiController.saldosDasIas));
+router.post('/costs/ai-balances/:provedor', asyncHandler(adminCostsApiController.informarSaldoDeIa));
 // Video narrado a partir de um roteiro - MODO DE TESTE, so admin. Fica atras
 // do requireRoleApi(ADMIN) montado no topo deste arquivo: e o mesmo guarda que
 // protege o resto do painel, e e ele que mantem o recurso invisivel pros

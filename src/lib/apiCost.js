@@ -12,6 +12,22 @@ function whisperCostUsd(audioSeconds) {
   return (audioSeconds / 60) * WHISPER_USD_PER_MINUTE;
 }
 
+// Transcricao principal desde 07/10/2026: whisper-large-v3-turbo na DeepInfra.
+// O cadastro do modelo diz "cents_per_input_sec: 0.000333" - US$ 0,0002 por
+// minuto, 30x menos que o whisper-1 da OpenAI. Conferido no painel de consumo
+// da propria DeepInfra: 14.255 s de audio custaram 5 centavos de dolar.
+const DEEPINFRA_WHISPER_USD_PER_MINUTE = 0.0002;
+// Groq (reserva): o Post Flow usa o plano GRATUITO dela, entao o custo real e
+// zero. Se um dia virar o plano pago, o preco e US$ 0,04/h = 0,000667/min.
+const GROQ_WHISPER_USD_PER_MINUTE = 0;
+
+function transcricaoCostUsd(provedor, audioSeconds) {
+  if (!audioSeconds) return 0;
+  if (provedor === 'deepinfra') return (audioSeconds / 60) * DEEPINFRA_WHISPER_USD_PER_MINUTE;
+  if (provedor === 'groq') return (audioSeconds / 60) * GROQ_WHISPER_USD_PER_MINUTE;
+  return whisperCostUsd(audioSeconds);
+}
+
 function claudeCostUsd(inputTokens, outputTokens) {
   const input = (inputTokens || 0) / 1_000_000;
   const output = (outputTokens || 0) / 1_000_000;
@@ -123,6 +139,9 @@ function gpt5NanoCostUsd(inputTokens, outputTokens) {
 
 module.exports = {
   whisperCostUsd,
+  transcricaoCostUsd,
+  DEEPINFRA_WHISPER_USD_PER_MINUTE,
+  GROQ_WHISPER_USD_PER_MINUTE,
   miniTranscribeCostFromUsage,
   textoCostFromUsage,
   FRACAO_FLEX,

@@ -1,13 +1,13 @@
 // Transcricao corrida da live, bloco a bloco (~30s). Antes de pagar pela
 // transcricao, o proprio ffmpeg mede o bloco de graca: quanto dele e silencio
-// e qual o volume. Bloco quase todo silencioso nao vai pra OpenAI - numa live
+// e qual o volume. Bloco quase todo silencioso nao vai pra transcricao - numa live
 // com pausas longas (AFK, tela de espera) isso corta boa parte do custo.
 'use strict';
 
 const fs = require('fs');
 const { spawn } = require('child_process');
 const livesRepository = require('../../repositories/livesRepository');
-const openaiLives = require('./openaiLives');
+const transcricaoService = require('../transcricaoService');
 const logger = require('../../lib/logger');
 const { similaridade } = require('../../lib/similaridadeDeTexto');
 
@@ -124,7 +124,7 @@ function amostrar(bloco) {
 // o texto acelerado. Falha aqui nunca derruba o bloco: e so medicao.
 async function conferirVelocidade(bloco, textoAcelerado, segundos) {
   try {
-    const normal = await openaiLives.transcreverBloco(bloco.file_path, { segundos });
+    const normal = await transcricaoService.transcreverBlocoDeLive(bloco.file_path, { segundos, uso: 'lives_monitor' });
     const pct = Math.round(similaridade(normal.texto, textoAcelerado) * 10000) / 100;
     await livesRepository.setTranscriptCheck(bloco.id, pct);
     await livesRepository.recordCost({
@@ -166,7 +166,7 @@ async function processarProximo() {
     let resultado;
     try {
       await module.exports.acelerarAudio(bloco.file_path, acelerado);
-      resultado = await openaiLives.transcreverBloco(acelerado, { segundos: segundosCobrados });
+      resultado = await transcricaoService.transcreverBlocoDeLive(acelerado, { segundos: segundosCobrados, uso: 'lives' });
     } finally {
       fs.rm(acelerado, { force: true }, () => {});
     }

@@ -1327,3 +1327,32 @@ export interface AdminSupportDetail {
   messages: { id: number; role: "user" | "assistant"; model: string | null; costUsd: number; createdAt: string; blocks: AdminSupportBlock[] }[]
   refunds: { videoId: number | null; title: string | null; minutes: number; reason: string; createdAt: string }[]
 }
+
+// Saldo de cada conta de IA (tela de Custos e aviso na tela inicial do admin).
+export interface SaldoDeIa {
+  provedor: "deepinfra" | "groq" | "openai" | "anthropic" | "elevenlabs"
+  nome: string
+  uso: string
+  // real = informado pela API do provedor; estimado = saldo informado pelo
+  // admin menos o gasto do Post Flow desde então; gratuito = sem saldo.
+  tipo: "real" | "estimado" | "gratuito"
+  configurado: boolean
+  saldoUsd?: number | null
+  suspenso?: boolean
+  semInformacao?: boolean
+  informadoUsd?: number
+  informadoEm?: string
+  gastoDesdeUsd?: number
+  chaveOk?: boolean
+  erro?: string
+  consultadoEm?: string
+  gasto30dUsd: number
+  diasRestantes: number | null
+  abaixoDoLimite: boolean
+}
+
+export interface SaldosDasIasResponse {
+  limiteAlertaUsd: number
+  provedores: SaldoDeIa[]
+  algumAbaixo: boolean
+}

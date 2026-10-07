@@ -9,6 +9,7 @@
 
 const config = require('../config');
 const { claudeCostUsd } = require('../lib/apiCost');
+const gastoDeIa = require('./gastoDeIaService');
 
 const MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-5';
@@ -143,6 +144,7 @@ async function planejarIlustracoes(cenas, { titulo = 'video' } = {}) {
   const inputTokens = data.usage?.input_tokens || 0;
   const outputTokens = data.usage?.output_tokens || 0;
 
+  gastoDeIa.registrar('anthropic', 'narrado_roteiro', claudeCostUsd(inputTokens, outputTokens));
   return {
     cenas: casarPorIndice(cenas, toolUse.input.cenas),
     musicMood: toolUse.input.musicMood || null,

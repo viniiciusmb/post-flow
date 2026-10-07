@@ -33,6 +33,7 @@ const livesSettings = require('../../src/services/lives/livesSettings');
 const twitchApi = require('../../src/services/lives/twitchApi');
 const kickApi = require('../../src/services/lives/kickApi');
 const openaiLives = require('../../src/services/lives/openaiLives');
+const transcricaoService = require('../../src/services/transcricaoService');
 const liveSegmentsService = require('../../src/services/lives/liveSegmentsService');
 const liveTranscriptionService = require('../../src/services/lives/liveTranscriptionService');
 const liveAnalysisService = require('../../src/services/lives/liveAnalysisService');
@@ -173,7 +174,7 @@ test('bloco quase todo silencioso nao e mandado pra OpenAI e nao custa nada', as
   let chamouOpenai = false;
   const desfazer = [
     trocar(liveTranscriptionService, 'analisarAudio', async () => ({ silencioSegundos: 28, loudness: -60, pico: -30 })),
-    trocar(openaiLives, 'transcreverBloco', async () => { chamouOpenai = true; return { texto: 'x', custoUsd: 1 }; }),
+    trocar(transcricaoService, 'transcreverBlocoDeLive', async () => { chamouOpenai = true; return { texto: 'x', custoUsd: 1 }; }),
   ];
   try {
     while (await liveTranscriptionService.processarProximo()) { /* esvazia a fila */ }
@@ -201,7 +202,7 @@ test('bloco com fala e transcrito acelerado em 1,25x, sem o texto anterior como 
     trocar(liveTranscriptionService, 'analisarAudio', async () => ({ silencioSegundos: 2, loudness: -18, pico: -1 })),
     trocar(liveTranscriptionService, 'acelerarAudio', async (_orig, destino) => destino),
     trocar(liveTranscriptionService, 'amostrar', () => false),
-    trocar(openaiLives, 'transcreverBloco', async (f, { contexto, segundos }) => {
+    trocar(transcricaoService, 'transcreverBlocoDeLive', async (f, { contexto, segundos }) => {
       contextoRecebido = contexto;
       arquivoEnviado = f;
       segundosEnviados = segundos;
@@ -236,7 +237,7 @@ test('amostra de conferencia: o mesmo bloco em velocidade normal, a concordancia
     trocar(liveTranscriptionService, 'analisarAudio', async () => ({ silencioSegundos: 1, loudness: -18, pico: -1 })),
     trocar(liveTranscriptionService, 'acelerarAudio', async (_orig, destino) => destino),
     trocar(liveTranscriptionService, 'amostrar', () => true),
-    trocar(openaiLives, 'transcreverBloco', async (f, { segundos }) => {
+    trocar(transcricaoService, 'transcreverBlocoDeLive', async (f, { segundos }) => {
       enviados.push([f, segundos]);
       // acelerado perdeu 1 palavra de 4
       return { texto: f.endsWith('.rapido.ogg') ? 'que jogada absurda' : 'que jogada absurda mano', custoUsd: 0.0007 };

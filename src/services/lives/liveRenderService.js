@@ -1,7 +1,7 @@
 // Transforma um corte escolhido (inicio/fim na gravacao) no video vertical
 // pronto, REAPROVEITANDO o pipeline do YouTube inteiro:
-//   - legenda palavra por palavra: openaiTranscriptionService (whisper-1, o
-//     unico modelo da OpenAI com tempo por palavra);
+//   - legenda palavra por palavra: transcricaoService (Whisper com tempo por
+//     palavra - DeepInfra, com Groq e OpenAI de reserva);
 //   - reenquadramento 9:16, legenda queimada, titulo: videoEditingService.renderClip;
 //   - estilo: o dos cortes de live do usuario (livesUserSettings) - proprio,
 //     ou o mesmo dos cortes de video, se ele escolher assim.
@@ -24,7 +24,7 @@ const livesUserSettings = require('./livesUserSettings');
 const liveFormatoService = require('./liveFormatoService');
 const liveTextoService = require('./liveTextoService');
 const videoEditingService = require('../videoEditingService');
-const openaiTranscriptionService = require('../openaiTranscriptionService');
+const transcricaoService = require('../transcricaoService');
 const openaiLives = require('./openaiLives');
 const { ajustarIntervalo } = require('./liveAnalysisService');
 const tiposDeMomento = require('./tiposDeMomento');
@@ -353,7 +353,7 @@ async function renderizar(clip) {
 
     // So o trecho pedido mais a folga do ajuste fino vai pra legenda - nao os
     // pedacos de 10s inteiros que o arquivo de trabalho carrega (ate 20s a mais
-    // por corte, pagos no whisper-1). Os tempos das palavras voltam pro eixo
+    // por corte, pagos na transcricao). Os tempos das palavras voltam pro eixo
     // do arquivo de trabalho somando o inicio do recorte.
     const audioDe = Math.max(0, inicioPedido - origem - antes);
     const audioAte = Math.min(duracaoBruto, fimPedido - origem + MARGEM_DEPOIS_S);
@@ -361,7 +361,7 @@ async function renderizar(clip) {
       '-ss', String(audioDe), '-to', String(audioAte), '-i', bruto,
       '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', audio,
     ]);
-    const transcricaoDoRecorte = await openaiTranscriptionService.transcribeAudio(audio);
+    const transcricaoDoRecorte = await transcricaoService.transcribeAudio(audio, { uso: 'lives_legenda' });
     const transcricao = {
       ...transcricaoDoRecorte,
       words: transcricaoDoRecorte.words.map((w) => ({ ...w, start: w.start + audioDe, end: w.end + audioDe })),

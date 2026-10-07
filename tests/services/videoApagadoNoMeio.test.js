@@ -24,7 +24,7 @@ const config = require('../../src/config');
 const processVideoJob = require('../../src/worker/videoJobs/processVideoJob');
 const ytDlpService = require('../../src/services/ytDlpService');
 const videoEditingService = require('../../src/services/videoEditingService');
-const openaiTranscriptionService = require('../../src/services/openaiTranscriptionService');
+const openaiTranscriptionService = require('../../src/services/transcricaoService');
 const claudeClipSelectionService = require('../../src/services/claudeClipSelectionService');
 const { createClient, createYoutubeChannel, giveCredits } = require('../helpers/db');
 

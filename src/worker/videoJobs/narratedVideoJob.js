@@ -26,7 +26,7 @@ const ttsService = require('../../services/ttsService');
 const imageSearchService = require('../../services/imageSearchService');
 const imageGenerationService = require('../../services/imageGenerationService');
 const renderService = require('../../services/narratedVideoRenderService');
-const openaiTranscriptionService = require('../../services/openaiTranscriptionService');
+const transcricaoService = require('../../services/transcricaoService');
 const custoService = require('../../services/custoService');
 
 // Faixas de progresso por etapa. Sao aproximadas de proposito - o que a barra
@@ -199,7 +199,7 @@ async function run(narratedVideoId) {
 
     let legendaPath = null;
     if (video.burn_captions) {
-      const transcricao = await openaiTranscriptionService.transcribeAudio(audioPath);
+      const transcricao = await transcricaoService.transcribeAudio(audioPath, { uso: 'narrado_legenda' });
       await custoService.registrarNarrado(video, { whisperUsd: transcricao.costUsd });
       legendaPath = renderService.montarLegenda(
         transcricao.words,

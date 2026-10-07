@@ -33,7 +33,7 @@ const clipsRepository = require('../../src/repositories/clipsRepository');
 const sharedVideoFiles = require('../../src/lib/sharedVideoFiles');
 const ytDlpService = require('../../src/services/ytDlpService');
 const videoEditingService = require('../../src/services/videoEditingService');
-const openaiTranscriptionService = require('../../src/services/openaiTranscriptionService');
+const openaiTranscriptionService = require('../../src/services/transcricaoService');
 const claudeClipSelectionService = require('../../src/services/claudeClipSelectionService');
 const { createClient, createYoutubeChannel, giveCredits, readCredits } = require('../helpers/db');
 

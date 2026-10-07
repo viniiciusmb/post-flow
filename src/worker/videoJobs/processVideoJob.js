@@ -32,7 +32,7 @@ const sharedVideoFiles = require('../../lib/sharedVideoFiles');
 const idiomaDoAudio = require('../../lib/idiomaDoAudio');
 const ytDlpService = require('../../services/ytDlpService');
 const videoEditingService = require('../../services/videoEditingService');
-const openaiTranscriptionService = require('../../services/openaiTranscriptionService');
+const transcricaoService = require('../../services/transcricaoService');
 const claudeClipSelectionService = require('../../services/claudeClipSelectionService');
 
 // "Estilo do corte" escolhido pelo cliente vira duracao min/max pro Claude
@@ -581,8 +581,9 @@ async function run(sourceVideoId) {
         // ser musica ou vinheta, e uma deteccao errada ali contamina a
         // transcricao inteira - e, com ela, o idioma do titulo e da legenda.
         // 'original' nao vira dica: nao ha nada declarado pra afirmar.
-        transcript = await openaiTranscriptionService.transcribeAudio(audioPath, {
+        transcript = await transcricaoService.transcribeAudio(audioPath, {
           checkCancelled,
+          uso: 'transcricao',
           language: idiomaDoArquivo === idiomaDoAudio.ORIGINAL ? undefined : idiomaDoArquivo,
         });
         await sourceVideosRepository.saveTranscript(sourceVideo.id, {

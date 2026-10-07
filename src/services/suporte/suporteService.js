@@ -18,6 +18,7 @@ const { Anthropic } = require('@anthropic-ai/sdk');
 const config = require('../../config');
 const logger = require('../../lib/logger');
 const supportRepository = require('../../repositories/supportRepository');
+const gastoDeIa = require('../gastoDeIaService');
 const { DEFINICOES, executar } = require('./ferramentasDoSuporte');
 const { MANUAL, textoDosPlanos } = require('./conhecimentoDoSistema');
 const { escolherModelo, dadosDoNivel, nivelDoModelo } = require('./escolhaDoModelo');
@@ -248,6 +249,7 @@ async function processarMensagem({ clientUserId, conversationId = null, texto, a
         costUsd: custoUsd(r.usage, dadosDoNivel(nivel).preco),
         model: dadosDoNivel(nivel).modelo,
       });
+      gastoDeIa.registrar('anthropic', 'flora', custoUsd(r.usage, dadosDoNivel(nivel).preco));
       messages.push({ role: 'assistant', content });
 
       if (!usouFerramenta) {

@@ -4,6 +4,7 @@
 
 const config = require('../config');
 const { claudeCostUsd } = require('../lib/apiCost');
+const gastoDeIa = require('./gastoDeIaService');
 
 const MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-5';
@@ -153,6 +154,7 @@ ${instrucaoDeIdioma(language)}`;
   const inputTokens = data.usage?.input_tokens || 0;
   const outputTokens = data.usage?.output_tokens || 0;
 
+  gastoDeIa.registrar('anthropic', 'cortes', claudeCostUsd(inputTokens, outputTokens));
   return {
     clips: toolUse.input.clips,
     inputTokens,
@@ -245,6 +247,7 @@ ${instrucaoDeIdioma(language)}`;
 
   const inputTokens = data.usage?.input_tokens || 0;
   const outputTokens = data.usage?.output_tokens || 0;
+  gastoDeIa.registrar('anthropic', 'cortes', claudeCostUsd(inputTokens, outputTokens));
   return {
     parts: toolUse.input.parts,
     inputTokens,

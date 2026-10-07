@@ -10,6 +10,7 @@ const { spawn } = require('child_process');
 const config = require('../config');
 const { whisperCostUsd } = require('../lib/apiCost');
 const { PausedError } = require('../lib/errors');
+const { codigoDeIdioma } = require('../lib/codigoDeIdioma');
 
 const TRANSCRIPTION_URL = 'https://api.openai.com/v1/audio/transcriptions';
 
@@ -92,7 +93,9 @@ async function transcreverEmPartes(audioFilePath, { duracao, quantidade }, { lan
       // A primeira parte detecta o idioma; as seguintes recebem o mesmo, pra
       // um video nao virar metade portugues e metade outra coisa.
       const t = await transcreverUmArquivo(parte, { language: resultado.language, checkCancelled });
-      if (!resultado.language) resultado.language = t.language;
+      // Em codigo ISO: a OpenAI devolve "portuguese" mas so ACEITA "pt" no
+      // parametro language - a segunda parte falharia com o nome por extenso.
+      if (!resultado.language) resultado.language = codigoDeIdioma(t.language) || t.language;
       resultado.text.push(t.text);
       for (const w of t.words) resultado.words.push({ word: w.word, start: w.start + inicio, end: w.end + inicio });
       for (const sg of t.segments) resultado.segments.push({ start: sg.start + inicio, end: sg.end + inicio, text: sg.text });

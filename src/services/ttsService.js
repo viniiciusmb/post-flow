@@ -18,6 +18,7 @@
 const fs = require('fs');
 const config = require('../config');
 const { ttsCostUsd } = require('../lib/apiCost');
+const gastoDeIa = require('./gastoDeIaService');
 
 const OPENAI_URL = 'https://api.openai.com/v1/audio/speech';
 const OPENAI_MODEL = 'gpt-4o-mini-tts';
@@ -120,8 +121,12 @@ async function gerarNarracao(texto, destino, { provider = 'openai', voiceId = 'o
   return { path: destino, chars: conteudo.length, bytes: buffer.length };
 }
 
+// Chamado UMA vez por video, com o total narrado - e aqui que o gasto da voz
+// e anotado na conta do provedor (OpenAI ou ElevenLabs).
 function custoDaNarracao(provider, { chars, audioSeconds }) {
-  return ttsCostUsd(provider, { chars, audioSeconds });
+  const usd = ttsCostUsd(provider, { chars, audioSeconds });
+  gastoDeIa.registrar(provider === 'elevenlabs' ? 'elevenlabs' : 'openai', 'narrado_voz', usd, { audioSegundos: audioSeconds });
+  return usd;
 }
 
 module.exports = {

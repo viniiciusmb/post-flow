@@ -11,6 +11,7 @@ import { useDateRange } from "@/hooks/useDateRange"
 import { api } from "@/lib/api"
 import type { AdminDashboardResponse } from "@/types/api"
 import { TiktokLimitAlert } from "@/components/dashboard/TiktokLimitAlert"
+import { SaldoBaixoAlerta } from "@/components/dashboard/SaldoDasIas"
 
 function brl(cents: number) {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -51,6 +52,7 @@ export function AdminDashboardPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title={t("menu.inicio")}>
+      <SaldoBaixoAlerta />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-muted-foreground">{t("inicio.periodo")}</h2>
         <DateRangeFilter value={range} onChange={setRange} />

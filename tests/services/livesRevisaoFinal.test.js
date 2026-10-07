@@ -15,7 +15,7 @@ const liveRenderService = require('../../src/services/lives/liveRenderService');
 const liveFormatoService = require('../../src/services/lives/liveFormatoService');
 const openaiLives = require('../../src/services/lives/openaiLives');
 const videoEditingService = require('../../src/services/videoEditingService');
-const openaiTranscriptionService = require('../../src/services/openaiTranscriptionService');
+const openaiTranscriptionService = require('../../src/services/transcricaoService');
 const tiposDeMomento = require('../../src/services/lives/tiposDeMomento');
 const { createClient } = require('../helpers/db');
 

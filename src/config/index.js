@@ -42,6 +42,16 @@ const config = {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
   },
 
+  // Transcricao (07/10/2026): DeepInfra e a principal (whisper-large-v3-turbo,
+  // US$ 0,0002/min), Groq e a reserva gratuita, e a OpenAI fica de ultimo
+  // recurso. Sem a chave, o provedor simplesmente sai da fila - nada quebra.
+  deepinfra: {
+    apiKey: process.env.DEEPINFRA_API_KEY || '',
+  },
+  groq: {
+    apiKey: process.env.GROQ_API_KEY || '',
+  },
+
   // Cortes de lives (so admin, fase de validacao). O app da Twitch e usado
   // SO para saber se o canal esta ao vivo (token de app, client credentials);
   // a gravacao em si e feita pelo streamlink, sem login. Sem as duas

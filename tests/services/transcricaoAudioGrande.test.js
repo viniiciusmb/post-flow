@@ -98,7 +98,9 @@ test('a segunda parte recebe o idioma detectado na primeira', async () => {
   await servico.transcribeAudio(audioDeTamanho(40 * 1024 * 1024));
   assert.ok(chamadas.length >= 2, 'foi dividido');
   assert.equal(chamadas[0].idioma, null);
-  for (const c of chamadas.slice(1)) assert.equal(c.idioma, 'portuguese');
+  // Em codigo ISO: a OpenAI devolve "portuguese" mas so ACEITA "pt" no
+  // parametro language (com o nome por extenso a segunda parte falharia).
+  for (const c of chamadas.slice(1)) assert.equal(c.idioma, 'pt');
 });
 
 test('as partes temporarias sao apagadas no fim', async () => {

@@ -12,6 +12,7 @@ const subscriptionPlansRepository = require('../../../repositories/subscriptionP
 const clientSubscriptionsRepository = require('../../../repositories/clientSubscriptionsRepository');
 const settingsRepository = require('../../../repositories/settingsRepository');
 const { resolveRange } = require('../../../lib/dateRanges');
+const saldoDasIasService = require('../../../services/saldoDasIasService');
 
 // Semanas por mes: 52/12. Usar 4 subestimaria a cota mensal em 8% e a margem
 // apareceria melhor do que e.
@@ -151,4 +152,20 @@ async function setInfra(req, res) {
   res.json({ ok: true, infraMensalUsd: valor });
 }
 
-module.exports = { overview, setCotacao, setInfra };
+// Saldo de cada conta de IA (real da DeepInfra, estimado da OpenAI/Anthropic).
+// ?atualizar=1 ignora o cache de 5 min - e o botao "Atualizar" da tela.
+async function saldosDasIas(req, res) {
+  res.json(await saldoDasIasService.listar({ forcar: req.query.atualizar === '1' }));
+}
+
+async function informarSaldoDeIa(req, res) {
+  try {
+    await saldoDasIasService.informarSaldo(req.params.provedor, req.body.saldoUsd);
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+  res.json(await saldoDasIasService.listar());
+}
+
+module.exports = { overview, setCotacao, setInfra, saldosDasIas, informarSaldoDeIa };

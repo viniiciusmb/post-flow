@@ -10,6 +10,7 @@ import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api } from "@/lib/api"
 import type { AdminCostsResponse, DateRangeKey } from "@/types/api"
+import { SaldoDasIasCard } from "@/components/dashboard/SaldoDasIas"
 
 // Vírgula decimal, como o resto da tela: "US$ 0.0081" ao lado de "R$ 97,48"
 // faz o mesmo número parecer de dois sistemas diferentes.
@@ -118,6 +119,9 @@ export function AdminCostsPage() {
         de vídeos: são lançados quando o custo acontece.
       </p>
 
+      {/* Fica fora do filtro de período: saldo é "agora", não um período. */}
+      <SaldoDasIasCard />
+
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <span className="text-xs font-semibold uppercase tracking-[0.07em] text-muted-foreground">Período</span>
@@ -147,7 +151,7 @@ export function AdminCostsPage() {
                 Custo por minuto de vídeo
               </CardTitle>
               <CardDescription>
-                Whisper + IA + banda de proxy pago. Túnel e reaproveitamento não entram: essa banda já está
+                Transcrição + IA + banda de proxy pago. Túnel e reaproveitamento não entram: essa banda já está
                 paga na conta de internet.
               </CardDescription>
             </CardHeader>
@@ -192,7 +196,7 @@ export function AdminCostsPage() {
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <Metric label="Transcrição (Whisper)" value={usd(r.whisperUsd)} sub={`${r.videos} vídeos processados`} />
+                <Metric label="Transcrição" value={usd(r.whisperUsd)} sub={`${r.videos} vídeos processados`} />
               </CardContent>
             </Card>
             <Card>
@@ -296,7 +300,7 @@ export function AdminCostsPage() {
                       <TableHead>Cliente</TableHead>
                       <TableHead className="text-right">Vídeos</TableHead>
                       <TableHead className="text-right">Minutos</TableHead>
-                      <TableHead className="text-right">Whisper</TableHead>
+                      <TableHead className="text-right">Transcrição</TableHead>
                       <TableHead className="text-right">IA</TableHead>
                       <TableHead className="text-right">Banda</TableHead>
                       <TableHead className="text-right">Total</TableHead>

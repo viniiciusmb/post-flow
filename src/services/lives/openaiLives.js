@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('../../config');
+const gastoDeIa = require('../gastoDeIaService');
 const {
   miniTranscribeCostFromUsage,
   textoCostFromUsage,
@@ -152,6 +153,7 @@ async function chamarJson({ nome, sistema, usuario, schema, modelo, raciocinio, 
     // O tier que a OpenAI DE FATO usou (ela devolve na resposta), nao o pedido.
     const tier = dados.service_tier || (flex ? 'flex' : 'default');
     const custo = textoCostFromUsage({ ...(PRECOS[modelo] || PRECOS['gpt-5-mini']), entrada, emCache, saida, flex: tier === 'flex' });
+    gastoDeIa.registrar('openai', 'lives', custo);
     return { dados: json, inputTokens: entrada, outputTokens: saida, cachedTokens: emCache, tier, custoUsd: custo };
   };
   // No flex, um 429 vai direto pro modo normal (sem esperar 3s pra repetir).

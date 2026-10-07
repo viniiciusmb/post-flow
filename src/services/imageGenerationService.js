@@ -14,6 +14,7 @@
 const fs = require('fs');
 const config = require('../config');
 const { imagemIaCostUsd } = require('../lib/apiCost');
+const gastoDeIa = require('./gastoDeIaService');
 
 const URL_GERACAO = 'https://api.openai.com/v1/images/generations';
 const MODELO = 'gpt-image-1-mini';
@@ -73,6 +74,7 @@ async function gerar(prompt, destino, { aspect = '16:9' } = {}) {
   if (!b64) throw new Error('A OpenAI não devolveu nenhuma imagem.');
 
   fs.writeFileSync(destino, Buffer.from(b64, 'base64'));
+  gastoDeIa.registrar('openai', 'narrado_imagem', imagemIaCostUsd(1));
 
   return {
     path: destino,
