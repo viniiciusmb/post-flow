@@ -108,7 +108,7 @@ async function monitorar() {
   for (const c of seguidos) {
     if (vigiados.has(Number(c.id)) || !status.has(Number(c.id))) continue;
     const st = status.get(Number(c.id));
-    await livesRepository.updateChannelStatus(c.id, { isLive: Boolean(st), titulo: st?.titulo, jogo: st?.jogo, espectadores: st?.espectadores });
+    await livesRepository.updateChannelStatus(c.id, { isLive: Boolean(st), titulo: st?.titulo, jogo: st?.jogo, espectadores: st?.espectadores, iniciouEm: st?.iniciouEm });
   }
   if (!canais.length) return;
 
@@ -139,6 +139,7 @@ async function cuidarDoCanal(canal, stream, cfg, discoPercent) {
     titulo: stream?.titulo,
     jogo: stream?.jogo,
     espectadores: stream?.espectadores,
+    iniciouEm: stream?.iniciouEm,
   });
   const sessao = await livesRepository.recordingSessionForChannel(canal.id);
   const horasHoje = (await livesRepository.recordedSecondsToday(canal.id)) / 3600;

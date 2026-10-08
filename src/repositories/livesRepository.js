@@ -99,14 +99,18 @@ async function activeFollowerIds(channelId) {
   return rows.map((r) => Number(r.user_id));
 }
 
-async function updateChannelStatus(channelId, { isLive, titulo, jogo, espectadores }) {
+async function updateChannelStatus(channelId, { isLive, titulo, jogo, espectadores, iniciouEm = null }) {
+  // Inicio da live na plataforma: guardado enquanto ela durar (consulta que
+  // nao trouxe o horario nao apaga o que ja se sabia) e apagado quando acaba.
+  const inicio = iniciouEm && !Number.isNaN(new Date(iniciouEm).getTime()) ? new Date(iniciouEm) : null;
   await pool.query(
     `UPDATE live_channels
         SET is_live = $2, stream_title = COALESCE($3, stream_title), game_name = COALESCE($4, game_name),
             viewer_count = $5, last_checked_at = now(),
-            last_live_at = CASE WHEN $2 THEN now() ELSE last_live_at END
+            last_live_at = CASE WHEN $2 THEN now() ELSE last_live_at END,
+            live_started_at = CASE WHEN $2 THEN COALESCE($6, live_started_at) ELSE NULL END
       WHERE id = $1`,
-    [channelId, isLive, titulo || null, jogo || null, isLive ? espectadores ?? null : null]
+    [channelId, isLive, titulo || null, jogo || null, isLive ? espectadores ?? null : null, inicio]
   );
   // "Clipar esta live" vale so pra live em que foi pedido: acabou, apaga. Sem
   // isto o canal voltaria a gravar sozinho na live seguinte, que e justamente

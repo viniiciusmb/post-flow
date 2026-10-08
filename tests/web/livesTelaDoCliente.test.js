@@ -140,3 +140,26 @@ test('adicionar ja escolhe o automatico: desligado entra sem gravar', async () =
     Object.assign(kickApi, original);
   }
 });
+
+// "Clipar este momento" mostra, no relogio da live, qual trecho vira corte
+// (pedido de 08/10/2026). Pra isso o sistema guarda quando a live comecou na
+// plataforma - a Twitch e a Kick informam, e antes isso era jogado fora.
+test('inicio da live na plataforma: guardado enquanto ela dura, apagado quando acaba, e a tela recebe a janela do clipar agora', async () => {
+  const { u, agent } = await logado();
+  const id = await canalSeguido(u.id, { aoVivo: true });
+  const inicio = new Date(Date.now() - 2 * 3600 * 1000);
+  await livesRepository.updateChannelStatus(id, { isLive: true, iniciouEm: inicio.toISOString() });
+  // Uma consulta que nao trouxe o horario nao apaga o que ja se sabia.
+  await livesRepository.updateChannelStatus(id, { isLive: true });
+  await pool.query("UPDATE live_channels SET last_checked_at = now() + interval '1 hour' WHERE id = $1", [id]);
+  let r = await agent.get('/api/client/lives');
+  assert.equal(doCanal(r, id).aoVivoDesde, inicio.toISOString());
+  assert.equal(r.body.janelaCliparAgoraS, 150, 'o mesmo trecho que o servidor corta (JANELA_CLIPAR_AGORA_S)');
+
+  await livesRepository.updateChannelStatus(id, { isLive: false });
+  await pool.query("UPDATE live_channels SET last_checked_at = now() + interval '1 hour' WHERE id = $1", [id]);
+  r = await agent.get('/api/client/lives');
+  assert.equal(doCanal(r, id).aoVivoDesde, null, 'a proxima live nao pode herdar o relogio desta');
+  const { rows } = await pool.query('SELECT live_started_at FROM live_channels WHERE id = $1', [id]);
+  assert.equal(rows[0].live_started_at, null);
+});

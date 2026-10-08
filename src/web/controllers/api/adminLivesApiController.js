@@ -36,6 +36,8 @@ function canalParaApi(c) {
     nome: c.display_name || c.login,
     imagem: c.profile_image_url,
     aoVivo: c.is_live,
+    // Quando a live comecou na plataforma (relogio da live, nao da gravacao).
+    aoVivoDesde: c.is_live && c.live_started_at ? new Date(c.live_started_at).toISOString() : null,
     pausado: Boolean(c.paused_at),
     pausadoDesde: c.paused_at || null,
     tituloDaLive: c.stream_title,
@@ -118,7 +120,7 @@ async function atualizarStatus(canais, { forcar = false } = {}) {
     for (const c of velhos) {
       if (!status.has(Number(c.id))) continue;
       const st = status.get(Number(c.id));
-      await livesRepository.updateChannelStatus(c.id, { isLive: Boolean(st), titulo: st?.titulo, jogo: st?.jogo, espectadores: st?.espectadores });
+      await livesRepository.updateChannelStatus(c.id, { isLive: Boolean(st), titulo: st?.titulo, jogo: st?.jogo, espectadores: st?.espectadores, iniciouEm: st?.iniciouEm });
     }
   } catch {
     // Consulta falhou por inteiro: idem.

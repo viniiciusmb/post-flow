@@ -62,6 +62,9 @@ async function estado(req, res) {
       minutosDeLivePorCredito: liveCreditosService.SEGUNDOS_POR_CREDITO / 60,
       cliparAgora: liveCreditosService.CREDITOS_CLIPAR_AGORA,
     },
+    // Quantos segundos pra tras o "Clipar este momento" pega - a tela mostra
+    // essa janela no relogio da live antes do clique.
+    janelaCliparAgoraS: admin.JANELA_CLIPAR_AGORA_S,
     opcoes: admin.opcoesParaApi(opcoes),
     niveis: livesUserSettings.NIVEIS,
     categorias: tiposDeMomento.CATEGORIAS.map(({ id, nome, descricao }) => ({ id, nome, descricao })),

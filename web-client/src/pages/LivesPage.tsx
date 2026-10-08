@@ -11,6 +11,7 @@ import {
   IconEye,
   IconLoader2,
   IconPlayerPlayFilled,
+  IconPlayerStopFilled,
   IconPlus,
   IconScissors,
   IconStarFilled,
@@ -57,6 +58,8 @@ type Canal = {
   nome: string
   imagem: string | null
   aoVivo: boolean
+  // Quando a live começou na plataforma (relógio da live, não da gravação).
+  aoVivoDesde: string | null
   tituloDaLive: string | null
   jogo: string | null
   espectadores: number | null
@@ -79,6 +82,8 @@ type Estado = {
   niveis: Record<string, Nivel>
   categorias: Categoria[]
   creditos: { disponiveis: number; isento: boolean; minutosDeLivePorCredito: number; cliparAgora: number }
+  // Quantos segundos pra trás o "Clipar este momento" pega.
+  janelaCliparAgoraS: number
 }
 
 type Corte = {
@@ -132,6 +137,27 @@ function duracaoCurta(segundos: number) {
 function relogio(segundos: number) {
   const s = Math.max(0, Math.round(segundos))
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`
+}
+
+// Relógio de live: 2:13:05 (ou 13:05 na primeira hora), como o player mostra.
+function relogioDeLive(segundos: number) {
+  const s = Math.max(0, Math.round(segundos))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const resto = String(s % 60).padStart(2, "0")
+  return h ? `${h}:${String(m).padStart(2, "0")}:${resto}` : `${m}:${resto}`
+}
+
+// "Agora" que anda sozinho a cada segundo - só enquanto ligado, pra não
+// redesenhar a página inteira à toa.
+function useAgora(ligado: boolean) {
+  const [agora, setAgora] = useState(() => Date.now())
+  useEffect(() => {
+    if (!ligado) return
+    const t = setInterval(() => setAgora(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [ligado])
+  return agora
 }
 
 const compacto = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 })
@@ -311,6 +337,72 @@ function SaldoDeCreditos({ creditos }: { creditos: Estado["creditos"] }) {
   )
 }
 
+// ---------------------------------------------------------------- clipar este momento
+
+// Secundário de propósito (pequeno e preto): com a live já sendo clipada, o
+// sistema acha os momentos sozinho; o botão é pra quando a pessoa viu algo e
+// quer garantir. O aviso diz, no relógio da live, qual trecho vira corte -
+// sem ele não dá pra saber se o momento que acabou de passar ainda cabe.
+function ClipeDesteMomento({
+  canal: c,
+  janelaS,
+  agora,
+  recebidoEm,
+  ocupado,
+  onClipar,
+}: {
+  canal: Canal
+  janelaS: number
+  agora: number
+  recebidoEm: number
+  ocupado: boolean
+  onClipar: () => void
+}) {
+  if (!c.gravacao) return null
+  // A gravação anda enquanto a tela está aberta. O servidor corta pelo que já
+  // foi GRAVADO (pedaços de 10s), então o fim real fica alguns segundos atrás
+  // do "agora" - por isso o "~".
+  const gravado = c.gravacao.segundosGravados + Math.max(0, (agora - recebidoEm) / 1000)
+  const inicioDaGravacao = new Date(c.gravacao.desde).getTime()
+  const inicioDaLive = c.aoVivoDesde ? new Date(c.aoVivoDesde).getTime() : null
+  // Desde quando a gravação começou, contado no relógio da live.
+  const deslocamento = inicioDaLive && inicioDaLive <= inicioDaGravacao ? (inicioDaGravacao - inicioDaLive) / 1000 : null
+  const fim = (deslocamento ?? 0) + gravado
+  const inicio = Math.max(deslocamento ?? 0, fim - janelaS)
+  const relogioRotulo = deslocamento !== null ? "da live" : "da gravação"
+  const naLive = inicioDaLive ? (agora - inicioDaLive) / 1000 : null
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3 text-left">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
+        <span className="inline-flex items-center gap-1.5 font-medium tabular-nums">
+          <IconClock className="size-3.5 text-muted-foreground" />
+          {naLive !== null ? `Live em ${relogioDeLive(naLive)}` : `Gravando há ${relogioDeLive(gravado)}`}
+        </span>
+        {naLive !== null && (
+          <span className="tabular-nums text-muted-foreground">gravando há {relogioDeLive(gravado)}</span>
+        )}
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Clipar este momento analisa os últimos {relogio(janelaS)} — de{" "}
+        <strong className="font-semibold tabular-nums text-foreground">~{relogioDeLive(inicio)}</strong> a{" "}
+        <strong className="font-semibold tabular-nums text-foreground">~{relogioDeLive(fim)}</strong> {relogioRotulo} — e a IA
+        recorta o melhor trecho dessa janela.
+      </p>
+      <Button
+        size="sm"
+        className="w-full bg-neutral-900 text-white hover:bg-neutral-800 dark:border dark:border-neutral-700 dark:bg-black dark:text-white dark:hover:bg-neutral-900"
+        disabled={ocupado}
+        onClick={onClipar}
+        title={`Cria um corte com o melhor trecho dos últimos ${relogio(janelaS)}`}
+      >
+        {ocupado ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconScissors className="size-3.5" />}
+        <span className="truncate">{ocupado ? "Enviando…" : "Clipar este momento"}</span>
+      </Button>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- cartão do canal
 
 // Tudo do canal mora no próprio cartão (pedido de 07/10/2026): clipar sempre,
@@ -320,9 +412,10 @@ function CartaoCanal({
   servicoAtivo,
   ocupado,
   salvando,
+  janelaS,
   onClipar,
   onAutomatico,
-  onPararEstaLive,
+  onParar,
   onRemover,
   onVerCortes,
 }: {
@@ -330,9 +423,10 @@ function CartaoCanal({
   servicoAtivo: boolean
   ocupado: boolean
   salvando: boolean
+  janelaS: number
   onClipar: () => void
   onAutomatico: (ligado: boolean) => void
-  onPararEstaLive: () => void
+  onParar: () => void
   onRemover: () => void
   onVerCortes: () => void
 }) {
@@ -341,6 +435,16 @@ function CartaoCanal({
   const marca = MARCA[c.plataforma]
   const clipandoAgora = c.aoVivo && c.recebendoCortes && Boolean(c.gravacao)
   const preparando = c.aoVivo && c.recebendoCortes && !c.gravacao && !c.semCredito
+  // Carimbo de quando a resposta chegou: a gravação anda enquanto a tela está
+  // aberta, e o aviso da janela tem que andar junto.
+  const [recebidoEm, setRecebidoEm] = useState(() => Date.now())
+  const gravadoNoServidor = c.gravacao?.segundosGravados
+  useEffect(() => {
+    // A página se atualiza sozinha: cada número novo do servidor vira o novo
+    // ponto de partida (senão o tempo aberto seria somado duas vezes).
+    setRecebidoEm(Date.now())
+  }, [gravadoNoServidor])
+  const agora = useAgora(clipandoAgora)
 
   let rotuloClipar = "Clipar"
   let ajuda = "Disponível quando o canal estiver ao vivo"
@@ -350,9 +454,6 @@ function CartaoCanal({
   } else if (c.aoVivo && !c.recebendoCortes) {
     rotuloClipar = "Clipar esta live"
     ajuda = "Grava e corta os melhores momentos desta live, até ela acabar"
-  } else if (clipandoAgora) {
-    rotuloClipar = "Clipar este momento"
-    ajuda = "Corta os últimos ~2,5 minutos da live agora"
   } else if (preparando) {
     rotuloClipar = "Começando…"
     ajuda = "A gravação começa em até 1 minuto"
@@ -435,29 +536,46 @@ function CartaoCanal({
         <Interruptor ligado={c.autoClipar} disabled={salvando} onChange={onAutomatico} rotulo={`Clipar ${c.nome} sempre que estiver ao vivo`} />
       </label>
 
-      {c.clipandoEstaLive && !c.autoClipar && c.aoVivo && (
-        <div className="mx-4 flex items-center justify-between gap-3 rounded-lg border border-dashed px-3 py-2 text-xs sm:mx-5">
-          <span className="min-w-0 text-left text-muted-foreground">Clipando só esta live — para sozinho quando ela acabar</span>
-          <Button size="sm" variant="ghost" className="h-7 shrink-0 px-2" disabled={salvando} onClick={onPararEstaLive}>
-            Parar
-          </Button>
-        </div>
-      )}
-
       <div className="mt-auto flex flex-col gap-2 p-4 pt-3 sm:p-5 sm:pt-3">
-        <Button
-          variant={c.aoVivo ? "default" : "outline"}
-          className={cn(
-            "w-full",
-            c.aoVivo && !preparando && !c.semCredito && "bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:text-white dark:hover:bg-red-700",
-          )}
-          disabled={!c.aoVivo || preparando || ocupado || c.semCredito}
-          onClick={onClipar}
-          title={ajuda}
-        >
-          {ocupado || preparando ? <IconLoader2 className="size-4 animate-spin" /> : <IconScissors className="size-4" />}
-          <span className="truncate">{ocupado ? "Enviando…" : rotuloClipar}</span>
-        </Button>
+        {clipandoAgora ? (
+          <>
+            {/* Clipando: a ação principal vira PARAR (pedido de 08/10/2026).
+                Com "Clipar sempre" ligado, parar desliga o automático - não
+                existe "pular só esta live" sem desligá-lo. */}
+            <Button
+              variant="outline"
+              className="w-full border-red-600 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/40"
+              disabled={salvando}
+              onClick={onParar}
+              title={c.autoClipar ? "Para de clipar agora e desliga o “Clipar sempre” deste canal" : "Para de clipar esta live agora"}
+            >
+              {salvando ? <IconLoader2 className="size-4 animate-spin" /> : <IconPlayerStopFilled className="size-4" />}
+              <span className="truncate">Parar de clipar</span>
+            </Button>
+            <ClipeDesteMomento
+              canal={c}
+              janelaS={janelaS}
+              agora={agora}
+              recebidoEm={recebidoEm}
+              ocupado={ocupado}
+              onClipar={onClipar}
+            />
+          </>
+        ) : (
+          <Button
+            variant={c.aoVivo ? "default" : "outline"}
+            className={cn(
+              "w-full",
+              c.aoVivo && !preparando && !c.semCredito && "bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:text-white dark:hover:bg-red-700",
+            )}
+            disabled={!c.aoVivo || preparando || ocupado || c.semCredito}
+            onClick={onClipar}
+            title={ajuda}
+          >
+            {ocupado || preparando ? <IconLoader2 className="size-4 animate-spin" /> : <IconScissors className="size-4" />}
+            <span className="truncate">{ocupado ? "Enviando…" : rotuloClipar}</span>
+          </Button>
+        )}
 
         {confirmandoRemover ? (
           <div className="flex flex-col gap-2 rounded-lg bg-destructive/5 p-2 text-left">
@@ -725,6 +843,15 @@ export function LivesPage() {
     setSalvandoCanal(null)
   }
 
+  // Parar desfaz o que estiver fazendo o canal ser clipado: o "clipar esta
+  // live" e, se estiver ligado, o "Clipar sempre".
+  async function pararDeClipar(c: Canal): Promise<Estado> {
+    let novo: Estado | null = null
+    if (c.clipandoEstaLive) novo = await api.delete<Estado>(`${API}/canais/${c.id}/clipar-esta-live`)
+    if (c.autoClipar) novo = await api.put<Estado>(`${API}/canais/${c.id}/automatico`, { ligado: false })
+    return novo ?? (await api.get<Estado>(API))
+  }
+
   async function clipar(c: Canal) {
     setClipando(c.id)
     setErro(null)
@@ -900,7 +1027,8 @@ export function LivesPage() {
                     salvando={salvandoCanal === c.id}
                     onClipar={() => void clipar(c)}
                     onAutomatico={(v) => void acaoNoCanal(c.id, () => api.put<Estado>(`${API}/canais/${c.id}/automatico`, { ligado: v }))}
-                    onPararEstaLive={() => void acaoNoCanal(c.id, () => api.delete<Estado>(`${API}/canais/${c.id}/clipar-esta-live`))}
+                    janelaS={estado.janelaCliparAgoraS ?? 150}
+                    onParar={() => void acaoNoCanal(c.id, () => pararDeClipar(c))}
                     onRemover={() => void acaoNoCanal(c.id, () => api.delete<Estado>(`${API}/canais/${c.id}`)).then(() => filtroCanal === c.id && setFiltroCanal(null))}
                     onVerCortes={() => verCortesDoCanal(c.id)}
                   />
