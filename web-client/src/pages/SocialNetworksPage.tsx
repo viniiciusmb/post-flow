@@ -4,6 +4,7 @@ import {
   IconBrandInstagram,
   IconBrandTiktok,
   IconCheck,
+  IconPlugConnectedX,
   IconPlus,
 } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
@@ -52,6 +53,10 @@ const REDES: Record<
   {
     nome: string
     Icone: ComponentType<{ className?: string }>
+    /** Cor da marca: borda e detalhes. */
+    cor: string
+    /** Fundo do ícone (o Instagram é um degradê). */
+    fundo: string
     resumo: string
     requisitos: { chave: string; valor: string; detalhe?: string }[]
     comoPreparar?: string[]
@@ -60,6 +65,8 @@ const REDES: Record<
   tiktok: {
     nome: "TikTok",
     Icone: IconBrandTiktok,
+    cor: "#FE2C55",
+    fundo: "linear-gradient(135deg, #111 0%, #111 55%, #25F4EE 140%)",
     resumo: "Publicação direta pelo app oficial do Post Flow, aprovado pelo TikTok. Cada canal do YouTube publica em uma conta.",
     requisitos: [
       { chave: "Conta", valor: "Qualquer conta", detalhe: "Pessoal ou empresa." },
@@ -71,6 +78,8 @@ const REDES: Record<
   instagram: {
     nome: "Instagram",
     Icone: IconBrandInstagram,
+    cor: "#DD2A7B",
+    fundo: "linear-gradient(45deg, #F58529 0%, #DD2A7B 45%, #8134AF 75%, #515BD4 100%)",
     resumo: "Os cortes saem como Reels no perfil conectado.",
     requisitos: [
       { chave: "Conta", valor: "Profissional", detalhe: "Criador de conteúdo ou Empresa. Conta pessoal não pode ser conectada." },
@@ -88,6 +97,8 @@ const REDES: Record<
   facebook: {
     nome: "Facebook",
     Icone: IconBrandFacebook,
+    cor: "#1877F2",
+    fundo: "#1877F2",
     resumo: "Os cortes são publicados numa Página do Facebook que você administra.",
     requisitos: [
       { chave: "Onde publica", valor: "Somente em Página", detalhe: "Perfil pessoal não pode ser conectado: o Facebook não permite publicar nele por aplicativo." },
@@ -124,6 +135,7 @@ function lerUrl() {
     tiktokErro,
     conectada: p.get("conectada") === "1",
     erro: p.get("erro"),
+    motivo: p.get("motivo"),
     escolher: p.get("escolher") === "1",
   }
 }
@@ -138,7 +150,11 @@ export function SocialNetworksPage() {
   const [aviso, setAviso] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(() => {
     if (inicial.tiktokErro) return { tipo: "erro", texto: `Não foi possível conectar o TikTok: ${inicial.tiktokErro}` }
     if (inicial.tiktokConectada) return { tipo: "ok", texto: "Conta do TikTok conectada." }
-    if (inicial.erro) return { tipo: "erro", texto: ERROS[inicial.erro] ?? ERROS.servico }
+    if (inicial.erro)
+      return {
+        tipo: "erro",
+        texto: `${ERROS[inicial.erro] ?? ERROS.servico}${inicial.motivo ? ` Mensagem recebida: "${inicial.motivo}".` : ""}`,
+      }
     if (inicial.conectada) return { tipo: "ok", texto: `${REDES[inicial.rede].nome} conectado.` }
     return null
   })
@@ -200,24 +216,22 @@ export function SocialNetworksPage() {
                 setAviso(null)
               }}
               className={cn(
-                "flex min-w-0 flex-col items-start gap-3 rounded-xl border p-3 text-left transition-colors sm:flex-row sm:items-center",
-                ativa
-                  ? "border-foreground bg-card shadow-[var(--shadow-raised)]"
-                  : "border-border bg-card/60 hover:bg-card",
+                "relative flex min-w-0 flex-col items-start gap-2.5 overflow-hidden rounded-2xl border-2 bg-card p-3 text-left transition-all sm:flex-row sm:items-center sm:gap-3",
+                ativa ? "shadow-[var(--shadow-raised)]" : "border-transparent shadow-[var(--shadow-flat)] hover:-translate-y-px",
               )}
+              style={ativa ? { borderColor: REDES[r].cor } : undefined}
             >
-              <span
-                className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-lg",
-                  ativa ? "bg-foreground text-background" : "bg-muted text-foreground",
-                )}
-              >
+              {ativa && (
+                <span aria-hidden className="absolute inset-0 opacity-[0.07]" style={{ background: REDES[r].fundo }} />
+              )}
+              <span className="relative flex size-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm" style={{ background: REDES[r].fundo }}>
                 <Icone className="size-5" />
               </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium">{nome}</span>
-                <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted-foreground">
-                  {n === null ? "…" : n === 0 ? "não conectado" : n === 1 ? "1 conta" : `${n} contas`}
+              <span className="relative min-w-0">
+                <span className="block truncate text-sm font-semibold">{nome}</span>
+                <span className="mt-0.5 flex items-center gap-1 truncate font-mono text-[10.5px] text-muted-foreground">
+                  {n !== null && n > 0 && <span className="size-1.5 shrink-0 rounded-full bg-status-posted" />}
+                  {n === null ? "…" : n === 1 ? "1 conta" : `${n} contas`}
                 </span>
               </span>
             </button>
@@ -270,14 +284,20 @@ export function SocialNetworksPage() {
 
 function Requisitos({ rede, info }: { rede: Rede; info: (typeof REDES)[Rede] }) {
   return (
-    <Card className="gap-0 py-0 xl:sticky xl:top-4">
-      <div className="border-b border-border px-5 py-4">
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Requisitos · {info.nome}</p>
-        <p className="mt-1.5 text-sm text-muted-foreground">{info.resumo}</p>
+    <Card className="gap-0 overflow-hidden py-0 xl:sticky xl:top-4">
+      <div className="relative border-b border-border px-5 py-4">
+        <span aria-hidden className="absolute inset-0 opacity-[0.09]" style={{ background: info.fundo }} />
+        <div className="relative flex items-center gap-2.5">
+          <span className="flex size-7 items-center justify-center rounded-lg text-white" style={{ background: info.fundo }}>
+            <info.Icone className="size-4" />
+          </span>
+          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em]">Requisitos · {info.nome}</p>
+        </div>
+        <p className="relative mt-2 text-sm text-muted-foreground">{info.resumo}</p>
       </div>
       <dl className="divide-y divide-border">
         {info.requisitos.map((r) => (
-          <div key={r.chave} className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 px-5 py-3">
+          <div key={r.chave} className="grid grid-cols-1 gap-1 px-5 py-3 sm:grid-cols-[6.5rem_minmax(0,1fr)] sm:gap-3">
             <dt className="pt-px font-mono text-[11px] text-muted-foreground">{r.chave}</dt>
             <dd className="min-w-0">
               <p className="text-sm font-medium">{r.valor}</p>
@@ -289,7 +309,7 @@ function Requisitos({ rede, info }: { rede: Rede; info: (typeof REDES)[Rede] }) 
       {info.comoPreparar && (
         <div className="border-t border-border bg-muted/40 px-5 py-4">
           <p className="text-xs font-medium">{rede === "instagram" ? "Como deixar a conta profissional" : "Antes de conectar"}</p>
-          <ol className="mt-2 flex list-decimal flex-col gap-1.5 pl-4 text-xs text-muted-foreground marker:font-mono">
+          <ol className="mt-2 flex list-decimal flex-col gap-1.5 pl-4 text-xs text-muted-foreground marker:font-mono marker:font-semibold" style={{ ["--tw-prose-counters" as string]: info.cor }}>
             {info.comoPreparar.map((p) => (
               <li key={p}>{p}</li>
             ))}
@@ -313,7 +333,7 @@ function ContasDaRede({
   onMudou: (lista: ContaSocial[]) => void
   onErro: (texto: string) => void
 }) {
-  const { nome, Icone } = REDES[rede]
+  const { nome, Icone, fundo } = REDES[rede]
   const [indo, setIndo] = useState(false)
 
   async function conectar() {
@@ -328,7 +348,7 @@ function ContasDaRede({
   }
 
   const botao = (
-    <Button onClick={conectar} disabled={indo || !disponivel} className="gap-1.5">
+    <Button onClick={conectar} disabled={indo || !disponivel} className="gap-1.5 border-0 text-white hover:opacity-90" style={{ background: fundo }}>
       <IconPlus className="size-4" />
       {indo ? "Abrindo..." : contas && contas.length > 0 ? `Conectar outra ${rede === "facebook" ? "Página" : "conta"}` : `Conectar ${nome}`}
     </Button>
@@ -346,8 +366,8 @@ function ContasDaRede({
 
       {contas.length === 0 ? (
         <Card className="items-center gap-0 px-6 py-12 text-center">
-          <span className="flex size-12 items-center justify-center rounded-xl bg-muted">
-            <Icone className="size-6" />
+          <span className="flex size-14 items-center justify-center rounded-2xl text-white shadow-sm" style={{ background: fundo }}>
+            <Icone className="size-7" />
           </span>
           <p className="mt-4 font-medium">
             {rede === "facebook" ? "Nenhuma Página conectada" : "Nenhuma conta do Instagram conectada"}
@@ -391,24 +411,27 @@ function LinhaDaConta({
 }) {
   const [confirmando, setConfirmando] = useState(false)
   const [saindo, setSaindo] = useState(false)
-  const { Icone } = REDES[rede]
+  const { Icone, fundo } = REDES[rede]
   const nome = conta.displayName || conta.username || "Conta"
 
   return (
-    <Card className="flex-row items-center gap-4 px-4 py-3.5">
+    <Card className="flex-row flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5">
       <div className="relative shrink-0">
         <Avatar className="size-11">
           {conta.avatarUrl && <AvatarImage src={conta.avatarUrl} alt="" />}
           <AvatarFallback>{nome.slice(0, 2).toUpperCase()}</AvatarFallback>
         </Avatar>
-        <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full bg-foreground text-background ring-2 ring-card">
+        <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full text-white ring-2 ring-card" style={{ background: fundo }}>
           <Icone className="size-3" />
         </span>
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">{nome}</p>
-        <p className="truncate font-mono text-[11px] text-muted-foreground">
-          {conta.username && rede === "instagram" ? `@${conta.username} · ` : ""}conectada em {data(conta.connectedAt)}
+        <p className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+          <span className="size-1.5 shrink-0 rounded-full bg-status-posted" />
+          <span className="truncate">
+            {conta.username && rede === "instagram" ? `@${conta.username} · ` : ""}conectada em {data(conta.connectedAt)}
+          </span>
         </p>
       </div>
       {confirmando ? (
@@ -436,8 +459,15 @@ function LinhaDaConta({
           </Button>
         </div>
       ) : (
-        <Button size="sm" variant="ghost" className="shrink-0 text-muted-foreground" onClick={() => setConfirmando(true)}>
-          Desconectar
+        <Button
+          size="sm"
+          variant="ghost"
+          className="shrink-0 px-2 text-muted-foreground sm:px-3"
+          aria-label="Desconectar"
+          onClick={() => setConfirmando(true)}
+        >
+          <IconPlugConnectedX className="size-4 sm:hidden" />
+          <span className="hidden sm:inline">Desconectar</span>
         </Button>
       )}
     </Card>

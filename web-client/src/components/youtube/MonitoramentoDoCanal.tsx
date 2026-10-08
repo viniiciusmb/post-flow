@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import { IconBrandGoogleDrive, IconBrandTiktok, IconTrash } from "@tabler/icons-react"
+import { IconBrandGoogleDrive, IconBrandTiktok, IconClockHour4, IconHourglass, IconRadar, IconTrash } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -10,12 +10,38 @@ import { cn } from "@/lib/utils"
 import type { TikTokAccountSummary, YoutubeChannel } from "@/types/api"
 
 /** Uma linha de ajuste: o que é e o que muda, à esquerda; o controle, à direita. */
-function Linha({ titulo, texto, children, className }: { titulo: string; texto: ReactNode; children: ReactNode; className?: string }) {
+const TONS = {
+  green: "bg-tone-success-wash text-tone-success-ink",
+  amber: "bg-amber-500/12 text-amber-700 dark:text-amber-400",
+  violet: "bg-tone-violet-wash text-tone-violet-ink",
+  ink: "bg-foreground text-background",
+  cyan: "bg-tone-cyan-wash text-tone-cyan-ink",
+  red: "bg-tone-danger-wash text-tone-danger-ink",
+} as const
+
+function Linha({
+  titulo,
+  texto,
+  children,
+  className,
+  icone,
+  tom = "green",
+}: {
+  titulo: string
+  texto: ReactNode
+  children: ReactNode
+  className?: string
+  icone?: ReactNode
+  tom?: keyof typeof TONS
+}) {
   return (
-    <div className={cn("flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8", className)}>
-      <div className="min-w-0 sm:max-w-[26rem]">
-        <p className="text-sm font-medium">{titulo}</p>
-        <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{texto}</div>
+    <div className={cn("flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8 sm:px-5", className)}>
+      <div className="flex min-w-0 gap-3 sm:max-w-[30rem]">
+        {icone && <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", TONS[tom])}>{icone}</span>}
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{titulo}</p>
+          <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{texto}</div>
+        </div>
       </div>
       <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">{children}</div>
     </div>
@@ -44,11 +70,13 @@ export function Interruptor({
       onClick={onClick}
       className="group inline-flex items-center gap-2.5 disabled:opacity-60"
     >
-      <span className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground">{ligado ? "Ligado" : "Desligado"}</span>
+      <span className={cn("font-mono text-[11px] uppercase tracking-wide", ligado ? "text-tone-success-ink" : "text-muted-foreground")}>
+        {ligado ? "Ligado" : "Desligado"}
+      </span>
       <span
         className={cn(
           "relative h-[22px] w-[38px] rounded-full transition-colors",
-          ligado ? "bg-foreground" : "bg-border",
+          ligado ? "bg-tone-success-ink" : "bg-border",
         )}
       >
         <span
@@ -116,6 +144,8 @@ export function MonitoramentoDoCanal({
       <Card className="gap-0 divide-y divide-border py-0">
         <Linha
           titulo="Pegar vídeos novos sozinho"
+          icone={<IconRadar className="size-5" />}
+          tom="green"
           texto={
             channel.isActive
               ? "O canal é conferido a cada 20 minutos. Cada vídeo novo publicado é baixado e cortado sem você fazer nada."
@@ -136,6 +166,8 @@ export function MonitoramentoDoCanal({
 
         <Linha
           titulo="Esperar a fila de publicação esvaziar"
+          icone={<IconHourglass className="size-5" />}
+          tom="amber"
           texto="Só pega o próximo vídeo quando falta no máximo 1 corte pra publicar. Evita acumular cortes de assunto velho em canal que publica todo dia."
         >
           <Interruptor
@@ -154,6 +186,8 @@ export function MonitoramentoDoCanal({
 
         <Linha
           titulo="Limite de duração"
+          icone={<IconClockHour4 className="size-5" />}
+          tom="violet"
           texto={
             channel.maxVideoMinutes
               ? `Vídeos com mais de ${channel.maxVideoMinutes} min ficam de fora e aparecem com um aviso. Você ainda pode cortar cada um na mão.`
@@ -189,7 +223,7 @@ export function MonitoramentoDoCanal({
                 className={cn(
                   "rounded-md border px-2 py-1 font-mono text-[11px] transition-colors",
                   channel.maxVideoMinutes === m
-                    ? "border-foreground bg-foreground text-background"
+                    ? "border-tone-violet-ink bg-tone-violet-ink text-white"
                     : "border-border text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -210,6 +244,8 @@ export function MonitoramentoDoCanal({
 
         <Linha
           titulo="Publicar no TikTok"
+          icone={<IconBrandTiktok className="size-5" />}
+          tom="ink"
           texto={
             tiktokAccounts.length === 0 ? (
               <>
@@ -259,6 +295,8 @@ export function MonitoramentoDoCanal({
 
         <Linha
           titulo="Enviar ao Google Drive"
+          icone={<IconBrandGoogleDrive className="size-5" />}
+          tom="cyan"
           texto={
             !driveConectado ? (
               <>
@@ -320,6 +358,8 @@ export function MonitoramentoDoCanal({
       <Card className="gap-0 py-0">
         <Linha
           titulo="Remover canal"
+          icone={<IconTrash className="size-5" />}
+          tom="red"
           texto="Para de acompanhar o canal e apaga do Post Flow os vídeos e cortes dele. O que já foi publicado continua nas redes."
         >
           {confirmandoRemocao ? (

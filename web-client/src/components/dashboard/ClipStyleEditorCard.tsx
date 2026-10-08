@@ -14,6 +14,7 @@ import { api, csrfToken } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { ClientVideoSettingsResponse, PartLabelPosition, VideoCaptionStyle } from "@/types/api"
 // Prévias dos modelos de título/legenda: compartilhadas com a tela de Lives.
+import { ModelosDeCorte } from "@/components/youtube/ModelosDeCorte"
 import { PREVIA_DE_ESTILO as STYLE_PREVIEW, GaleriaDeEstilos as StyleGallery } from "@/components/estilos/estilosDeTexto"
 
 // A moldura 9:16 (o recorte final) é FIXA - nunca muda de tamanho. O que o
@@ -486,12 +487,15 @@ export function ClipStyleEditorCard({
   endpoint = "/api/client/video-settings",
   modoLive = false,
   channelId,
+  comModelos = false,
 }: {
   sourceVideoId?: number
   endpoint?: string
   modoLive?: boolean
   /** Painel novo: o editor abre DENTRO de um canal, já mirando nele. */
   channelId?: number
+  /** Painel novo: mostra a galeria de modelos de estilo no topo. */
+  comModelos?: boolean
 } = {}) {
   const t = useT()
   const { idioma } = useI18n()
@@ -519,6 +523,10 @@ export function ClipStyleEditorCard({
       ? ""
       : `?channelId=${alvo}`
 
+  // Sobe quando um modelo é aplicado: o servidor mudou a configuração inteira
+  // e a tela precisa ler de novo, senão mostraria o estilo antigo.
+  const [recarga, setRecarga] = useState(0)
+
   useEffect(() => {
     api.get<ClientVideoSettingsResponse>(`${endpoint}${queryAlvo}`).then((data) => {
       setSettings(data)
@@ -526,7 +534,7 @@ export function ClipStyleEditorCard({
       setDescriptionDraft(data.descriptionTemplate ?? "")
       setVersaoTemplate((v) => v + 1)
     })
-  }, [queryAlvo, endpoint])
+  }, [queryAlvo, endpoint, recarga])
 
   async function save(next: ClientVideoSettingsResponse) {
     setSettings(next)
@@ -689,6 +697,19 @@ export function ClipStyleEditorCard({
           <p className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
             {t("ce.valeSoParaEsteVideo")}
           </p>
+        )}
+        {comModelos && !modoLive && (
+          <ModelosDeCorte
+            alvo={
+              sourceVideoId
+                ? { sourceVideoId }
+                : alvo === "all"
+                  ? {}
+                  : { channelId: Number(alvo) }
+            }
+            atual={settings}
+            onAplicado={() => setRecarga((n) => n + 1)}
+          />
         )}
 
         {/* ----------------------------------------------------------------

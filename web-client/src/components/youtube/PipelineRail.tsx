@@ -34,7 +34,7 @@ export function PipelineRail({
       <div className="grid grid-cols-4 gap-1" aria-hidden="true">
         {ETAPAS.map((e, i) => (
           <div key={e.status} className="relative h-1 overflow-hidden rounded-full bg-border">
-            {i < atual && <div className="absolute inset-0 bg-foreground" />}
+            {i < atual && <div className="absolute inset-0 bg-status-posted" />}
             {i === atual && (
               <div className={cn("absolute inset-0", pausado ? "bg-muted-foreground/60" : "pipeline-vivo")} />
             )}
@@ -45,7 +45,7 @@ export function PipelineRail({
         <span className="min-w-0 truncate text-foreground">
           {atual >= 0 ? (
             <>
-              <span className="text-muted-foreground">{atual + 1}/4</span> {ETAPAS[atual].rotulo}
+              <span className="text-muted-foreground">{atual + 1}/4</span> <span className="font-semibold text-tone-indigo-ink">{ETAPAS[atual].rotulo}</span>
               {pausado && <span className="text-muted-foreground"> · pausado</span>}
             </>
           ) : (

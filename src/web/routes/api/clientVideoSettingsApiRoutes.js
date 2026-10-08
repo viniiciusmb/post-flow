@@ -6,6 +6,8 @@ const express = require('express');
 const multer = require('multer');
 const controller = require('../../controllers/api/clientVideoSettingsApiController');
 const templateController = require('../../controllers/api/backgroundTemplateApiController');
+const modelosController = require('../../controllers/api/modelosDeCorteApiController');
+const requirePainelNovo = require('../../middleware/requirePainelNovo');
 const requireAuthApi = require('../../middleware/requireAuthApi');
 const requireRoleApi = require('../../middleware/requireRoleApi');
 const asyncHandler = require('../../lib/asyncHandler');
@@ -37,6 +39,13 @@ router.put('/', asyncHandler(controller.update));
 
 // Faz um canal voltar a seguir a configuração de todos os canais.
 router.delete('/channel/:channelId', asyncHandler(controller.removeChannelStyle));
+
+// Modelos de estilo de corte (prontos + salvos pelo cliente). Em teste no
+// painel novo, igual ao resto da remodelação (ver lib/painelNovo).
+router.get('/modelos', requirePainelNovo.api, asyncHandler(modelosController.listar));
+router.post('/modelos', requirePainelNovo.api, asyncHandler(modelosController.salvar));
+router.post('/modelos/aplicar', requirePainelNovo.api, asyncHandler(modelosController.aplicar));
+router.delete('/modelos/:id', requirePainelNovo.api, asyncHandler(modelosController.apagar));
 
 router.post('/background-template', uploadTemplate.single('image'), asyncHandler(templateController.upload));
 router.get('/background-template', asyncHandler(templateController.download));

@@ -57,6 +57,7 @@ async function listar(req, res) {
 async function iniciarConexao(req, res) {
   const { network } = req.params;
   if (!REDES.includes(network)) return res.status(400).json({ error: 'Rede inválida.' });
+  logger.info(`Conexao ${network} iniciada pelo cliente #${req.session.user.id}`);
   try {
     const url = await outstandService.urlDeAutorizacao({
       network,
@@ -82,8 +83,14 @@ function pendenteValida(req, network) {
 
 async function vincularConta(req, network, accountId) {
   const conta = await outstandService.buscarConta(accountId);
-  if (!conta || conta.network !== network) return { erro: 'conta' };
-  if (conta.tenant_id !== outstandService.tenantDe(req.session.user.id)) return { erro: 'conta' };
+  if (!conta || conta.network !== network) {
+    logger.warn(`Conexao ${network}: conta ${accountId} nao encontrada na Outstand ou de outra rede (${conta && conta.network})`);
+    return { erro: 'conta' };
+  }
+  if (conta.tenant_id !== outstandService.tenantDe(req.session.user.id)) {
+    logger.warn(`Conexao ${network}: conta ${accountId} e do tenant ${conta.tenant_id}, nao do cliente #${req.session.user.id}`);
+    return { erro: 'conta' };
+  }
   const vinculada = await socialAccountsRepository.upsert({
     clientUserId: req.session.user.id,
     network,
@@ -101,13 +108,24 @@ async function vincularConta(req, network, accountId) {
 async function retorno(req, res) {
   const { network } = req.params;
   if (!REDES.includes(network)) return res.redirect('/client/social');
+  // Toda volta fica registrada (só os NOMES dos parâmetros e o erro, nunca o
+  // token de sessão): a primeira tentativa real falhou sem deixar rastro
+  // nenhum, e sem isto não há como saber em que ponto quebrou.
+  logger.info(
+    `Conexao ${network} voltou para o cliente #${req.session.user.id}: parametros=[${Object.keys(req.query).join(',')}] ` +
+      `pendente=${pendenteValida(req, network)} erro="${String(req.query.error || '').slice(0, 300)}"`
+  );
   if (!pendenteValida(req, network)) return res.redirect(telaDaRede(network, { erro: 'sessao' }));
 
   if (req.query.error || req.query.success === 'false') {
     delete req.session.conexaoSocial;
-    // O texto vem de fora; vai pra tela só como código curto, nunca cru.
-    logger.warn(`Conexao ${network} recusada/cancelada: ${String(req.query.error || '').slice(0, 300)}`);
-    return res.redirect(telaDaRede(network, { erro: 'cancelada' }));
+    // O motivo vem da Meta/Outstand e vai pra tela, que é o único jeito de o
+    // cliente saber o que fazer (conta pessoal, sem Página...). Limpo de
+    // qualquer coisa que não seja texto e cortado: é exibido, nunca executado.
+    const motivo = String(req.query.error || req.query.error_description || '')
+      .replace(/[^\p{L}\p{N}\s.,:;!?'"()/_-]/gu, '')
+      .slice(0, 200);
+    return res.redirect(telaDaRede(network, { erro: 'cancelada', ...(motivo ? { motivo } : {}) }));
   }
 
   try {
