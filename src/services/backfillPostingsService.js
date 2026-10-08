@@ -299,6 +299,8 @@ async function enfileirarCortesDoVideo({ sourceVideo, clipId = null }) {
 }
 
 module.exports = {
+  garantirVideo,
+  arquivoUtilizavel,
   enfileirarCortesDoVideo,
   contarPendencias,
   reenfileirarCancelados, enfileirarCortesProntos, listarCortesOrfaos, listarCortesOrfaosDoCanal };

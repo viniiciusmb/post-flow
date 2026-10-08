@@ -20,6 +20,7 @@ import {
   IconTrendingUp,
   IconMessageCircle,
   IconShare3,
+  IconCarouselVertical,
 } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
@@ -94,6 +95,7 @@ const ADMIN_GROUPS: Grupo[] = [
 const CONTEUDO_NOVO: Grupo["items"] = [
   { title: "menu.videosDoYoutube", url: "/client/youtube", icon: IconBrandYoutube },
   { title: "menu.lives", url: "/client/lives", icon: IconBroadcast },
+  { title: "menu.feedCortes", url: "/client/feed", icon: IconCarouselVertical },
   { title: "menu.redesSociais", url: "/client/social", icon: IconShare3 },
 ]
 

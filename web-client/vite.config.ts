@@ -52,6 +52,7 @@ export default defineConfig({
         'admin-support': path.resolve(__dirname, 'admin-support.html'),
         'youtube-videos': path.resolve(__dirname, 'youtube-videos.html'),
         'social-networks': path.resolve(__dirname, 'social-networks.html'),
+        'feed-cortes': path.resolve(__dirname, 'feed-cortes.html'),
       },
     },
   },

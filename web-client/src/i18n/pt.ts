@@ -59,6 +59,7 @@ export const pt = {
   "menu.lives": "Lives",
   "menu.videosDoYoutube": "Vídeos do YouTube",
   "menu.redesSociais": "Redes sociais",
+  "menu.feedCortes": "Feed de cortes",
   "menu.livesAdmin": "Lives Admin",
   "menu.faturamento": "Faturamento",
   "menu.erros": "Erros",

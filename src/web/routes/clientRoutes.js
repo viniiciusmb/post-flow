@@ -52,6 +52,7 @@ router.get('/lives', requirePainelNovo.pagina('/client'), serveSpaPage('client-l
 // lib/painelNovo). Quem nao esta no teste cai na tela antiga equivalente.
 router.get('/youtube', requirePainelNovo.pagina('/client/youtube-channels'), serveSpaPage('youtube-videos'));
 router.get('/social', requirePainelNovo.pagina('/client/tiktok-account'), serveSpaPage('social-networks'));
+router.get('/feed', requirePainelNovo.pagina('/client/videos-clips'), serveSpaPage('feed-cortes'));
 // Volta do navegador depois de autorizar o Instagram/Facebook na Outstand.
 router.get(
   '/social/retorno/:network',

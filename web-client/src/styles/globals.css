@@ -446,3 +446,15 @@ h1.font-heading,
 @media (prefers-reduced-motion: reduce) {
   .pipeline-vivo { animation: none; background: var(--signal); }
 }
+
+/* Feed de cortes: o coração que aparece no meio do vídeo nos dois toques. */
+@keyframes feed-coracao {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4) rotate(-12deg); }
+  25% { opacity: 1; transform: translate(-50%, -50%) scale(1.15) rotate(-6deg); }
+  60% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+  100% { opacity: 0; transform: translate(-50%, -80%) scale(0.9); }
+}
+.feed-coracao { animation: feed-coracao 0.9s ease-out forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .feed-coracao { animation-duration: 0.01s; }
+}

@@ -346,12 +346,26 @@ function aplicar(painelReal, { userId, since, until, maxMonths }) {
 
   const indicadosPeriodo = indicados.filter((i) => noPeriodo(i.entrada, since, until));
 
+  // Reparte um total entre os links sem perder nem inventar clique: arredondar
+  // cada fatia sozinha podia somar um a mais (991 de 990), e quem soma as
+  // linhas na mão encontraria um número diferente do cartão. A sobra do
+  // arredondamento vai pras fatias com a maior parte decimal.
+  function repartir(total) {
+    const brutos = slots.map((slot) => (total * slot.peso) / pesoTotal);
+    const partes = brutos.map(Math.floor);
+    let sobra = total - partes.reduce((a, b) => a + b, 0);
+    const ordem = brutos.map((b, k) => [b - Math.floor(b), k]).sort((a, b) => b[0] - a[0]);
+    for (let k = 0; sobra > 0; k = (k + 1) % ordem.length, sobra--) partes[ordem[k][1]] += 1;
+    return partes;
+  }
+  const cliquesPorLink = repartir(cliquesPeriodo);
+  const totalPorLink = repartir(totalCliques);
+
   return {
     ...painelReal,
-    links: slots.map((slot) => {
-      const fatia = slot.peso / pesoTotal;
-      const cliquesDoLink = Math.round(cliquesPeriodo * fatia);
-      const totalDoLink = Math.round(totalCliques * fatia);
+    links: slots.map((slot, k) => {
+      const cliquesDoLink = cliquesPorLink[k];
+      const totalDoLink = totalPorLink[k];
       const dele = slot.indice >= 0 ? indicados.filter((ind) => ind.link === slot.indice) : [];
       const nomesDele = new Set(dele.map((ind) => ind.nome));
       return {
