@@ -52,6 +52,16 @@ const config = {
     apiKey: process.env.GROQ_API_KEY || '',
   },
 
+  // Outstand: API unificada que publica no Instagram e no Facebook com o app
+  // dela (ja aprovado pela Meta). Sem a chave, a tela de Redes sociais mostra
+  // as duas redes como indisponiveis e nada mais muda.
+  outstand: {
+    apiKey: process.env.OUTSTAND_API_KEY || '',
+    // So pros testes apontarem pra uma Outstand de mentira na propria maquina
+    // (restrito a localhost, mesmo motivo do UTMIFY_BASE_URL).
+    baseUrlOverride: process.env.OUTSTAND_BASE_URL || '',
+  },
+
   // Cortes de lives (so admin, fase de validacao). O app da Twitch e usado
   // SO para saber se o canal esta ao vivo (token de app, client credentials);
   // a gravacao em si e feita pelo streamlink, sem login. Sem as duas

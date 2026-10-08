@@ -19,6 +19,7 @@ import {
   IconBook,
   IconTrendingUp,
   IconMessageCircle,
+  IconShare3,
 } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
@@ -86,6 +87,45 @@ const ADMIN_GROUPS: Grupo[] = [
   },
 ]
 
+// Painel remodelado (08/10/2026), em teste com o admin e a Rise Style (ver
+// src/lib/painelNovo.js no servidor). Três frentes de conteúdo no lugar de
+// "Canais", "Cortes" e "Publicação": o que entra (Vídeos do YouTube e Lives) e
+// pra onde vai (Redes sociais).
+const CONTEUDO_NOVO: Grupo["items"] = [
+  { title: "menu.videosDoYoutube", url: "/client/youtube", icon: IconBrandYoutube },
+  { title: "menu.lives", url: "/client/lives", icon: IconBroadcast },
+  { title: "menu.redesSociais", url: "/client/social", icon: IconShare3 },
+]
+
+const ADMIN_GROUPS_NOVO: Grupo[] = [
+  ADMIN_GROUPS[0],
+  ADMIN_GROUPS[1],
+  {
+    label: "menu.grupoMeuConteudo",
+    items: [
+      ...CONTEUDO_NOVO,
+      { title: "menu.configuracoes", url: "/client/settings", icon: IconSettings },
+      { title: "menu.tutorial", url: "/client/tutorial", icon: IconBook },
+      { title: "menu.flora", url: "/client/support", icon: IconMessageCircle },
+    ],
+  },
+]
+
+const CLIENT_GROUPS_NOVO: Grupo[] = [
+  {
+    items: [
+      { title: "menu.inicio", url: "/client", icon: IconLayoutDashboard },
+      ...CONTEUDO_NOVO,
+      { title: "menu.conexao", url: "/client/tunnel", icon: IconRouter },
+      { title: "menu.planoEUso", url: "/client/billing", icon: IconReceipt2 },
+      { title: "menu.comissoes", url: "/client/commissions", icon: IconGift },
+      { title: "menu.configuracoes", url: "/client/settings", icon: IconSettings },
+      { title: "menu.tutorial", url: "/client/tutorial", icon: IconBook },
+      { title: "menu.flora", url: "/client/support", icon: IconMessageCircle },
+    ],
+  },
+]
+
 const CLIENT_GROUPS: Grupo[] = [
   {
     items: [
@@ -112,14 +152,23 @@ export function AppSidebar({
   // Só o menu: a página e as rotas continuam existindo, e quem já pareou o
   // programa continua baixando pela internet dele (ver lib/exibicaoDoTunel).
   mostrarTunel = false,
+  painelNovo = false,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   user: SessionUser
   onLogout: () => void
   mostrarTunel?: boolean
+  painelNovo?: boolean
 }) {
   const t = useT()
-  const grupos = user.role === "admin" ? ADMIN_GROUPS : CLIENT_GROUPS
+  const grupos =
+    user.role === "admin"
+      ? painelNovo
+        ? ADMIN_GROUPS_NOVO
+        : ADMIN_GROUPS
+      : painelNovo
+        ? CLIENT_GROUPS_NOVO
+        : CLIENT_GROUPS
   const groups: { label?: string; items: NavItem[] }[] = grupos.map((g) => ({
     label: g.label ? t(g.label) : undefined,
     items: g.items

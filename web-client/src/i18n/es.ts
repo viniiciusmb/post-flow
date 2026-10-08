@@ -51,6 +51,8 @@ export const es: Dicionario = {
   "menu.receita": "Ingresos",
   "menu.narrado": "Video narrado",
   "menu.lives": "Directos",
+  "menu.videosDoYoutube": "Videos de YouTube",
+  "menu.redesSociais": "Redes sociales",
   "menu.livesAdmin": "Directos Admin",
   "menu.faturamento": "Facturación",
   "menu.erros": "Errores",

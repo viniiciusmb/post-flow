@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { api, ApiError } from "@/lib/api"
 import type { SessionUser } from "@/types/api"
 
-type MeResponse = { user: SessionUser; ui?: { mostrarTunel?: boolean } }
+type MeResponse = { user: SessionUser; ui?: { mostrarTunel?: boolean; painelNovo?: boolean } }
 
 /**
  * Uma requisição só por carregamento de página, compartilhada por quem chamar.
@@ -17,9 +17,17 @@ type MeResponse = { user: SessionUser; ui?: { mostrarTunel?: boolean } }
  * a página, então ela nunca fica velha.
  */
 let pedido: Promise<MeResponse> | null = null
+// A resposta já recebida. Quem monta DEPOIS dela (o layout, que só aparece
+// quando a página já tem o usuário) começa com o valor certo, em vez de
+// desenhar um quadro com o menu antigo e trocar no seguinte.
+let resposta: MeResponse | null = null
 
 function buscarSessao() {
-  if (!pedido) pedido = api.get<MeResponse>("/api/auth/me")
+  if (!pedido)
+    pedido = api.get<MeResponse>("/api/auth/me").then((d) => {
+      resposta = d
+      return d
+    })
   return pedido
 }
 
@@ -35,7 +43,9 @@ export function useAuth() {
    * e um padrão "mostrar" faria o menu da conexão piscar na tela antes de
    * sumir — pior do que nunca ter aparecido. Escondido enquanto não se sabe.
    */
-  const [mostrarTunel, setMostrarTunel] = useState(false)
+  const [mostrarTunel, setMostrarTunel] = useState(resposta?.ui?.mostrarTunel === true)
+  /** Menu remodelado (Vídeos do YouTube / Lives / Redes sociais), em teste. */
+  const [painelNovo, setPainelNovo] = useState(resposta?.ui?.painelNovo === true)
 
   useEffect(() => {
     let cancelled = false
@@ -45,12 +55,14 @@ export function useAuth() {
         if (cancelled) return
         setUser(data.user)
         setMostrarTunel(data.ui?.mostrarTunel === true)
+        setPainelNovo(data.ui?.painelNovo === true)
       })
       .catch((err) => {
         // Uma sessão vencida não pode deixar a promessa compartilhada envenenada
         // para a próxima chamada: sem isto, quem chamasse depois receberia o
         // mesmo erro sem nunca ter tentado.
         pedido = null
+        resposta = null
         if (!cancelled && err instanceof ApiError && err.status === 401) {
           window.location.href = "/login"
         }
@@ -69,5 +81,5 @@ export function useAuth() {
     window.location.href = "/login"
   }
 
-  return { user, loading, logout, mostrarTunel }
+  return { user, loading, logout, mostrarTunel, painelNovo }
 }

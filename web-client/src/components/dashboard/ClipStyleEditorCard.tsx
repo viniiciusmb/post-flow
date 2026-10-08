@@ -485,7 +485,14 @@ export function ClipStyleEditorCard({
   sourceVideoId,
   endpoint = "/api/client/video-settings",
   modoLive = false,
-}: { sourceVideoId?: number; endpoint?: string; modoLive?: boolean } = {}) {
+  channelId,
+}: {
+  sourceVideoId?: number
+  endpoint?: string
+  modoLive?: boolean
+  /** Painel novo: o editor abre DENTRO de um canal, já mirando nele. */
+  channelId?: number
+} = {}) {
   const t = useT()
   const { idioma } = useI18n()
   const [settings, setSettings] = useState<ClientVideoSettingsResponse | null>(null)
@@ -497,7 +504,7 @@ export function ClipStyleEditorCard({
   const [savedFlash, setSavedFlash] = useState(false)
   // "all" = a configuração que vale pra todos os canais. Um id = o estilo
   // daquele canal só.
-  const [alvo, setAlvo] = useState<string>("all")
+  const [alvo, setAlvo] = useState<string>(channelId ? String(channelId) : "all")
   // Muda a cada upload/remoção pra forçar o navegador a buscar a imagem de
   // novo (a URL é sempre a mesma, senão ficaria mostrando a antiga do cache).
   const [versaoTemplate, setVersaoTemplate] = useState(0)
@@ -607,7 +614,47 @@ export function ClipStyleEditorCard({
             Some quando o editor está travado num vídeo avulso: ali o alvo já
             está decidido, e oferecer "todos os canais" faria o cliente mudar o
             padrão dele achando que ajustava só aquele vídeo. */}
-        {!sourceVideoId && !modoLive && (
+        {/* Dentro de um canal (painel novo): a escolha é só "este canal" ou
+            "todos". Mostrar a lista de canais ali faria a pessoa editar outro
+            canal sem sair da tela deste. */}
+        {channelId && !sourceVideoId && !modoLive && (
+          <div className="flex flex-col gap-2">
+            <div className="inline-flex w-fit rounded-lg border border-border bg-muted/40 p-0.5 text-xs font-medium">
+              {[
+                { valor: String(channelId), rotulo: "Só este canal" },
+                { valor: "all", rotulo: "Todos os canais" },
+              ].map((o) => (
+                <button
+                  key={o.valor}
+                  type="button"
+                  onClick={() => setAlvo(o.valor)}
+                  className={
+                    alvo === o.valor
+                      ? "rounded-md bg-card px-3 py-1.5 text-foreground shadow-[var(--shadow-flat)]"
+                      : "rounded-md px-3 py-1.5 text-muted-foreground hover:text-foreground"
+                  }
+                >
+                  {o.rotulo}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs text-muted-foreground">
+                {alvo === "all"
+                  ? t("ce.valeParaTodoCanal")
+                  : settings.usesDefault
+                    ? t("ce.canalSegueConfig")
+                    : t("ce.canalTemProprio")}
+              </p>
+              {alvo !== "all" && !settings.usesDefault && (
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={voltarAoPadrao}>
+                  {t("ce.voltarASeguirTodos")}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+        {!channelId && !sourceVideoId && !modoLive && (
         <Field>
           <FieldLabel>{t("ce.aplicarEm")}</FieldLabel>
           <div className="flex flex-wrap items-center gap-2">

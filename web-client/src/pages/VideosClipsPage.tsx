@@ -51,6 +51,7 @@ import type {
   YoutubeChannel,
 } from "@/types/api"
 import { useT, useI18n } from "@/i18n"
+import { PipelineRail } from "@/components/youtube/PipelineRail"
 import { nomeDeIdioma } from "@/lib/nomeDeIdioma"
 
 // So aparece quando o cliente tem 2+ contas TikTok - com 0 ou 1, o backend
@@ -426,7 +427,7 @@ function SeloDeMembros() {
   )
 }
 
-function VideoRow({
+export function VideoRow({
   video,
   avgProcessingSeconds,
   channel,
@@ -435,6 +436,7 @@ function VideoRow({
   selected,
   onToggleSelect,
   mostrarTunel,
+  pipeline = false,
 }: {
   video: SourceVideo
   avgProcessingSeconds: number
@@ -445,6 +447,8 @@ function VideoRow({
   onToggleSelect: () => void
   /** Vem da página (uma consulta só) em vez de cada linha chamar useAuth. */
   mostrarTunel: boolean
+  /** Painel novo: mostra as quatro etapas do vídeo numa trilha (PipelineRail). */
+  pipeline?: boolean
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
@@ -528,7 +532,7 @@ function VideoRow({
   const progress = computeVideoProgress(video.status, video.processingStartedAt, avgProcessingSeconds)
 
   return (
-    <Card>
+    <Card className={pipeline ? "gap-0 py-0" : undefined}>
       <div className="flex w-full flex-wrap items-center gap-3 p-4 sm:flex-nowrap sm:gap-4">
         <Checkbox checked={selected} onCheckedChange={onToggleSelect} className="shrink-0" />
         <button
@@ -614,6 +618,16 @@ function VideoRow({
         </Button>
         </div>
       </div>
+
+      {pipeline && isActive && (
+        <div className="border-t border-border px-4 py-3">
+          <PipelineRail
+            status={video.status}
+            percent={progress?.percent ?? null}
+            eta={progress && progress.etaSeconds !== null ? formatEta(progress.etaSeconds, t) : null}
+          />
+        </div>
+      )}
 
       {(video.status === "error" || video.status === "cancelled") && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2">
@@ -712,7 +726,7 @@ function VideoRow({
       )}
 
       {open && (
-        <CardContent className="border-t border-border pt-4">
+        <CardContent className={`border-t border-border pt-4${pipeline ? " pb-4" : ""}`}>
           {!clips ? (
             <Skeleton className="h-16" />
           ) : clips.length === 0 ? (
@@ -758,7 +772,7 @@ function VideoRow({
   )
 }
 
-function AddManualVideoCard({
+export function AddManualVideoCard({
   onAdded,
   tiktokAccounts,
   onConfigurarEstilo,
@@ -1057,7 +1071,7 @@ function EscolhaDeEstilo({
   )
 }
 
-function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tiktokAccounts: TikTokAccountSummary[] }) {
+export function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tiktokAccounts: TikTokAccountSummary[] }) {
   const t = useT()
   const [file, setFile] = useState<File | null>(null)
   const [title, setTitle] = useState("")
@@ -1162,8 +1176,8 @@ function UploadVideoCard({ onAdded, tiktokAccounts }: { onAdded: () => void; tik
   )
 }
 
-const PENDING_STATUSES = ["detected", "paused", "aguardando_creditos", "aguardando_conexao", "somente_membros", ...ACTIVE_STATUSES]
-const STAGE_PRIORITY: Record<string, number> = {
+export const PENDING_STATUSES = ["detected", "paused", "aguardando_creditos", "aguardando_conexao", "somente_membros", ...ACTIVE_STATUSES]
+export const STAGE_PRIORITY: Record<string, number> = {
   paused: -1,
   cutting: 0,
   selecting_clips: 1,

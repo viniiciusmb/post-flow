@@ -1,5 +1,6 @@
 'use strict';
 
+const painelNovo = require('../../../lib/painelNovo');
 const exibicaoDoTunel = require('../../../lib/exibicaoDoTunel');
 const authService = require('../../../services/authService');
 const usersRepository = require('../../../repositories/usersRepository');
@@ -47,7 +48,11 @@ function logout(req, res) {
 async function me(req, res) {
   res.json({
     user: req.session.user,
-    ui: { mostrarTunel: await exibicaoDoTunel.mostrarTunel() },
+    ui: {
+      mostrarTunel: await exibicaoDoTunel.mostrarTunel(),
+      // Menu remodelado (Videos do YouTube / Lives / Redes sociais), em teste.
+      painelNovo: await painelNovo.ehPainelNovo(req.session.user),
+    },
   });
 }
 

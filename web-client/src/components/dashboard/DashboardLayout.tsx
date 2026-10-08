@@ -23,7 +23,7 @@ export function DashboardLayout({
 }) {
   // O layout monta o menu, então é ele que precisa saber se "Sua conexão"
   // aparece. Reaproveita a MESMA requisição que a página já fez (ver useAuth).
-  const { mostrarTunel } = useAuth()
+  const { mostrarTunel, painelNovo } = useAuth()
 
   return (
     <SidebarProvider
@@ -34,7 +34,7 @@ export function DashboardLayout({
         } as React.CSSProperties
       }
     >
-      <AppSidebar user={user} onLogout={onLogout} mostrarTunel={mostrarTunel} variant="inset" />
+      <AppSidebar user={user} onLogout={onLogout} mostrarTunel={mostrarTunel} painelNovo={painelNovo} variant="inset" />
       <SidebarInset>
         <SiteHeader title={title} />
         <div className="flex flex-1 flex-col">

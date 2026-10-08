@@ -1530,9 +1530,14 @@ function lerAvisoDaUrl() {
   }
 }
 
-export function TikTokAccountPage() {
+/**
+ * Contas do TikTok: conectar, escolher a conta e configurar fila, horários e
+ * publicação. É o corpo da tela "Publicação" e também a aba "TikTok" de
+ * "Redes sociais" no painel novo - por isso `voltarPara` (pra onde a conexão
+ * com o TikTok devolve a pessoa) vem de fora.
+ */
+export function TikTokContasPainel({ voltarPara = "/client/tiktok-account" }: { voltarPara?: string }) {
   const t = useT()
-  const { user, loading: authLoading, logout } = useAuth()
   const [accounts, setAccounts] = useState<TikTokAccountSummary[] | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
   const [aviso] = useState(lerAvisoDaUrl)
@@ -1543,9 +1548,8 @@ export function TikTokAccountPage() {
   }
 
   useEffect(() => {
-    if (user) load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
+    load()
+  }, [])
 
   // Se a conta selecionada for desconectada (ou de algum jeito sumir da
   // lista), fecha o painel em vez de deixar ele preso numa conta fantasma.
@@ -1555,17 +1559,10 @@ export function TikTokAccountPage() {
     }
   }, [accounts, selectedAccountId])
 
-  if (authLoading || !user) return null
-
   const selectedAccount = accounts?.find((a) => a.id === selectedAccountId) ?? null
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title={t("pub.titulo")}>
-      <PageHeader
-        title={t("pub.titulo")}
-        description={t("pub.descricao")}
-      />
-
+    <>
       {aviso.conectada && (
         <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">
           {t("inicio.contaConectada")}
@@ -1585,7 +1582,7 @@ export function TikTokAccountPage() {
           )}
         </div>
         <Button asChild size="sm" className="shrink-0" data-tour="conectar-tiktok">
-          <a href="/auth/tiktok/connect?from=/client/tiktok-account">
+          <a href={`/auth/tiktok/connect?from=${voltarPara}`}>
             <IconPlus className="size-4" />
             {t("pub.conectarPalavra")} {accounts && accounts.length > 0 ? t("pub.outraConta") : t("pub.contaTikTokMinusculo")}
           </a>
@@ -1616,6 +1613,23 @@ export function TikTokAccountPage() {
           {selectedAccount && <AccountDetailPanel account={selectedAccount} onChanged={load} />}
         </>
       )}
+    </>
+  )
+}
+
+export function TikTokAccountPage() {
+  const t = useT()
+  const { user, loading: authLoading, logout } = useAuth()
+
+  if (authLoading || !user) return null
+
+  return (
+    <DashboardLayout user={user} onLogout={logout} title={t("pub.titulo")}>
+      <PageHeader
+        title={t("pub.titulo")}
+        description={t("pub.descricao")}
+      />
+      <TikTokContasPainel />
     </DashboardLayout>
   )
 }

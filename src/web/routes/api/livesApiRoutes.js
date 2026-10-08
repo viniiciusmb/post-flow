@@ -10,11 +10,13 @@ const livesApiController = require('../../controllers/api/livesApiController');
 const requireAuthApi = require('../../middleware/requireAuthApi');
 const requireRoleApi = require('../../middleware/requireRoleApi');
 const asyncHandler = require('../../lib/asyncHandler');
+const requirePainelNovo = require('../../middleware/requirePainelNovo');
 const { ROLES } = require('../../../config/constants');
 
 const router = express.Router();
 
-router.use(requireAuthApi, requireRoleApi(ROLES.ADMIN));
+// Admin e as contas do painel novo (ver lib/painelNovo).
+router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]), requirePainelNovo.api);
 
 router.get('/', asyncHandler(livesApiController.estado));
 router.put('/opcoes', asyncHandler(livesApiController.salvarOpcoes));

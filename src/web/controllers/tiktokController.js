@@ -13,7 +13,7 @@ const planLimitsService = require('../../services/planLimitsService');
 // Lista fechada de destinos, e NUNCA o valor cru: o endereco vem da URL, e
 // redirecionar pra qualquer coisa que chegue ali seria um redirecionamento
 // aberto (um link que parece nosso levando pra fora do site).
-const RETORNOS_PERMITIDOS = new Set(['/client', '/client/tiktok-account', '/client/youtube-channels']);
+const RETORNOS_PERMITIDOS = new Set(['/client', '/client/tiktok-account', '/client/youtube-channels', '/client/social', '/client/youtube']);
 
 function destinoDeRetorno(valor) {
   return RETORNOS_PERMITIDOS.has(valor) ? valor : '/client';
