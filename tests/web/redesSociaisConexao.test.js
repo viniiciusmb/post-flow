@@ -127,7 +127,7 @@ test('instagram: conecta e a conta aparece so pra quem conectou', async () => {
   const pedido = chamadas.filter((c) => c.caminho === '/v1/social-networks/instagram/auth-url').at(-1);
   assert.equal(pedido.corpo.tenant_id, `pf_${u.id}`);
   assert.match(pedido.corpo.redirect_uri, /\/client\/social\/retorno\/instagram$/);
-  assert.equal(pedido.corpo.force_account_selection, true);
+  assert.equal(pedido.corpo.force_account_selection, false, 'a primeira conta nao forca login de novo');
 
   const id = contaNaOutstand({ tenant: `pf_${u.id}` });
   const volta = await agent.get(`/client/social/retorno/instagram?success=true&account_id=${id}`);
@@ -136,6 +136,11 @@ test('instagram: conecta e a conta aparece so pra quem conectou', async () => {
   assert.equal(lista.disponivel, true);
   assert.equal(lista.contas.length, 1);
   assert.equal(lista.contas[0].network, 'instagram');
+
+  // A segunda conta da mesma rede força a escolha de conta, senão reautoriza a primeira.
+  await agent.post('/api/client/social-accounts/instagram/conectar');
+  const segundo = chamadas.filter((c) => c.caminho === '/v1/social-networks/instagram/auth-url').at(-1);
+  assert.equal(segundo.corpo.force_account_selection, true);
 
   const outro = await logado();
   assert.equal((await outro.agent.get('/api/client/social-accounts')).body.contas.length, 0);

@@ -59,10 +59,12 @@ async function iniciarConexao(req, res) {
   if (!REDES.includes(network)) return res.status(400).json({ error: 'Rede inválida.' });
   logger.info(`Conexao ${network} iniciada pelo cliente #${req.session.user.id}`);
   try {
+    const jaTem = (await socialAccountsRepository.listActive(req.session.user.id)).some((c) => c.network === network);
     const url = await outstandService.urlDeAutorizacao({
       network,
       userId: req.session.user.id,
       redirectUri: `${origem(req)}/client/social/retorno/${network}`,
+      outraConta: jaTem,
     });
     req.session.conexaoSocial = { network, desde: Date.now() };
     res.json({ url });

@@ -79,13 +79,15 @@ async function chamar(metodo, caminho, corpo) {
   return dados;
 }
 
-async function urlDeAutorizacao({ network, userId, redirectUri }) {
+async function urlDeAutorizacao({ network, userId, redirectUri, outraConta = false }) {
   const dados = await chamar('POST', `/v1/social-networks/${network}/auth-url`, {
     redirect_uri: redirectUri,
     tenant_id: tenantDe(userId),
-    // Sem isso, quem conecta a segunda conta acaba reautorizando a primeira
-    // (a rede reaproveita a sessão aberta no navegador).
-    force_account_selection: true,
+    // Só na SEGUNDA conta da mesma rede: sem isso, ela reautorizaria a primeira
+    // (a rede reaproveita a sessão aberta no navegador). Na primeira, forçar o
+    // login de novo só atrapalha - foi na tela de login forçado do Instagram
+    // que a primeira tentativa real falhou.
+    force_account_selection: outraConta,
   });
   return dados.data.auth_url;
 }
