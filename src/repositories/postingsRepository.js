@@ -175,6 +175,7 @@ async function agruparFilaPorVideo(tiktokAccountId) {
 const ORIGIN_CASE = `
   CASE
     WHEN v.source_type = 'youtube_clip' THEN 'youtube_clip'
+    WHEN v.source_type = 'live_clip' THEN 'live_clip'
     ELSE 'drive_client'
   END AS origin
 `;
@@ -236,13 +237,18 @@ async function updateStatus(id, { status, errorMessage = null, tiktokPublishId =
   return rows[0] || null;
 }
 
-// So cortes gerados a partir do YouTube tem arquivo local pra publicar
-// (postagem vinda do Drive ainda nao tem esse caminho implementado) - por
-// isso o INNER JOIN ate clips exclui automaticamente as de origem Drive.
+// Cortes do YouTube e cortes de LIVE (desde 08/10/2026) tem arquivo local pra
+// publicar; postagem vinda do Drive ainda nao tem esse caminho - por isso o
+// INNER JOIN ate cortes_da_fila exclui automaticamente as de origem Drive.
+//
+// cortes_da_fila (migration 109) junta os dois tipos numa forma so. Num corte
+// de live, c.id e c.source_video_id sao NULOS (o id dele vem em
+// c.live_clip_id) - quem apaga corte pelo c.id precisa olhar c.origem antes,
+// senao apagaria o corte do YouTube de mesmo numero.
 const CLIP_FILE_JOIN = `
   JOIN videos v ON v.id = p.video_id
-  JOIN clips c ON c.id = v.clip_id
-  JOIN source_videos sv ON sv.id = c.source_video_id
+  JOIN cortes_da_fila c ON c.video_id = v.id
+  LEFT JOIN source_videos sv ON sv.id = c.source_video_id
 `;
 
 // LEFT porque video avulso/upload (source_videos.input_type != 'channel')
@@ -269,7 +275,7 @@ async function findNextPendingForAccounts(accountIds) {
   const { rows } = await pool.query(
     `SELECT DISTINCT ON (p.tiktok_account_id)
             p.tiktok_account_id, p.id, p.scheduled_for,
-            c.id AS clip_id, c.title AS clip_title, c.thumbnail_path,
+            c.id AS clip_id, c.live_clip_id, c.title AS clip_title, c.thumbnail_path,
             c.start_seconds, c.end_seconds, yc.channel_name
      FROM postings p
      ${CLIP_FILE_JOIN}
@@ -448,7 +454,7 @@ async function listStaleProcessing() {
 // linha em posting_schedule_settings nunca era varrida.
 async function listPostedOlderThan(hours) {
   const { rows } = await pool.query(
-    `SELECT p.*, c.id AS clip_id, c.local_clip_path, c.thumbnail_path, sv.id AS source_video_id
+    `SELECT p.*, c.id AS clip_id, c.origem, c.live_clip_id, c.local_clip_path, c.thumbnail_path, sv.id AS source_video_id
      FROM postings p
      ${CLIP_FILE_JOIN}
      WHERE p.status = 'posted' AND p.posted_at < now() - ($1 || ' hours')::interval`,
@@ -462,7 +468,7 @@ async function listPostedOlderThan(hours) {
 async function listQueueForClient(clientUserId, tiktokAccountId = null) {
   const { rows } = await pool.query(
     `SELECT p.*, c.title AS clip_title, c.description AS clip_description, c.thumbnail_path,
-            c.id AS clip_id, c.start_seconds, c.end_seconds, yc.id AS channel_id, yc.channel_name
+            c.id AS clip_id, c.live_clip_id, c.start_seconds, c.end_seconds, yc.id AS channel_id, yc.channel_name
      FROM postings p
      ${CLIP_FILE_JOIN}
      ${YOUTUBE_CHANNEL_JOIN}
@@ -550,7 +556,7 @@ async function setQueueOrder(tiktokAccountId, orderedIds) {
 
 async function listPostedForClient(clientUserId, tiktokAccountId = null) {
   const { rows } = await pool.query(
-    `SELECT p.*, c.title AS clip_title, c.thumbnail_path, c.id AS clip_id
+    `SELECT p.*, c.title AS clip_title, c.thumbnail_path, c.id AS clip_id, c.live_clip_id
      FROM postings p
      ${CLIP_FILE_JOIN}
      JOIN tiktok_accounts ta ON ta.id = p.tiktok_account_id
@@ -568,7 +574,7 @@ async function listPostedForClient(clientUserId, tiktokAccountId = null) {
 // corte nao saiu. Mostrado numa aba "Erro" ao lado de "Postados".
 async function listErrorForClient(clientUserId, tiktokAccountId = null) {
   const { rows } = await pool.query(
-    `SELECT p.*, c.title AS clip_title, c.thumbnail_path, c.id AS clip_id, yc.id AS channel_id, yc.channel_name
+    `SELECT p.*, c.title AS clip_title, c.thumbnail_path, c.id AS clip_id, c.live_clip_id, yc.id AS channel_id, yc.channel_name
      FROM postings p
      ${CLIP_FILE_JOIN}
      ${YOUTUBE_CHANNEL_JOIN}

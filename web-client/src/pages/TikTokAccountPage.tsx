@@ -520,7 +520,7 @@ function formatScheduledFor(iso: string | null) {
 // legenda que vai sair junto no TikTok, embaixo do vídeo.
 function ViewClipSheet({ item, onClose }: { item: PostingQueueItem; onClose: () => void }) {
   const t = useT()
-  const videoUrl = `/api/client/source-videos/clips/${item.clipId}/download`
+  const videoUrl = item.videoUrl ?? `/api/client/source-videos/clips/${item.clipId}/download`
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
@@ -581,7 +581,7 @@ function QueueRow({
   const t = useT()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
   const [abrirOpcoes, setAbrirOpcoes] = useState(false)
-  const downloadUrl = `/api/client/source-videos/clips/${item.clipId}/download`
+  const downloadUrl = item.videoUrl ?? `/api/client/source-videos/clips/${item.clipId}/download`
 
   // Na publicação direta o corte segue o padrão da conta. Ele só fica parado se
   // NINGUÉM definiu esse padrão ainda - o que se resolve uma vez lá em cima, não

@@ -16,7 +16,8 @@ router.use(requireAuthApi, requireRoleApi([ROLES.CLIENT, ROLES.ADMIN]), requireP
 
 router.get('/', asyncHandler(controller.listar));
 router.get('/contexto', asyncHandler(controller.contexto));
-router.put('/cortes/:id/gostei', asyncHandler(controller.gostei));
-router.post('/cortes/:id/enviar', asyncHandler(controller.enviar));
+// :tipo = youtube | live (os dois tipos de corte têm ids independentes).
+router.put('/cortes/:tipo/:id/gostei', asyncHandler(controller.gostei));
+router.post('/cortes/:tipo/:id/enviar', asyncHandler(controller.enviar));
 
 module.exports = router;

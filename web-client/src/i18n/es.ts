@@ -140,6 +140,7 @@ export const es: Dicionario = {
   "status.corte.erro": "Error",
   "status.origem.drive": "Drive del cliente",
   "status.origem.youtube": "YouTube",
+  "status.origem.live": "Directo",
   "inicio.titulo": "Inicio",
   "inicio.descricao": "Un resumen de lo que Post Flow hizo por tus canales en el período elegido.",
   "inicio.contaConectada": "¡Cuenta de TikTok conectada con éxito!",

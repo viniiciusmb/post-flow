@@ -54,4 +54,5 @@ export const CLIP_STATUS_TONE: Record<
 export const ORIGIN_LABEL: Record<PostingOrigin, ChaveDeTraducao> = {
   drive_client: "status.origem.drive",
   youtube_clip: "status.origem.youtube",
+  live_clip: "status.origem.live",
 }

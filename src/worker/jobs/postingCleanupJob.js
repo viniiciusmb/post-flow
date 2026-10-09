@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const postingsRepository = require('../../repositories/postingsRepository');
+const livesRepository = require('../../repositories/livesRepository');
 const clipsRepository = require('../../repositories/clipsRepository');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
 const sharedVideoFiles = require('../../lib/sharedVideoFiles');
@@ -41,6 +42,17 @@ async function run() {
 }
 
 async function deletePostingAndClip(posting) {
+  // Corte de LIVE: o id dele mora em live_clip_id, e posting.clip_id vem nulo.
+  // Apagar por clip_id aqui poderia acertar o corte do YouTube de mesmo
+  // numero - por isso ele tem caminho proprio (e nao ha video-fonte a limpar).
+  if (posting.origem === 'live') {
+    if (posting.live_clip_id) await livesRepository.deleteClipById(posting.live_clip_id);
+    if (posting.local_clip_path) fs.rm(posting.local_clip_path, { force: true }, () => {});
+    if (posting.thumbnail_path) fs.rm(posting.thumbnail_path, { force: true }, () => {});
+    logger.info(`Postagem ${posting.id} (corte de live) apagada automaticamente (${RETENCAO_CORTE_POSTADO_HORAS}h desde a publicacao).`);
+    return;
+  }
+
   // Apaga so o corte - video/posting ligados a ele caem em cascata no banco.
   await clipsRepository.deleteById(posting.clip_id);
 

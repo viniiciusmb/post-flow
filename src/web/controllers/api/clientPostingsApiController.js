@@ -8,8 +8,17 @@ const publishOptions = require('../../../lib/publishOptions');
 const logger = require('../../../lib/logger');
 const backfillPostingsService = require('../../../services/backfillPostingsService');
 
+// Corte de live (desde 08/10/2026) vem com clip_id nulo e live_clip_id
+// preenchido: o arquivo dele e servido pela rota das lives, que confere o dono.
 function thumbnailUrl(row) {
-  return row.thumbnail_path ? `/api/client/source-videos/clips/${row.clip_id}/thumbnail` : null;
+  if (!row.thumbnail_path) return null;
+  if (row.live_clip_id) return `/api/client/lives/cortes/${row.live_clip_id}/arquivo?capa=1`;
+  return `/api/client/source-videos/clips/${row.clip_id}/thumbnail`;
+}
+
+function videoUrl(row) {
+  if (row.live_clip_id) return `/api/client/lives/cortes/${row.live_clip_id}/arquivo`;
+  return row.clip_id ? `/api/client/source-videos/clips/${row.clip_id}/download` : null;
 }
 
 // scheduled_for e gravado uma unica vez quando a postagem entra na fila
@@ -45,6 +54,8 @@ async function listQueue(req, res) {
       clipTitle: p.clip_title,
       caption: p.caption ?? p.clip_description,
       thumbnailUrl: thumbnailUrl(p),
+      videoUrl: videoUrl(p),
+      liveClipId: p.live_clip_id ? Number(p.live_clip_id) : null,
       startSeconds: Number(p.start_seconds),
       endSeconds: Number(p.end_seconds),
       createdAt: p.created_at,

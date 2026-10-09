@@ -23,7 +23,7 @@ export type PostingStatus =
   | "error"
   | "skipped"
 
-export type PostingOrigin = "drive_client" | "youtube_clip"
+export type PostingOrigin = "drive_client" | "youtube_clip" | "live_clip"
 
 export interface AdminPosting {
   id: number
@@ -396,6 +396,10 @@ export interface PublishDefaults {
 export interface PostingQueueItem {
   id: number
   clipId: number
+  /** Endereço do arquivo do corte (do YouTube ou de live). */
+  videoUrl?: string | null
+  /** Preenchido quando o corte é de uma live. */
+  liveClipId?: number | null
   /** true = este corte tem opções próprias, diferentes do padrão da conta. */
   optionsCustom: boolean
   privacyLevel: string | null

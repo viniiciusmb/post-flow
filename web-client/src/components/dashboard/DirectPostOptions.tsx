@@ -247,7 +247,7 @@ function FormularioDeOpcoes({
         <div>
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("opc.previa")}</p>
           <video
-            src={`/api/client/source-videos/clips/${item.clipId}/download`}
+            src={item.videoUrl ?? `/api/client/source-videos/clips/${item.clipId}/download`}
             controls
             preload="metadata"
             poster={item.thumbnailUrl ?? undefined}

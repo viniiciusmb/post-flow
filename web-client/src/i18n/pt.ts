@@ -146,6 +146,7 @@ export const pt = {
   "status.corte.erro": "Erro",
   "status.origem.drive": "Drive do cliente",
   "status.origem.youtube": "YouTube",
+  "status.origem.live": "Live",
   "inicio.titulo": "Início",
   "inicio.descricao": "Um resumo do que o Post Flow fez pelos seus canais no período escolhido.",
   "inicio.contaConectada": "Conta TikTok conectada com sucesso!",

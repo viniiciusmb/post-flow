@@ -681,14 +681,26 @@ async function listClipsForUser(userId, { channelId = null, ordem = 'recentes', 
 async function deleteClipsOlderThan(horas, limite = 200) {
   const { rows } = await pool.query(
     `DELETE FROM live_clips WHERE id IN (
-       SELECT id FROM live_clips
+       SELECT id FROM live_clips k
         WHERE COALESCE(ready_at, created_at) < now() - make_interval(hours => $1)
           AND status NOT IN ('na_fila', 'renderizando')
+          -- Corte que o cliente mandou pra fila do TikTok e ainda nao saiu:
+          -- apagar levaria a postagem junto (cascata) e ele sumiria da fila
+          -- sem aviso. Depois de publicado, quem apaga e a limpeza de 3 dias
+          -- da publicacao (postingCleanupJob).
+          AND NOT EXISTS (
+            SELECT 1 FROM videos v JOIN postings p ON p.video_id = v.id
+             WHERE v.live_clip_id = k.id AND p.status IN ('pending', 'queued', 'processing', 'posted'))
         ORDER BY id LIMIT $2)
      RETURNING id, local_clip_path, thumbnail_path`,
     [horas, limite]
   );
   return rows;
+}
+
+// Usado pela limpeza de 3 dias depois da publicacao (postingCleanupJob).
+async function deleteClipById(clipId) {
+  await pool.query('DELETE FROM live_clips WHERE id = $1', [clipId]);
 }
 
 async function findClipForUser(clipId, userId) {
@@ -833,6 +845,7 @@ async function costSummary(desde) {
 }
 
 module.exports = {
+  deleteClipById,
   upsertChannel,
   follow,
   unfollow,
