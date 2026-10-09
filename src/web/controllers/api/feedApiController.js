@@ -126,7 +126,10 @@ async function listar(req, res) {
     }
     proximo = `${cursor.us}.${cursor.tipo}.${cursor.id}`;
   }
-  res.json({ cortes, proximo });
+  // O total só vai na primeira página (é o que o marcador "3 / 34" usa); nas
+  // seguintes seria a mesma consulta de novo a cada rolagem.
+  const total = depois ? undefined : await feedRepository.contarCortes(clientUserId, { origem, canal, soGostei });
+  res.json({ cortes, proximo, total });
 }
 
 // Canais pro filtro e contas pro "Postar", numa chamada só.

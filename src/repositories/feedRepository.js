@@ -54,10 +54,8 @@ const CORTES = `
    WHERE k.user_id = $1 AND k.status = 'pronto' AND k.local_clip_path IS NOT NULL
 `;
 
-// filtros: { origem: 'youtube'|'live'|null, canal: { tipo, id } | 'avulsos' | null,
-//            soGostei, ordem: 'recentes'|'antigos', depois: { us, tipo, id } | null, limite }
-async function listarCortes(clientUserId, { origem = null, canal = null, soGostei = false, ordem = 'recentes', depois = null, limite = 12 } = {}) {
-  const params = [clientUserId];
+// Os filtros comuns à listagem e à contagem (tudo menos cursor e ordem).
+function filtrosDe(params, { origem = null, canal = null, soGostei = false } = {}) {
   const filtros = [];
   if (origem) {
     params.push(origem);
@@ -70,6 +68,25 @@ async function listarCortes(clientUserId, { origem = null, canal = null, soGoste
     filtros.push(`t.tipo = $${params.length - 1} AND t.canal_id = $${params.length}`);
   }
   if (soGostei) filtros.push('t.gostei');
+  return filtros;
+}
+
+// Quantos cortes o filtro atual tem, pro marcador "3 / 34" do feed.
+async function contarCortes(clientUserId, opcoes = {}) {
+  const params = [clientUserId];
+  const filtros = filtrosDe(params, opcoes);
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS n FROM (${CORTES}) t ${filtros.length ? `WHERE ${filtros.join(' AND ')}` : ''}`,
+    params
+  );
+  return rows[0].n;
+}
+
+// filtros: { origem: 'youtube'|'live'|null, canal: { tipo, id } | 'avulsos' | null,
+//            soGostei, ordem: 'recentes'|'antigos', depois: { us, tipo, id } | null, limite }
+async function listarCortes(clientUserId, { origem = null, canal = null, soGostei = false, ordem = 'recentes', depois = null, limite = 12 } = {}) {
+  const params = [clientUserId];
+  const filtros = filtrosDe(params, { origem, canal, soGostei });
   const desc = ordem !== 'antigos';
   if (depois) {
     params.push(depois.us, depois.tipo, depois.id);
@@ -149,4 +166,4 @@ async function canaisDeLive(clientUserId) {
   return rows;
 }
 
-module.exports = { listarCortes, contarGostei, marcarGostei, postagemDoCorte, garantirVideoDeLive, canaisDeLive };
+module.exports = { listarCortes, contarCortes, contarGostei, marcarGostei, postagemDoCorte, garantirVideoDeLive, canaisDeLive };

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
+  IconAdjustmentsHorizontal,
   IconArrowsSort,
   IconBrandFacebook,
   IconBrandInstagram,
@@ -27,6 +28,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import {
   Dialog,
   DialogContent,
@@ -77,6 +79,12 @@ const REDE_FUNDO: Record<Conta["rede"], string> = {
 }
 const REDE_ICONE = { tiktok: IconBrandTiktok, instagram: IconBrandInstagram, facebook: IconBrandFacebook }
 
+// "09/10 08:00": a etiqueta da fila no vídeo precisa caber numa linha curta.
+function diaHoraCurto(iso: string) {
+  const d = new Date(iso)
+  return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", "")
+}
+
 function mmss(s: number) {
   return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`
 }
@@ -118,6 +126,11 @@ export function FeedPage() {
   const [ctx, setCtx] = useState<Contexto | null>(null)
   const [cortes, setCortes] = useState<Corte[] | null>(null)
   const [proximo, setProximo] = useState<string | null>(null)
+  // Quantos cortes o filtro tem, pro marcador "3 / 34". Vem do servidor na
+  // primeira página; ao chegar no fim da lista vira a contagem exata (algum
+  // corte pode ter perdido o arquivo e ficado de fora).
+  const [total, setTotal] = useState<number | null>(null)
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [carregandoMais, setCarregandoMais] = useState(false)
   const [ativo, setAtivo] = useState(0)
   // O navegador só deixa o vídeo tocar sozinho se começar MUDO. O som liga no
@@ -154,11 +167,13 @@ export function FeedPage() {
     palco.current?.scrollTo({ top: 0 })
     const url = consulta().replace("/api/client/feed", "/client/feed")
     window.history.replaceState(null, "", url)
+    setTotal(null)
     api
-      .get<{ cortes: Corte[]; proximo: string | null }>(consulta())
+      .get<{ cortes: Corte[]; proximo: string | null; total?: number }>(consulta())
       .then((d) => {
         setCortes(d.cortes)
         setProximo(d.proximo)
+        setTotal(d.proximo ? (d.total ?? null) : d.cortes.length)
       })
       .catch((err) => {
         setCortes([])
@@ -172,7 +187,11 @@ export function FeedPage() {
     api
       .get<{ cortes: Corte[]; proximo: string | null }>(consulta(proximo))
       .then((d) => {
-        setCortes((atual) => [...(atual ?? []), ...d.cortes.filter((c) => !(atual ?? []).some((x) => x.chave === c.chave))])
+        setCortes((atual) => {
+          const junto = [...(atual ?? []), ...d.cortes.filter((c) => !(atual ?? []).some((x) => x.chave === c.chave))]
+          if (!d.proximo) setTotal(junto.length)
+          return junto
+        })
         setProximo(d.proximo)
       })
       .finally(() => setCarregandoMais(false))
@@ -209,7 +228,7 @@ export function FeedPage() {
       const el = palco.current
       if (!el || window.innerWidth >= 1024) return setAlturaMovel(null)
       const topo = el.getBoundingClientRect().top + window.scrollY
-      setAlturaMovel(Math.max(380, Math.round(window.innerHeight - topo - 16)))
+      setAlturaMovel(Math.max(380, Math.round(window.innerHeight - topo)))
     }
     medir()
     window.addEventListener("resize", medir)
@@ -274,11 +293,20 @@ export function FeedPage() {
     if ((canal === "avulsos" && o === "lives") || (atual && o !== "todos" && (o === "youtube") !== (atual.tipo === "youtube"))) setCanal("todos")
   }
 
+  const filtrosAtivos = (origem !== "todos" ? 1 : 0) + (canal !== "todos" ? 1 : 0) + (ordem !== "recentes" ? 1 : 0)
+
   return (
     <DashboardLayout user={user} onLogout={logout} title="Feed de cortes">
-      <div className={cn("flex min-w-0 flex-col gap-3 lg:mb-0 lg:flex-row lg:items-start lg:gap-6", aba === "todos" && "-mb-12")}>
+      {/* No celular o feed vai de ponta a ponta da tela (come o respiro do
+          layout), como nos apps: o vídeo é o que importa ali. */}
+      <div
+        className={cn(
+          "flex min-w-0 flex-col gap-3 lg:m-0 lg:flex-row lg:items-start lg:gap-6",
+          aba === "todos" && "-mx-4 -mt-4 -mb-16 lg:mx-0 lg:mt-0",
+        )}
+      >
         {/* Controles: no celular ficam em cima; no computador, numa coluna ao lado. */}
-        <aside className="flex min-w-0 flex-col gap-3 lg:sticky lg:top-4 lg:w-72 lg:shrink-0">
+        <aside className={cn("min-w-0 flex-col gap-3 lg:sticky lg:top-4 lg:flex lg:w-72 lg:shrink-0", aba === "todos" ? "hidden" : "flex")}>
           <div className="flex items-start gap-3">
             <span
               className="flex size-11 shrink-0 items-center justify-center rounded-xl text-white shadow-sm"
@@ -396,7 +424,7 @@ export function FeedPage() {
             <div
               ref={palco}
               style={alturaMovel ? { height: alturaMovel } : undefined}
-              className="h-[calc(100dvh-14rem)] min-h-[380px] snap-y snap-mandatory overflow-y-auto overscroll-contain rounded-2xl bg-[#0b0b0f] [scrollbar-width:none] lg:h-[calc(100dvh-7.5rem)] [&::-webkit-scrollbar]:hidden"
+              className="h-[calc(100dvh-3rem)] min-h-[380px] snap-y snap-mandatory overflow-y-auto overscroll-contain bg-black [scrollbar-width:none] lg:h-[calc(100dvh-7.5rem)] lg:rounded-2xl lg:bg-[#0b0b0f] [&::-webkit-scrollbar]:hidden"
             >
               {!cortes ? (
                 <div className="flex h-full items-center justify-center p-4">
@@ -406,7 +434,7 @@ export function FeedPage() {
                 <FeedVazio aba={aba} erro={erro} />
               ) : (
                 cortes.map((c, i) => (
-                  <div key={c.chave} data-indice={i} className="flex h-full snap-start snap-always items-center justify-center gap-4 p-2 sm:p-4">
+                  <div key={c.chave} data-indice={i} className="flex h-full snap-start snap-always items-center justify-center gap-4 lg:p-4">
                     <ItemDoFeed
                       corte={c}
                       ativo={i === ativo}
@@ -424,6 +452,42 @@ export function FeedPage() {
                 <div className="flex h-16 snap-start items-center justify-center text-xs text-white/60">Carregando mais cortes...</div>
               )}
             </div>
+
+            {/* Barra por cima do vídeo no celular: filtros, abas e o marcador.
+                Tudo o que antes ficava empilhado acima do feed e roubava a
+                altura do vídeo. */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 bg-gradient-to-b from-black/60 to-transparent px-3 pb-6 pt-2.5 lg:hidden">
+              <button
+                type="button"
+                onClick={() => setFiltrosAbertos(true)}
+                aria-label="Filtros"
+                className="pointer-events-auto relative flex size-9 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur"
+              >
+                <IconAdjustmentsHorizontal className="size-5" />
+                {filtrosAtivos > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full text-[9px] font-bold text-white" style={{ background: CORACAO }}>
+                    {filtrosAtivos}
+                  </span>
+                )}
+              </button>
+              <div className="pointer-events-auto flex items-center gap-4 text-[15px] font-semibold text-white drop-shadow">
+                <button type="button" className="relative pb-1" onClick={() => setAba("todos")}>
+                  Para você
+                  <span className="absolute inset-x-2 -bottom-0.5 h-0.5 rounded-full bg-white" />
+                </button>
+                <button type="button" className="pb-1 text-white/65" onClick={() => setAba("gostei")}>
+                  Gostei
+                </button>
+              </div>
+              <Marcador atual={cortes && cortes.length ? ativo + 1 : 0} total={total} />
+            </div>
+
+            {/* Marcador no computador, no canto do palco. */}
+            {cortes && cortes.length > 0 && (
+              <div className="absolute left-4 top-4 z-10 hidden lg:block">
+                <Marcador atual={ativo + 1} total={total} />
+              </div>
+            )}
 
             {/* Setas no computador, fora do vídeo. */}
             {cortes && cortes.length > 1 && (
@@ -452,6 +516,49 @@ export function FeedPage() {
         )}
       </div>
 
+      {/* Filtros do feed no celular, numa gaveta: na tela ficam só o vídeo e a barra. */}
+      <Sheet open={filtrosAbertos} onOpenChange={setFiltrosAbertos}>
+        <SheetContent side="bottom" className="max-h-[80dvh] gap-0 overflow-y-auto rounded-t-2xl px-4 pb-6">
+          <SheetHeader className="px-0">
+            <SheetTitle>Filtrar cortes</SheetTitle>
+          </SheetHeader>
+          <div className="flex flex-col gap-4">
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Origem</p>
+              <div className="grid grid-cols-3 rounded-xl bg-muted p-1">
+                <SegmentoBotao ativo={origem === "todos"} onClick={() => escolherOrigem("todos")}>Todos</SegmentoBotao>
+                <SegmentoBotao ativo={origem === "youtube"} onClick={() => escolherOrigem("youtube")}>
+                  <IconBrandYoutubeFilled className="size-4 shrink-0" style={{ color: YT }} /> YouTube
+                </SegmentoBotao>
+                <SegmentoBotao ativo={origem === "lives"} onClick={() => escolherOrigem("lives")}>
+                  <IconBroadcast className="size-4 shrink-0" style={{ color: TWITCH }} /> Lives
+                </SegmentoBotao>
+              </div>
+            </div>
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Ordem</p>
+              <div className="grid grid-cols-2 rounded-xl bg-muted p-1">
+                <SegmentoBotao ativo={ordem === "recentes"} onClick={() => setOrdem("recentes")}>Mais recentes</SegmentoBotao>
+                <SegmentoBotao ativo={ordem === "antigos"} onClick={() => setOrdem("antigos")}>Mais antigos</SegmentoBotao>
+              </div>
+            </div>
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Canais</p>
+              <div className="flex flex-wrap gap-2">
+                <FiltroCanal ativo={canal === "todos"} onClick={() => setCanal("todos")} nome="Todos os canais" />
+                {canais.map((c) => (
+                  <FiltroCanal key={c.chave} ativo={canal === c.chave} onClick={() => setCanal(c.chave)} nome={c.nome} avatar={c.avatar} tipo={c.tipo} />
+                ))}
+                {origem !== "lives" && <FiltroCanal ativo={canal === "avulsos"} onClick={() => setCanal("avulsos")} nome="Envios avulsos" avulso />}
+              </div>
+            </div>
+            <Button className="mt-1 w-full" onClick={() => setFiltrosAbertos(false)}>
+              Ver {total ?? ""} {total === 1 ? "corte" : "cortes"}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <EnviarCorteDialog
         corte={enviando}
         contas={ctx?.contas ?? []}
@@ -479,6 +586,16 @@ export function FeedPage() {
         }
       />
     </DashboardLayout>
+  )
+}
+
+/** "3 / 34": em que corte a pessoa está e quantos o filtro tem. */
+function Marcador({ atual, total }: { atual: number; total: number | null }) {
+  return (
+    <span className="pointer-events-none rounded-full bg-black/45 px-2.5 py-1 font-mono text-xs font-semibold tabular-nums text-white backdrop-blur">
+      {atual}
+      <span className="text-white/60"> / {total ?? "…"}</span>
+    </span>
   )
 }
 
@@ -673,7 +790,7 @@ function ItemDoFeed({
   const { canal: canalNome, linha } = deOnde(corte)
 
   const acoes = (dentro: boolean) => (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-3.5 lg:gap-4">
       <BotaoDeAcao
         rotulo={corte.gostei ? "Gostei" : "Gostar"}
         dentro={dentro}
@@ -682,7 +799,8 @@ function ItemDoFeed({
         icone={corte.gostei ? <IconHeartFilled className="size-6" style={{ color: CORACAO }} /> : <IconHeart className="size-6" />}
       />
       <BotaoDeAcao rotulo="Postar" dentro={dentro} onClick={onEnviar} icone={<IconSend className="size-6" />} cor />
-      <BotaoDeAcao rotulo="Baixar" dentro={dentro} href={corte.downloadUrl} icone={<IconDownload className="size-6" />} />
+      {/* No celular o Baixar fica na janela de Postar: um botão a menos em cima do vídeo. */}
+      {!dentro && <BotaoDeAcao rotulo="Baixar" dentro={dentro} href={corte.downloadUrl} icone={<IconDownload className="size-6" />} />}
       <BotaoDeAcao
         rotulo={mudo ? "Sem som" : "Som"}
         dentro={dentro}
@@ -694,7 +812,7 @@ function ItemDoFeed({
 
   return (
     <>
-      <div className="relative aspect-[9/16] h-full max-h-full max-w-full touch-manipulation select-none overflow-hidden rounded-2xl bg-black shadow-2xl ring-1 ring-white/10">
+      <div className="relative h-full w-full touch-manipulation select-none overflow-hidden bg-black lg:aspect-[9/16] lg:max-h-full lg:w-auto lg:max-w-full lg:rounded-2xl lg:shadow-2xl lg:ring-1 lg:ring-white/10">
         <video
           ref={video}
           src={perto ? corte.videoUrl : undefined}
@@ -736,26 +854,33 @@ function ItemDoFeed({
           </span>
         )}
 
-        {/* Onde o corte já está: na fila ou publicado. */}
-        {(naFila.length > 0 || publicadas.length > 0) && (
-          <div className="absolute left-3 right-3 top-3 flex flex-wrap gap-1.5">
-            {publicadas.map((p) => (
-              <span key={`p${p.accountId}`} className="inline-flex items-center gap-1 rounded-full bg-tone-success-ink/90 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur">
-                <IconCheck className="size-3" /> Publicado em {nomeConta(p.accountId)}
-              </span>
-            ))}
-            {naFila.map((p) => (
-              <span key={`f${p.accountId}`} className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[11px] font-medium text-white backdrop-blur">
-                <IconClock className="size-3" /> Na fila de {nomeConta(p.accountId)}
-                {p.scheduledFor ? ` · ${dataHora(p.scheduledFor)}` : ""}
-              </span>
-            ))}
-          </div>
-        )}
-
         {/* Informações por cima do vídeo, como no app. */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3.5 pb-4 pt-24 text-white">
-          <div className="pointer-events-auto pr-14 lg:pr-0">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-3.5 pb-5 pt-20 text-white lg:pb-4">
+          <div className="pointer-events-auto pr-16 lg:pr-0">
+            {/* Onde o corte já está, numa etiqueta só e curta. */}
+            {(publicadas.length > 0 || naFila.length > 0) && (
+              <span
+                className={cn(
+                  "mb-2 inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px] font-semibold backdrop-blur",
+                  publicadas.length ? "bg-tone-success-ink/90" : "bg-white/20",
+                )}
+                title={
+                  publicadas.length
+                    ? `Publicado em ${publicadas.map((p) => nomeConta(p.accountId)).join(", ")}`
+                    : `Na fila de ${naFila.map((p) => nomeConta(p.accountId)).join(", ")}`
+                }
+              >
+                {publicadas.length ? (
+                  <>
+                    <IconCheck className="size-3 shrink-0" /> Publicado
+                  </>
+                ) : (
+                  <>
+                    <IconClock className="size-3 shrink-0" /> Na fila{naFila[0].scheduledFor ? ` · ${diaHoraCurto(naFila[0].scheduledFor)}` : ""}
+                  </>
+                )}
+              </span>
+            )}
             <div className="flex min-w-0 items-center gap-2">
               <Avatar className="size-8 shrink-0 ring-2 ring-white/80">
                 {corte.origem.canalAvatar && <AvatarImage src={corte.origem.canalAvatar} alt="" />}
@@ -763,19 +888,19 @@ function ItemDoFeed({
               </Avatar>
               <span className="min-w-0 truncate text-sm font-semibold">{canalNome}</span>
               <SeloDeOrigem tipo={corte.tipo} claro />
-              <span className="shrink-0 rounded bg-white/15 px-1.5 py-0.5 font-mono text-[10.5px]">{mmss(corte.duracaoSegundos)}</span>
+              <span className="hidden shrink-0 rounded bg-white/15 px-1.5 py-0.5 font-mono text-[10.5px] lg:inline">{mmss(corte.duracaoSegundos)}</span>
             </div>
             {corte.titulo && <p className="mt-2 line-clamp-2 text-[15px] font-semibold leading-snug">{corte.titulo}</p>}
             {corte.legenda && corte.legenda !== corte.titulo && (
               <button
                 type="button"
                 onClick={() => setLegendaAberta((v) => !v)}
-                className={cn("mt-1 block text-left text-[13px] leading-snug text-white/85", legendaAberta ? "" : "line-clamp-2")}
+                className={cn("mt-1 block text-left text-[13px] leading-snug text-white/85", legendaAberta ? "" : "line-clamp-1")}
               >
                 {corte.legenda}
               </button>
             )}
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-white/70">
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-white/65">
               {corte.tipo === "live" ? <IconBroadcast className="size-3.5 shrink-0" /> : <IconMusic className="size-3.5 shrink-0" />}
               <span className="truncate">{linha}</span>
             </p>
@@ -783,7 +908,7 @@ function ItemDoFeed({
         </div>
 
         {/* Ações dentro do vídeo no celular; no computador elas ficam ao lado. */}
-        <div className="absolute bottom-24 right-2 lg:hidden">{acoes(true)}</div>
+        <div className="absolute bottom-6 right-2 lg:hidden">{acoes(true)}</div>
 
         <div className="absolute inset-x-0 bottom-0 h-[3px] bg-white/15">
           <div className="h-full bg-white" style={{ width: `${progresso * 100}%` }} />
@@ -976,7 +1101,7 @@ function BotaoDeAcao({
   cor?: boolean
 }) {
   const classe = cn(
-    "flex size-12 items-center justify-center rounded-full transition active:scale-90",
+    "flex size-11 items-center justify-center rounded-full transition active:scale-90 lg:size-12",
     cor
       ? "text-white shadow-lg"
       : dentro
@@ -997,7 +1122,7 @@ function BotaoDeAcao({
           {icone}
         </button>
       )}
-      <span className={cn("text-[11px] font-medium", dentro ? "text-white drop-shadow" : "text-white/80")}>{rotulo}</span>
+      <span className={cn("text-[10.5px] font-medium", dentro ? "text-white drop-shadow" : "text-white/80")}>{rotulo}</span>
     </div>
   )
 }
@@ -1059,6 +1184,11 @@ function EnviarCorteDialog({
         <DialogHeader>
           <DialogTitle>{resultados ? "Enviado para a fila" : "Postar este corte"}</DialogTitle>
           <DialogDescription className="line-clamp-2">{corte?.titulo}</DialogDescription>
+          {corte && (
+            <a href={corte.downloadUrl} download className="inline-flex w-fit items-center gap-1 text-xs font-medium text-foreground underline underline-offset-2">
+              <IconDownload className="size-3.5" /> Baixar este corte
+            </a>
+          )}
         </DialogHeader>
 
         {resultados ? (

@@ -102,6 +102,10 @@ test('mostra so os cortes prontos do proprio cliente, do mais novo pro mais anti
   const p1 = await agent.get('/api/client/feed');
   assert.equal(p1.status, 200);
   assert.equal(p1.body.cortes.length, 12);
+  // O marcador "N / total" conta os prontos com arquivo registrado: os 14 +
+  // o que perdeu o arquivo no disco = 15 (o de render em andamento fica de
+  // fora). A tela acerta o total quando chega ao fim da lista.
+  assert.equal(p1.body.total, 15);
   assert.ok(p1.body.proximo);
   const p2 = await agent.get(`/api/client/feed?depois=${p1.body.proximo}`);
   const ids = [...p1.body.cortes, ...p2.body.cortes].map((c) => c.id);
