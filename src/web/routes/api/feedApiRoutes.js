@@ -19,5 +19,7 @@ router.get('/contexto', asyncHandler(controller.contexto));
 // :tipo = youtube | live (os dois tipos de corte têm ids independentes).
 router.put('/cortes/:tipo/:id/gostei', asyncHandler(controller.gostei));
 router.post('/cortes/:tipo/:id/enviar', asyncHandler(controller.enviar));
+router.post('/vistos', asyncHandler(controller.marcarVistos));
+router.delete('/vistos', asyncHandler(controller.esquecerVistos));
 
 module.exports = router;

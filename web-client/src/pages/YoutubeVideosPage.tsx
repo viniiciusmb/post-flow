@@ -4,7 +4,6 @@ import {
   IconArrowUpRight,
   IconBrandTiktok,
   IconBrandYoutubeFilled,
-  IconCheck,
   IconClockPause,
   IconLink,
   IconLoader2,
@@ -32,6 +31,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { MonitoramentoDoCanal } from "@/components/youtube/MonitoramentoDoCanal"
+import type { CanalDestino, ContaSocial } from "@/components/redes/PainelDaContaSocial"
+import { REDES } from "@/lib/redes"
 import { UltimoVideoDialog, type PedidoDeUltimoVideo } from "@/components/youtube/UltimoVideoDialog"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
@@ -104,6 +105,10 @@ export function YoutubeVideosPage() {
   const [, setTick] = useState(0)
   // Canais com estilo próprio (o resto segue o padrão). Vem da tela de estilo.
   const [comEstiloProprio, setComEstiloProprio] = useState<Set<number>>(new Set())
+  // Contas das outras redes (Instagram, Facebook...) e em quais delas cada
+  // canal publica. Só no painel novo; falhar aqui não pode derrubar a tela.
+  const [contasSociais, setContasSociais] = useState<ContaSocial[]>([])
+  const [destinosSociais, setDestinosSociais] = useState<Map<number, number[]>>(new Map())
 
   async function load() {
     const [c, v, tk, d, estilo] = await Promise.all([
@@ -130,6 +135,12 @@ export function YoutubeVideosPage() {
     setAvgSeconds(Number(v.avgProcessingSeconds))
     setTiktokAccounts(tk.accounts.map((a) => ({ ...a, id: Number(a.id) })))
     setDrive(d)
+    const [sociais, destinos] = await Promise.all([
+      api.get<{ contas: ContaSocial[] }>("/api/client/social-accounts").catch(() => null),
+      api.get<{ canais: CanalDestino[] }>("/api/client/social-accounts/canais").catch(() => null),
+    ])
+    setContasSociais(sociais?.contas ?? [])
+    setDestinosSociais(new Map((destinos?.canais ?? []).map((x) => [x.id, x.socialAccountIds])))
   }
 
   useEffect(() => {
@@ -232,87 +243,73 @@ export function YoutubeVideosPage() {
 
   const totalAndamento = videos.filter((v) => ACTIVE_STATUSES.includes(v.status)).length
   const totalCortes = videos.reduce((s, v) => s + v.readyClipCount, 0)
-  const monitorando = channels?.filter((c) => c.isActive).length ?? 0
+
+  const resumo = [
+    `${channels?.length ?? 0} ${channels?.length === 1 ? "canal" : "canais"}`,
+    totalAndamento > 0 ? `${totalAndamento} ${totalAndamento === 1 ? "vídeo sendo cortado" : "vídeos sendo cortados"}` : null,
+    `${totalCortes} ${totalCortes === 1 ? "corte pronto" : "cortes prontos"}`,
+  ]
+    .filter(Boolean)
+    .join(" · ")
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Vídeos do YouTube">
-      {/* Cabeçalho: o que a tela faz + a ação principal (conectar canal). */}
-      <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-flat)] sm:p-6">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-24 -top-24 size-72 rounded-full opacity-[0.13] blur-3xl"
-          style={{ background: `radial-gradient(circle, ${YT}, transparent 70%)` }}
-        />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm" style={{ background: YT }}>
-              <IconBrandYoutubeFilled className="size-7" />
-            </span>
-            <div className="min-w-0">
-              <h1 className="font-heading text-[1.5rem] font-semibold leading-tight tracking-[-0.03em] sm:text-[1.65rem]">Vídeos do YouTube</h1>
-              <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-                Conecte um canal e cada vídeo novo vira cortes prontos pra publicar. Estilo e acompanhamento ficam aqui, canal por canal.
-              </p>
-            </div>
+      {/* Cabeçalho: o que a tela é, o estado de relance, e a ação principal. */}
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl text-white" style={{ background: YT }}>
+            <IconBrandYoutubeFilled className="size-6" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="font-heading text-[1.65rem] font-semibold leading-tight tracking-[-0.03em]">Vídeos do YouTube</h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">{channels ? resumo : "Carregando…"}</p>
           </div>
-          <form onSubmit={enviarLink} className="flex w-full flex-col gap-1.5 lg:w-[26rem]">
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="relative min-w-0 flex-1">
-                <IconLink className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  aria-label="Link ou @ do canal"
-                  placeholder="youtube.com/@canal"
-                  value={link}
-                  onChange={(e) => setLink(e.target.value)}
-                  className="h-10 bg-background pl-9"
-                  data-tour="canal-endereco"
-                />
-              </div>
-              <Button
-                type="submit"
-                disabled={conectando || !link.trim()}
-                className="h-10 gap-1.5 text-white hover:opacity-90"
-                style={{ background: YT }}
-                data-tour="canal-adicionar"
-              >
-                <IconPlus className="size-4" />
-                {conectando ? "Conectando..." : "Conectar canal"}
-              </Button>
+        </div>
+        <form onSubmit={enviarLink} className="flex w-full flex-col gap-1.5 lg:w-[25rem]">
+          <div className="flex gap-2">
+            <div className="relative min-w-0 flex-1">
+              <IconLink className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                aria-label="Link ou @ do canal"
+                placeholder="Cole o link ou @ de um canal"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                className="h-10 bg-card pl-9"
+                data-tour="canal-endereco"
+              />
             </div>
-            {erroConectar && <p className="text-xs text-destructive">{erroConectar}</p>}
-          </form>
-        </div>
-      </div>
-
-      {/* Os números de relance, cada um com a cor do que ele mede. */}
-      {channels && channels.length > 0 && (
-        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-          <Numero icone={<IconBrandYoutubeFilled className="size-4" />} cor="red" valor={channels.length} rotulo={channels.length === 1 ? "canal conectado" : "canais conectados"} />
-          <Numero icone={<IconRadar className="size-4" />} cor="green" valor={monitorando} rotulo="monitorando" />
-          <Numero icone={<IconLoader2 className="size-4" />} cor="blue" valor={totalAndamento} rotulo="em processamento" />
-          <Numero icone={<IconScissors className="size-4" />} cor="violet" valor={totalCortes} rotulo="cortes prontos" />
-        </div>
-      )}
+            <Button
+              type="submit"
+              disabled={conectando || !link.trim()}
+              className="h-10 shrink-0 gap-1.5 text-white hover:opacity-90"
+              style={{ background: YT }}
+              data-tour="canal-adicionar"
+            >
+              <IconPlus className="size-4" />
+              <span className="hidden sm:inline">{conectando ? "Conectando..." : "Conectar canal"}</span>
+              <span className="sm:hidden">{conectando ? "..." : "Conectar"}</span>
+            </Button>
+          </div>
+          {erroConectar && <p className="text-xs text-destructive">{erroConectar}</p>}
+        </form>
+      </header>
 
       {aviso && (
         <p className="rounded-md border border-status-posted/30 bg-status-posted/10 px-3 py-2 text-sm text-status-posted">{aviso}</p>
       )}
 
       {!channels ? (
-        <div className="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
-          <Skeleton className="h-64" />
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-12" />
           <Skeleton className="h-96" />
         </div>
       ) : channels.length === 0 && avulsos.length === 0 ? (
         <PrimeiroCanal />
       ) : (
-        <div className="grid items-start gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
-          {/* Lista de canais. No celular vira uma faixa que rola de lado. */}
-          <nav aria-label="Canais" className="min-w-0 lg:sticky lg:top-4">
-            <p className="mb-2 hidden px-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground lg:block">
-              Canais
-            </p>
-            <div ref={faixa} className="relative -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0">
+        <div className="flex min-w-0 flex-col gap-4">
+          {/* Os canais como abas: o conteúdo do canal ganha a largura toda. */}
+          <nav aria-label="Canais" className="min-w-0">
+            <div ref={faixa} className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
               {channels.map((c) => {
                 const st = estadoDoCanal(c)
                 const andando = emAndamento(c.id)
@@ -324,49 +321,43 @@ export function YoutubeVideosPage() {
                     onClick={() => setSelecao(c.id)}
                     aria-current={ativo ? "page" : undefined}
                     className={cn(
-                      "relative flex min-w-[13rem] shrink-0 items-center gap-3 overflow-hidden rounded-xl border px-2.5 py-2 text-left transition-colors lg:min-w-0",
+                      "flex shrink-0 items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-sm transition-colors",
                       ativo
-                        ? "border-[#FF0033]/35 bg-card shadow-[var(--shadow-raised)]"
-                        : "border-border bg-card/60 hover:bg-card lg:border-transparent lg:bg-transparent",
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border bg-card text-foreground hover:border-foreground/40",
                     )}
                   >
-                    {ativo && <span aria-hidden className="absolute inset-y-2 left-0 w-[3px] rounded-r-full" style={{ background: YT }} />}
-                    <Avatar className="size-8 shrink-0">
-                      {c.avatarUrl && <AvatarImage src={c.avatarUrl} alt="" />}
-                      <AvatarFallback className="text-[10px]">{iniciais(c.channelName || "YT")}</AvatarFallback>
-                    </Avatar>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{c.channelName || handleDoCanal(c.channelUrl)}</span>
-                      <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[10.5px] text-muted-foreground">
-                        <span className={cn("size-1.5 shrink-0 rounded-full", st.cor)} />
-                        {st.rotulo}
-                        {andando > 0 && <span className="text-foreground">· {andando} em curso</span>}
-                      </span>
+                    <span className="relative">
+                      <Avatar className="size-7">
+                        {c.avatarUrl && <AvatarImage src={c.avatarUrl} alt="" />}
+                        <AvatarFallback className="text-[9px] text-foreground">{iniciais(c.channelName || "YT")}</AvatarFallback>
+                      </Avatar>
+                      <span className={cn("absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full ring-2", st.cor, ativo ? "ring-foreground" : "ring-card")} />
                     </span>
+                    <span className="max-w-[11rem] truncate font-medium">{c.channelName || handleDoCanal(c.channelUrl)}</span>
+                    {andando > 0 && (
+                      <span className={cn("flex items-center gap-1 font-mono text-[10.5px]", ativo ? "text-background/80" : "text-tone-indigo-ink")}>
+                        <IconLoader2 className="size-3 animate-spin" />
+                        {andando}
+                      </span>
+                    )}
                   </button>
                 )
               })}
-              <div className="hidden lg:my-2 lg:block lg:border-t lg:border-border/70" />
               <button
                 type="button"
                 onClick={() => setSelecao("avulsos")}
                 aria-current={selecao === "avulsos" ? "page" : undefined}
                 className={cn(
-                  "relative flex min-w-[13rem] shrink-0 items-center gap-3 overflow-hidden rounded-xl border px-2.5 py-2 text-left transition-colors lg:min-w-0",
-                  selecao === "avulsos"
-                    ? "border-tone-cyan-ink/35 bg-card shadow-[var(--shadow-raised)]"
-                    : "border-border bg-card/60 hover:bg-card lg:border-transparent lg:bg-transparent",
+                  "flex shrink-0 items-center gap-2 rounded-full border border-dashed py-1 pl-1 pr-3 text-sm transition-colors",
+                  selecao === "avulsos" ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:text-foreground",
                 )}
               >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-tone-cyan-wash text-tone-cyan-ink">
+                <span className={cn("flex size-7 items-center justify-center rounded-full", selecao === "avulsos" ? "bg-background/15" : "bg-muted")}>
                   <IconUpload className="size-3.5" />
                 </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">Envios avulsos</span>
-                  <span className="mt-0.5 block font-mono text-[10.5px] text-muted-foreground">
-                    link ou arquivo · {avulsos.length}
-                  </span>
-                </span>
+                Envios avulsos
+                <span className="font-mono text-[10.5px] opacity-70">{avulsos.length}</span>
               </button>
             </div>
           </nav>
@@ -382,6 +373,8 @@ export function YoutubeVideosPage() {
                 aba={aba}
                 setAba={setAba}
                 tiktokAccounts={tiktokAccounts}
+                contasSociais={contasSociais}
+                destinosSociais={destinosSociais.get(canal.id) ?? []}
                 driveConectado={drive?.connected === true}
                 mostrarTunel={mostrarTunel}
                 onRecarregar={load}
@@ -458,19 +451,6 @@ const CORES = {
   amber: { wash: "bg-amber-500/12", ink: "text-amber-700 dark:text-amber-400" },
 } as const
 
-/** Um número de relance, com a cor do que ele mede. */
-function Numero({ icone, cor, valor, rotulo }: { icone: ReactNode; cor: keyof typeof CORES; valor: number; rotulo: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3 shadow-[var(--shadow-flat)]">
-      <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", CORES[cor].wash, CORES[cor].ink)}>{icone}</span>
-      <span className="min-w-0">
-        <span className="block font-mono text-lg font-semibold leading-none tabular-nums">{valor}</span>
-        <span className="mt-1 block text-xs leading-tight text-muted-foreground">{rotulo}</span>
-      </span>
-    </div>
-  )
-}
-
 /** Primeira visita: o caminho em três passos, na ordem em que acontece. */
 function PrimeiroCanal() {
   const passos: { titulo: string; texto: string; icone: ReactNode; cor: keyof typeof CORES }[] = [
@@ -491,33 +471,6 @@ function PrimeiroCanal() {
         </Card>
       ))}
     </div>
-  )
-}
-
-/** Um item do "pronto para rodar": verde quando está certo, âmbar quando falta. */
-function ItemDePreparo({ ok, titulo, texto, onClick }: { ok: boolean; titulo: string; texto: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex min-w-0 items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors",
-        ok ? "border-tone-success-ink/20 bg-tone-success-wash/60 hover:bg-tone-success-wash" : "border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/15",
-      )}
-    >
-      <span
-        className={cn(
-          "mt-px flex size-5 shrink-0 items-center justify-center rounded-full text-white",
-          ok ? "bg-tone-success-ink" : "bg-amber-500",
-        )}
-      >
-        {ok ? <IconCheck className="size-3" /> : <span className="text-[11px] font-bold leading-none">!</span>}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-xs font-semibold">{titulo}</span>
-        <span className="line-clamp-2 block text-[11px] text-muted-foreground">{texto}</span>
-      </span>
-    </button>
   )
 }
 
@@ -545,6 +498,8 @@ function EspacoDoCanal({
   aba,
   setAba,
   tiktokAccounts,
+  contasSociais,
+  destinosSociais,
   driveConectado,
   mostrarTunel,
   onRecarregar,
@@ -553,6 +508,8 @@ function EspacoDoCanal({
   estiloProprio,
 }: {
   estiloProprio: boolean
+  contasSociais: ContaSocial[]
+  destinosSociais: number[]
   canal: YoutubeChannel
   videos: SourceVideo[]
   avgSeconds: number
@@ -569,6 +526,12 @@ function EspacoDoCanal({
   const [erro, setErro] = useState<string | null>(null)
   const st = estadoDoCanal(canal)
   const conta = tiktokAccounts.find((a) => a.id === canal.tiktokAccountId) ?? null
+  const destinos = [
+    ...(conta ? [{ chave: `tiktok-${conta.id}`, rede: "tiktok" as const, nome: conta.displayName, avatar: conta.avatarUrl }] : []),
+    ...contasSociais
+      .filter((c) => destinosSociais.includes(c.id))
+      .map((c) => ({ chave: `${c.network}-${c.id}`, rede: c.network, nome: c.displayName || c.username || "Conta", avatar: c.avatarUrl })),
+  ]
 
   async function cortarUltimo() {
     setErro(null)
@@ -586,34 +549,14 @@ function EspacoDoCanal({
   return (
     <>
       <Card className="gap-0 overflow-hidden py-0">
-        <div
-          aria-hidden
-          className="h-14 sm:h-16"
-          style={{ background: `linear-gradient(110deg, ${YT}26, color-mix(in oklab, var(--tone-violet-ink) 16%, transparent) 55%, transparent)` }}
-        />
-        <div className="-mt-8 flex flex-col gap-4 px-5 pb-5 sm:flex-row sm:items-end">
-          <Avatar className="size-16 shrink-0 ring-4 ring-card">
+        <div className="flex flex-col gap-4 px-5 pb-4 pt-5 sm:flex-row sm:items-center">
+          <Avatar className="size-14 shrink-0">
             {canal.avatarUrl && <AvatarImage src={canal.avatarUrl} alt="" />}
             <AvatarFallback className="text-base">{iniciais(canal.channelName || "YT")}</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <h2 className="truncate text-lg font-semibold tracking-[-0.02em]">{canal.channelName || handleDoCanal(canal.channelUrl)}</h2>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-mono text-[10.5px] font-medium",
-                  !canal.isActive
-                    ? "bg-muted text-muted-foreground"
-                    : canal.lastCheckOk === false
-                      ? "bg-amber-500/12 text-amber-700 dark:text-amber-400"
-                      : "bg-tone-success-wash text-tone-success-ink",
-                )}
-              >
-                <span className={cn("size-1.5 rounded-full", st.cor)} />
-                {st.rotulo}
-              </span>
-            </div>
-            <p className="mt-1 flex flex-wrap items-center gap-x-2 font-mono text-[11px] text-muted-foreground">
+            <h2 className="truncate text-xl font-semibold tracking-[-0.02em]">{canal.channelName || handleDoCanal(canal.channelUrl)}</h2>
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
               <a href={canal.channelUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 hover:text-foreground">
                 {handleDoCanal(canal.channelUrl)}
                 <IconArrowUpRight className="size-3" />
@@ -627,27 +570,44 @@ function EspacoDoCanal({
           </Button>
         </div>
 
-        {/* Pronto para rodar? As três coisas que fazem um canal trabalhar
-            sozinho, cada uma levando direto pra aba onde se resolve. */}
-        <div className="grid gap-2 border-t border-border bg-muted/30 px-5 py-3 sm:grid-cols-3">
-          <ItemDePreparo
-            ok={canal.isActive}
-            titulo={canal.isActive ? "Pegando vídeos novos" : "Monitoramento desligado"}
-            texto={canal.isActive ? "conferido a cada 20 min" : "ligue pra entrar sozinho"}
-            onClick={() => setAba("monitoramento")}
-          />
-          <ItemDePreparo
-            ok={!!conta}
-            titulo={conta ? `Publica em ${conta.displayName}` : "Sem conta de destino"}
-            texto={conta ? (conta.autoPostEnabled ? "publicação automática ligada" : "publicação automática desligada") : "escolha a conta do TikTok"}
-            onClick={() => setAba("monitoramento")}
-          />
-          <ItemDePreparo
-            ok
-            titulo={estiloProprio ? "Estilo próprio" : "Estilo padrão"}
-            texto={estiloProprio ? "só deste canal" : "o mesmo de todos os canais"}
-            onClick={() => setAba("estilo")}
-          />
+        {/* O caminho do canal numa linha: entra -> corta no estilo -> sai nas
+            contas. Cada parte leva pra aba onde se muda. */}
+        <div className="flex flex-col gap-2 border-t border-border bg-muted/30 px-5 py-3 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5">
+          <button type="button" onClick={() => setAba("monitoramento")} className="flex items-center gap-2 text-left hover:text-foreground">
+            <span className={cn("size-2 shrink-0 rounded-full", st.cor)} />
+            <span>
+              <span className="font-medium text-foreground">{canal.isActive ? "Pegando vídeos novos" : "Monitoramento desligado"}</span>
+              <span className="text-muted-foreground"> {canal.isActive ? "a cada 20 min" : "· ligue pra entrar sozinho"}</span>
+            </span>
+          </button>
+          <button type="button" onClick={() => setAba("estilo")} className="flex items-center gap-2 text-left hover:text-foreground">
+            <IconPalette className="size-3.5 shrink-0 text-tone-violet-ink" />
+            <span className="font-medium text-foreground">{estiloProprio ? "Estilo próprio" : "Estilo padrão"}</span>
+          </button>
+          <button type="button" onClick={() => setAba("monitoramento")} className="flex min-w-0 items-center gap-2 text-left">
+            <span className="text-muted-foreground">Publica em</span>
+            {destinos.length === 0 ? (
+              <span className="font-medium text-amber-700 dark:text-amber-400">nenhuma conta — escolher</span>
+            ) : (
+              <span className="flex min-w-0 items-center -space-x-1.5">
+                {destinos.slice(0, 6).map((d) => {
+                  const r = REDES[d.rede]
+                  return (
+                    <span key={d.chave} title={`${d.nome} · ${r.nome}`} className="relative">
+                      <Avatar className="size-6 ring-2 ring-card">
+                        {d.avatar && <AvatarImage src={d.avatar} alt="" />}
+                        <AvatarFallback className="text-[8px]">{d.nome.slice(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <span className="absolute -bottom-0.5 -right-0.5 flex size-3 items-center justify-center rounded-full text-white ring-1 ring-card" style={{ background: r.fundo }}>
+                        <r.Icone className="size-2" />
+                      </span>
+                    </span>
+                  )
+                })}
+                {destinos.length > 6 && <span className="pl-2.5 font-mono text-[10.5px] text-muted-foreground">+{destinos.length - 6}</span>}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Avisos do canal: só o que explica uma dúvida real ("por que esse
@@ -687,7 +647,7 @@ function EspacoDoCanal({
             <IconPalette className="size-4" /> Estilo do corte
           </AbaBotao>
           <AbaBotao ativa={aba === "monitoramento"} onClick={() => setAba("monitoramento")}>
-            <IconRadar className="size-4" /> Monitoramento
+            <IconRadar className="size-4" /> Monitoramento e destinos
           </AbaBotao>
         </div>
       </Card>
@@ -720,6 +680,8 @@ function EspacoDoCanal({
         <MonitoramentoDoCanal
           channel={canal}
           tiktokAccounts={tiktokAccounts}
+          contasSociais={contasSociais}
+          destinosSociais={destinosSociais}
           driveConectado={driveConectado}
           onMudou={onRecarregar}
           onRemovido={onRemovido}

@@ -1373,7 +1373,7 @@ function AccountBox({
 // Painel de configuração da conta selecionada - fica FORA da lista de
 // caixas, uma unica vez embaixo de tudo (nao dentro de cada card), pra
 // deixar claro que so uma conta por vez esta sendo editada.
-function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSummary; onChanged: () => void }) {
+export function AccountDetailPanel({ account, onChanged }: { account: TikTokAccountSummary; onChanged: () => void }) {
   const t = useT()
   const [savingAutoPost, setSavingAutoPost] = useState(false)
   const [autoPostEnabled, setAutoPostEnabled] = useState(account.autoPostEnabled)

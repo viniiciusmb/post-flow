@@ -691,6 +691,10 @@ async function deleteClipsOlderThan(horas, limite = 200) {
           AND NOT EXISTS (
             SELECT 1 FROM videos v JOIN postings p ON p.video_id = v.id
              WHERE v.live_clip_id = k.id AND p.status IN ('pending', 'queued', 'processing', 'posted'))
+          -- Mesma coisa na fila das outras redes (Instagram, Facebook...).
+          AND NOT EXISTS (
+            SELECT 1 FROM social_postings sp
+             WHERE sp.live_clip_id = k.id AND sp.status IN ('pending', 'sending', 'processing', 'posted'))
         ORDER BY id LIMIT $2)
      RETURNING id, local_clip_path, thumbnail_path`,
     [horas, limite]

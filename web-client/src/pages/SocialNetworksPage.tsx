@@ -1,122 +1,40 @@
-import { useEffect, useMemo, useState, type ComponentType } from "react"
-import {
-  IconBrandFacebook,
-  IconBrandInstagram,
-  IconBrandTiktok,
-  IconCheck,
-  IconPlugConnectedX,
-  IconPlus,
-} from "@tabler/icons-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { IconAlertTriangle, IconCheck, IconPlus, IconTrash } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { TikTokContasPainel } from "@/pages/TikTokAccountPage"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { AccountDetailPanel } from "@/pages/TikTokAccountPage"
+import { PainelDaContaSocial, quando, type CanalDestino, type ContaSocial } from "@/components/redes/PainelDaContaSocial"
+import { MiniRegua, ReguaDoDia } from "@/components/redes/ReguaDoDia"
 import { useAuth } from "@/hooks/useAuth"
+import { useT } from "@/i18n"
 import { api, ApiError } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { data } from "@/lib/formatoLocal"
-import type { TikTokAccountSummary } from "@/types/api"
-
-type Rede = "tiktok" | "instagram" | "facebook"
-
-type ContaSocial = {
-  id: number
-  network: "instagram" | "facebook"
-  username: string | null
-  displayName: string | null
-  avatarUrl: string | null
-  accountType: string | null
-  connectedAt: string
-}
-
-type PaginaDoFacebook = { id: string; name: string; username: string | null; pictureUrl: string | null; category: string | null }
+import { ORDEM_DAS_REDES, REDES, type Rede } from "@/lib/redes"
+import type { PostingQueueItem, PostingScheduleResponse, TikTokAccountSummary } from "@/types/api"
 
 /**
- * O que cada rede exige. É a parte da tela que evita a frustração mais comum:
- * conectar, ver tudo "certo" e descobrir depois que a conta era do tipo errado.
- * Cada linha é uma exigência real da rede (ou do nosso jeito de publicar), não
- * texto de venda.
+ * Redes sociais: todas as contas onde os cortes saem, de todas as redes, numa
+ * lista só - e, ao escolher uma, a fila dela com a "régua do dia" (quando cada
+ * corte vai sair).
+ *
+ * Cada conta é identificada por "rede-id": os ids do TikTok e das outras redes
+ * vêm de tabelas diferentes e se repetem.
  */
-const REDES: Record<
-  Rede,
-  {
-    nome: string
-    Icone: ComponentType<{ className?: string }>
-    /** Cor da marca: borda e detalhes. */
-    cor: string
-    /** Fundo do ícone (o Instagram é um degradê). */
-    fundo: string
-    resumo: string
-    requisitos: { chave: string; valor: string; detalhe?: string }[]
-    comoPreparar?: string[]
-  }
-> = {
-  tiktok: {
-    nome: "TikTok",
-    Icone: IconBrandTiktok,
-    cor: "#FE2C55",
-    fundo: "linear-gradient(135deg, #111 0%, #111 55%, #25F4EE 140%)",
-    resumo: "Publicação direta pelo app oficial do Post Flow, aprovado pelo TikTok. Cada canal do YouTube publica em uma conta.",
-    requisitos: [
-      { chave: "Conta", valor: "Qualquer conta", detalhe: "Pessoal ou empresa." },
-      { chave: "Formato", valor: "Vertical 9:16", detalhe: "Os cortes já saem nesse formato." },
-      { chave: "Várias contas", valor: "Sim", detalhe: "Conecte quantas o seu plano permitir; cada canal escolhe a sua." },
-      { chave: "Horários", valor: "Você escolhe", detalhe: "Fila, horários e publicação automática por conta." },
-    ],
-  },
-  instagram: {
-    nome: "Instagram",
-    Icone: IconBrandInstagram,
-    cor: "#DD2A7B",
-    fundo: "linear-gradient(45deg, #F58529 0%, #DD2A7B 45%, #8134AF 75%, #515BD4 100%)",
-    resumo: "Os cortes saem como Reels no perfil conectado.",
-    requisitos: [
-      { chave: "Conta", valor: "Profissional", detalhe: "Criador de conteúdo ou Empresa. Conta pessoal não pode ser conectada." },
-      { chave: "Duração", valor: "Até 90 segundos", detalhe: "Cortes mais longos não são publicados no Instagram." },
-      { chave: "Formato", valor: "Reels 9:16" },
-      { chave: "Página", valor: "Ligada a uma Página do Facebook", detalhe: "Exigência da Meta para publicar por aplicativo." },
-      { chave: "Limite", valor: "100 por dia", detalhe: "Por conta, contando tudo que for publicado por aplicativo." },
-    ],
-    comoPreparar: [
-      "No app do Instagram, abra o seu perfil e toque em ☰.",
-      "Entre em Tipo de conta e ferramentas e toque em Mudar para conta profissional.",
-      "Escolha Criador de conteúdo ou Empresa e conecte uma Página do Facebook quando o app pedir.",
-    ],
-  },
-  facebook: {
-    nome: "Facebook",
-    Icone: IconBrandFacebook,
-    cor: "#1877F2",
-    fundo: "#1877F2",
-    resumo: "Os cortes são publicados numa Página do Facebook que você administra.",
-    requisitos: [
-      { chave: "Onde publica", valor: "Somente em Página", detalhe: "Perfil pessoal não pode ser conectado: o Facebook não permite publicar nele por aplicativo." },
-      { chave: "Acesso", valor: "Administrador da Página", detalhe: "Quem conecta precisa ter controle total da Página." },
-      { chave: "Duração", valor: "Até 90 segundos", detalhe: "Nessa faixa o corte sai como Reels da Página." },
-      { chave: "Formato", valor: "Reels 9:16" },
-    ],
-    comoPreparar: [
-      "Se ainda não tem, crie a Página em facebook.com/pages/create.",
-      "Ao conectar, entre com o perfil que administra a Página.",
-      "Na volta, marque a Página (ou as Páginas) que vão receber os cortes.",
-    ],
-  },
-}
+type Conta =
+  | { chave: string; rede: "tiktok"; id: number; nome: string; avatar: string | null; tiktok: TikTokAccountSummary }
+  | { chave: string; rede: Exclude<Rede, "tiktok">; id: number; nome: string; avatar: string | null; social: ContaSocial }
+
+type Pagina = { id: string; name: string; username: string | null; pictureUrl: string | null; category: string | null }
 
 const ERROS: Record<string, string> = {
   sessao: "A autorização demorou demais ou foi aberta em outra janela. Clique em conectar de novo.",
-  cancelada: "A conexão foi cancelada antes de terminar. Se a conta não é profissional, mude o tipo de conta e tente de novo.",
+  cancelada: "A conexão foi cancelada antes de terminar.",
   conta: "Não conseguimos confirmar a conta que voltou da autorização. Tente conectar de novo.",
   outro_cliente: "Essa conta já está conectada a outro usuário do Post Flow.",
   servico: "O serviço de conexão não respondeu. Tente de novo em instantes.",
@@ -124,15 +42,12 @@ const ERROS: Record<string, string> = {
 
 function lerUrl() {
   const p = new URLSearchParams(window.location.search)
-  const rede = p.get("rede")
-  // A volta da conexão do TikTok usa os parâmetros dela (tiktok_connected /
-  // tiktok_error). São lidos aqui porque a página limpa a barra de endereço
-  // antes de o painel do TikTok montar.
-  const tiktokErro = p.get("tiktok_error")
+  const rede = p.get("rede") as Rede | null
   return {
-    rede: (rede === "instagram" || rede === "facebook" || rede === "tiktok" ? rede : "tiktok") as Rede,
+    conta: p.get("conta"),
+    rede: rede && rede in REDES ? rede : null,
     tiktokConectada: p.get("tiktok_connected") === "1",
-    tiktokErro,
+    tiktokErro: p.get("tiktok_error"),
     conectada: p.get("conectada") === "1",
     erro: p.get("erro"),
     motivo: p.get("motivo"),
@@ -140,100 +55,139 @@ function lerUrl() {
   }
 }
 
+function SeloDaRede({ rede, className }: { rede: Rede; className?: string }) {
+  const { Icone, fundo } = REDES[rede]
+  return (
+    <span className={cn("flex items-center justify-center rounded-full text-white ring-2 ring-card", className)} style={{ background: fundo }}>
+      <Icone className="size-[60%]" />
+    </span>
+  )
+}
+
+function AvatarDaConta({ conta, tamanho = "size-10" }: { conta: Conta; tamanho?: string }) {
+  return (
+    <span className="relative shrink-0">
+      <Avatar className={tamanho}>
+        {conta.avatar && <AvatarImage src={conta.avatar} alt="" />}
+        <AvatarFallback className="text-[11px]">{(conta.nome || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
+      </Avatar>
+      <SeloDaRede rede={conta.rede} className="absolute -bottom-1 -right-1 size-[18px]" />
+    </span>
+  )
+}
+
 export function SocialNetworksPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const inicial = useMemo(lerUrl, [])
-  const [rede, setRede] = useState<Rede>(inicial.rede)
-  const [contas, setContas] = useState<ContaSocial[] | null>(null)
-  const [disponivel, setDisponivel] = useState(true)
   const [tiktok, setTiktok] = useState<TikTokAccountSummary[] | null>(null)
+  const [sociais, setSociais] = useState<ContaSocial[] | null>(null)
+  const [disponivel, setDisponivel] = useState(true)
+  const [canais, setCanais] = useState<CanalDestino[] | null>(null)
+  const [selecionada, setSelecionada] = useState<string | null>(inicial.conta)
+  const [conectar, setConectar] = useState<Rede | null>(null)
+  const [escolher, setEscolher] = useState(inicial.escolher)
+  const [aplicarDe, setAplicarDe] = useState<Conta | null>(null)
   const [aviso, setAviso] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(() => {
     if (inicial.tiktokErro) return { tipo: "erro", texto: `Não foi possível conectar o TikTok: ${inicial.tiktokErro}` }
     if (inicial.tiktokConectada) return { tipo: "ok", texto: "Conta do TikTok conectada." }
     if (inicial.erro)
-      return {
-        tipo: "erro",
-        texto: `${ERROS[inicial.erro] ?? ERROS.servico}${inicial.motivo ? ` Mensagem recebida: "${inicial.motivo}".` : ""}`,
-      }
-    if (inicial.conectada) return { tipo: "ok", texto: `${REDES[inicial.rede].nome} conectado.` }
+      return { tipo: "erro", texto: `${ERROS[inicial.erro] ?? ERROS.servico}${inicial.motivo ? ` Mensagem recebida: "${inicial.motivo}".` : ""}` }
+    if (inicial.conectada && inicial.rede) return { tipo: "ok", texto: `${REDES[inicial.rede].nome} conectado.` }
     return null
   })
-  const [escolherPagina, setEscolherPagina] = useState(inicial.escolher && inicial.rede === "facebook")
 
-  async function load() {
-    const [s, tk] = await Promise.all([
-      api.get<{ disponivel: boolean; contas: ContaSocial[] }>("/api/client/social-accounts"),
+  const load = useCallback(async () => {
+    const [tk, s, c] = await Promise.all([
       api.get<{ accounts: TikTokAccountSummary[] }>("/api/client/tiktok-accounts"),
+      api.get<{ disponivel: boolean; contas: ContaSocial[] }>("/api/client/social-accounts"),
+      api.get<{ canais: CanalDestino[] }>("/api/client/social-accounts/canais"),
     ])
-    setContas(s.contas)
+    setTiktok(tk.accounts.map((a) => ({ ...a, id: Number(a.id) })))
+    setSociais(s.contas)
     setDisponivel(s.disponivel)
-    setTiktok(tk.accounts)
-  }
+    setCanais(c.canais)
+  }, [])
 
   useEffect(() => {
     if (user) void load()
-  }, [user])
+  }, [user, load])
 
-  // Limpa os avisos da barra de endereço (um F5 não deve repetir "conectado"),
-  // mas mantém a rede: recarregar volta pra mesma aba.
+  const contas: Conta[] | null = useMemo(() => {
+    if (!tiktok || !sociais) return null
+    const lista: Conta[] = [
+      ...tiktok.map((a) => ({ chave: `tiktok-${a.id}`, rede: "tiktok" as const, id: a.id, nome: a.displayName, avatar: a.avatarUrl, tiktok: a })),
+      ...sociais.map((s) => ({ chave: `${s.network}-${s.id}`, rede: s.network, id: s.id, nome: s.displayName || s.username || "Conta", avatar: s.avatarUrl, social: s })),
+    ]
+    return lista.sort((a, b) => ORDEM_DAS_REDES.indexOf(a.rede) - ORDEM_DAS_REDES.indexOf(b.rede))
+  }, [tiktok, sociais])
+
+  // Sem seleção válida: a primeira da rede que acabou de conectar, senão a primeira.
   useEffect(() => {
-    window.history.replaceState(null, "", `/client/social?rede=${rede}`)
-  }, [rede])
+    if (!contas || contas.length === 0) return
+    if (selecionada && contas.some((c) => c.chave === selecionada)) return
+    const daRede = inicial.rede ? [...contas].reverse().find((c) => c.rede === inicial.rede) : null
+    setSelecionada((daRede ?? contas[0]).chave)
+  }, [contas, selecionada, inicial.rede])
+
+  useEffect(() => {
+    window.history.replaceState(null, "", `/client/social${selecionada ? `?conta=${selecionada}` : ""}`)
+  }, [selecionada])
+
+  // No celular a lista é uma faixa que rola de lado: a conta aberta fica à vista.
+  const faixa = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = faixa.current
+    if (!el || el.scrollWidth <= el.clientWidth) return
+    const ativo = el.querySelector<HTMLElement>('[aria-current="true"]')
+    if (ativo) el.scrollTo({ left: ativo.offsetLeft - 16 })
+  }, [selecionada, contas])
 
   if (authLoading || !user) return null
 
-  const contagem: Record<Rede, number | null> = {
-    tiktok: tiktok ? tiktok.length : null,
-    instagram: contas ? contas.filter((c) => c.network === "instagram").length : null,
-    facebook: contas ? contas.filter((c) => c.network === "facebook").length : null,
-  }
-  const info = REDES[rede]
+  const conta = contas?.find((c) => c.chave === selecionada) ?? null
+  const porRede = (r: Rede) => contas?.filter((c) => c.rede === r).length ?? 0
+  const naFila =
+    (tiktok?.reduce((s, a) => s + a.pendingCount, 0) ?? 0) + (sociais?.reduce((s, a) => s + a.fila.naFila, 0) ?? 0)
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Redes sociais">
-      <div className="min-w-0">
-        <h1 className="font-heading text-[1.65rem] font-semibold leading-tight tracking-[-0.03em]">Redes sociais</h1>
-        <p className="mt-1.5 max-w-xl text-sm text-muted-foreground">
-          Os perfis onde os seus cortes são publicados. Cada rede tem as próprias exigências, listadas ao lado de cada uma.
-        </p>
-      </div>
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="font-heading text-[1.65rem] font-semibold leading-tight tracking-[-0.03em]">Redes sociais</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {contas === null
+              ? "Carregando suas contas…"
+              : contas.length === 0
+                ? "Conecte as redes onde os seus cortes vão ser publicados."
+                : `${contas.length} ${contas.length === 1 ? "conta conectada" : "contas conectadas"} · ${naFila} ${naFila === 1 ? "corte na fila" : "cortes na fila"}`}
+          </p>
+        </div>
+      </header>
 
-      {/* Seletor de rede: cada botão já diz quantas contas estão conectadas,
-          então dá pra ver o que falta sem abrir as três. */}
-      <div role="tablist" aria-label="Rede" className="grid grid-cols-3 gap-2 sm:max-w-2xl">
-        {(Object.keys(REDES) as Rede[]).map((r) => {
-          const { nome, Icone } = REDES[r]
-          const n = contagem[r]
-          const ativa = rede === r
+      {/* As redes: as conectadas mostram quantas contas; as outras convidam. */}
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+        {ORDEM_DAS_REDES.map((r) => {
+          const n = porRede(r)
+          const { nome, Icone, fundo } = REDES[r]
           return (
             <button
               key={r}
               type="button"
-              role="tab"
-              aria-selected={ativa}
-              onClick={() => {
-                setRede(r)
-                setAviso(null)
-              }}
+              onClick={() => setConectar(r)}
               className={cn(
-                "relative flex min-w-0 flex-col items-start gap-2.5 overflow-hidden rounded-2xl border-2 bg-card p-3 text-left transition-all sm:flex-row sm:items-center sm:gap-3",
-                ativa ? "shadow-[var(--shadow-raised)]" : "border-transparent shadow-[var(--shadow-flat)] hover:-translate-y-px",
+                "group flex shrink-0 items-center gap-1.5 rounded-full border py-[3px] pl-[3px] pr-2.5 text-[13px] transition-colors",
+                n > 0 ? "border-border bg-card shadow-[var(--shadow-flat)] hover:border-foreground/30" : "border-dashed border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground",
               )}
-              style={ativa ? { borderColor: REDES[r].cor } : undefined}
             >
-              {ativa && (
-                <span aria-hidden className="absolute inset-0 opacity-[0.07]" style={{ background: REDES[r].fundo }} />
+              <span className={cn("flex size-6 items-center justify-center rounded-full text-white", n === 0 && "opacity-60 grayscale group-hover:opacity-100 group-hover:grayscale-0")} style={{ background: fundo }}>
+                <Icone className="size-3.5" />
+              </span>
+              <span className={cn(n > 0 && "font-medium")}>{nome}</span>
+              {n > 0 ? (
+                <span className="font-mono text-[11px] text-muted-foreground">{n}</span>
+              ) : (
+                <IconPlus className="size-3.5" />
               )}
-              <span className="relative flex size-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm" style={{ background: REDES[r].fundo }}>
-                <Icone className="size-5" />
-              </span>
-              <span className="relative min-w-0">
-                <span className="block truncate text-sm font-semibold">{nome}</span>
-                <span className="mt-0.5 flex items-center gap-1 truncate font-mono text-[10.5px] text-muted-foreground">
-                  {n !== null && n > 0 && <span className="size-1.5 shrink-0 rounded-full bg-status-posted" />}
-                  {n === null ? "…" : n === 1 ? "1 conta" : `${n} contas`}
-                </span>
-              </span>
             </button>
           )
         })}
@@ -243,100 +197,299 @@ export function SocialNetworksPage() {
         <p
           className={cn(
             "rounded-md border px-3 py-2 text-sm",
-            aviso.tipo === "ok"
-              ? "border-status-posted/30 bg-status-posted/10 text-status-posted"
-              : "border-destructive/30 bg-destructive/10 text-destructive",
+            aviso.tipo === "ok" ? "border-status-posted/30 bg-status-posted/10 text-status-posted" : "border-destructive/30 bg-destructive/10 text-destructive",
           )}
         >
           {aviso.texto}
         </p>
       )}
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_21rem]">
-        <div className="flex min-w-0 flex-col gap-4">
-          {rede === "tiktok" ? (
-            <TikTokContasPainel voltarPara="/client/social" />
-          ) : (
-            <ContasDaRede
-              rede={rede}
-              contas={contas?.filter((c) => c.network === rede) ?? null}
-              disponivel={disponivel}
-              onMudou={(lista) => setContas(lista)}
-              onErro={(texto) => setAviso({ tipo: "erro", texto })}
-            />
-          )}
+      {!contas ? (
+        <div className="grid gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]">
+          <Skeleton className="h-72" />
+          <Skeleton className="h-96" />
         </div>
-        <Requisitos rede={rede} info={info} />
-      </div>
+      ) : contas.length === 0 ? (
+        <Card className="items-center gap-0 px-6 py-14 text-center">
+          <p className="font-medium">Nenhuma rede conectada</p>
+          <p className="mt-1 max-w-sm text-sm text-muted-foreground">Comece pela rede onde você mais publica. Dá pra conectar quantas quiser, e cada uma tem a própria fila.</p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {(["tiktok", "instagram", "youtube"] as Rede[]).map((r) => (
+              <Button key={r} variant="outline" className="gap-1.5" onClick={() => setConectar(r)}>
+                <SeloDaRede rede={r} className="size-5 ring-0" />
+                {REDES[r].nome}
+              </Button>
+            ))}
+          </div>
+        </Card>
+      ) : (
+        <div className="grid items-start gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]">
+          <nav aria-label="Contas" className="min-w-0 lg:sticky lg:top-4">
+            <div ref={faixa} className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-col lg:gap-1 lg:overflow-visible lg:px-0 lg:pb-0">
+              {contas.map((c) => (
+                <LinhaDaConta key={c.chave} conta={c} ativa={c.chave === selecionada} onClick={() => setSelecionada(c.chave)} />
+              ))}
+            </div>
+          </nav>
 
+          <section className="flex min-w-0 flex-col gap-4">
+            {conta && (
+              <>
+                <CabecalhoDaConta
+                  conta={conta}
+                  onDesconectada={async () => {
+                    setSelecionada(null)
+                    await load()
+                  }}
+                />
+                {conta.rede === "tiktok" ? (
+                  <EspacoDoTiktok key={conta.chave} conta={conta.tiktok} onMudou={load} onAplicarEmTodas={() => setAplicarDe(conta)} />
+                ) : (
+                  <PainelDaContaSocial key={conta.chave} conta={conta.social} canais={canais} onMudou={load} onAplicarEmTodas={() => setAplicarDe(conta)} />
+                )}
+              </>
+            )}
+          </section>
+        </div>
+      )}
+
+      <ConectarRedeDialog
+        rede={conectar}
+        jaTem={conectar ? porRede(conectar) : 0}
+        disponivel={disponivel}
+        onFechar={() => setConectar(null)}
+        onErro={(texto) => setAviso({ tipo: "erro", texto })}
+      />
       <EscolherPaginaDialog
-        aberto={escolherPagina}
-        onFechar={() => setEscolherPagina(false)}
-        onConectado={(lista, n) => {
-          setContas(lista)
-          setEscolherPagina(false)
-          setAviso({ tipo: "ok", texto: n === 1 ? "Página conectada." : `${n} Páginas conectadas.` })
+        aberto={escolher}
+        onFechar={() => setEscolher(false)}
+        onConectado={async (n, rede) => {
+          setEscolher(false)
+          setAviso({ tipo: "ok", texto: n === 1 ? "Conta conectada." : `${n} contas conectadas.` })
+          await load()
+          if (rede) setSelecionada(null)
+        }}
+      />
+      <AplicarEmTodasDialog
+        de={aplicarDe}
+        total={contas?.length ?? 0}
+        onFechar={() => setAplicarDe(null)}
+        onAplicado={async (n) => {
+          setAplicarDe(null)
+          setAviso({ tipo: "ok", texto: `Horários copiados pra ${n} contas. As filas foram reorganizadas.` })
+          await load()
         }}
       />
     </DashboardLayout>
   )
 }
 
-function Requisitos({ rede, info }: { rede: Rede; info: (typeof REDES)[Rede] }) {
+function resumoDaConta(c: Conta) {
+  if (c.rede === "tiktok") {
+    const a = c.tiktok
+    return {
+      naFila: a.pendingCount,
+      erros: a.errorCount,
+      proxima: a.nextInQueue?.scheduledFor ?? null,
+      parada: !a.autoPostEnabled || a.paused === true,
+      motivo: !a.autoPostEnabled ? "publicação automática desligada" : a.paused ? "fila pausada" : null,
+    }
+  }
+  const f = c.social.fila
+  return {
+    naFila: f.naFila,
+    erros: f.erros,
+    proxima: f.proxima,
+    parada: f.pausada || !f.publicaSozinho,
+    motivo: f.pausada ? "fila pausada" : !f.publicaSozinho ? "publicação automática desligada" : null,
+  }
+}
+
+function LinhaDaConta({ conta, ativa, onClick }: { conta: Conta; ativa: boolean; onClick: () => void }) {
+  const r = resumoDaConta(conta)
+  const info = REDES[conta.rede]
+  const horarios = conta.rede === "tiktok" ? (conta.tiktok.horarios ?? []) : conta.social.fila.horarios
   return (
-    <Card className="gap-0 overflow-hidden py-0 xl:sticky xl:top-4">
-      <div className="relative border-b border-border px-5 py-4">
-        <span aria-hidden className="absolute inset-0 opacity-[0.09]" style={{ background: info.fundo }} />
-        <div className="relative flex items-center gap-2.5">
-          <span className="flex size-7 items-center justify-center rounded-lg text-white" style={{ background: info.fundo }}>
-            <info.Icone className="size-4" />
-          </span>
-          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em]">Requisitos · {info.nome}</p>
-        </div>
-        <p className="relative mt-2 text-sm text-muted-foreground">{info.resumo}</p>
-      </div>
-      <dl className="divide-y divide-border">
-        {info.requisitos.map((r) => (
-          <div key={r.chave} className="grid grid-cols-1 gap-1 px-5 py-3 sm:grid-cols-[6.5rem_minmax(0,1fr)] sm:gap-3">
-            <dt className="pt-px font-mono text-[11px] text-muted-foreground">{r.chave}</dt>
-            <dd className="min-w-0">
-              <p className="text-sm font-medium">{r.valor}</p>
-              {r.detalhe && <p className="mt-0.5 text-xs text-muted-foreground">{r.detalhe}</p>}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {info.comoPreparar && (
-        <div className="border-t border-border bg-muted/40 px-5 py-4">
-          <p className="text-xs font-medium">{rede === "instagram" ? "Como deixar a conta profissional" : "Antes de conectar"}</p>
-          <ol className="mt-2 flex list-decimal flex-col gap-1.5 pl-4 text-xs text-muted-foreground marker:font-mono marker:font-semibold" style={{ ["--tw-prose-counters" as string]: info.cor }}>
-            {info.comoPreparar.map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ol>
-        </div>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={ativa ? "true" : undefined}
+      className={cn(
+        "relative flex w-[15.5rem] shrink-0 flex-col gap-2 overflow-hidden rounded-xl border px-3 py-2.5 text-left transition-colors lg:w-auto",
+        ativa ? "bg-card shadow-[var(--shadow-raised)]" : "border-border bg-card/60 hover:bg-card lg:border-transparent lg:bg-transparent",
       )}
-    </Card>
+      style={ativa ? { borderColor: `${info.cor}55` } : undefined}
+    >
+      {ativa && <span aria-hidden className="absolute inset-y-2 left-0 w-[3px] rounded-r-full" style={{ background: info.cor }} />}
+      <span className="flex items-center gap-3">
+        <AvatarDaConta conta={conta} tamanho="size-9" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">{conta.nome}</span>
+          <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted-foreground">
+            {r.motivo ? (
+              <span className="text-amber-700 dark:text-amber-400">{r.motivo}</span>
+            ) : r.proxima ? (
+              <>próx. {quando(r.proxima).toLowerCase()}</>
+            ) : (
+              "fila vazia"
+            )}
+          </span>
+        </span>
+        <span className="flex shrink-0 flex-col items-end gap-0.5">
+          <span className="font-mono text-sm font-semibold tabular-nums">{r.naFila}</span>
+          {r.erros > 0 && <span className="font-mono text-[10px] text-tone-danger-ink">{r.erros} ✕</span>}
+        </span>
+      </span>
+      {horarios.length > 0 && <MiniRegua horarios={horarios} cor={info.cor} apagada={r.parada} />}
+    </button>
   )
 }
 
-function ContasDaRede({
+function CabecalhoDaConta({ conta, onDesconectada }: { conta: Conta; onDesconectada: () => void }) {
+  const [confirmando, setConfirmando] = useState(false)
+  const [saindo, setSaindo] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+  const info = REDES[conta.rede]
+  const usuario = conta.rede === "tiktok" ? null : conta.social.username
+  const desde = conta.rede === "tiktok" ? conta.tiktok.connectedAt : conta.social.connectedAt
+
+  useEffect(() => setConfirmando(false), [conta.chave])
+
+  async function desconectar() {
+    setSaindo(true)
+    setErro(null)
+    try {
+      if (conta.rede === "tiktok") await api.post(`/api/client/tiktok-accounts/${conta.id}/deactivate`, {})
+      else await api.delete(`/api/client/social-accounts/${conta.id}`)
+      onDesconectada()
+    } catch (err) {
+      setErro(err instanceof ApiError ? err.message : "Não foi possível desconectar.")
+      setSaindo(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+      <AvatarDaConta conta={conta} tamanho="size-14" />
+      <div className="min-w-0 flex-1">
+        <h2 className="truncate text-xl font-semibold tracking-[-0.02em]">{conta.nome}</h2>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+          {usuario && conta.rede !== "facebook" ? `@${usuario} · ` : ""}
+          {info.nome} · {info.formato} · conectada em {data(desde)}
+        </p>
+        {erro && <p className="mt-1 text-xs text-destructive">{erro}</p>}
+      </div>
+      {confirmando ? (
+        <div className="flex gap-1.5">
+          <Button size="sm" variant="ghost" onClick={() => setConfirmando(false)}>
+            Manter
+          </Button>
+          <Button size="sm" variant="destructive" disabled={saindo} onClick={desconectar}>
+            {saindo ? "Desconectando..." : "Desconectar"}
+          </Button>
+        </div>
+      ) : (
+        <Button size="sm" variant="ghost" className="gap-1.5 text-muted-foreground" onClick={() => setConfirmando(true)}>
+          <IconTrash className="size-3.5" />
+          Desconectar
+        </Button>
+      )}
+    </div>
+  )
+}
+
+/** A conta do TikTok no layout novo: régua do dia + o painel de sempre. */
+function EspacoDoTiktok({ conta, onMudou, onAplicarEmTodas }: { conta: TikTokAccountSummary; onMudou: () => Promise<void>; onAplicarEmTodas: () => void }) {
+  const t = useT()
+  const [horario, setHorario] = useState<PostingScheduleResponse | null>(null)
+  const [fila, setFila] = useState<PostingQueueItem[]>([])
+  const [corrigindo, setCorrigindo] = useState(false)
+  const [avisoFila, setAvisoFila] = useState<string | null>(null)
+
+  useEffect(() => {
+    void api.get<PostingScheduleResponse>(`/api/client/tiktok-accounts/${conta.id}/schedule`).then(setHorario)
+    void api.get<{ postings: PostingQueueItem[] }>(`/api/client/postings/queue?accountId=${conta.id}`).then((d) => setFila(d.postings))
+  }, [conta.id, conta.pendingCount])
+
+  const faltaOpcoes = conta.publishMode === "direct" && !conta.hasPublishDefaults
+  const horarios = horario ? (horario.mode === "manual" && horario.manualTimes.length ? horario.manualTimes : horario.defaultTimes) : []
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="gap-4 px-5 py-5">
+        <ReguaDoDia
+          horarios={horarios}
+          cor={REDES.tiktok.cor}
+          pausada={!conta.autoPostEnabled || horario?.paused}
+          itens={fila.map((p) => ({ id: Number(p.id), horario: p.scheduledFor, capaUrl: p.thumbnailUrl, titulo: p.clipTitle }))}
+        />
+        {(faltaOpcoes || !conta.autoPostEnabled) && (
+          <p className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+            <IconAlertTriangle className="mt-px size-3.5 shrink-0" />
+            <span>
+              <strong>{faltaOpcoes ? t("pub.avisoNadaSeraPublicado") : t("pub.avisoNaoEstaPublicando")}</strong>{" "}
+              {faltaOpcoes ? t("pub.avisoConfigureOpcoes") : t("pub.avisoLigueAutomatico")}
+            </span>
+          </p>
+        )}
+        {conta.readyOutOfQueueCount > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs">
+            <span>{t("pub.prontosForaDaFila", { n: conta.readyOutOfQueueCount })}</span>
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={corrigindo}
+              onClick={async () => {
+                setCorrigindo(true)
+                try {
+                  const r = await api.post<{ enfileirados?: number }>("/api/client/postings/enfileirar-prontos", { accountId: conta.id })
+                  setAvisoFila(t("pub.cortesNaFila", { n: r.enfileirados ?? 0 }))
+                  await onMudou()
+                } finally {
+                  setCorrigindo(false)
+                }
+              }}
+            >
+              Colocar na fila
+            </Button>
+          </div>
+        )}
+        {avisoFila && <p className="text-xs text-muted-foreground">{avisoFila}</p>}
+        <div>
+          <Button variant="outline" size="sm" className="h-auto min-h-8 whitespace-normal text-left" onClick={onAplicarEmTodas}>
+            Usar estes horários em todas as contas
+          </Button>
+        </div>
+      </Card>
+      <AccountDetailPanel account={conta} onChanged={() => void onMudou()} />
+    </div>
+  )
+}
+
+/** O que a rede exige, e o botão de conectar. */
+function ConectarRedeDialog({
   rede,
-  contas,
+  jaTem,
   disponivel,
-  onMudou,
+  onFechar,
   onErro,
 }: {
-  rede: "instagram" | "facebook"
-  contas: ContaSocial[] | null
+  rede: Rede | null
+  jaTem: number
   disponivel: boolean
-  onMudou: (lista: ContaSocial[]) => void
+  onFechar: () => void
   onErro: (texto: string) => void
 }) {
-  const { nome, Icone, fundo } = REDES[rede]
   const [indo, setIndo] = useState(false)
+  useEffect(() => setIndo(false), [rede])
+  if (!rede) return null
+  const info = REDES[rede]
 
   async function conectar() {
+    if (rede === "tiktok") {
+      window.location.href = "/auth/tiktok/connect?from=/client/social"
+      return
+    }
     setIndo(true)
     try {
       const { url } = await api.post<{ url: string }>(`/api/client/social-accounts/${rede}/conectar`, {})
@@ -344,151 +497,68 @@ function ContasDaRede({
     } catch (err) {
       onErro(err instanceof ApiError ? err.message : "Não foi possível iniciar a conexão.")
       setIndo(false)
+      onFechar()
     }
   }
 
-  const botao = (
-    <Button onClick={conectar} disabled={indo || !disponivel} className="gap-1.5 border-0 text-white hover:opacity-90" style={{ background: fundo }}>
-      <IconPlus className="size-4" />
-      {indo ? "Abrindo..." : contas && contas.length > 0 ? `Conectar outra ${rede === "facebook" ? "Página" : "conta"}` : `Conectar ${nome}`}
-    </Button>
-  )
-
-  if (!contas) return <Skeleton className="h-40" />
-
   return (
-    <>
-      {!disponivel && (
-        <p className="rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-          A conexão com {nome} ainda não está disponível nesta instalação.
-        </p>
-      )}
-
-      {contas.length === 0 ? (
-        <Card className="items-center gap-0 px-6 py-12 text-center">
-          <span className="flex size-14 items-center justify-center rounded-2xl text-white shadow-sm" style={{ background: fundo }}>
-            <Icone className="size-7" />
+    <Dialog open onOpenChange={(a) => !a && onFechar()}>
+      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
+        <div className="flex items-center gap-3 px-6 pb-4 pt-6" style={{ background: `linear-gradient(180deg, ${info.cor}14, transparent)` }}>
+          <span className="flex size-11 items-center justify-center rounded-xl text-white shadow-sm" style={{ background: info.fundo }}>
+            <info.Icone className="size-6" />
           </span>
-          <p className="mt-4 font-medium">
-            {rede === "facebook" ? "Nenhuma Página conectada" : "Nenhuma conta do Instagram conectada"}
-          </p>
-          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            {rede === "facebook"
-              ? "Você entra com o seu perfil do Facebook e escolhe em quais Páginas os cortes vão ser publicados."
-              : "Você entra com a conta do Instagram e autoriza o Post Flow a publicar Reels nela."}
-          </p>
-          <div className="mt-5">{botao}</div>
-        </Card>
-      ) : (
-        <>
-          <div className="flex justify-end">{botao}</div>
-          <div className="flex flex-col gap-2.5">
-            {contas.map((c) => (
-              <LinhaDaConta key={c.id} conta={c} rede={rede} onMudou={onMudou} onErro={onErro} />
-            ))}
-          </div>
-        </>
-      )}
-
-      <p className="text-xs text-muted-foreground">
-        Pra publicar no {nome}, abra o{" "}
-        <a href="/client/feed" className="font-medium text-foreground underline underline-offset-2">
-          Feed de cortes
-        </a>
-        , toque em Postar e marque esta conta. O corte sai na hora, como Reel (de 3 a 90 segundos). A publicação automática, com
-        horários, entra numa próxima atualização.
-      </p>
-    </>
-  )
-}
-
-function LinhaDaConta({
-  conta,
-  rede,
-  onMudou,
-  onErro,
-}: {
-  conta: ContaSocial
-  rede: "instagram" | "facebook"
-  onMudou: (lista: ContaSocial[]) => void
-  onErro: (texto: string) => void
-}) {
-  const [confirmando, setConfirmando] = useState(false)
-  const [saindo, setSaindo] = useState(false)
-  const { Icone, fundo } = REDES[rede]
-  const nome = conta.displayName || conta.username || "Conta"
-
-  return (
-    <Card className="flex-row flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5">
-      <div className="relative shrink-0">
-        <Avatar className="size-11">
-          {conta.avatarUrl && <AvatarImage src={conta.avatarUrl} alt="" />}
-          <AvatarFallback>{nome.slice(0, 2).toUpperCase()}</AvatarFallback>
-        </Avatar>
-        <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full text-white ring-2 ring-card" style={{ background: fundo }}>
-          <Icone className="size-3" />
-        </span>
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{nome}</p>
-        <p className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
-          <span className="size-1.5 shrink-0 rounded-full bg-status-posted" />
-          <span className="truncate">
-            {conta.username && rede === "instagram" ? `@${conta.username} · ` : ""}conectada em {data(conta.connectedAt)}
-          </span>
-        </p>
-      </div>
-      {confirmando ? (
-        <div className="flex shrink-0 gap-1.5">
-          <Button size="sm" variant="ghost" onClick={() => setConfirmando(false)}>
-            Manter
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            disabled={saindo}
-            onClick={async () => {
-              setSaindo(true)
-              try {
-                const r = await api.delete<{ contas: ContaSocial[] }>(`/api/client/social-accounts/${conta.id}`)
-                onMudou(r.contas)
-              } catch (err) {
-                onErro(err instanceof ApiError ? err.message : "Não foi possível desconectar.")
-                setSaindo(false)
-                setConfirmando(false)
-              }
-            }}
-          >
-            {saindo ? "Desconectando..." : "Desconectar"}
-          </Button>
+          <DialogHeader className="text-left">
+            <DialogTitle>{jaTem > 0 ? `Conectar outra conta do ${info.nome}` : `Conectar ${info.nome}`}</DialogTitle>
+            <DialogDescription>Os cortes saem como {info.formato}.</DialogDescription>
+          </DialogHeader>
         </div>
-      ) : (
-        <Button
-          size="sm"
-          variant="ghost"
-          className="shrink-0 px-2 text-muted-foreground sm:px-3"
-          aria-label="Desconectar"
-          onClick={() => setConfirmando(true)}
-        >
-          <IconPlugConnectedX className="size-4 sm:hidden" />
-          <span className="hidden sm:inline">Desconectar</span>
-        </Button>
-      )}
-    </Card>
+        <dl className="divide-y divide-border border-y border-border">
+          {info.exigencias.map((e) => (
+            <div key={e.chave} className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 px-6 py-2.5">
+              <dt className="pt-px text-xs text-muted-foreground">{e.chave}</dt>
+              <dd className="min-w-0 text-sm">
+                <span className="font-medium">{e.valor}</span>
+                {e.detalhe && <span className="mt-0.5 block text-xs text-muted-foreground">{e.detalhe}</span>}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        {(info.comoPreparar || info.aviso) && (
+          <div className="flex flex-col gap-2 px-6 py-4 text-xs text-muted-foreground">
+            {info.aviso && (
+              <p className="flex gap-2 text-amber-800 dark:text-amber-300">
+                <IconAlertTriangle className="mt-px size-3.5 shrink-0" />
+                {info.aviso}
+              </p>
+            )}
+            {info.comoPreparar && (
+              <ol className="list-decimal pl-4">
+                {info.comoPreparar.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ol>
+            )}
+          </div>
+        )}
+        <DialogFooter className="px-6 pb-6 pt-2">
+          <Button variant="ghost" onClick={onFechar}>
+            Agora não
+          </Button>
+          <Button onClick={conectar} disabled={indo || (rede !== "tiktok" && !disponivel)} className="border-0 text-white hover:opacity-90" style={{ background: info.fundo }}>
+            {indo ? "Abrindo..." : `Conectar ${info.nome}`}
+          </Button>
+        </DialogFooter>
+        {rede !== "tiktok" && !disponivel && <p className="px-6 pb-4 text-xs text-muted-foreground">A conexão com {info.nome} ainda não está disponível.</p>}
+      </DialogContent>
+    </Dialog>
   )
 }
 
-/** Segunda etapa do Facebook: um login traz várias Páginas, e o cliente escolhe quais. */
-function EscolherPaginaDialog({
-  aberto,
-  onFechar,
-  onConectado,
-}: {
-  aberto: boolean
-  onFechar: () => void
-  onConectado: (lista: ContaSocial[], n: number) => void
-}) {
-  const [paginas, setPaginas] = useState<PaginaDoFacebook[] | null>(null)
+/** Segunda etapa do Facebook e do LinkedIn: um login traz várias Páginas/perfis, e a pessoa escolhe. */
+function EscolherPaginaDialog({ aberto, onFechar, onConectado }: { aberto: boolean; onFechar: () => void; onConectado: (n: number, rede: Rede | null) => void }) {
+  const [paginas, setPaginas] = useState<Pagina[] | null>(null)
+  const [rede, setRede] = useState<Rede | null>(null)
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
   const [erro, setErro] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -496,55 +566,49 @@ function EscolherPaginaDialog({
   useEffect(() => {
     if (!aberto) return
     api
-      .get<{ paginas: PaginaDoFacebook[] }>("/api/client/social-accounts/facebook/paginas")
+      .get<{ rede: Rede; paginas: Pagina[] }>("/api/client/social-accounts/pendente")
       .then((d) => {
+        setRede(d.rede)
         setPaginas(d.paginas)
         if (d.paginas.length === 1) setMarcadas(new Set([d.paginas[0].id]))
       })
-      .catch((err) => setErro(err instanceof ApiError ? err.message : "Não foi possível listar as Páginas."))
+      .catch((err) => setErro(err instanceof ApiError ? err.message : "Não foi possível listar as opções."))
   }, [aberto])
 
-  async function conectar() {
+  async function confirmar() {
     setEnviando(true)
     setErro(null)
     try {
-      const r = await api.post<{ conectadas: number; contas: ContaSocial[] }>("/api/client/social-accounts/facebook/paginas", {
-        pageIds: [...marcadas],
-      })
-      onConectado(r.contas, r.conectadas)
+      const r = await api.post<{ conectadas: number }>("/api/client/social-accounts/pendente", { pageIds: [...marcadas] })
+      onConectado(r.conectadas, rede)
     } catch (err) {
-      setErro(err instanceof ApiError ? err.message : "Não foi possível conectar as Páginas.")
+      setErro(err instanceof ApiError ? err.message : "Não foi possível conectar.")
     } finally {
       setEnviando(false)
     }
   }
 
+  const nomeDaRede = rede ? REDES[rede].nome : ""
   return (
     <Dialog open={aberto} onOpenChange={(a) => !a && onFechar()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Em quais Páginas publicar?</DialogTitle>
-          <DialogDescription>Estas são as Páginas que o seu perfil administra. Marque as que vão receber os cortes.</DialogDescription>
+          <DialogTitle>{rede === "linkedin" ? "Onde publicar no LinkedIn?" : "Em quais Páginas publicar?"}</DialogTitle>
+          <DialogDescription>
+            {rede === "linkedin"
+              ? "Escolha o seu perfil, as páginas de empresa que você administra, ou os dois."
+              : `Estas são as Páginas que o seu perfil administra no ${nomeDaRede || "Facebook"}. Marque as que vão receber os cortes.`}
+          </DialogDescription>
         </DialogHeader>
         {erro && <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{erro}</p>}
         {!paginas && !erro && <Skeleton className="h-28" />}
-        {paginas && paginas.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Nenhuma Página encontrada neste perfil. Crie uma Página no Facebook (ou peça acesso de administrador) e conecte de novo.
-          </p>
-        )}
+        {paginas && paginas.length === 0 && <p className="text-sm text-muted-foreground">Nada encontrado nesta conta. Confira se você é administrador e conecte de novo.</p>}
         {paginas && paginas.length > 0 && (
           <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
             {paginas.map((p) => {
               const on = marcadas.has(p.id)
               return (
-                <label
-                  key={p.id}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
-                    on ? "border-foreground bg-muted/40" : "border-border hover:bg-muted/30",
-                  )}
-                >
+                <label key={p.id} className={cn("flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors", on ? "border-foreground bg-muted/40" : "border-border hover:bg-muted/30")}>
                   <Checkbox
                     checked={on}
                     onCheckedChange={(c) =>
@@ -574,8 +638,64 @@ function EscolherPaginaDialog({
           <Button variant="outline" onClick={onFechar}>
             Cancelar
           </Button>
-          <Button onClick={conectar} disabled={enviando || marcadas.size === 0}>
-            {enviando ? "Conectando..." : marcadas.size > 1 ? `Conectar ${marcadas.size} Páginas` : "Conectar Página"}
+          <Button onClick={confirmar} disabled={enviando || marcadas.size === 0}>
+            {enviando ? "Conectando..." : marcadas.size > 1 ? `Conectar ${marcadas.size}` : "Conectar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function AplicarEmTodasDialog({
+  de,
+  total,
+  onFechar,
+  onAplicado,
+}: {
+  de: Conta | null
+  total: number
+  onFechar: () => void
+  onAplicado: (n: number) => void
+}) {
+  const [indo, setIndo] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+  useEffect(() => {
+    setErro(null)
+    setIndo(false)
+  }, [de])
+  if (!de) return null
+  return (
+    <Dialog open onOpenChange={(a) => !a && onFechar()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Usar os horários de {de.nome} em todas as contas?</DialogTitle>
+          <DialogDescription>
+            As outras {total - 1} contas passam a publicar nos mesmos horários, na mesma quantidade por dia e com o mesmo “publicar sozinho”.
+            As filas são reorganizadas pros horários novos. Opções próprias de cada rede (como a visibilidade do YouTube) não mudam.
+          </DialogDescription>
+        </DialogHeader>
+        {erro && <p className="text-sm text-destructive">{erro}</p>}
+        <DialogFooter>
+          <Button variant="outline" onClick={onFechar}>
+            Cancelar
+          </Button>
+          <Button
+            disabled={indo}
+            onClick={async () => {
+              setIndo(true)
+              try {
+                const r = await api.post<{ contas: number }>("/api/client/social-accounts/aplicar-em-todas", {
+                  origem: { rede: de.rede === "tiktok" ? "tiktok" : "social", id: de.id },
+                })
+                onAplicado(r.contas)
+              } catch (err) {
+                setErro(err instanceof ApiError ? err.message : "Não foi possível aplicar.")
+                setIndo(false)
+              }
+            }}
+          >
+            {indo ? "Aplicando..." : "Usar em todas"}
           </Button>
         </DialogFooter>
       </DialogContent>

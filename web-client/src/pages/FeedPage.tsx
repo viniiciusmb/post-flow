@@ -2,9 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import {
   IconAdjustmentsHorizontal,
   IconArrowsSort,
-  IconBrandFacebook,
-  IconBrandInstagram,
-  IconBrandTiktok,
   IconBrandTwitch,
   IconBrandYoutubeFilled,
   IconBroadcast,
@@ -41,6 +38,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { dataHora } from "@/lib/formatoLocal"
+import { ORDEM_DAS_REDES, REDES, duracaoCurta, type InfoDaRede, type Rede } from "@/lib/redes"
 
 type Postagem = {
   rede: Conta["rede"]
@@ -66,13 +64,22 @@ type Corte = {
   gostei: boolean
   postagens: Postagem[]
 }
-type Conta = { id: number; rede: "tiktok" | "instagram" | "facebook"; nome: string; avatar: string | null; publicaSozinho: boolean; disponivel: boolean }
+type Conta = {
+  id: number
+  rede: Rede
+  nome: string
+  avatar: string | null
+  publicaSozinho: boolean
+  disponivel: boolean
+  /** Limite de duração da rede (as do TikTok não mandam: a fila dele confere sozinha). */
+  duracaoMinimaS?: number
+  duracaoMaximaS?: number
+}
 type Canal = { chave: string; tipo: "youtube" | "live"; id: number; nome: string; avatar: string | null; plataforma: string | null }
 type Contexto = {
   canais: Canal[]
   contas: Conta[]
   totalGostei: number
-  limitesRedesSociais?: { duracaoMinimaS: number; duracaoMaximaS: number }
 }
 type Aba = "todos" | "gostei"
 type Origem = "todos" | "youtube" | "lives"
@@ -81,7 +88,7 @@ type Resultado = {
   rede: Conta["rede"]
   accountId: number
   nome: string
-  resultado: "enfileirado" | "ja_na_fila" | "ja_publicado" | "ja_existia"
+  resultado: "enfileirado" | "ja_na_fila" | "ja_publicado" | "ja_existia" | "bloqueado"
   scheduledFor: string | null
 }
 
@@ -91,13 +98,9 @@ type Resultado = {
 const CORACAO = "#FE2C55"
 const YT = "#FF0033"
 const TWITCH = "#9146FF"
-const REDE_FUNDO: Record<Conta["rede"], string> = {
-  tiktok: "linear-gradient(135deg, #111 0%, #111 55%, #25F4EE 140%)",
-  instagram: "linear-gradient(45deg, #F58529 0%, #DD2A7B 45%, #8134AF 75%, #515BD4 100%)",
-  facebook: "#1877F2",
-}
-const REDE_ICONE = { tiktok: IconBrandTiktok, instagram: IconBrandInstagram, facebook: IconBrandFacebook }
-const REDE_NOME: Record<Conta["rede"], string> = { tiktok: "TikTok", instagram: "Instagram", facebook: "Facebook" }
+const REDE_FUNDO = Object.fromEntries(ORDEM_DAS_REDES.map((r) => [r, REDES[r].fundo])) as Record<Rede, string>
+const REDE_ICONE = Object.fromEntries(ORDEM_DAS_REDES.map((r) => [r, REDES[r].Icone])) as Record<Rede, InfoDaRede["Icone"]>
+const REDE_NOME = Object.fromEntries(ORDEM_DAS_REDES.map((r) => [r, REDES[r].nome])) as Record<Rede, string>
 
 // "sending" é o Instagram/Facebook recebendo o vídeo; pra quem olha é a mesma
 // coisa que estar na fila.
@@ -119,7 +122,7 @@ function mmss(s: number) {
   return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`
 }
 
-function lerUrl(): { aba: Aba; canal: string; origem: Origem; ordem: Ordem } {
+function lerUrl(): { aba: Aba; canal: string; origem: Origem; ordem: Ordem; vistos: boolean } {
   const p = new URLSearchParams(window.location.search)
   const origem = p.get("origem")
   return {
@@ -127,6 +130,7 @@ function lerUrl(): { aba: Aba; canal: string; origem: Origem; ordem: Ordem } {
     canal: p.get("canal") || "todos",
     origem: origem === "youtube" || origem === "lives" ? origem : "todos",
     ordem: p.get("ordem") === "antigos" ? "antigos" : "recentes",
+    vistos: p.get("vistos") === "1",
   }
 }
 
@@ -153,6 +157,10 @@ export function FeedPage() {
   const [canal, setCanal] = useState(inicial.canal)
   const [origem, setOrigem] = useState<Origem>(inicial.origem)
   const [ordem, setOrdem] = useState<Ordem>(inicial.ordem)
+  // Feed sem repetição: o que a pessoa já assistiu não volta, a menos que ela
+  // peça pra ver de novo. `assistidos` é quantos ficaram de fora no filtro.
+  const [verVistos, setVerVistos] = useState(inicial.vistos)
+  const [assistidos, setAssistidos] = useState(0)
   const [ctx, setCtx] = useState<Contexto | null>(null)
   const [cortes, setCortes] = useState<Corte[] | null>(null)
   const [proximo, setProximo] = useState<string | null>(null)
@@ -177,10 +185,11 @@ export function FeedPage() {
       if (canal !== "todos") p.set("canal", canal)
       if (ordem === "antigos") p.set("ordem", "antigos")
       if (aba === "gostei") p.set("aba", "gostei")
+      else if (verVistos) p.set("vistos", "1")
       if (depois) p.set("depois", depois)
       return `/api/client/feed${p.toString() ? `?${p}` : ""}`
     },
-    [aba, canal, origem, ordem],
+    [aba, canal, origem, ordem, verVistos],
   )
 
   useEffect(() => {
@@ -199,8 +208,9 @@ export function FeedPage() {
     window.history.replaceState(null, "", url)
     setTotal(null)
     api
-      .get<{ cortes: Corte[]; proximo: string | null; total?: number }>(consulta())
+      .get<{ cortes: Corte[]; proximo: string | null; total?: number; assistidos?: number }>(consulta())
       .then((d) => {
+        setAssistidos(d.assistidos ?? 0)
         setCortes(d.cortes)
         setProximo(d.proximo)
         setTotal(d.proximo ? (d.total ?? null) : d.cortes.length)
@@ -232,6 +242,26 @@ export function FeedPage() {
     if (aba !== "todos" || !cortes || ativo < cortes.length - 3) return
     carregarMais()
   }, [aba, ativo, cortes, carregarMais])
+
+  // Corte que ficou 2 segundos na tela conta como assistido e não volta mais
+  // no feed (só na próxima vez que a lista carregar: tirar da tela agora
+  // faria o feed pular debaixo do dedo).
+  const enviadosComoVistos = useRef(new Set<string>())
+  useEffect(() => {
+    if (aba !== "todos" || !cortes) return
+    const c = cortes[ativo]
+    if (!c || enviadosComoVistos.current.has(c.chave)) return
+    const t = window.setTimeout(() => {
+      enviadosComoVistos.current.add(c.chave)
+      api.post("/api/client/feed/vistos", { cortes: [{ tipo: c.tipo, id: c.id }] }).catch(() => enviadosComoVistos.current.delete(c.chave))
+    }, 2000)
+    return () => window.clearTimeout(t)
+  }, [aba, ativo, cortes])
+
+  async function verDeNovo() {
+    enviadosComoVistos.current.clear()
+    setVerVistos(true)
+  }
 
   // Qual corte está na tela: o que ocupa a maior parte do palco.
   useEffect(() => {
@@ -428,6 +458,8 @@ export function FeedPage() {
             </div>
           </div>
 
+          {aba === "todos" && <AlternarVistos ligado={verVistos} onMudar={setVerVistos} />}
+
           {aba === "todos" && (
             <p className="hidden items-center gap-2 px-1 text-xs text-muted-foreground lg:flex">
               <kbd className="rounded border border-border bg-card px-1.5 font-mono text-[10px]">↑</kbd>
@@ -461,7 +493,7 @@ export function FeedPage() {
                   <Skeleton className="aspect-[9/16] h-full max-h-full bg-white/10" />
                 </div>
               ) : cortes.length === 0 ? (
-                <FeedVazio aba={aba} erro={erro} />
+                <FeedVazio aba={aba} erro={erro} assistidos={verVistos ? 0 : assistidos} onVerDeNovo={verDeNovo} />
               ) : (
                 cortes.map((c, i) => (
                   <div key={c.chave} data-indice={i} className="flex h-full snap-start snap-always items-center justify-center gap-4 lg:p-4">
@@ -582,6 +614,7 @@ export function FeedPage() {
                 {origem !== "lives" && <FiltroCanal ativo={canal === "avulsos"} onClick={() => setCanal("avulsos")} nome="Envios avulsos" avulso />}
               </div>
             </div>
+            <AlternarVistos ligado={verVistos} onMudar={setVerVistos} />
             <Button className="mt-1 w-full" onClick={() => setFiltrosAbertos(false)}>
               Ver {total ?? ""} {total === 1 ? "corte" : "cortes"}
             </Button>
@@ -592,7 +625,6 @@ export function FeedPage() {
       <EnviarCorteDialog
         corte={enviando}
         contas={ctx?.contas ?? []}
-        limites={ctx?.limitesRedesSociais ?? { duracaoMinimaS: 3, duracaoMaximaS: 90 }}
         onFechar={() => setEnviando(null)}
         onEnviado={(chave, resultados) =>
           setCortes(
@@ -618,6 +650,19 @@ export function FeedPage() {
         }
       />
     </DashboardLayout>
+  )
+}
+
+/** Mostrar (ou não) os cortes já assistidos. Desligado é o normal: o feed não repete. */
+function AlternarVistos({ ligado, onMudar }: { ligado: boolean; onMudar: (v: boolean) => void }) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5 text-sm">
+      <Checkbox checked={ligado} onCheckedChange={(v) => onMudar(v === true)} className="mt-0.5" />
+      <span>
+        Mostrar os que já vi
+        <span className="block text-xs text-muted-foreground">Desligado, cada corte aparece uma vez só.</span>
+      </span>
+    </label>
   )
 }
 
@@ -687,7 +732,23 @@ function FiltroCanal({
   )
 }
 
-function FeedVazio({ aba, erro }: { aba: Aba; erro: string | null }) {
+function FeedVazio({ aba, erro, assistidos = 0, onVerDeNovo }: { aba: Aba; erro: string | null; assistidos?: number; onVerDeNovo?: () => void }) {
+  if (aba === "todos" && !erro && assistidos > 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-white">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-white/10">
+          <IconCheck className="size-7" />
+        </span>
+        <p className="font-medium">Você já viu todos os cortes daqui</p>
+        <p className="max-w-xs text-sm text-white/60">
+          {assistidos === 1 ? "1 corte já assistido" : `${assistidos} cortes já assistidos`} neste filtro. Os novos aparecem aqui assim que ficam prontos.
+        </p>
+        <Button size="sm" variant="secondary" className="mt-1" onClick={onVerDeNovo}>
+          Ver de novo os que já vi
+        </Button>
+      </div>
+    )
+  }
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-white">
       <span className="flex size-14 items-center justify-center rounded-2xl bg-white/10">
@@ -768,7 +829,6 @@ function ItemDoFeed({
     } else {
       v.pause()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ativo])
 
   function tocarOuPausar() {
@@ -1163,13 +1223,11 @@ function BotaoDeAcao({
 function EnviarCorteDialog({
   corte,
   contas,
-  limites,
   onFechar,
   onEnviado,
 }: {
   corte: Corte | null
   contas: Conta[]
-  limites: { duracaoMinimaS: number; duracaoMaximaS: number }
   onFechar: () => void
   onEnviado: (chave: string, resultados: Resultado[]) => void
 }) {
@@ -1181,15 +1239,24 @@ function EnviarCorteDialog({
 
   const chaveDe = (c: { rede: Conta["rede"]; id: number }) => `${c.rede}-${c.id}`
   const postagemNa = (c: Conta) => corte?.postagens.find((p) => (p.rede ?? "tiktok") === c.rede && p.accountId === c.id && p.status !== "skipped")
-  // Reel no Instagram/Facebook só dentro do limite de duração.
-  const foraDoLimite =
-    corte !== null && (corte.duracaoSegundos > limites.duracaoMaximaS || corte.duracaoSegundos < limites.duracaoMinimaS)
+  // Cada rede só aceita corte dentro do limite dela. O texto do Instagram é o
+  // que o fundador pediu, palavra por palavra (igual ao do servidor).
+  const motivoDoLimite = (c: Conta) => {
+    if (!corte || c.duracaoMaximaS === undefined) return null
+    const s = corte.duracaoSegundos
+    if (c.rede === "instagram" && s > c.duracaoMaximaS)
+      return "O Instagram só aceita vídeos com menos de 90 segundos, esse vídeo não será publicado no Instagram."
+    if (s > c.duracaoMaximaS) return `O ${REDE_NOME[c.rede]} só aceita vídeos de até ${duracaoCurta(c.duracaoMaximaS)}; este tem ${duracaoCurta(s)}.`
+    if (c.duracaoMinimaS !== undefined && s < c.duracaoMinimaS) return `O ${REDE_NOME[c.rede]} só aceita vídeos a partir de ${c.duracaoMinimaS} s.`
+    return null
+  }
   const podeMarcar = (c: Conta) => {
     if (!c.disponivel) return false
-    if (c.rede !== "tiktok" && foraDoLimite) return false
+    if (motivoDoLimite(c)) return false
     const ja = postagemNa(c)
-    // Instagram/Facebook publicado ou publicando não tem o que reenviar.
-    if (c.rede !== "tiktok" && ja && ja.status !== "error") return false
+    // Nas outras redes, corte já na fila ou publicado não tem o que reenviar
+    // (erro e cancelado voltam pra fila).
+    if (c.rede !== "tiktok" && ja && !["error", "skipped"].includes(ja.status)) return false
     return true
   }
 
@@ -1197,12 +1264,12 @@ function EnviarCorteDialog({
     if (!corte) return
     setErro(null)
     setResultados(null)
-    // Já marca as contas do TikTok onde o corte ainda não está: é o que a
-    // pessoa quer na maioria das vezes ("manda pra minhas redes"). Instagram e
-    // Facebook publicam NA HORA, então ficam pra pessoa marcar.
-    const tiktok = contas.filter((c) => c.rede === "tiktok" && c.disponivel)
-    const livres = tiktok.filter((c) => !corte.postagens.some((p) => (p.rede ?? "tiktok") === "tiktok" && p.accountId === c.id && p.status !== "skipped"))
-    setMarcadas(new Set((tiktok.length === 1 ? tiktok : livres).map(chaveDe)))
+    // Já marca as contas onde o corte ainda não está e que aceitam o corte: é
+    // o que a pessoa quer na maioria das vezes ("manda pra minhas redes").
+    const livres = contas.filter(
+      (c) => c.disponivel && !motivoDoLimite(c) && !corte.postagens.some((p) => (p.rede ?? "tiktok") === c.rede && p.accountId === c.id && p.status !== "skipped"),
+    )
+    setMarcadas(new Set(livres.map(chaveDe)))
   }, [corte, contas])
 
   async function enviar() {
@@ -1224,14 +1291,9 @@ function EnviarCorteDialog({
     }
   }
 
-  const grupos: { rede: Conta["rede"]; nome: string }[] = [
-    { rede: "tiktok", nome: "TikTok" },
-    { rede: "instagram", nome: "Instagram" },
-    { rede: "facebook", nome: "Facebook" },
-  ]
+  const grupos = ORDEM_DAS_REDES.map((rede) => ({ rede, nome: REDE_NOME[rede] }))
   const semConta = contas.length === 0
   const quantas = contas.filter((c) => marcadas.has(chaveDe(c)) && podeMarcar(c)).length
-  const soRedesNaHora = contas.filter((c) => marcadas.has(chaveDe(c)) && podeMarcar(c)).every((c) => c.rede !== "tiktok")
 
   function textoDoResultado(r: Resultado) {
     if (r.rede === "tiktok") {
@@ -1243,21 +1305,23 @@ function EnviarCorteDialog({
     }
     const rede = REDE_NOME[r.rede]
     return r.resultado === "enfileirado"
-      ? `Publicando agora no ${rede}. Aparece no perfil em alguns minutos.`
+      ? `Entrou na fila${r.scheduledFor ? `, previsto para ${dataHora(r.scheduledFor)}` : ""}.`
       : r.resultado === "ja_publicado"
         ? `Este corte já foi publicado nesta conta do ${rede}.`
-        : `Este corte já está sendo publicado nesta conta do ${rede}.`
+        : r.resultado === "bloqueado"
+          ? `Este corte não vai pro ${rede} por causa da duração.`
+          : `Este corte já está na fila desta conta.`
   }
 
   function subtitulo(c: Conta) {
     const ja = postagemNa(c)
     if (!c.disponivel) return "A publicação nesta rede chega na próxima atualização."
+    const limite = motivoDoLimite(c)
+    if (limite) return limite
     if (c.rede !== "tiktok") {
-      if (foraDoLimite) return `Só cortes de ${limites.duracaoMinimaS} s a ${limites.duracaoMaximaS} s (este tem ${corte?.duracaoSegundos ?? 0} s)`
       if (ja?.status === "posted") return "Já publicado nesta conta"
       if (ja?.status === "error") return `Não saiu: ${ja.erro ?? "a rede recusou"} Marque pra tentar de novo.`
-      if (ja) return "Publicando agora"
-      return "Publica na hora, como Reel"
+      if (ja && ja.status !== "skipped") return `Já está na fila${ja.scheduledFor ? ` · ${dataHora(ja.scheduledFor)}` : ""}`
     }
     if (ja) return ja.status === "posted" ? "Já publicado nesta conta" : `Já está na fila${ja.scheduledFor ? ` · ${dataHora(ja.scheduledFor)}` : ""}`
     return c.publicaSozinho ? "Entra na fila e sai no próximo horário livre" : "Entra na fila; a publicação automática desta conta está desligada"
@@ -1267,7 +1331,7 @@ function EnviarCorteDialog({
     <Dialog open={corte !== null} onOpenChange={(a) => !a && onFechar()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{resultados ? "Enviado" : "Postar este corte"}</DialogTitle>
+          <DialogTitle>{resultados ? "Enviado para a fila" : "Postar este corte"}</DialogTitle>
           <DialogDescription className="line-clamp-2">{corte?.titulo}</DialogDescription>
           {corte && (
             <a href={corte.downloadUrl} download className="inline-flex w-fit items-center gap-1 text-xs font-medium text-foreground underline underline-offset-2">
@@ -1296,10 +1360,10 @@ function EnviarCorteDialog({
                 </div>
               </div>
             ))}
-            {resultados.some((r) => r.rede === "tiktok") && (
+            {resultados.length > 0 && (
               <p className="text-xs text-muted-foreground">
-                A ordem e os horários da fila do TikTok você ajusta em{" "}
-                <a href="/client/social?rede=tiktok" className="font-medium text-foreground underline underline-offset-2">
+                A ordem e os horários de cada fila você ajusta em{" "}
+                <a href="/client/social" className="font-medium text-foreground underline underline-offset-2">
                   Redes sociais
                 </a>
                 .
@@ -1327,12 +1391,11 @@ function EnviarCorteDialog({
                       <Icone className="size-3" />
                     </span>
                     {g.nome}
-                    {g.rede !== "tiktok" && <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">publica na hora</span>}
                   </p>
                   {doGrupo.map((c) => {
                     const pode = podeMarcar(c)
                     const marcada = marcadas.has(chaveDe(c)) && pode
-                    const falhou = c.rede !== "tiktok" && postagemNa(c)?.status === "error"
+                    const falhou = Boolean(motivoDoLimite(c)) || (c.rede !== "tiktok" && postagemNa(c)?.status === "error")
                     return (
                       <label
                         key={chaveDe(c)}
@@ -1388,7 +1451,7 @@ function EnviarCorteDialog({
                 style={{ background: "linear-gradient(135deg, #FE2C55, #8134AF)" }}
               >
                 <IconSend className="size-4" />
-                {enviando ? "Enviando..." : quantas > 1 ? `Enviar para ${quantas} contas` : soRedesNaHora && quantas === 1 ? "Publicar agora" : "Enviar para a fila"}
+                {enviando ? "Enviando..." : quantas > 1 ? `Enviar para ${quantas} contas` : "Enviar para a fila"}
               </Button>
             </>
           )}

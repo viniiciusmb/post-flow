@@ -8,8 +8,9 @@
 // ordem por vídeo é mantida e a publicação automática da conta continua
 // decidindo se sai sozinho. O feed só escolhe O QUE e PRA ONDE.
 //
-// Instagram e Facebook (10/10/2026) vão pela fila própria (social_postings) e
-// publicam na hora, pela Outstand - ver socialPostingService.
+// As outras redes (Instagram, Facebook, Threads, LinkedIn, Pinterest, Bluesky,
+// YouTube) vão pela fila própria (social_postings), com os horários da conta -
+// ver filaSocialService e socialPostingService.
 'use strict';
 
 const clipsRepository = require('../../../repositories/clipsRepository');
@@ -19,11 +20,10 @@ const postingsRepository = require('../../../repositories/postingsRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const socialAccountsRepository = require('../../../repositories/socialAccountsRepository');
-const socialPostingsRepository = require('../../../repositories/socialPostingsRepository');
 const backfillPostingsService = require('../../../services/backfillPostingsService');
-const socialPostingService = require('../../../services/socialPostingService');
-const queueService = require('../../../services/queueService');
-const logger = require('../../../lib/logger');
+const socialPostingSettingsRepository = require('../../../repositories/socialPostingSettingsRepository');
+const filaSocialService = require('../../../services/filaSocialService');
+const redesSociais = require('../../../lib/redesSociais');
 
 const POR_PAGINA = 12;
 const POR_PAGINA_GRADE = 24;
@@ -100,6 +100,10 @@ async function listar(req, res) {
     if (!depois) return res.status(400).json({ error: 'Página inválida.' });
   }
   const soGostei = req.query.aba === 'gostei';
+  // Feed sem repetição: na aba principal, corte já assistido não volta, a
+  // menos que a pessoa peça (vistos=1). Na aba Gostei aparece tudo o que ela
+  // marcou - é justamente pra rever.
+  const ocultarAssistidos = !soGostei && req.query.vistos !== '1';
   const ordem = req.query.ordem === 'antigos' ? 'antigos' : 'recentes';
   const porPagina = soGostei ? POR_PAGINA_GRADE : POR_PAGINA;
 
@@ -111,7 +115,7 @@ async function listar(req, res) {
   let cursor = depois;
   let proximo = null;
   for (let rodada = 0; rodada < 5; rodada++) {
-    const linhas = await feedRepository.listarCortes(clientUserId, { origem, canal, soGostei, ordem, depois: cursor, limite: porPagina });
+    const linhas = await feedRepository.listarCortes(clientUserId, { origem, canal, soGostei, ocultarAssistidos, ordem, depois: cursor, limite: porPagina });
     // Lote menor que o pedido = não há nada além dele.
     const acabou = linhas.length < porPagina;
     let cheia = false;
@@ -135,8 +139,12 @@ async function listar(req, res) {
   }
   // O total só vai na primeira página (é o que o marcador "3 / 34" usa); nas
   // seguintes seria a mesma consulta de novo a cada rolagem.
-  const total = depois ? undefined : await feedRepository.contarCortes(clientUserId, { origem, canal, soGostei });
-  res.json({ cortes, proximo, total });
+  const total = depois ? undefined : await feedRepository.contarCortes(clientUserId, { origem, canal, soGostei, ocultarAssistidos });
+  // Quantos já foram assistidos neste filtro: a tela usa pra dizer "você já viu
+  // todos" em vez de "nenhum corte" quando a lista acaba vazia.
+  const assistidos =
+    depois || !ocultarAssistidos ? undefined : (await feedRepository.contarCortes(clientUserId, { origem, canal, soGostei })) - total;
+  res.json({ cortes, proximo, total, assistidos });
 }
 
 // Canais pro filtro e contas pro "Postar", numa chamada só.
@@ -170,18 +178,25 @@ async function contexto(req, res) {
         publicaSozinho: a.auto_post_enabled === true,
         disponivel: true,
       })),
-      // Instagram e Facebook publicam na hora pela Outstand (não têm fila
-      // com horário como o TikTok), e só cortes dentro do limite de duração.
-      ...sociais.map((s) => ({
-        id: Number(s.id),
-        rede: s.network,
-        nome: s.display_name || s.username,
-        avatar: s.avatar_url,
-        publicaSozinho: true,
-        disponivel: true,
-      })),
+      // As outras redes entram na fila da conta, com os horários dela, e só
+      // cortes dentro do limite de duração de cada rede.
+      ...(await Promise.all(
+        sociais.map(async (s) => {
+          const cfg = await socialPostingSettingsRepository.findOrCreate(s.id);
+          const r = redesSociais.info(s.network) || {};
+          return {
+            id: Number(s.id),
+            rede: s.network,
+            nome: s.display_name || s.username,
+            avatar: s.avatar_url,
+            publicaSozinho: cfg.auto_post_enabled && !cfg.paused,
+            disponivel: true,
+            duracaoMinimaS: r.duracaoMin,
+            duracaoMaximaS: r.duracaoMax,
+          };
+        })
+      )),
     ],
-    limitesRedesSociais: { duracaoMinimaS: socialPostingService.DURACAO_MINIMA_S, duracaoMaximaS: socialPostingService.DURACAO_MAXIMA_S },
     totalGostei,
   });
 }
@@ -253,15 +268,12 @@ async function enviar(req, res) {
   // Conta de outro cliente (ou desconectada) recusa o pedido inteiro, antes
   // de criar qualquer postagem.
   if (contas.some((c) => !c) || sociais.some((c) => !c)) return res.status(404).json({ error: 'Conta não encontrada.' });
-  // Instagram/Facebook só aceitam Reel dentro do limite: recusar aqui, com o
-  // motivo, em vez de o corte virar erro minutos depois.
-  if (sociais.length > 0) {
-    const { DURACAO_MINIMA_S: min, DURACAO_MAXIMA_S: max } = socialPostingService;
-    if (corte.duracaoS > max + 0.5 || corte.duracaoS < min) {
-      return res.status(422).json({
-        error: `Instagram e Facebook só aceitam cortes de ${min} s a ${max} s, e este tem ${Math.round(corte.duracaoS)} s.`,
-      });
-    }
+  // Cada rede só aceita corte dentro do limite dela: recusar aqui, com o
+  // motivo, em vez de o corte virar erro depois. A tela já desabilita essas
+  // contas; isto é a trava do servidor.
+  for (const conta of sociais) {
+    const motivo = redesSociais.motivoDaDuracao(conta.network, corte.duracaoS);
+    if (motivo) return res.status(422).json({ error: motivo });
   }
 
   const resultados = [];
@@ -274,21 +286,19 @@ async function enviar(req, res) {
   }
 
   for (const conta of sociais) {
-    const { linha, resultado } = await socialPostingsRepository.enfileirar({
+    const { linha, resultado } = await filaSocialService.enfileirarCorte({
       clientUserId,
-      socialAccountId: conta.id,
-      tipo: corte.tipo,
-      clipId: corte.id,
-      caption: corte.legenda,
+      conta,
+      corte: { tipo: corte.tipo, id: corte.id, titulo: corte.titulo, legenda: corte.legenda, duracao: corte.duracaoS },
     });
-    resultados.push({ rede: conta.network, accountId: Number(conta.id), nome: conta.display_name || conta.username, resultado, scheduledFor: null, status: linha.status });
-  }
-  // Publica na hora: não espera a rodada de minuto em minuto do video-worker.
-  if (resultados.some((r) => r.rede !== 'tiktok' && r.resultado === 'enfileirado')) {
-    queueService
-      .getBoss()
-      .then((boss) => boss.send('social-posting', {}))
-      .catch((err) => logger.error('Nao deu pra disparar a publicacao no Instagram/Facebook na hora:', err));
+    resultados.push({
+      rede: conta.network,
+      accountId: Number(conta.id),
+      nome: conta.display_name || conta.username,
+      resultado,
+      scheduledFor: linha.status === 'pending' ? linha.scheduled_for : null,
+      status: linha.status,
+    });
   }
   res.json({ resultados });
 }
@@ -318,4 +328,20 @@ async function enviarParaTiktok(corte, videoId, conta) {
   };
 }
 
-module.exports = { listar, contexto, gostei, enviar };
+// POST /api/client/feed/vistos { cortes: [{ tipo, id }] }
+async function marcarVistos(req, res) {
+  const lista = Array.isArray(req.body?.cortes) ? req.body.cortes.slice(0, 50) : [];
+  const cortes = lista
+    .map((c) => ({ tipo: c && c.tipo, id: Number(c && c.id) }))
+    .filter((c) => TIPOS.includes(c.tipo) && Number.isInteger(c.id));
+  await feedRepository.marcarAssistidos(req.session.user.id, cortes);
+  res.json({ ok: true });
+}
+
+// DELETE /api/client/feed/vistos - "ver de novo os já assistidos".
+async function esquecerVistos(req, res) {
+  await feedRepository.esquecerAssistidos(req.session.user.id);
+  res.json({ ok: true });
+}
+
+module.exports = { listar, contexto, gostei, enviar, marcarVistos, esquecerVistos };

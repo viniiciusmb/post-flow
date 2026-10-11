@@ -332,6 +332,9 @@ export interface TikTokAccountSummary extends TikTokAccountStats {
   hasPublishDefaults: boolean
   /** O próximo corte que sai nessa conta. null = fila vazia. */
   nextInQueue: NextInQueue | null
+  /** Horários em uso ("HH:MM") e pausa da fila - pra régua do dia da lista. */
+  horarios?: string[]
+  paused?: boolean
 }
 
 export interface NextInQueue {

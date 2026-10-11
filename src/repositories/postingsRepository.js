@@ -457,7 +457,14 @@ async function listPostedOlderThan(hours) {
     `SELECT p.*, c.id AS clip_id, c.origem, c.live_clip_id, c.local_clip_path, c.thumbnail_path, sv.id AS source_video_id
      FROM postings p
      ${CLIP_FILE_JOIN}
-     WHERE p.status = 'posted' AND p.posted_at < now() - ($1 || ' hours')::interval`,
+     WHERE p.status = 'posted' AND p.posted_at < now() - ($1 || ' hours')::interval
+       -- O mesmo corte ainda esperando na fila do Instagram/Facebook/...: o
+       -- arquivo precisa ficar ate ele sair la tambem (migration 111). Quem
+       -- apaga depois e a limpeza das redes (socialPostingsRepository).
+       AND NOT EXISTS (
+         SELECT 1 FROM social_postings sp
+          WHERE sp.status IN ('pending', 'sending', 'processing')
+            AND (CASE WHEN c.origem = 'live' THEN sp.live_clip_id = c.live_clip_id ELSE sp.clip_id = c.id END))`,
     [hours]
   );
   return rows;

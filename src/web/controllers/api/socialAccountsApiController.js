@@ -1,4 +1,5 @@
-// Conexão das contas do Instagram e do Facebook (via Outstand).
+// Conexão das contas de Instagram, Facebook, Threads, LinkedIn, Pinterest,
+// Bluesky e YouTube (via Outstand).
 //
 // O fluxo atravessa três sites (Post Flow -> Outstand -> Meta -> Outstand ->
 // Post Flow), e o ponto delicado é a volta: a URL de retorno traz o id da conta
@@ -10,17 +11,22 @@
 //   3. o tenant da conta é o do usuário da sessão - o tenant vai aberto na URL
 //      de autorização e pode ser editado, então ele confirma, mas não decide.
 //
-// No Facebook a volta não traz conta nenhuma, e sim um token de sessão: um
-// login carrega várias Páginas e o cliente ainda precisa escolher quais. O
-// token fica guardado na sessão (nunca na URL, que vai pro histórico e pros
-// logs), e a escolha acontece numa segunda etapa.
+// No Facebook e no LinkedIn a volta não traz conta nenhuma, e sim um token de
+// sessão: um login carrega várias Páginas (ou perfil + páginas de empresa) e o
+// cliente ainda precisa escolher quais. O token fica guardado na sessão (nunca
+// na URL, que vai pro histórico e pros logs), e a escolha acontece numa
+// segunda etapa.
 'use strict';
 
 const outstandService = require('../../../services/outstandService');
 const socialAccountsRepository = require('../../../repositories/socialAccountsRepository');
+const socialPostingsRepository = require('../../../repositories/socialPostingsRepository');
+const socialPostingSettingsRepository = require('../../../repositories/socialPostingSettingsRepository');
+const redesSociais = require('../../../lib/redesSociais');
+const { horariosPadrao } = require('../../../lib/postingSchedule');
 const logger = require('../../../lib/logger');
 
-const REDES = ['instagram', 'facebook'];
+const REDES = redesSociais.LISTA;
 // A Outstand mantém a sessão de autorização por 30 minutos; damos 5 de folga
 // pra quem demora convertendo a conta em profissional no meio do caminho.
 const VALIDADE_MS = 35 * 60 * 1000;
@@ -44,14 +50,41 @@ function origem(req) {
 function erroDaOutstand(res, err, acao) {
   logger.error(`Outstand (${acao}): ${err.message}`);
   if (err instanceof outstandService.OutstandError && err.status === 503) {
-    return res.status(503).json({ error: 'A conexão com Instagram e Facebook ainda não está disponível.' });
+    return res.status(503).json({ error: 'A conexão com as redes sociais ainda não está disponível.' });
   }
   return res.status(502).json({ error: 'O serviço de conexão não respondeu agora. Tente de novo em instantes.' });
 }
 
+// Lista com o resumo da fila de cada conta (pra tela mostrar "3 na fila ·
+// próxima às 16:00" sem abrir conta por conta).
+async function listaComResumo(clientUserId) {
+  const [contas, contagens] = await Promise.all([
+    socialAccountsRepository.listActive(clientUserId),
+    socialPostingsRepository.contagensPorConta(clientUserId),
+  ]);
+  const out = [];
+  for (const c of contas) {
+    const s = await socialPostingSettingsRepository.findOrCreate(c.id);
+    const n = contagens.get(Number(c.id));
+    out.push({
+      ...paraApi(c),
+      fila: {
+        naFila: n ? n.na_fila : 0,
+        publicados: n ? n.publicados : 0,
+        erros: n ? n.erros : 0,
+        proxima: n ? n.proxima : null,
+        publicaSozinho: s.auto_post_enabled,
+        pausada: s.paused,
+        porDia: s.videos_per_day,
+        horarios: s.mode === 'manual' && s.manual_times.length ? s.manual_times : horariosPadrao(s.videos_per_day),
+      },
+    });
+  }
+  return out;
+}
+
 async function listar(req, res) {
-  const contas = await socialAccountsRepository.listActive(req.session.user.id);
-  res.json({ disponivel: outstandService.configurado(), contas: contas.map(paraApi) });
+  res.json({ disponivel: outstandService.configurado(), contas: await listaComResumo(req.session.user.id) });
 }
 
 async function iniciarConexao(req, res) {
@@ -146,52 +179,64 @@ async function retorno(req, res) {
   }
 }
 
-function tokenDoFacebook(req) {
+// A conexão pendente (Facebook/LinkedIn) da sessão, se ainda vale.
+function pendente(req) {
   const p = req.session.conexaoSocial;
-  return pendenteValida(req, 'facebook') && p.sessionToken ? p.sessionToken : null;
+  return p && p.sessionToken && pendenteValida(req, p.network) ? p : null;
 }
 
-async function paginasDoFacebook(req, res) {
-  const token = tokenDoFacebook(req);
-  if (!token) return res.status(409).json({ error: 'A autorização expirou. Conecte o Facebook de novo.' });
+// GET /pendente - as Páginas/perfis que o login trouxe, pra escolher.
+async function paginasPendentes(req, res) {
+  const p = pendente(req);
+  if (!p) return res.status(409).json({ error: 'A autorização expirou. Conecte a rede de novo.' });
   try {
-    const dados = await outstandService.paginasPendentes(token);
+    const dados = await outstandService.paginasPendentes(p.sessionToken);
     const paginas = (dados.availablePages || [])
-      .filter((p) => !p.type || p.type === 'page')
-      .map((p) => ({ id: String(p.id), name: p.name, username: p.username || null, pictureUrl: p.profilePictureUrl || null, category: p.category || null }));
-    res.json({ paginas });
+      // No Facebook só Página publica por aplicativo; no LinkedIn vale perfil e
+      // página de empresa.
+      .filter((x) => p.network !== 'facebook' || !x.type || x.type === 'page')
+      .map((x) => ({
+        id: String(x.id),
+        name: x.name,
+        username: x.username || null,
+        pictureUrl: x.profilePictureUrl || null,
+        category: x.category || (x.type === 'profile' ? 'Perfil pessoal' : x.type === 'organization' ? 'Página de empresa' : null),
+      }));
+    res.json({ rede: p.network, paginas });
   } catch (err) {
-    erroDaOutstand(res, err, 'paginas do facebook');
+    erroDaOutstand(res, err, `paginas pendentes ${p.network}`);
   }
 }
 
+// POST /pendente { pageIds }
 async function conectarPaginas(req, res) {
-  const token = tokenDoFacebook(req);
-  if (!token) return res.status(409).json({ error: 'A autorização expirou. Conecte o Facebook de novo.' });
+  const p = pendente(req);
+  if (!p) return res.status(409).json({ error: 'A autorização expirou. Conecte a rede de novo.' });
+  const network = p.network;
   const ids = Array.isArray(req.body.pageIds) ? req.body.pageIds.map(String).filter(Boolean).slice(0, 20) : [];
-  if (ids.length === 0) return res.status(400).json({ error: 'Escolha pelo menos uma Página.' });
+  if (ids.length === 0) return res.status(400).json({ error: 'Escolha pelo menos uma opção.' });
   try {
-    const contas = await outstandService.finalizarPendente(token, ids);
+    const contas = await outstandService.finalizarPendente(p.sessionToken, ids);
     delete req.session.conexaoSocial;
     let conectadas = 0;
     let deOutroCliente = 0;
     for (const conta of contas) {
-      if (conta.network && conta.network !== 'facebook') continue;
+      if (conta.network && conta.network !== network) continue;
       const vinculada = await socialAccountsRepository.upsert({
         clientUserId: req.session.user.id,
-        network: 'facebook',
+        network,
         outstandAccountId: conta.id,
         username: conta.username,
         displayName: conta.nickname,
+        avatarUrl: conta.profile_picture_url || conta.profilePictureUrl || null,
         accountType: conta.accountType,
       });
       if (vinculada) conectadas += 1;
       else deOutroCliente += 1;
     }
-    const lista = await socialAccountsRepository.listActive(req.session.user.id);
-    res.json({ conectadas, deOutroCliente, contas: lista.map(paraApi) });
+    res.json({ conectadas, deOutroCliente, contas: await listaComResumo(req.session.user.id) });
   } catch (err) {
-    erroDaOutstand(res, err, 'finalizar facebook');
+    erroDaOutstand(res, err, `finalizar ${network}`);
   }
 }
 
@@ -209,8 +254,7 @@ async function desconectar(req, res) {
     }
   }
   await socialAccountsRepository.markDisconnected(id, req.session.user.id);
-  const lista = await socialAccountsRepository.listActive(req.session.user.id);
-  res.json({ contas: lista.map(paraApi) });
+  res.json({ contas: await listaComResumo(req.session.user.id) });
 }
 
-module.exports = { listar, iniciarConexao, retorno, paginasDoFacebook, conectarPaginas, desconectar };
+module.exports = { listar, iniciarConexao, retorno, paginasPendentes, conectarPaginas, desconectar };

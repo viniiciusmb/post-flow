@@ -23,6 +23,7 @@ const CORTES = `
          sv.title AS origem_titulo, sv.youtube_channel_id AS canal_id,
          yc.channel_name AS canal_nome, yc.avatar_url AS canal_avatar, NULL::text AS plataforma,
          (l.clip_id IS NOT NULL) AS gostei,
+         (cv.clip_id IS NOT NULL) AS assistido,
          COALESCE((
            SELECT json_agg(t.x ORDER BY t.ordem) FROM (
              SELECT json_build_object('rede', 'tiktok', 'accountId', p.tiktok_account_id, 'status', p.status,
@@ -42,6 +43,7 @@ const CORTES = `
     JOIN source_videos sv ON sv.id = c.source_video_id
     LEFT JOIN youtube_channels yc ON yc.id = sv.youtube_channel_id
     LEFT JOIN clip_likes l ON l.clip_id = c.id AND l.client_user_id = $1
+    LEFT JOIN clip_views cv ON cv.clip_id = c.id AND cv.client_user_id = $1
    WHERE sv.owner_client_user_id = $1 AND c.status = 'ready' AND c.local_clip_path IS NOT NULL
   UNION ALL
   SELECT 'live', k.id, k.title, k.hook,
@@ -51,6 +53,7 @@ const CORTES = `
          NULL, k.live_channel_id,
          ch.display_name, ch.profile_image_url, ch.platform,
          (ll.live_clip_id IS NOT NULL),
+         (lv.live_clip_id IS NOT NULL),
          COALESCE((
            SELECT json_agg(t.x ORDER BY t.ordem) FROM (
              SELECT json_build_object('rede', 'tiktok', 'accountId', p.tiktok_account_id, 'status', p.status,
@@ -69,11 +72,12 @@ const CORTES = `
     FROM live_clips k
     JOIN live_channels ch ON ch.id = k.live_channel_id
     LEFT JOIN live_clip_likes ll ON ll.live_clip_id = k.id AND ll.client_user_id = $1
+    LEFT JOIN live_clip_views lv ON lv.live_clip_id = k.id AND lv.client_user_id = $1
    WHERE k.user_id = $1 AND k.status = 'pronto' AND k.local_clip_path IS NOT NULL
 `;
 
 // Os filtros comuns à listagem e à contagem (tudo menos cursor e ordem).
-function filtrosDe(params, { origem = null, canal = null, soGostei = false } = {}) {
+function filtrosDe(params, { origem = null, canal = null, soGostei = false, ocultarAssistidos = false } = {}) {
   const filtros = [];
   if (origem) {
     params.push(origem);
@@ -86,6 +90,8 @@ function filtrosDe(params, { origem = null, canal = null, soGostei = false } = {
     filtros.push(`t.tipo = $${params.length - 1} AND t.canal_id = $${params.length}`);
   }
   if (soGostei) filtros.push('t.gostei');
+  // Feed sem repetição (11/10/2026): o que a pessoa já assistiu não volta.
+  if (ocultarAssistidos) filtros.push('NOT t.assistido');
   return filtros;
 }
 
@@ -102,9 +108,12 @@ async function contarCortes(clientUserId, opcoes = {}) {
 
 // filtros: { origem: 'youtube'|'live'|null, canal: { tipo, id } | 'avulsos' | null,
 //            soGostei, ordem: 'recentes'|'antigos', depois: { us, tipo, id } | null, limite }
-async function listarCortes(clientUserId, { origem = null, canal = null, soGostei = false, ordem = 'recentes', depois = null, limite = 12 } = {}) {
+async function listarCortes(
+  clientUserId,
+  { origem = null, canal = null, soGostei = false, ocultarAssistidos = false, ordem = 'recentes', depois = null, limite = 12 } = {}
+) {
   const params = [clientUserId];
-  const filtros = filtrosDe(params, { origem, canal, soGostei });
+  const filtros = filtrosDe(params, { origem, canal, soGostei, ocultarAssistidos });
   const desc = ordem !== 'antigos';
   if (depois) {
     params.push(depois.us, depois.tipo, depois.id);
@@ -184,4 +193,35 @@ async function canaisDeLive(clientUserId) {
   return rows;
 }
 
-module.exports = { listarCortes, contarCortes, contarGostei, marcarGostei, postagemDoCorte, garantirVideoDeLive, canaisDeLive };
+// Marca cortes como assistidos (o feed para de mostrá-los). Só marca corte do
+// PRÓPRIO cliente: o filtro de dono está no INSERT ... SELECT, então um id de
+// outro cliente simplesmente não entra.
+async function marcarAssistidos(clientUserId, cortes) {
+  const yt = cortes.filter((c) => c.tipo === 'youtube').map((c) => c.id);
+  const lv = cortes.filter((c) => c.tipo === 'live').map((c) => c.id);
+  if (yt.length) {
+    await pool.query(
+      `INSERT INTO clip_views (client_user_id, clip_id)
+       SELECT $1, c.id FROM clips c JOIN source_videos sv ON sv.id = c.source_video_id
+        WHERE c.id = ANY($2::bigint[]) AND sv.owner_client_user_id = $1
+       ON CONFLICT DO NOTHING`,
+      [clientUserId, yt]
+    );
+  }
+  if (lv.length) {
+    await pool.query(
+      `INSERT INTO live_clip_views (client_user_id, live_clip_id)
+       SELECT $1, k.id FROM live_clips k WHERE k.id = ANY($2::bigint[]) AND k.user_id = $1
+       ON CONFLICT DO NOTHING`,
+      [clientUserId, lv]
+    );
+  }
+}
+
+// "Ver de novo os já assistidos": esquece tudo o que o cliente já assistiu.
+async function esquecerAssistidos(clientUserId) {
+  await pool.query('DELETE FROM clip_views WHERE client_user_id = $1', [clientUserId]);
+  await pool.query('DELETE FROM live_clip_views WHERE client_user_id = $1', [clientUserId]);
+}
+
+module.exports = { marcarAssistidos, esquecerAssistidos, listarCortes, contarCortes, contarGostei, marcarGostei, postagemDoCorte, garantirVideoDeLive, canaisDeLive };

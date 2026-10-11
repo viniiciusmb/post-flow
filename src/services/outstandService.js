@@ -140,19 +140,25 @@ async function enviarMidia(caminhoDoArquivo, nomeDoArquivo) {
   return confirmado.data.url;
 }
 
-// Cria a publicação, pra sair AGORA (sem scheduledAt). `chave` vai como
-// Idempotency-Key: repetir a chamada com a mesma chave devolve a publicação já
-// criada em vez de publicar o vídeo duas vezes.
-async function criarPublicacao({ accountId, rede, legenda, midiaUrl, nomeDoArquivo, chave }) {
+// Cria a publicação, pra sair AGORA (sem scheduledAt: o horário é decidido
+// pela nossa fila). `chave` vai como Idempotency-Key: repetir a chamada com a
+// mesma chave devolve a publicação já criada em vez de publicar duas vezes.
+// `configuracao` é o bloco próprio da rede, já com a chave no nome da rede
+// (ex.: { facebook: { publishAsReel: true } }) - ver socialPostingService.
+async function criarPublicacao({ accountId, legenda, midiaUrl, nomeDoArquivo, chave, configuracao = {} }) {
   const corpo = {
     accounts: [accountId],
     containers: [{ content: legenda || '', media: [{ url: midiaUrl, filename: nomeDoArquivo }] }],
+    ...configuracao,
   };
-  // No Facebook, vídeo sem esta marca sai como vídeo comum da Página, não como
-  // Reel. No Instagram, vídeo publicado pela API já é Reel.
-  if (rede === 'facebook') corpo.facebook = { publishAsReel: true };
   const dados = await chamar('POST', '/v1/posts', corpo, { cabecalhos: { 'Idempotency-Key': chave } });
   return dados.post;
+}
+
+// As pastas (boards) de uma conta do Pinterest: todo pin precisa de uma.
+async function pastasDoPinterest(accountId) {
+  const dados = await chamar('GET', `/v1/pinterest/accounts/${encodeURIComponent(accountId)}/boards`);
+  return (dados.data || []).map((b) => ({ id: String(b.id), nome: b.name, privada: b.privacy && b.privacy !== 'PUBLIC' }));
 }
 
 // O resultado da publicação NAQUELA conta: { status: 'pending'|'published'|'failed', error, url }.
@@ -168,6 +174,7 @@ module.exports = {
   OutstandError,
   enviarMidia,
   criarPublicacao,
+  pastasDoPinterest,
   situacaoDaPublicacao,
   configurado,
   tenantDe,

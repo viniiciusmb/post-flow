@@ -26,6 +26,7 @@ const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRep
 const videosRepository = require('../../repositories/videosRepository');
 const postingsRepository = require('../../repositories/postingsRepository');
 const destinoDoVideoService = require('../../services/destinoDoVideoService');
+const filaSocialService = require('../../services/filaSocialService');
 const clientVideoSettingsRepository = require('../../repositories/clientVideoSettingsRepository');
 const sharedVideoAssetsRepository = require('../../repositories/sharedVideoAssetsRepository');
 const sharedVideoFiles = require('../../lib/sharedVideoFiles');
@@ -838,6 +839,11 @@ async function run(sourceVideoId) {
             }
           }
         }
+
+        // Instagram, Facebook, Threads, LinkedIn, Pinterest, Bluesky e YouTube
+        // escolhidos pro canal (migration 111). Nunca lança: a fila das redes
+        // não pode derrubar o corte que acabou de ficar pronto.
+        await filaSocialService.corteFicouPronto({ sourceVideo, clip });
       } catch (err) {
         // Corte interrompido por pausa (nao e falha de verdade) - deixa o
         // status como estava (ainda 'rendering'/'pending') e propaga pro

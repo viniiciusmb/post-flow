@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react"
-import { IconBrandGoogleDrive, IconBrandTiktok, IconClockHour4, IconHourglass, IconRadar, IconTrash } from "@tabler/icons-react"
+import { useEffect, useState, type ReactNode } from "react"
+import { IconBrandGoogleDrive, IconBrandTiktok, IconClockHour4, IconHourglass, IconRadar, IconShare3, IconTrash } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api, ApiError } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { TikTokAccountSummary, YoutubeChannel } from "@/types/api"
+import type { ContaSocial } from "@/components/redes/PainelDaContaSocial"
+import { REDES, duracaoCurta } from "@/lib/redes"
 
 /** Uma linha de ajuste: o que é e o que muda, à esquerda; o controle, à direita. */
 const TONS = {
@@ -93,12 +95,17 @@ export function Interruptor({
 export function MonitoramentoDoCanal({
   channel,
   tiktokAccounts,
+  contasSociais = [],
+  destinosSociais = [],
   driveConectado,
   onMudou,
   onRemovido,
 }: {
   channel: YoutubeChannel
   tiktokAccounts: TikTokAccountSummary[]
+  /** Contas das outras redes (painel novo) e as que já recebem deste canal. */
+  contasSociais?: ContaSocial[]
+  destinosSociais?: number[]
   driveConectado: boolean
   onMudou: () => Promise<void> | void
   onRemovido: () => void
@@ -135,6 +142,36 @@ export function MonitoramentoDoCanal({
   }
 
   const contaVinculada = tiktokAccounts.find((a) => a.id === channel.tiktokAccountId) ?? null
+  const [ligadas, setLigadas] = useState<number[]>(destinosSociais)
+  // A lista chega do servidor depois que a aba pode já ter aberto: acompanha o
+  // que veio, senão as caixas ficariam desmarcadas com o canal publicando.
+  const chaveDestinos = destinosSociais.join(",")
+  useEffect(() => {
+    setLigadas(chaveDestinos ? chaveDestinos.split(",").map(Number) : [])
+  }, [chaveDestinos])
+  const [avisoRedes, setAvisoRedes] = useState<string | null>(null)
+
+  async function alternarConta(id: number, ligar: boolean) {
+    const antes = ligadas
+    const novas = ligar ? [...new Set([...ligadas, id])] : ligadas.filter((x) => x !== id)
+    setLigadas(novas)
+    setAvisoRedes(null)
+    try {
+      await salvar("redes", async () => {
+        const r = await api.put<{ enfileirados: number; longos: number }>(`/api/client/social-accounts/canais/${channel.id}`, { socialAccountIds: novas })
+        if (ligar && (r.enfileirados || r.longos)) {
+          const conta = contasSociais.find((c) => c.id === id)
+          const limite = conta ? REDES[conta.network].duracaoMaxS : 0
+          setAvisoRedes(
+            `${r.enfileirados} corte${r.enfileirados === 1 ? "" : "s"} já pronto${r.enfileirados === 1 ? "" : "s"} entr${r.enfileirados === 1 ? "ou" : "aram"} na fila.` +
+              (r.longos ? ` ${r.longos} ficaram de fora por passar de ${duracaoCurta(limite)}.` : ""),
+          )
+        }
+      })
+    } catch {
+      setLigadas(antes)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -292,6 +329,49 @@ export function MonitoramentoDoCanal({
             </Select>
           )}
         </Linha>
+
+        {contasSociais !== undefined && (
+          <Linha
+            titulo="Publicar também em"
+            icone={<IconShare3 className="size-5" />}
+            tom="violet"
+            texto={
+              contasSociais.length === 0 ? (
+                <>
+                  Instagram, Facebook, YouTube e outras redes.{" "}
+                  <a href="/client/social" className="font-medium text-foreground underline underline-offset-2">Conectar em Redes sociais</a>.
+                </>
+              ) : (
+                <>
+                  Cada corte novo entra também na fila das contas marcadas, com os horários de cada uma. Corte mais longo do que a rede aceita não vai pra ela.
+                  {avisoRedes && <span className="mt-1 block text-foreground">{avisoRedes}</span>}
+                </>
+              )
+            }
+          >
+            {contasSociais.length > 0 && (
+              <div className="flex w-full flex-col gap-1.5 sm:w-64">
+                {contasSociais.map((c) => {
+                  const r = REDES[c.network]
+                  const on = ligadas.includes(c.id)
+                  return (
+                    <label
+                      key={c.id}
+                      className={cn("flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs", on ? "border-foreground bg-muted/40" : "border-border")}
+                    >
+                      <Checkbox checked={on} disabled={salvando === "redes"} onCheckedChange={(v) => void alternarConta(c.id, v === true)} />
+                      <span className="flex size-4 shrink-0 items-center justify-center rounded-full text-white" style={{ background: r.fundo }}>
+                        <r.Icone className="size-2.5" />
+                      </span>
+                      <span className="min-w-0 truncate">{c.displayName || c.username}</span>
+                      <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">até {duracaoCurta(r.duracaoMaxS)}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </Linha>
+        )}
 
         <Linha
           titulo="Enviar ao Google Drive"

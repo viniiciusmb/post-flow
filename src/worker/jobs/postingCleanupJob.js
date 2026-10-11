@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const postingsRepository = require('../../repositories/postingsRepository');
+const socialPostingsRepository = require('../../repositories/socialPostingsRepository');
 const livesRepository = require('../../repositories/livesRepository');
 const clipsRepository = require('../../repositories/clipsRepository');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
@@ -24,7 +25,13 @@ const { RETENCAO_CORTE_POSTADO_HORAS } = require('../../config/constants');
 const logger = require('../../lib/logger');
 
 async function run() {
-  const postings = await postingsRepository.listPostedOlderThan(RETENCAO_CORTE_POSTADO_HORAS);
+  // Publicados no TikTok + publicados nas outras redes (Instagram, Facebook...).
+  // Um corte que saiu nos dois aparece nas duas listas; apagar duas vezes é
+  // inofensivo (a segunda não acha nada).
+  const postings = [
+    ...(await postingsRepository.listPostedOlderThan(RETENCAO_CORTE_POSTADO_HORAS)),
+    ...(await socialPostingsRepository.publicadosParaLimpar(RETENCAO_CORTE_POSTADO_HORAS)),
+  ];
   let apagadas = 0;
 
   for (const posting of postings) {

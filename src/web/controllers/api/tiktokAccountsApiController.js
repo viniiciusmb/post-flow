@@ -104,17 +104,24 @@ async function list(req, res) {
   const proximoPorConta = new Map(proximos.map((p) => [String(p.tiktok_account_id), p]));
 
   const withCounts = await Promise.all(
-    refreshed.map(async (account) =>
-      accountToApi(
-        account,
-        await postingsRepository.countByStatusForAccount(account.id),
-        proximoPorConta.get(String(account.id)) || null,
-        await backfillPostingsService.contarPendencias({
-          clientUserId: req.session.user.id,
-          tiktokAccountId: account.id,
-        })
-      )
-    )
+    refreshed.map(async (account) => {
+      const s = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(account.id);
+      return {
+        ...accountToApi(
+          account,
+          await postingsRepository.countByStatusForAccount(account.id),
+          proximoPorConta.get(String(account.id)) || null,
+          await backfillPostingsService.contarPendencias({
+            clientUserId: req.session.user.id,
+            tiktokAccountId: account.id,
+          })
+        ),
+        // Os horários em uso e a pausa, pra a lista de contas desenhar a
+        // régua do dia de cada uma sem abrir conta por conta.
+        horarios: s.mode === 'manual' && s.manual_times.length ? s.manual_times : horariosPadrao(s.videos_per_day),
+        paused: s.paused,
+      };
+    })
   );
   res.json({ accounts: withCounts });
 }

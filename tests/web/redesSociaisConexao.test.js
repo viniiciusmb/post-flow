@@ -194,22 +194,22 @@ test('facebook: token fica na sessao, cliente escolhe a pagina, e o token nao se
   assert.match(local(volta), /escolher=1/);
   assert.ok(!local(volta).includes('tok-fb'), 'o token nao pode ir pra barra de endereco');
 
-  const paginas = await agent.get('/api/client/social-accounts/facebook/paginas');
+  const paginas = await agent.get('/api/client/social-accounts/pendente');
   assert.equal(paginas.status, 200);
   assert.deepEqual(paginas.body.paginas.map((p) => p.id), ['pg1', 'pg2']);
 
-  assert.equal((await agent.post('/api/client/social-accounts/facebook/paginas', { pageIds: [] })).status, 400);
-  const fim = await agent.post('/api/client/social-accounts/facebook/paginas', { pageIds: ['pg1'] });
+  assert.equal((await agent.post('/api/client/social-accounts/pendente', { pageIds: [] })).status, 400);
+  const fim = await agent.post('/api/client/social-accounts/pendente', { pageIds: ['pg1'] });
   assert.equal(fim.status, 200);
   assert.equal(fim.body.conectadas, 1);
   assert.equal(fim.body.contas[0].network, 'facebook');
-  assert.equal((await agent.get('/api/client/social-accounts/facebook/paginas')).status, 409);
+  assert.equal((await agent.get('/api/client/social-accounts/pendente')).status, 409);
 });
 
 test('facebook: sem ter autorizado, nao da pra listar nem escolher pagina', async () => {
   const { agent } = await logado();
-  assert.equal((await agent.get('/api/client/social-accounts/facebook/paginas')).status, 409);
-  assert.equal((await agent.post('/api/client/social-accounts/facebook/paginas', { pageIds: ['pg1'] })).status, 409);
+  assert.equal((await agent.get('/api/client/social-accounts/pendente')).status, 409);
+  assert.equal((await agent.post('/api/client/social-accounts/pendente', { pageIds: ['pg1'] })).status, 409);
 });
 
 test('desconectar: so a propria conta, e avisa a Outstand', async () => {
