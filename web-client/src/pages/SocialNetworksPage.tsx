@@ -391,8 +391,12 @@ function ContasDaRede({
       )}
 
       <p className="text-xs text-muted-foreground">
-        A publicação automática dos cortes no {nome} entra na próxima atualização. As contas conectadas agora já ficam prontas pra
-        isso.
+        Pra publicar no {nome}, abra o{" "}
+        <a href="/client/feed" className="font-medium text-foreground underline underline-offset-2">
+          Feed de cortes
+        </a>
+        , toque em Postar e marque esta conta. O corte sai na hora, como Reel (de 3 a 90 segundos). A publicação automática, com
+        horários, entra numa próxima atualização.
       </p>
     </>
   )

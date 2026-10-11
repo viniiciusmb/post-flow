@@ -42,7 +42,15 @@ import { api, ApiError } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { dataHora } from "@/lib/formatoLocal"
 
-type Postagem = { accountId: number; status: string; scheduledFor: string | null; postedAt: string | null }
+type Postagem = {
+  rede: Conta["rede"]
+  accountId: number
+  status: string
+  scheduledFor: string | null
+  postedAt: string | null
+  url?: string | null
+  erro?: string | null
+}
 type Corte = {
   chave: string
   tipo: "youtube" | "live"
@@ -60,11 +68,22 @@ type Corte = {
 }
 type Conta = { id: number; rede: "tiktok" | "instagram" | "facebook"; nome: string; avatar: string | null; publicaSozinho: boolean; disponivel: boolean }
 type Canal = { chave: string; tipo: "youtube" | "live"; id: number; nome: string; avatar: string | null; plataforma: string | null }
-type Contexto = { canais: Canal[]; contas: Conta[]; totalGostei: number }
+type Contexto = {
+  canais: Canal[]
+  contas: Conta[]
+  totalGostei: number
+  limitesRedesSociais?: { duracaoMinimaS: number; duracaoMaximaS: number }
+}
 type Aba = "todos" | "gostei"
 type Origem = "todos" | "youtube" | "lives"
 type Ordem = "recentes" | "antigos"
-type Resultado = { accountId: number; nome: string; resultado: "enfileirado" | "ja_na_fila" | "ja_publicado" | "ja_existia"; scheduledFor: string | null }
+type Resultado = {
+  rede: Conta["rede"]
+  accountId: number
+  nome: string
+  resultado: "enfileirado" | "ja_na_fila" | "ja_publicado" | "ja_existia"
+  scheduledFor: string | null
+}
 
 // Cores de ação do feed. O vermelho do "gostei" é o mesmo coração de rede
 // social que todo mundo reconhece; o resto da tela fica escura de propósito,
@@ -78,6 +97,17 @@ const REDE_FUNDO: Record<Conta["rede"], string> = {
   facebook: "#1877F2",
 }
 const REDE_ICONE = { tiktok: IconBrandTiktok, instagram: IconBrandInstagram, facebook: IconBrandFacebook }
+const REDE_NOME: Record<Conta["rede"], string> = { tiktok: "TikTok", instagram: "Instagram", facebook: "Facebook" }
+
+// "sending" é o Instagram/Facebook recebendo o vídeo; pra quem olha é a mesma
+// coisa que estar na fila.
+const EM_ANDAMENTO = ["pending", "queued", "processing", "sending"]
+
+// Os ids das contas do TikTok e das do Instagram/Facebook vêm de tabelas
+// diferentes e podem se repetir: conta é sempre rede + id.
+function nomeDaConta(contas: Conta[], p: { rede?: Conta["rede"]; accountId: number }) {
+  return contas.find((c) => c.rede === (p.rede ?? "tiktok") && c.id === p.accountId)?.nome ?? "conta"
+}
 
 // "09/10 08:00": a etiqueta da fila no vídeo precisa caber numa linha curta.
 function diaHoraCurto(iso: string) {
@@ -562,6 +592,7 @@ export function FeedPage() {
       <EnviarCorteDialog
         corte={enviando}
         contas={ctx?.contas ?? []}
+        limites={ctx?.limitesRedesSociais ?? { duracaoMinimaS: 3, duracaoMaximaS: 90 }}
         onFechar={() => setEnviando(null)}
         onEnviado={(chave, resultados) =>
           setCortes(
@@ -571,8 +602,9 @@ export function FeedPage() {
                   ? {
                       ...x,
                       postagens: [
-                        ...x.postagens.filter((p) => !resultados.some((r) => r.accountId === p.accountId)),
+                        ...x.postagens.filter((p) => !resultados.some((r) => r.rede === p.rede && r.accountId === p.accountId)),
                         ...resultados.map((r) => ({
+                          rede: r.rede,
                           accountId: r.accountId,
                           status: r.resultado === "ja_publicado" ? "posted" : "pending",
                           scheduledFor: r.scheduledFor,
@@ -784,9 +816,8 @@ function ItemDoFeed({
   }
   useEffect(() => () => window.clearTimeout(esperaDoToque.current), [])
 
-  const naFila = corte.postagens.filter((p) => ["pending", "queued", "processing"].includes(p.status))
+  const naFila = corte.postagens.filter((p) => EM_ANDAMENTO.includes(p.status))
   const publicadas = corte.postagens.filter((p) => p.status === "posted")
-  const nomeConta = (id: number) => contas.find((c) => c.rede === "tiktok" && c.id === id)?.nome ?? "conta"
   const { canal: canalNome, linha } = deOnde(corte)
 
   const acoes = (dentro: boolean) => (
@@ -866,8 +897,8 @@ function ItemDoFeed({
                 )}
                 title={
                   publicadas.length
-                    ? `Publicado em ${publicadas.map((p) => nomeConta(p.accountId)).join(", ")}`
-                    : `Na fila de ${naFila.map((p) => nomeConta(p.accountId)).join(", ")}`
+                    ? `Publicado em ${publicadas.map((p) => nomeDaConta(contas, p)).join(", ")}`
+                    : `Na fila de ${naFila.map((p) => nomeDaConta(contas, p)).join(", ")}`
                 }
               >
                 {publicadas.length ? (
@@ -876,7 +907,10 @@ function ItemDoFeed({
                   </>
                 ) : (
                   <>
-                    <IconClock className="size-3 shrink-0" /> Na fila{naFila[0].scheduledFor ? ` · ${diaHoraCurto(naFila[0].scheduledFor)}` : ""}
+                    <IconClock className="size-3 shrink-0" />{" "}
+                    {naFila[0].rede !== "tiktok"
+                      ? `Publicando no ${REDE_NOME[naFila[0].rede]}`
+                      : `Na fila${naFila[0].scheduledFor ? ` · ${diaHoraCurto(naFila[0].scheduledFor)}` : ""}`}
                   </>
                 )}
               </span>
@@ -943,7 +977,6 @@ function GradeGostei({
   onEnviar: (c: Corte) => void
 }) {
   const [aberto, setAberto] = useState<Corte | null>(null)
-  const nomeConta = (id: number) => contas.find((c) => c.rede === "tiktok" && c.id === id)?.nome ?? "conta"
 
   if (!cortes) {
     return (
@@ -967,7 +1000,7 @@ function GradeGostei({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
         {cortes.map((c) => {
           const { canal } = deOnde(c)
-          const naFila = c.postagens.filter((p) => ["pending", "queued", "processing"].includes(p.status))
+          const naFila = c.postagens.filter((p) => EM_ANDAMENTO.includes(p.status))
           const publicadas = c.postagens.filter((p) => p.status === "posted")
           return (
             <article key={c.chave} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-[var(--shadow-flat)]">
@@ -993,7 +1026,7 @@ function GradeGostei({
                       publicadas.length ? "bg-tone-success-ink/90" : "bg-black/60",
                     )}
                   >
-                    {publicadas.length ? `Publicado em ${nomeConta(publicadas[0].accountId)}` : `Na fila de ${nomeConta(naFila[0].accountId)}`}
+                    {publicadas.length ? `Publicado em ${nomeDaConta(contas, publicadas[0])}` : `Na fila de ${nomeDaConta(contas, naFila[0])}`}
                   </span>
                 )}
               </button>
@@ -1130,37 +1163,57 @@ function BotaoDeAcao({
 function EnviarCorteDialog({
   corte,
   contas,
+  limites,
   onFechar,
   onEnviado,
 }: {
   corte: Corte | null
   contas: Conta[]
+  limites: { duracaoMinimaS: number; duracaoMaximaS: number }
   onFechar: () => void
   onEnviado: (chave: string, resultados: Resultado[]) => void
 }) {
-  const [marcadas, setMarcadas] = useState<Set<number>>(new Set())
+  // Chave "rede-id": os ids do TikTok e do Instagram/Facebook se repetem.
+  const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [resultados, setResultados] = useState<Resultado[] | null>(null)
+
+  const chaveDe = (c: { rede: Conta["rede"]; id: number }) => `${c.rede}-${c.id}`
+  const postagemNa = (c: Conta) => corte?.postagens.find((p) => (p.rede ?? "tiktok") === c.rede && p.accountId === c.id && p.status !== "skipped")
+  // Reel no Instagram/Facebook só dentro do limite de duração.
+  const foraDoLimite =
+    corte !== null && (corte.duracaoSegundos > limites.duracaoMaximaS || corte.duracaoSegundos < limites.duracaoMinimaS)
+  const podeMarcar = (c: Conta) => {
+    if (!c.disponivel) return false
+    if (c.rede !== "tiktok" && foraDoLimite) return false
+    const ja = postagemNa(c)
+    // Instagram/Facebook publicado ou publicando não tem o que reenviar.
+    if (c.rede !== "tiktok" && ja && ja.status !== "error") return false
+    return true
+  }
 
   useEffect(() => {
     if (!corte) return
     setErro(null)
     setResultados(null)
-    // Já marca as contas onde o corte ainda não está: é o que a pessoa quer na
-    // maioria das vezes ("manda pra minhas redes").
+    // Já marca as contas do TikTok onde o corte ainda não está: é o que a
+    // pessoa quer na maioria das vezes ("manda pra minhas redes"). Instagram e
+    // Facebook publicam NA HORA, então ficam pra pessoa marcar.
     const tiktok = contas.filter((c) => c.rede === "tiktok" && c.disponivel)
-    const livres = tiktok.filter((c) => !corte.postagens.some((p) => p.accountId === c.id && p.status !== "skipped"))
-    setMarcadas(new Set((tiktok.length === 1 ? tiktok : livres).map((c) => c.id)))
+    const livres = tiktok.filter((c) => !corte.postagens.some((p) => (p.rede ?? "tiktok") === "tiktok" && p.accountId === c.id && p.status !== "skipped"))
+    setMarcadas(new Set((tiktok.length === 1 ? tiktok : livres).map(chaveDe)))
   }, [corte, contas])
 
   async function enviar() {
     if (!corte) return
     setEnviando(true)
     setErro(null)
+    const escolhidas = contas.filter((c) => marcadas.has(chaveDe(c)) && podeMarcar(c))
     try {
       const r = await api.post<{ resultados: Resultado[] }>(`/api/client/feed/cortes/${corte.tipo}/${corte.id}/enviar`, {
-        tiktokAccountIds: [...marcadas],
+        tiktokAccountIds: escolhidas.filter((c) => c.rede === "tiktok").map((c) => c.id),
+        socialAccountIds: escolhidas.filter((c) => c.rede !== "tiktok").map((c) => c.id),
       })
       setResultados(r.resultados)
       onEnviado(corte.chave, r.resultados)
@@ -1177,12 +1230,44 @@ function EnviarCorteDialog({
     { rede: "facebook", nome: "Facebook" },
   ]
   const semConta = contas.length === 0
+  const quantas = contas.filter((c) => marcadas.has(chaveDe(c)) && podeMarcar(c)).length
+  const soRedesNaHora = contas.filter((c) => marcadas.has(chaveDe(c)) && podeMarcar(c)).every((c) => c.rede !== "tiktok")
+
+  function textoDoResultado(r: Resultado) {
+    if (r.rede === "tiktok") {
+      return r.resultado === "enfileirado"
+        ? `Entrou na fila${r.scheduledFor ? `, previsto para ${dataHora(r.scheduledFor)}` : ""}.`
+        : r.resultado === "ja_publicado"
+          ? "Este corte já foi publicado nesta conta."
+          : `Já estava na fila${r.scheduledFor ? ` (${dataHora(r.scheduledFor)})` : ""}.`
+    }
+    const rede = REDE_NOME[r.rede]
+    return r.resultado === "enfileirado"
+      ? `Publicando agora no ${rede}. Aparece no perfil em alguns minutos.`
+      : r.resultado === "ja_publicado"
+        ? `Este corte já foi publicado nesta conta do ${rede}.`
+        : `Este corte já está sendo publicado nesta conta do ${rede}.`
+  }
+
+  function subtitulo(c: Conta) {
+    const ja = postagemNa(c)
+    if (!c.disponivel) return "A publicação nesta rede chega na próxima atualização."
+    if (c.rede !== "tiktok") {
+      if (foraDoLimite) return `Só cortes de ${limites.duracaoMinimaS} s a ${limites.duracaoMaximaS} s (este tem ${corte?.duracaoSegundos ?? 0} s)`
+      if (ja?.status === "posted") return "Já publicado nesta conta"
+      if (ja?.status === "error") return `Não saiu: ${ja.erro ?? "a rede recusou"} Marque pra tentar de novo.`
+      if (ja) return "Publicando agora"
+      return "Publica na hora, como Reel"
+    }
+    if (ja) return ja.status === "posted" ? "Já publicado nesta conta" : `Já está na fila${ja.scheduledFor ? ` · ${dataHora(ja.scheduledFor)}` : ""}`
+    return c.publicaSozinho ? "Entra na fila e sai no próximo horário livre" : "Entra na fila; a publicação automática desta conta está desligada"
+  }
 
   return (
     <Dialog open={corte !== null} onOpenChange={(a) => !a && onFechar()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{resultados ? "Enviado para a fila" : "Postar este corte"}</DialogTitle>
+          <DialogTitle>{resultados ? "Enviado" : "Postar este corte"}</DialogTitle>
           <DialogDescription className="line-clamp-2">{corte?.titulo}</DialogDescription>
           {corte && (
             <a href={corte.downloadUrl} download className="inline-flex w-fit items-center gap-1 text-xs font-medium text-foreground underline underline-offset-2">
@@ -1194,7 +1279,7 @@ function EnviarCorteDialog({
         {resultados ? (
           <div className="flex flex-col gap-2">
             {resultados.map((r) => (
-              <div key={r.accountId} className="flex items-start gap-3 rounded-lg border border-border p-3">
+              <div key={`${r.rede}-${r.accountId}`} className="flex items-start gap-3 rounded-lg border border-border p-3">
                 <span
                   className={cn(
                     "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-white",
@@ -1204,24 +1289,22 @@ function EnviarCorteDialog({
                   <IconCheck className="size-3.5" />
                 </span>
                 <div className="min-w-0 text-sm">
-                  <p className="font-medium">{r.nome}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {r.resultado === "enfileirado"
-                      ? `Entrou na fila${r.scheduledFor ? `, previsto para ${dataHora(r.scheduledFor)}` : ""}.`
-                      : r.resultado === "ja_publicado"
-                        ? "Este corte já foi publicado nesta conta."
-                        : `Já estava na fila${r.scheduledFor ? ` (${dataHora(r.scheduledFor)})` : ""}.`}
+                  <p className="font-medium">
+                    {r.nome} <span className="text-xs font-normal text-muted-foreground">· {REDE_NOME[r.rede]}</span>
                   </p>
+                  <p className="text-xs text-muted-foreground">{textoDoResultado(r)}</p>
                 </div>
               </div>
             ))}
-            <p className="text-xs text-muted-foreground">
-              A ordem e os horários da fila você ajusta em{" "}
-              <a href="/client/social?rede=tiktok" className="font-medium text-foreground underline underline-offset-2">
-                Redes sociais
-              </a>
-              .
-            </p>
+            {resultados.some((r) => r.rede === "tiktok") && (
+              <p className="text-xs text-muted-foreground">
+                A ordem e os horários da fila do TikTok você ajusta em{" "}
+                <a href="/client/social?rede=tiktok" className="font-medium text-foreground underline underline-offset-2">
+                  Redes sociais
+                </a>
+                .
+              </p>
+            )}
           </div>
         ) : semConta ? (
           <div className="rounded-lg border border-dashed border-border p-5 text-center">
@@ -1244,28 +1327,29 @@ function EnviarCorteDialog({
                       <Icone className="size-3" />
                     </span>
                     {g.nome}
-                    {!doGrupo[0].disponivel && <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">publicação em breve</span>}
+                    {g.rede !== "tiktok" && <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">publica na hora</span>}
                   </p>
                   {doGrupo.map((c) => {
-                    const ja = corte?.postagens.find((p) => p.accountId === c.id && c.rede === "tiktok" && p.status !== "skipped")
-                    const marcada = marcadas.has(c.id) && c.disponivel
+                    const pode = podeMarcar(c)
+                    const marcada = marcadas.has(chaveDe(c)) && pode
+                    const falhou = c.rede !== "tiktok" && postagemNa(c)?.status === "error"
                     return (
                       <label
-                        key={`${c.rede}${c.id}`}
+                        key={chaveDe(c)}
                         className={cn(
                           "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
-                          !c.disponivel ? "cursor-not-allowed opacity-55" : "cursor-pointer",
+                          !pode ? "cursor-not-allowed opacity-55" : "cursor-pointer",
                           marcada ? "border-foreground bg-muted/50" : "border-border",
                         )}
                       >
                         <Checkbox
                           checked={marcada}
-                          disabled={!c.disponivel}
+                          disabled={!pode}
                           onCheckedChange={(v) =>
                             setMarcadas((prev) => {
                               const n = new Set(prev)
-                              if (v === true) n.add(c.id)
-                              else n.delete(c.id)
+                              if (v === true) n.add(chaveDe(c))
+                              else n.delete(chaveDe(c))
                               return n
                             })
                           }
@@ -1276,17 +1360,7 @@ function EnviarCorteDialog({
                         </Avatar>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium">{c.nome}</span>
-                          <span className="block truncate text-[11px] text-muted-foreground">
-                            {!c.disponivel
-                              ? "A publicação nesta rede chega na próxima atualização."
-                              : ja
-                                ? ja.status === "posted"
-                                  ? "Já publicado nesta conta"
-                                  : `Já está na fila${ja.scheduledFor ? ` · ${dataHora(ja.scheduledFor)}` : ""}`
-                                : c.publicaSozinho
-                                  ? "Entra na fila e sai no próximo horário livre"
-                                  : "Entra na fila; a publicação automática desta conta está desligada"}
-                          </span>
+                          <span className={cn("block text-[11px]", falhou ? "text-tone-danger-ink" : "truncate text-muted-foreground")}>{subtitulo(c)}</span>
                         </span>
                       </label>
                     )
@@ -1308,13 +1382,13 @@ function EnviarCorteDialog({
                 Cancelar
               </Button>
               <Button
-                disabled={enviando || marcadas.size === 0}
+                disabled={enviando || quantas === 0}
                 onClick={enviar}
                 className="gap-1.5 border-0 text-white hover:opacity-90"
                 style={{ background: "linear-gradient(135deg, #FE2C55, #8134AF)" }}
               >
                 <IconSend className="size-4" />
-                {enviando ? "Enviando..." : marcadas.size > 1 ? `Enviar para ${marcadas.size} contas` : "Enviar para a fila"}
+                {enviando ? "Enviando..." : quantas > 1 ? `Enviar para ${quantas} contas` : soRedesNaHora && quantas === 1 ? "Publicar agora" : "Enviar para a fila"}
               </Button>
             </>
           )}

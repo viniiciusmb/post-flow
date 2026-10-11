@@ -6,6 +6,7 @@
 
 const systemErrorsRepository = require('../../../repositories/systemErrorsRepository');
 const sourceVideosRepository = require('../../../repositories/sourceVideosRepository');
+const socialPostingsRepository = require('../../../repositories/socialPostingsRepository');
 const postingsRepository = require('../../../repositories/postingsRepository');
 const queueService = require('../../../services/queueService');
 const queuePriorityService = require('../../../services/queuePriorityService');
@@ -130,6 +131,13 @@ async function reenfileirar(erro) {
     await postingsRepository.updateStatus(id, { status: 'pending', errorMessage: null });
     const boss = await queueService.getBoss();
     await boss.send('tiktok-posting', {});
+    return true;
+  }
+
+  if (erro.operation === 'social_posting') {
+    if (!(await socialPostingsRepository.devolverParaFila(id))) return false;
+    const boss = await queueService.getBoss();
+    await boss.send('social-posting', {});
     return true;
   }
 

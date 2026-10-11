@@ -14,6 +14,7 @@
 // conexão (ver socialAccountsApiController).
 'use strict';
 
+const fs = require('node:fs');
 const config = require('../config');
 const logger = require('../lib/logger');
 
@@ -49,7 +50,7 @@ function tenantDe(userId) {
   return `pf_${Number(userId)}`;
 }
 
-async function chamar(metodo, caminho, corpo) {
+async function chamar(metodo, caminho, corpo, { cabecalhos = {} } = {}) {
   if (!configurado()) throw new OutstandError('A integração com Instagram e Facebook não está configurada.', 503);
   let resposta;
   try {
@@ -58,6 +59,7 @@ async function chamar(metodo, caminho, corpo) {
       headers: {
         Authorization: `Bearer ${config.outstand.apiKey}`,
         ...(corpo ? { 'Content-Type': 'application/json' } : {}),
+        ...cabecalhos,
       },
       body: corpo ? JSON.stringify(corpo) : undefined,
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -113,8 +115,60 @@ async function removerConta(accountId) {
   await chamar('DELETE', `/v1/social-accounts/${encodeURIComponent(accountId)}`);
 }
 
+// Manda o arquivo do corte pra Outstand e devolve a URL pública que a
+// publicação usa. São 3 passos (pedir a URL de envio, mandar os bytes, confirmar).
+// A URL de envio é do armazenamento DELES, não da API: vai sem a nossa chave.
+const TIMEOUT_ENVIO_MS = 10 * 60 * 1000;
+async function enviarMidia(caminhoDoArquivo, nomeDoArquivo) {
+  const tamanho = fs.statSync(caminhoDoArquivo).size;
+  const pedido = await chamar('POST', '/v1/media/upload', { filename: nomeDoArquivo, content_type: 'video/mp4' });
+  const { id, upload_url: uploadUrl } = pedido.data;
+  let resposta;
+  try {
+    resposta = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'video/mp4', 'Content-Length': String(tamanho) },
+      body: fs.createReadStream(caminhoDoArquivo),
+      duplex: 'half',
+      signal: AbortSignal.timeout(TIMEOUT_ENVIO_MS),
+    });
+  } catch (err) {
+    throw new OutstandError(`Não foi possível enviar o vídeo pra Outstand (${err.message}).`, 502);
+  }
+  if (!resposta.ok) throw new OutstandError(`O armazenamento da Outstand recusou o vídeo (HTTP ${resposta.status}).`, resposta.status);
+  const confirmado = await chamar('POST', `/v1/media/${encodeURIComponent(id)}/confirm`, { size: tamanho });
+  return confirmado.data.url;
+}
+
+// Cria a publicação, pra sair AGORA (sem scheduledAt). `chave` vai como
+// Idempotency-Key: repetir a chamada com a mesma chave devolve a publicação já
+// criada em vez de publicar o vídeo duas vezes.
+async function criarPublicacao({ accountId, rede, legenda, midiaUrl, nomeDoArquivo, chave }) {
+  const corpo = {
+    accounts: [accountId],
+    containers: [{ content: legenda || '', media: [{ url: midiaUrl, filename: nomeDoArquivo }] }],
+  };
+  // No Facebook, vídeo sem esta marca sai como vídeo comum da Página, não como
+  // Reel. No Instagram, vídeo publicado pela API já é Reel.
+  if (rede === 'facebook') corpo.facebook = { publishAsReel: true };
+  const dados = await chamar('POST', '/v1/posts', corpo, { cabecalhos: { 'Idempotency-Key': chave } });
+  return dados.post;
+}
+
+// O resultado da publicação NAQUELA conta: { status: 'pending'|'published'|'failed', error, url }.
+async function situacaoDaPublicacao(postId, accountId) {
+  const dados = await chamar('GET', `/v1/posts/${encodeURIComponent(postId)}`);
+  const contas = (dados.post && dados.post.socialAccounts) || [];
+  const conta = contas.find((c) => c.id === accountId) || contas[0];
+  if (!conta) return { status: 'pending', error: null, url: null };
+  return { status: conta.status || 'pending', error: conta.error || null, url: conta.platformPostUrl || null };
+}
+
 module.exports = {
   OutstandError,
+  enviarMidia,
+  criarPublicacao,
+  situacaoDaPublicacao,
   configurado,
   tenantDe,
   urlDeAutorizacao,

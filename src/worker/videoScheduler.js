@@ -5,6 +5,7 @@ const processVideoJob = require('./videoJobs/processVideoJob');
 const videoErrorRetryJob = require('./jobs/videoErrorRetryJob');
 const videoStuckRecoveryJob = require('./jobs/videoStuckRecoveryJob');
 const tiktokPostingJob = require('./jobs/tiktokPostingJob');
+const socialPostingService = require('../services/socialPostingService');
 const postingCleanupJob = require('./jobs/postingCleanupJob');
 const sharedAssetsCleanupJob = require('./jobs/sharedAssetsCleanupJob');
 const driveExportJob = require('./jobs/driveExportJob');
@@ -22,6 +23,7 @@ const QUEUE_VIDEO_PROCESSING = 'video-processing';
 const QUEUE_VIDEO_ERROR_RETRY = 'video-error-retry';
 const QUEUE_VIDEO_STUCK_RECOVERY = 'video-stuck-recovery';
 const QUEUE_TIKTOK_POSTING = 'tiktok-posting';
+const QUEUE_SOCIAL_POSTING = 'social-posting';
 const QUEUE_POSTING_CLEANUP = 'posting-cleanup';
 const QUEUE_SHARED_ASSETS_CLEANUP = 'shared-assets-cleanup';
 const QUEUE_DRIVE_EXPORT = 'drive-export';
@@ -41,6 +43,7 @@ async function start(boss) {
   await boss.createQueue(QUEUE_VIDEO_ERROR_RETRY);
   await boss.createQueue(QUEUE_VIDEO_STUCK_RECOVERY);
   await boss.createQueue(QUEUE_TIKTOK_POSTING);
+  await boss.createQueue(QUEUE_SOCIAL_POSTING);
   await boss.createQueue(QUEUE_POSTING_CLEANUP);
   await boss.createQueue(QUEUE_SHARED_ASSETS_CLEANUP);
   await boss.createQueue(QUEUE_DRIVE_EXPORT);
@@ -90,6 +93,12 @@ async function start(boss) {
   // volume compartilhado), nao no worker leve (Drive de origem/metricas).
   await boss.schedule(QUEUE_TIKTOK_POSTING, '*/10 * * * *');
   logger.info('Fila de postagem no TikTok agendada a cada 10 minutos.');
+
+  // Instagram/Facebook publicam na hora (o cliente manda pelo feed e o envio
+  // tambem dispara este job na hora); o agendamento de minuto em minuto e a
+  // rede de seguranca e quem confere se a rede ja publicou.
+  await boss.schedule(QUEUE_SOCIAL_POSTING, '* * * * *');
+  logger.info('Publicacao no Instagram/Facebook agendada a cada minuto.');
 
   await boss.schedule(QUEUE_POSTING_CLEANUP, '5 * * * *');
   logger.info('Limpeza de postagens antigas agendada de hora em hora.');
@@ -142,6 +151,10 @@ async function start(boss) {
 
   await boss.work(QUEUE_TIKTOK_POSTING, async () => {
     await tiktokPostingJob.run();
+  });
+
+  await boss.work(QUEUE_SOCIAL_POSTING, async () => {
+    await socialPostingService.run();
   });
 
   await boss.work(QUEUE_POSTING_CLEANUP, async () => {

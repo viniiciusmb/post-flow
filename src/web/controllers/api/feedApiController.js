@@ -3,10 +3,13 @@
 // que gostou e manda os escolhidos pra fila de publicação das contas que ele
 // marcar.
 //
-// Enviar usa a MESMA criação de postagem do resto do sistema
+// Enviar pro TikTok usa a MESMA criação de postagem do resto do sistema
 // (postingsRepository.createIfNotExists): o horário sai da fila da conta, a
 // ordem por vídeo é mantida e a publicação automática da conta continua
 // decidindo se sai sozinho. O feed só escolhe O QUE e PRA ONDE.
+//
+// Instagram e Facebook (10/10/2026) vão pela fila própria (social_postings) e
+// publicam na hora, pela Outstand - ver socialPostingService.
 'use strict';
 
 const clipsRepository = require('../../../repositories/clipsRepository');
@@ -16,7 +19,11 @@ const postingsRepository = require('../../../repositories/postingsRepository');
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const socialAccountsRepository = require('../../../repositories/socialAccountsRepository');
+const socialPostingsRepository = require('../../../repositories/socialPostingsRepository');
 const backfillPostingsService = require('../../../services/backfillPostingsService');
+const socialPostingService = require('../../../services/socialPostingService');
+const queueService = require('../../../services/queueService');
+const logger = require('../../../lib/logger');
 
 const POR_PAGINA = 12;
 const POR_PAGINA_GRADE = 24;
@@ -163,17 +170,18 @@ async function contexto(req, res) {
         publicaSozinho: a.auto_post_enabled === true,
         disponivel: true,
       })),
-      // Instagram e Facebook já conectam, mas ainda não publicam: aparecem na
-      // lista pra pessoa ver que existem, marcados como indisponíveis.
+      // Instagram e Facebook publicam na hora pela Outstand (não têm fila
+      // com horário como o TikTok), e só cortes dentro do limite de duração.
       ...sociais.map((s) => ({
         id: Number(s.id),
         rede: s.network,
         nome: s.display_name || s.username,
         avatar: s.avatar_url,
-        publicaSozinho: false,
-        disponivel: false,
+        publicaSozinho: true,
+        disponivel: true,
       })),
     ],
+    limitesRedesSociais: { duracaoMinimaS: socialPostingService.DURACAO_MINIMA_S, duracaoMaximaS: socialPostingService.DURACAO_MAXIMA_S },
     totalGostei,
   });
 }
@@ -186,11 +194,29 @@ async function corteDoCliente(req) {
   if (tipo === 'live') {
     const k = await livesRepository.findClipForUser(id, req.session.user.id);
     if (!k) return null;
-    return { tipo, id, pronto: k.status === 'pronto', caminho: k.local_clip_path, titulo: k.title, legenda: k.title, linha: k };
+    return {
+      tipo,
+      id,
+      pronto: k.status === 'pronto',
+      caminho: k.local_clip_path,
+      titulo: k.title,
+      legenda: k.title,
+      duracaoS: Number(k.end_offset) - Number(k.start_offset),
+      linha: k,
+    };
   }
   const c = await clipsRepository.findByIdOwnedByClient(id, req.session.user.id);
   if (!c) return null;
-  return { tipo, id, pronto: c.status === 'ready', caminho: c.local_clip_path, titulo: c.title, legenda: c.description, linha: c };
+  return {
+    tipo,
+    id,
+    pronto: c.status === 'ready',
+    caminho: c.local_clip_path,
+    titulo: c.title,
+    legenda: c.description,
+    duracaoS: Number(c.end_seconds) - Number(c.start_seconds),
+    linha: c,
+  };
 }
 
 // PUT /api/client/feed/cortes/:tipo/:id/gostei { gostei: true|false }
@@ -202,7 +228,11 @@ async function gostei(req, res) {
   res.json({ gostei: req.body.gostei, totalGostei: await feedRepository.contarGostei(req.session.user.id) });
 }
 
-// POST /api/client/feed/cortes/:tipo/:id/enviar { tiktokAccountIds: [..] }
+function idsDoCorpo(lista) {
+  return Array.isArray(lista) ? [...new Set(lista.map(Number))] : [];
+}
+
+// POST /api/client/feed/cortes/:tipo/:id/enviar { tiktokAccountIds: [..], socialAccountIds: [..] }
 async function enviar(req, res) {
   const clientUserId = req.session.user.id;
   const corte = await corteDoCliente(req);
@@ -211,46 +241,81 @@ async function enviar(req, res) {
     return res.status(410).json({ error: 'O arquivo deste corte não existe mais (passou do prazo de retenção).' });
   }
 
-  const pedidas = Array.isArray(req.body?.tiktokAccountIds) ? [...new Set(req.body.tiktokAccountIds.map(Number))] : [];
-  if (pedidas.length === 0) return res.status(400).json({ error: 'Marque pelo menos uma conta.' });
-  const minhas = await tiktokAccountsRepository.listActiveByClientId(clientUserId);
-  const contas = pedidas.map((id) => minhas.find((a) => Number(a.id) === id));
+  const pedidasTiktok = idsDoCorpo(req.body?.tiktokAccountIds);
+  const pedidasSociais = idsDoCorpo(req.body?.socialAccountIds);
+  if (pedidasTiktok.length === 0 && pedidasSociais.length === 0) return res.status(400).json({ error: 'Marque pelo menos uma conta.' });
+  const [minhas, minhasSociais] = await Promise.all([
+    pedidasTiktok.length ? tiktokAccountsRepository.listActiveByClientId(clientUserId) : [],
+    pedidasSociais.length ? socialAccountsRepository.listActive(clientUserId) : [],
+  ]);
+  const contas = pedidasTiktok.map((id) => minhas.find((a) => Number(a.id) === id));
+  const sociais = pedidasSociais.map((id) => minhasSociais.find((a) => Number(a.id) === id));
   // Conta de outro cliente (ou desconectada) recusa o pedido inteiro, antes
   // de criar qualquer postagem.
-  if (contas.some((c) => !c)) return res.status(404).json({ error: 'Conta não encontrada.' });
-
-  const videoId =
-    corte.tipo === 'live'
-      ? await feedRepository.garantirVideoDeLive(corte.linha)
-      : await backfillPostingsService.garantirVideo(corte.linha);
-  const resultados = [];
-  for (const conta of contas) {
-    const criada = await postingsRepository.createIfNotExists({ videoId, tiktokAccountId: conta.id, caption: corte.legenda });
-    if (criada) {
-      resultados.push({ accountId: Number(conta.id), nome: conta.display_name, resultado: 'enfileirado', scheduledFor: criada.scheduled_for });
-      continue;
-    }
-    // Já existe uma postagem deste corte nesta conta. Cancelada volta pra fila
-    // (o cliente pediu de novo, de propósito); o resto só é informado.
-    const existente = await feedRepository.postagemDoCorte(corte.tipo, corte.id, conta.id);
-    if (existente && existente.status === 'skipped') {
-      const devolvida = await postingsRepository.requeueSkipped(existente.id, conta.id);
-      resultados.push({
-        accountId: Number(conta.id),
-        nome: conta.display_name,
-        resultado: devolvida ? 'enfileirado' : 'ja_existia',
-        scheduledFor: devolvida ? devolvida.scheduled_for : existente.scheduled_for,
-      });
-    } else {
-      resultados.push({
-        accountId: Number(conta.id),
-        nome: conta.display_name,
-        resultado: existente && existente.status === 'posted' ? 'ja_publicado' : 'ja_na_fila',
-        scheduledFor: existente ? existente.scheduled_for : null,
+  if (contas.some((c) => !c) || sociais.some((c) => !c)) return res.status(404).json({ error: 'Conta não encontrada.' });
+  // Instagram/Facebook só aceitam Reel dentro do limite: recusar aqui, com o
+  // motivo, em vez de o corte virar erro minutos depois.
+  if (sociais.length > 0) {
+    const { DURACAO_MINIMA_S: min, DURACAO_MAXIMA_S: max } = socialPostingService;
+    if (corte.duracaoS > max + 0.5 || corte.duracaoS < min) {
+      return res.status(422).json({
+        error: `Instagram e Facebook só aceitam cortes de ${min} s a ${max} s, e este tem ${Math.round(corte.duracaoS)} s.`,
       });
     }
   }
+
+  const resultados = [];
+  if (contas.length > 0) {
+    const videoId =
+      corte.tipo === 'live'
+        ? await feedRepository.garantirVideoDeLive(corte.linha)
+        : await backfillPostingsService.garantirVideo(corte.linha);
+    for (const conta of contas) resultados.push({ rede: 'tiktok', ...(await enviarParaTiktok(corte, videoId, conta)) });
+  }
+
+  for (const conta of sociais) {
+    const { linha, resultado } = await socialPostingsRepository.enfileirar({
+      clientUserId,
+      socialAccountId: conta.id,
+      tipo: corte.tipo,
+      clipId: corte.id,
+      caption: corte.legenda,
+    });
+    resultados.push({ rede: conta.network, accountId: Number(conta.id), nome: conta.display_name || conta.username, resultado, scheduledFor: null, status: linha.status });
+  }
+  // Publica na hora: não espera a rodada de minuto em minuto do video-worker.
+  if (resultados.some((r) => r.rede !== 'tiktok' && r.resultado === 'enfileirado')) {
+    queueService
+      .getBoss()
+      .then((boss) => boss.send('social-posting', {}))
+      .catch((err) => logger.error('Nao deu pra disparar a publicacao no Instagram/Facebook na hora:', err));
+  }
   res.json({ resultados });
+}
+
+async function enviarParaTiktok(corte, videoId, conta) {
+  const criada = await postingsRepository.createIfNotExists({ videoId, tiktokAccountId: conta.id, caption: corte.legenda });
+  if (criada) {
+    return { accountId: Number(conta.id), nome: conta.display_name, resultado: 'enfileirado', scheduledFor: criada.scheduled_for };
+  }
+  // Já existe uma postagem deste corte nesta conta. Cancelada volta pra fila
+  // (o cliente pediu de novo, de propósito); o resto só é informado.
+  const existente = await feedRepository.postagemDoCorte(corte.tipo, corte.id, conta.id);
+  if (existente && existente.status === 'skipped') {
+    const devolvida = await postingsRepository.requeueSkipped(existente.id, conta.id);
+    return {
+      accountId: Number(conta.id),
+      nome: conta.display_name,
+      resultado: devolvida ? 'enfileirado' : 'ja_existia',
+      scheduledFor: devolvida ? devolvida.scheduled_for : existente.scheduled_for,
+    };
+  }
+  return {
+    accountId: Number(conta.id),
+    nome: conta.display_name,
+    resultado: existente && existente.status === 'posted' ? 'ja_publicado' : 'ja_na_fila',
+    scheduledFor: existente ? existente.scheduled_for : null,
+  };
 }
 
 module.exports = { listar, contexto, gostei, enviar };

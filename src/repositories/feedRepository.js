@@ -24,10 +24,19 @@ const CORTES = `
          yc.channel_name AS canal_nome, yc.avatar_url AS canal_avatar, NULL::text AS plataforma,
          (l.clip_id IS NOT NULL) AS gostei,
          COALESCE((
-           SELECT json_agg(json_build_object('accountId', p.tiktok_account_id, 'status', p.status,
-                                             'scheduledFor', p.scheduled_for, 'postedAt', p.posted_at) ORDER BY p.id)
-             FROM videos v JOIN postings p ON p.video_id = v.id
-            WHERE v.clip_id = c.id
+           SELECT json_agg(t.x ORDER BY t.ordem) FROM (
+             SELECT json_build_object('rede', 'tiktok', 'accountId', p.tiktok_account_id, 'status', p.status,
+                                      'scheduledFor', p.scheduled_for, 'postedAt', p.posted_at, 'url', NULL,
+                                      'erro', NULL) AS x, p.id AS ordem
+               FROM videos v JOIN postings p ON p.video_id = v.id
+              WHERE v.clip_id = c.id
+             UNION ALL
+             SELECT json_build_object('rede', sa.network, 'accountId', sp.social_account_id, 'status', sp.status,
+                                      'scheduledFor', NULL, 'postedAt', sp.posted_at, 'url', sp.platform_post_url,
+                                      'erro', sp.error_message), 1000000000000 + sp.id
+               FROM social_postings sp JOIN social_accounts sa ON sa.id = sp.social_account_id
+              WHERE sp.clip_id = c.id
+           ) t
          ), '[]') AS postagens
     FROM clips c
     JOIN source_videos sv ON sv.id = c.source_video_id
@@ -43,10 +52,19 @@ const CORTES = `
          ch.display_name, ch.profile_image_url, ch.platform,
          (ll.live_clip_id IS NOT NULL),
          COALESCE((
-           SELECT json_agg(json_build_object('accountId', p.tiktok_account_id, 'status', p.status,
-                                             'scheduledFor', p.scheduled_for, 'postedAt', p.posted_at) ORDER BY p.id)
-             FROM videos v JOIN postings p ON p.video_id = v.id
-            WHERE v.live_clip_id = k.id
+           SELECT json_agg(t.x ORDER BY t.ordem) FROM (
+             SELECT json_build_object('rede', 'tiktok', 'accountId', p.tiktok_account_id, 'status', p.status,
+                                      'scheduledFor', p.scheduled_for, 'postedAt', p.posted_at, 'url', NULL,
+                                      'erro', NULL) AS x, p.id AS ordem
+               FROM videos v JOIN postings p ON p.video_id = v.id
+              WHERE v.live_clip_id = k.id
+             UNION ALL
+             SELECT json_build_object('rede', sa.network, 'accountId', sp.social_account_id, 'status', sp.status,
+                                      'scheduledFor', NULL, 'postedAt', sp.posted_at, 'url', sp.platform_post_url,
+                                      'erro', sp.error_message), 1000000000000 + sp.id
+               FROM social_postings sp JOIN social_accounts sa ON sa.id = sp.social_account_id
+              WHERE sp.live_clip_id = k.id
+           ) t
          ), '[]')
     FROM live_clips k
     JOIN live_channels ch ON ch.id = k.live_channel_id
