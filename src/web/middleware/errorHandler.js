@@ -1,6 +1,8 @@
 'use strict';
 
 const logger = require('../../lib/logger');
+const rotasEmTeste = require('../../lib/rotasEmTeste');
+const errorReportService = require('../../services/errorReportService');
 
 // Erro vindo do SDK da Stripe nao tem `status` (usa `statusCode`), entao caia
 // sempre no 500 generico "Algo deu errado" - que na tela de pagamento e o pior
@@ -30,6 +32,18 @@ function errorHandler(err, req, res, next) {
 
   const status = err.status || 500;
   const message = status === 500 ? 'Algo deu errado. Tente novamente.' : err.message;
+
+  // Erro de servidor numa novidade em teste vai pra tela "Erros em teste". Sem
+  // await: registrar não pode atrasar a resposta, e report() nunca lança.
+  if (status >= 500 && rotasEmTeste.ehRotaEmTeste(req.path)) {
+    errorReportService.report({
+      operation: errorReportService.OPERACOES.PAINEL_NOVO_API,
+      entityType: 'rota',
+      clientUserId: req.session && req.session.user ? req.session.user.id : null,
+      error: err,
+      message: `${req.method} ${rotasEmTeste.rotaSemIds(req.path)}: ${String(err.message || err).slice(0, 200)}`,
+    });
+  }
 
   if (req.path.startsWith('/api/')) {
     return res.status(status).json({ error: message });

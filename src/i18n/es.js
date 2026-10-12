@@ -368,6 +368,7 @@ module.exports = {
     idiomaAudioInvalido: "Idioma del audio no válido.",
     posicaoVideoInvalida: "Posición del vídeo en la plantilla no válida (0 a 100).",
     postagemNaoNaFila: "Publicación no encontrada o ya salió de la cola de espera.",
+    limiteDoTiktok24h: 'Esta cuenta ya publicó {n} veces en las últimas 24 horas. TikTok bloquea más que eso como spam: el corte sigue en la cola y sale en el próximo horario.',
     postagemSemErro: "Publicación no encontrada o no está con error.",
     programaNaoConectado: "Aún no has conectado el programa.",
     publicKeyInvalida: "publicKey no válida.",

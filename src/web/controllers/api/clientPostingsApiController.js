@@ -197,6 +197,10 @@ async function retry(req, res) {
 // agendamento nem respeitar a pausa da fila - o cliente pediu explicitamente
 // pra sair ja. Usa a mesma logica de publicacao do job de fundo
 // (tiktokPostingJob.publish), so que disparada na hora em vez de num ciclo.
+// Teto de publicações por conta em 24 horas corridas, igual ao teto diário da
+// tela (MAX_POSTS_POR_DIA). O TikTok começa a recusar como spam logo acima.
+const LIMITE_TIKTOK_24H = 10;
+
 async function postNow(req, res) {
   const posting = await postingsRepository.findPublishableByIdOwnedByClient(Number(req.params.id), req.session.user.id);
   if (!posting) {
@@ -206,6 +210,15 @@ async function postNow(req, res) {
   const account = await tiktokAccountsRepository.findActiveByIdAndClient(posting.tiktok_account_id, req.session.user.id);
   if (!account) {
     return res.status(404).json({ error: res.locals.t('erros.contaTiktokNaoEncontrada') });
+  }
+
+  // "Postar agora" passa por cima do horário e do "por dia", mas não do limite
+  // do próprio TikTok: acima disso ele recusa como spam e a conta fica marcada.
+  // Foi o que aconteceu em 11/10/2026 (3 cortes reenviados à mão em 1 minuto,
+  // numa conta que já tinha publicado o dia inteiro).
+  const recentes = await postingsRepository.countRecentForAccount(account.id, 24);
+  if (recentes >= LIMITE_TIKTOK_24H) {
+    return res.status(429).json({ error: res.locals.t('erros.limiteDoTiktok24h', { n: recentes }) });
   }
 
   await tiktokPostingJob.publish(account, posting);

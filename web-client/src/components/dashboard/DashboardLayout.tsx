@@ -1,10 +1,11 @@
-import type { ReactNode } from "react"
+import { useEffect, type ReactNode } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { GuidedTour } from "@/components/tour/GuidedTour"
 import { ClientNoticeDialog } from "@/components/dashboard/ClientNoticeDialog"
 import { useAuth } from "@/hooks/useAuth"
+import { instalarRelatorioDeErros } from "@/lib/reportarErroDeTela"
 import type { SessionUser } from "@/types/api"
 
 export function DashboardLayout({
@@ -24,6 +25,10 @@ export function DashboardLayout({
   // O layout monta o menu, então é ele que precisa saber se "Sua conexão"
   // aparece. Reaproveita a MESMA requisição que a página já fez (ver useAuth).
   const { mostrarTunel, painelNovo } = useAuth()
+  // Erros de tela de quem testa as novidades vão pra "Erros em teste".
+  useEffect(() => {
+    if (painelNovo) instalarRelatorioDeErros()
+  }, [painelNovo])
 
   return (
     <SidebarProvider

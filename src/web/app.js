@@ -36,6 +36,8 @@ const clientCommissionsApiRoutes = require('./routes/api/clientCommissionsApiRou
 const livesApiRoutes = require('./routes/api/livesApiRoutes');
 const socialAccountsApiRoutes = require('./routes/api/socialAccountsApiRoutes');
 const socialPostingsApiRoutes = require('./routes/api/socialPostingsApiRoutes');
+const contaApiRoutes = require('./routes/api/contaApiRoutes');
+const errosDeTelaApiRoutes = require('./routes/api/errosDeTelaApiRoutes');
 const feedApiRoutes = require('./routes/api/feedApiRoutes');
 const adminCommissionsApiRoutes = require('./routes/api/adminCommissionsApiRoutes');
 const errorHandler = require('./middleware/errorHandler');
@@ -208,7 +210,9 @@ app.use((req, res, next) => {
 // Stripe fica de fora - quem chama e a Stripe, que pode legitimamente mandar
 // varios eventos de uma vez, e a rota ja e autenticada por assinatura.
 app.use(
-  ['/login', '/register', '/api/auth/login', '/api/auth/forgot-password', '/api/auth/reset-password'],
+  // A exclusão de conta confere a senha: sem limite, viraria um jeito de
+  // testar senhas de quem deixou a sessão aberta.
+  ['/login', '/register', '/api/auth/login', '/api/auth/forgot-password', '/api/auth/reset-password', '/api/client/conta'],
   rateLimits.auth
 );
 app.use('/api/tunnel', rateLimits.publicApi);
@@ -263,6 +267,8 @@ app.use('/api/client/commissions', clientCommissionsApiRoutes);
 app.use('/api/client/lives', livesApiRoutes);
 app.use('/api/client/social-accounts', socialAccountsApiRoutes);
 app.use('/api/client/social-postings', socialPostingsApiRoutes);
+app.use('/api/client/conta', contaApiRoutes);
+app.use('/api/client/erros-de-tela', errosDeTelaApiRoutes);
 app.use('/api/client/feed', feedApiRoutes);
 app.use('/api/admin/commissions', adminCommissionsApiRoutes);
 app.use('/api/stripe/webhook', stripeWebhookApiRoutes);

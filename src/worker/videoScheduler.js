@@ -6,6 +6,8 @@ const videoErrorRetryJob = require('./jobs/videoErrorRetryJob');
 const videoStuckRecoveryJob = require('./jobs/videoStuckRecoveryJob');
 const tiktokPostingJob = require('./jobs/tiktokPostingJob');
 const socialPostingService = require('../services/socialPostingService');
+const saudeDasContasSociaisService = require('../services/saudeDasContasSociaisService');
+const suporteService = require('../services/suporte/suporteService');
 const postingCleanupJob = require('./jobs/postingCleanupJob');
 const sharedAssetsCleanupJob = require('./jobs/sharedAssetsCleanupJob');
 const driveExportJob = require('./jobs/driveExportJob');
@@ -24,6 +26,8 @@ const QUEUE_VIDEO_ERROR_RETRY = 'video-error-retry';
 const QUEUE_VIDEO_STUCK_RECOVERY = 'video-stuck-recovery';
 const QUEUE_TIKTOK_POSTING = 'tiktok-posting';
 const QUEUE_SOCIAL_POSTING = 'social-posting';
+const QUEUE_SOCIAL_ACCOUNTS_CHECK = 'social-accounts-check';
+const QUEUE_SUPORTE_INATIVO = 'support-close-idle';
 const QUEUE_POSTING_CLEANUP = 'posting-cleanup';
 const QUEUE_SHARED_ASSETS_CLEANUP = 'shared-assets-cleanup';
 const QUEUE_DRIVE_EXPORT = 'drive-export';
@@ -44,6 +48,8 @@ async function start(boss) {
   await boss.createQueue(QUEUE_VIDEO_STUCK_RECOVERY);
   await boss.createQueue(QUEUE_TIKTOK_POSTING);
   await boss.createQueue(QUEUE_SOCIAL_POSTING);
+  await boss.createQueue(QUEUE_SOCIAL_ACCOUNTS_CHECK);
+  await boss.createQueue(QUEUE_SUPORTE_INATIVO);
   await boss.createQueue(QUEUE_POSTING_CLEANUP);
   await boss.createQueue(QUEUE_SHARED_ASSETS_CLEANUP);
   await boss.createQueue(QUEUE_DRIVE_EXPORT);
@@ -99,6 +105,11 @@ async function start(boss) {
   // rede de seguranca e quem confere se a rede ja publicou.
   await boss.schedule(QUEUE_SOCIAL_POSTING, '* * * * *');
   logger.info('Publicacao no Instagram/Facebook agendada a cada minuto.');
+  // Confere se o login de cada conta das outras redes ainda vale, pra pedir a
+  // reconexão ANTES de um corte falhar (ver saudeDasContasSociaisService).
+  await boss.schedule(QUEUE_SOCIAL_ACCOUNTS_CHECK, '20 */6 * * *');
+  // Conversas da Flora paradas há mais de 30 min se encerram (painel novo).
+  await boss.schedule(QUEUE_SUPORTE_INATIVO, '*/10 * * * *');
 
   await boss.schedule(QUEUE_POSTING_CLEANUP, '5 * * * *');
   logger.info('Limpeza de postagens antigas agendada de hora em hora.');
@@ -155,6 +166,16 @@ async function start(boss) {
 
   await boss.work(QUEUE_SOCIAL_POSTING, async () => {
     await socialPostingService.run();
+  });
+
+  await boss.work(QUEUE_SUPORTE_INATIVO, async () => {
+    const n = await suporteService.encerrarConversasParadas();
+    if (n) logger.info(`Flora: ${n} conversa(s) encerrada(s) por inatividade.`);
+  });
+
+  await boss.work(QUEUE_SOCIAL_ACCOUNTS_CHECK, async () => {
+    const r = await saudeDasContasSociaisService.conferirTodas();
+    logger.info(`Contas das redes sociais conferidas: ${JSON.stringify(r)}`);
   });
 
   await boss.work(QUEUE_POSTING_CLEANUP, async () => {

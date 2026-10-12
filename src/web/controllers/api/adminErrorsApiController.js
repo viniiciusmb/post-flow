@@ -21,6 +21,11 @@ const ROTULO_ENTIDADE = Object.freeze({
   youtube_channel: 'Canal',
   posting: 'Publicação',
   drive_folder: 'Pasta do Drive',
+  social_posting: 'Publicação',
+  social_account: 'Conta de rede social',
+  social_conexao: 'Conexão',
+  rota: 'Rota',
+  tela: 'Tela',
 });
 
 function toApi(e) {
@@ -47,13 +52,16 @@ function toApi(e) {
 // Operações que o botão sabe reexecutar. As de fora (backup, teste de conexão)
 // aparecem na lista sem botão - fingir que dá pra tentar de novo e não fazer
 // nada seria pior que não ter botão.
-const PODE_TENTAR_DE_NOVO = new Set(['video_processing', 'channel_check', 'tiktok_posting', 'drive_export']);
+const PODE_TENTAR_DE_NOVO = new Set(['video_processing', 'channel_check', 'tiktok_posting', 'drive_export', 'social_posting']);
 
 async function list(req, res) {
   const status = ['abertos', 'resolvidos', 'todos'].includes(req.query.status) ? req.query.status : 'abertos';
+  // A tela de sempre mostra só o grupo principal; "Erros em teste" (?grupo=teste)
+  // mostra o das novidades do painel novo.
+  const grupo = req.query.grupo === 'teste' ? 'teste' : 'principal';
   const [erros, contagem] = await Promise.all([
-    systemErrorsRepository.list({ status }),
-    systemErrorsRepository.counts(),
+    systemErrorsRepository.list({ status, grupo }),
+    systemErrorsRepository.counts({ grupo }),
   ]);
   res.json({
     errors: erros.map(toApi),

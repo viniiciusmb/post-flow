@@ -193,6 +193,7 @@ async function contexto(req, res) {
             disponivel: true,
             duracaoMinimaS: r.duracaoMin,
             duracaoMaximaS: r.duracaoMax,
+            precisaReconectar: Boolean(s.precisa_reconectar_em),
           };
         })
       )),

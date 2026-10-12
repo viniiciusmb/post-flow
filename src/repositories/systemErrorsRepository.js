@@ -3,6 +3,10 @@
 const crypto = require('crypto');
 const pool = require('../db/pool');
 
+// Mesma lista de errorReportService.OPERACOES_EM_TESTE (repetida aqui porque
+// aquele módulo depende deste; há teste conferindo que as duas batem).
+const OPERACOES_EM_TESTE = ['social_posting', 'social_conta', 'social_conexao', 'painel_novo_api', 'painel_novo_tela'];
+
 // A assinatura decide o que é "o mesmo erro". Inclui a operação, a entidade e o
 // começo da mensagem - não a mensagem inteira, porque quase todo erro carrega
 // algo que muda a cada vez (timestamp, id de requisição, caminho de arquivo
@@ -44,7 +48,15 @@ async function record({
   return rows[0];
 }
 
-async function list({ status = 'abertos', limit = 200 } = {}) {
+// `grupo`: 'principal' (o que todo cliente usa) ou 'teste' (novidades do
+// painel novo, ver errorReportService.OPERACOES_EM_TESTE). Sem grupo, tudo.
+function filtroDeGrupo(grupo, params) {
+  if (grupo !== 'principal' && grupo !== 'teste') return 'true';
+  params.push(OPERACOES_EM_TESTE);
+  return grupo === 'teste' ? `e.operation = ANY($${params.length}::text[])` : `NOT (e.operation = ANY($${params.length}::text[]))`;
+}
+
+async function list({ status = 'abertos', limit = 200, grupo = null } = {}) {
   const filtro =
     status === 'resolvidos'
       ? "e.status = 'resolvido'"
@@ -52,14 +64,16 @@ async function list({ status = 'abertos', limit = 200 } = {}) {
         ? 'true'
         : "e.status <> 'resolvido'";
 
+  const params = [limit];
+  const doGrupo = filtroDeGrupo(grupo, params);
   const { rows } = await pool.query(
     `SELECT e.*, u.email AS client_email, u.business_name AS client_name
        FROM system_errors e
        LEFT JOIN users u ON u.id = e.client_user_id
-      WHERE ${filtro}
+      WHERE ${filtro} AND ${doGrupo}
       ORDER BY e.last_seen_at DESC
       LIMIT $1`,
-    [limit]
+    params
   );
   return rows;
 }
@@ -69,13 +83,16 @@ async function findById(id) {
   return rows[0] || null;
 }
 
-async function counts() {
+async function counts({ grupo = null } = {}) {
+  const params = [];
+  const doGrupo = filtroDeGrupo(grupo, params);
   const { rows } = await pool.query(
     `SELECT
        count(*) FILTER (WHERE status <> 'resolvido')::int AS abertos,
        count(*) FILTER (WHERE status = 'resolvido')::int  AS resolvidos,
        COALESCE(sum(occurrences) FILTER (WHERE status <> 'resolvido'), 0)::int AS ocorrencias_abertas
-     FROM system_errors`
+     FROM system_errors e WHERE ${doGrupo}`,
+    params
   );
   return rows[0];
 }
@@ -127,6 +144,7 @@ async function deleteResolvedOlderThan(dias = 30) {
 }
 
 module.exports = {
+  OPERACOES_EM_TESTE,
   record,
   list,
   findById,

@@ -93,6 +93,8 @@ function createAgent(url) {
     postCom: (path, body, headers) => request('POST', path, body ?? {}, headers),
     put: (path, body) => request('PUT', path, body ?? {}),
     delete: (path) => request('DELETE', path),
+    // Qualquer método com corpo (ex.: DELETE com confirmação).
+    request,
     // Envia SEM o cabecalho de CSRF - e assim que um site malicioso mandaria.
     postSemCsrf: async (path, body) => {
       const response = await fetch(`${url}${path}`, {

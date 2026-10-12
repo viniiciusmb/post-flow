@@ -31,6 +31,10 @@ export type ContaSocial = {
   displayName: string | null
   avatarUrl: string | null
   connectedAt: string
+  conferidaEm?: string | null
+  /** O login da conta não vale mais (senha trocada, sessão encerrada pela rede). */
+  precisaReconectar?: boolean
+  motivoReconectar?: string | null
   fila: {
     naFila: number
     publicados: number
@@ -176,7 +180,7 @@ export function PainelDaContaSocial({
           <ReguaDoDia
             horarios={horariosEmUso}
             cor={info.cor}
-            pausada={cfg.paused || !cfg.autoPostEnabled}
+            pausada={cfg.paused || !cfg.autoPostEnabled || conta.precisaReconectar === true}
             itens={pendentes.map((i) => ({ id: i.id, horario: i.horario, capaUrl: i.capaUrl, titulo: i.titulo }))}
           />
           {info.aviso && (

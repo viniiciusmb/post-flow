@@ -292,6 +292,9 @@ export function ClientSupportPage() {
   const [maxChars, setMaxChars] = useState(1500)
   const [etapas, setEtapas] = useState<Etapa[] | null>(null)
   const [erro, setErro] = useState<string | null>(null)
+  // "A conversa anterior foi encerrada" quando a tela troca de conversa sozinha.
+  const [avisoEncerrada, setAvisoEncerrada] = useState(false)
+  const [minutosParada, setMinutosParada] = useState(30)
   const rolagemRef = useRef<HTMLDivElement>(null)
   const campoRef = useRef<HTMLTextAreaElement>(null)
 
@@ -304,6 +307,7 @@ export function ClientSupportPage() {
         if (r.conversation) {
           setConversaId(r.conversation.id)
           setStatus(r.conversation.status)
+          if (r.conversation.minutosDeInatividade) setMinutosParada(r.conversation.minutosDeInatividade)
           setLinhas(r.conversation.mensagens.map((m) => ({ chave: `m${m.id}`, autor: m.autor, texto: m.texto })))
         }
       })
@@ -341,13 +345,21 @@ export function ClientSupportPage() {
     if (!mensagem || enviando) return
     setErro(null)
     setTexto("")
-    setLinhas((l) => [...l, { chave: `c${Date.now()}`, autor: "cliente", texto: mensagem }])
+    // Conversa encerrada por inatividade: a mensagem começa uma nova, e a tela
+    // também (o servidor faz o mesmo).
+    const comecaNova = status === "encerrada"
+    const idParaEnviar = comecaNova ? null : conversaId
+    if (comecaNova) {
+      setStatus("aberta")
+      setAvisoEncerrada(false)
+    }
+    setLinhas((l) => [...(comecaNova ? [] : l), { chave: `c${Date.now()}`, autor: "cliente", texto: mensagem }])
     setEtapas([{ chave: "inicio", rotulo: "flora.etapaPensando" }])
 
     let final: SupportSendResponse | null = null
     let falha: string | null = null
     try {
-      await enviarEmEtapas({ conversationId: conversaId, message: mensagem }, (e) => {
+      await enviarEmEtapas({ conversationId: idParaEnviar, message: mensagem }, (e) => {
         if (e.etapa === "ferramenta") {
           setEtapas((l) => acrescentarEtapa(l, e.nome, ROTULO_DA_FERRAMENTA[e.nome] ?? "flora.etapaPensando"))
         } else if (e.etapa === "elaborando") {
@@ -364,6 +376,12 @@ export function ClientSupportPage() {
 
     const r = final as SupportSendResponse | null
     if (r) {
+      // A conversa ficou parada e se encerrou enquanto a tela estava aberta:
+      // o servidor abriu outra. A tela acompanha, em vez de misturar as duas.
+      if (idParaEnviar !== null && r.conversationId !== idParaEnviar) {
+        setLinhas([{ chave: `c${Date.now()}`, autor: "cliente", texto: mensagem }])
+        setAvisoEncerrada(true)
+      }
       setConversaId(r.conversationId)
       setStatus(r.status)
       setLinhas((l) => [...l, { chave: `s${Date.now()}`, autor: "suporte", texto: r.resposta, acoes: r.acoes, digitar: true }])
@@ -385,6 +403,7 @@ export function ClientSupportPage() {
   }
 
   function novaConversa() {
+    setAvisoEncerrada(false)
     setConversaId(null)
     setStatus("aberta")
     setLinhas([])
@@ -452,6 +471,11 @@ export function ClientSupportPage() {
           ) : (
             <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">
               {carregando && <div className="h-6 w-1/2 animate-pulse rounded bg-muted" />}
+              {avisoEncerrada && (
+                <p className="rounded-xl bg-muted/60 px-4 py-2 text-center text-xs text-muted-foreground">
+                  A conversa anterior foi encerrada por ficar {minutosParada} minutos parada. Esta é uma conversa nova.
+                </p>
+              )}
               {linhas.map((l) =>
                 l.autor === "cliente" ? (
                   <MensagemDoCliente key={l.chave} texto={l.texto} />
@@ -460,6 +484,11 @@ export function ClientSupportPage() {
                 ),
               )}
               {etapas && <Trabalhando etapas={etapas} />}
+              {status === "encerrada" && !enviando && (
+                <p className="flora-entrar rounded-xl border px-4 py-3 text-sm text-muted-foreground">
+                  Esta conversa foi encerrada depois de {minutosParada} minutos sem mensagens. Escreva abaixo pra começar uma nova.
+                </p>
+              )}
               {status === "encaminhada" && !enviando && (
                 <p className="flora-entrar rounded-xl border px-4 py-3 text-sm text-muted-foreground">
                   <IconUsers className="mr-1.5 inline size-4" />

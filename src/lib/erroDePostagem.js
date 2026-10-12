@@ -24,7 +24,6 @@ const CODIGOS_PERMANENTES = [
   'unaudited_client_can_only_post_to_private_accounts',
   'scope_not_authorized',
   'access_token_invalid',
-  'spam_risk_too_many_posts',
   'spam_risk_user_banned_from_posting',
   'reached_active_user_cap',
   // Conteudo recusado pela TikTok.
@@ -79,6 +78,26 @@ function classificar(erro) {
 }
 
 // Quantas vezes tentamos de novo antes de desistir e mostrar na aba de erros.
+// Erros que dizem "agora não, mais tarde sim": o corte está certo, quem está no
+// limite é a CONTA. Esperar mais que a escada normal (5 a 240 min) é o que
+// resolve - tentar de novo em 5 minutos só bate no mesmo limite.
+//
+// spam_risk_too_many_posts era tratado como permanente e o corte ia pra aba de
+// erros. Em out/2026 isso fez um cliente clicar "Tentar postar agora" em três
+// cortes seguidos às 01:52, o que piorou justamente o limite que o TikTok
+// estava acusando. O TikTok conta 24 horas corridas; 6 horas de espera deixam
+// passar boa parte da janela sem segurar a fila um dia inteiro.
+const ESPERAS_ESPECIAIS_MINUTOS = [
+  ['spam_risk_too_many_posts', 360],
+  ['rate_limit', 30],
+];
+
+function esperaEspecialEmMinutos(erro) {
+  const texto = String(erro?.message || erro || '').toLowerCase();
+  const achou = ESPERAS_ESPECIAIS_MINUTOS.find(([sinal]) => texto.includes(sinal));
+  return achou ? achou[1] : null;
+}
+
 const MAX_TENTATIVAS = 5;
 
 // Espera crescente entre tentativas, em minutos. Comeca curto (a maioria das
@@ -99,6 +118,7 @@ function deveTentarDeNovo(erro, tentativasJaFeitas) {
 
 module.exports = {
   classificar,
+  esperaEspecialEmMinutos,
   deveTentarDeNovo,
   esperaEmMinutos,
   MAX_TENTATIVAS,

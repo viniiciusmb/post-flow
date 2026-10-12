@@ -2,7 +2,8 @@
 
 const pool = require('../db/pool');
 
-const CAMPOS = `id, network, outstand_account_id, username, display_name, avatar_url, account_type, connected_at`;
+const CAMPOS = `id, network, outstand_account_id, username, display_name, avatar_url, account_type, connected_at,
+  conferida_em, precisa_reconectar_em, motivo_reconectar`;
 
 async function listActive(clientUserId) {
   const { rows } = await pool.query(
@@ -33,7 +34,11 @@ async function upsert({ clientUserId, network, outstandAccountId, networkUniqueI
        avatar_url = COALESCE(EXCLUDED.avatar_url, social_accounts.avatar_url),
        account_type = COALESCE(EXCLUDED.account_type, social_accounts.account_type),
        connected_at = CASE WHEN social_accounts.disconnected_at IS NULL THEN social_accounts.connected_at ELSE now() END,
-       disconnected_at = NULL
+       disconnected_at = NULL,
+       -- Reconectar é justamente o que resolve o "precisa reconectar".
+       precisa_reconectar_em = NULL,
+       motivo_reconectar = NULL,
+       conferida_em = now()
      WHERE social_accounts.client_user_id = EXCLUDED.client_user_id OR social_accounts.disconnected_at IS NOT NULL
      RETURNING ${CAMPOS}`,
     [clientUserId, network, outstandAccountId, networkUniqueId || null, username || null, displayName || null, avatarUrl || null, accountType || null]

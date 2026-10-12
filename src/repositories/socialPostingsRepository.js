@@ -18,6 +18,7 @@ const ORDEM = 'sp.scheduled_for ASC NULLS FIRST, sp.id ASC';
 
 // Trava por conta pra reorganizar a fila (o 8501 é a do TikTok).
 const TRAVA_DA_FILA = 8511;
+const ATRASO_MAXIMO_MS = 2 * 60 * 60 * 1000;
 
 function colunaDoCorte(tipo) {
   return tipo === 'live' ? 'live_clip_id' : 'clip_id';
@@ -176,7 +177,7 @@ async function contasQuePublicamSozinhas() {
             COALESCE(s.timezone, 'America/Sao_Paulo') AS timezone
        FROM social_accounts sa
        LEFT JOIN social_posting_settings s ON s.social_account_id = sa.id
-      WHERE sa.disconnected_at IS NULL
+      WHERE sa.disconnected_at IS NULL AND sa.precisa_reconectar_em IS NULL
         AND COALESCE(s.auto_post_enabled, true) AND NOT COALESCE(s.paused, false)
         AND EXISTS (SELECT 1 FROM social_postings sp WHERE sp.social_account_id = sa.id AND sp.status = 'pending')`
   );
@@ -189,7 +190,8 @@ async function contasComPostarAgora() {
   const { rows } = await pool.query(
     `SELECT DISTINCT sa.id, sa.network, sa.client_user_id
        FROM social_postings sp JOIN social_accounts sa ON sa.id = sp.social_account_id
-      WHERE sp.status = 'pending' AND sp.ignora_limite_diario AND sa.disconnected_at IS NULL`
+      WHERE sp.status = 'pending' AND sp.ignora_limite_diario AND sa.disconnected_at IS NULL
+        AND sa.precisa_reconectar_em IS NULL`
   );
   return rows;
 }
@@ -225,6 +227,14 @@ async function pegarSeVenceu(socialAccountId, { soPostarAgora = false } = {}) {
     const p = rows[0];
     if (!p || (p.scheduled_for && new Date(p.scheduled_for) > new Date())) {
       await client.query('COMMIT');
+      return null;
+    }
+    // Perdeu o horário por muito tempo (fila pausada, conta esperando
+    // reconexão, publicação desligada): remarca a fila em vez de sair agora,
+    // fora de hora - é o que fazia os atrasados do TikTok virarem rajada.
+    if (!p.ignora_limite_diario && p.scheduled_for && Date.now() - new Date(p.scheduled_for).getTime() > ATRASO_MAXIMO_MS) {
+      await client.query('COMMIT');
+      await recalcularHorarios(socialAccountId);
       return null;
     }
     const { rows: pega } = await client.query(

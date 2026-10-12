@@ -119,48 +119,68 @@ ${countInstruction} que funcionariam bem como cortes verticais pro TikTok: momen
 
 ${instrucaoDeIdioma(language)}`;
 
-  const response = await fetch(MESSAGES_URL, {
-    method: 'POST',
-    headers: {
-      'x-api-key': config.anthropic.apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 4096,
-      tools: [SELECT_CLIPS_TOOL],
-      tool_choice: { type: 'tool', name: 'select_clips' },
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
+  // Duas tentativas. Em out/2026 a IA devolveu 4 vezes em uma semana a lista
+  // de cortes num formato fora do combinado (a lista inteira como TEXTO, em
+  // vez de lista) e o vídeo do cliente caía em erro - já com o download e a
+  // transcrição pagos. Agora o texto é aproveitado quando dá, e se ainda assim
+  // não vier uma lista, pergunta de novo uma vez antes de desistir.
+  let inputTokens = 0;
+  let outputTokens = 0;
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    const response = await fetch(MESSAGES_URL, {
+      method: 'POST',
+      headers: {
+        'x-api-key': config.anthropic.apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 4096,
+        tools: [SELECT_CLIPS_TOOL],
+        tool_choice: { type: 'tool', name: 'select_clips' },
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(`Falha ao selecionar cortes (Claude): ${data.error?.message || response.statusText}`);
-  }
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Falha ao selecionar cortes (Claude): ${data.error?.message || response.statusText}`);
+    }
+    inputTokens += data.usage?.input_tokens || 0;
+    outputTokens += data.usage?.output_tokens || 0;
+    gastoDeIa.registrar('anthropic', 'cortes', claudeCostUsd(data.usage?.input_tokens || 0, data.usage?.output_tokens || 0));
 
-  const toolUse = data.content.find((block) => block.type === 'tool_use');
-  if (!toolUse) {
-    throw new Error('Claude não retornou uma seleção de cortes válida.');
+    const toolUse = (data.content || []).find((block) => block.type === 'tool_use');
+    const cortada = data.stop_reason === 'max_tokens';
+    const clips = toolUse && !cortada ? listaDaFerramenta(toolUse.input, 'clips') : null;
+    if (clips) {
+      return { clips, inputTokens, outputTokens, costUsd: claudeCostUsd(inputTokens, outputTokens) };
+    }
+    if (tentativa === 2) {
+      if (cortada) {
+        throw new Error('A resposta da IA foi cortada antes de terminar (vídeo com muitos cortes selecionados). Tente de novo.');
+      }
+      throw new Error('Claude retornou uma seleção de cortes incompleta ou inválida.');
+    }
   }
-  if (data.stop_reason === 'max_tokens') {
-    throw new Error('A resposta da IA foi cortada antes de terminar (vídeo com muitos cortes selecionados). Tente de novo.');
-  }
-  if (!Array.isArray(toolUse.input.clips)) {
-    throw new Error('Claude retornou uma seleção de cortes incompleta ou inválida.');
-  }
+  return null;
+}
 
-  const inputTokens = data.usage?.input_tokens || 0;
-  const outputTokens = data.usage?.output_tokens || 0;
-
-  gastoDeIa.registrar('anthropic', 'cortes', claudeCostUsd(inputTokens, outputTokens));
-  return {
-    clips: toolUse.input.clips,
-    inputTokens,
-    outputTokens,
-    costUsd: claudeCostUsd(inputTokens, outputTokens),
-  };
+// A lista que a ferramenta devolveu, aceitando os desvios de formato que a IA
+// já cometeu: a lista como TEXTO JSON, ou embrulhada de novo na mesma chave
+// ({ clips: { clips: [...] } }). Qualquer outra coisa é null.
+function listaDaFerramenta(input, chave) {
+  let valor = input && input[chave];
+  if (typeof valor === 'string') {
+    try {
+      valor = JSON.parse(valor);
+    } catch {
+      return null;
+    }
+  }
+  if (valor && !Array.isArray(valor) && Array.isArray(valor[chave])) valor = valor[chave];
+  return Array.isArray(valor) ? valor : null;
 }
 
 // Titulos pras partes do modo "cortar o video inteiro em partes".
@@ -241,7 +261,8 @@ ${instrucaoDeIdioma(language)}`;
     throw new Error(`Falha ao titular as partes (Claude): ${data.error?.message || response.statusText}`);
   }
   const toolUse = data.content.find((block) => block.type === 'tool_use');
-  if (!toolUse || !Array.isArray(toolUse.input.parts)) {
+  const parts = toolUse ? listaDaFerramenta(toolUse.input, 'parts') : null;
+  if (!parts) {
     throw new Error('Claude não retornou títulos válidos para as partes.');
   }
 
@@ -249,11 +270,11 @@ ${instrucaoDeIdioma(language)}`;
   const outputTokens = data.usage?.output_tokens || 0;
   gastoDeIa.registrar('anthropic', 'cortes', claudeCostUsd(inputTokens, outputTokens));
   return {
-    parts: toolUse.input.parts,
+    parts,
     inputTokens,
     outputTokens,
     costUsd: claudeCostUsd(inputTokens, outputTokens),
   };
 }
 
-module.exports = { selectClips, titleParts, formatTranscriptForPrompt };
+module.exports = { selectClips, titleParts, formatTranscriptForPrompt, listaDaFerramenta };

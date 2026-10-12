@@ -128,6 +128,25 @@ async function latestConversationForClient(clientUserId) {
   return rows[0] || null;
 }
 
+// Só encerra o que ainda estava aberto (nunca reabre nem mexe em encaminhada).
+async function encerrarConversa(conversationId) {
+  const { rows } = await pool.query(
+    `UPDATE support_conversations SET status = 'encerrada', closed_at = now()
+      WHERE id = $1 AND status = 'aberta' RETURNING *`,
+    [conversationId]
+  );
+  return rows[0] || null;
+}
+
+async function listarConversasParadas(minutos) {
+  const { rows } = await pool.query(
+    `SELECT id, client_user_id FROM support_conversations
+      WHERE status = 'aberta' AND updated_at < now() - make_interval(mins => $1::int)`,
+    [minutos]
+  );
+  return rows;
+}
+
 async function listMessages(conversationId) {
   const { rows } = await pool.query(
     'SELECT * FROM support_messages WHERE conversation_id = $1 ORDER BY id',
@@ -226,6 +245,8 @@ async function setConversationStatus(conversationId, status) {
 }
 
 module.exports = {
+  encerrarConversa,
+  listarConversasParadas,
   listVideosForClient,
   findVideoForClient,
   minutesOnDeletedVideos,

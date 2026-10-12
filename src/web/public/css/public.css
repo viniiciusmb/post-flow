@@ -1538,3 +1538,14 @@ strong {
   border-radius: 20px;
   filter: drop-shadow(0 20px 40px rgba(12, 138, 75, 0.25));
 }
+
+/* Confirmação depois de excluir a própria conta (Configurações). */
+.aviso-conta-excluida {
+  margin: 16px 0 0;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  background: var(--mist);
+  color: var(--ink);
+  border-radius: 12px;
+  font-size: 14px;
+}

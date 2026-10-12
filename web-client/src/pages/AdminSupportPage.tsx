@@ -15,10 +15,12 @@ import type { AdminSupportConversation, AdminSupportDetail, SupportConversationS
 
 type Filtro = "todas" | SupportConversationStatus
 
-const TOM: Record<SupportConversationStatus, "danger" | "indigo" | "success"> = {
+const TOM: Record<SupportConversationStatus, "danger" | "indigo" | "success" | "neutral"> = {
   encaminhada: "danger",
   aberta: "indigo",
   resolvida: "success",
+  // Encerrada sozinha depois de 30 min parada (painel novo).
+  encerrada: "neutral",
 }
 
 // Qual modelo respondeu (a Flora escolhe pela complexidade da pergunta).

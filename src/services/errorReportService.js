@@ -20,6 +20,10 @@ const OPERACOES = Object.freeze({
   CHANNEL_CHECK: 'channel_check',
   TIKTOK_POSTING: 'tiktok_posting',
   SOCIAL_POSTING: 'social_posting',
+  SOCIAL_CONTA: 'social_conta',
+  SOCIAL_CONEXAO: 'social_conexao',
+  PAINEL_NOVO_API: 'painel_novo_api',
+  PAINEL_NOVO_TELA: 'painel_novo_tela',
   DRIVE_EXPORT: 'drive_export',
   DRIVE_DISCOVERY: 'drive_discovery',
   CREDIT_CHARGE: 'credit_charge',
@@ -32,7 +36,11 @@ const ROTULO_OPERACAO = Object.freeze({
   video_processing: 'Processamento de vídeo',
   channel_check: 'Checagem de canal',
   tiktok_posting: 'Publicação no TikTok',
-  social_posting: 'Publicação no Instagram/Facebook',
+  social_posting: 'Publicação nas outras redes',
+  social_conta: 'Conta de rede social',
+  social_conexao: 'Conexão de rede social',
+  painel_novo_api: 'Erro no servidor (telas em teste)',
+  painel_novo_tela: 'Erro na tela (telas em teste)',
   drive_export: 'Envio pro Google Drive',
   drive_discovery: 'Leitura da pasta do Drive',
   credit_charge: 'Cobrança de crédito',
@@ -121,4 +129,10 @@ async function clear(operation, entityType, entityId) {
   }
 }
 
-module.exports = { report, clear, OPERACOES, ROTULO_OPERACAO, resumir };
+// Erros das novidades que ainda estão em teste com o admin e a Rise Style
+// (painel novo). Ficam numa tela própria ("Erros em teste") pra não se
+// misturarem com os erros do que todo cliente já usa (pedido do fundador em
+// 12/10/2026). Quando uma novidade abrir pra todos, a operação dela sai daqui.
+const OPERACOES_EM_TESTE = Object.freeze(['social_posting', 'social_conta', 'social_conexao', 'painel_novo_api', 'painel_novo_tela']);
+
+module.exports = { report, clear, OPERACOES, ROTULO_OPERACAO, OPERACOES_EM_TESTE, resumir };

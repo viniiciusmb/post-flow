@@ -242,6 +242,9 @@ export function SocialNetworksPage() {
                     await load()
                   }}
                 />
+                {conta.rede !== "tiktok" && (
+                  <SaudeDaConta key={`saude-${conta.chave}`} conta={conta.social} disponivel={disponivel} onMudou={load} onErro={(texto) => setAviso({ tipo: "erro", texto })} />
+                )}
                 {conta.rede === "tiktok" ? (
                   <EspacoDoTiktok key={conta.chave} conta={conta.tiktok} onMudou={load} onAplicarEmTodas={() => setAplicarDe(conta)} />
                 ) : (
@@ -300,8 +303,14 @@ function resumoDaConta(c: Conta) {
     naFila: f.naFila,
     erros: f.erros,
     proxima: f.proxima,
-    parada: f.pausada || !f.publicaSozinho,
-    motivo: f.pausada ? "fila pausada" : !f.publicaSozinho ? "publicação automática desligada" : null,
+    parada: f.pausada || !f.publicaSozinho || c.social.precisaReconectar === true,
+    motivo: c.social.precisaReconectar
+      ? "precisa reconectar"
+      : f.pausada
+        ? "fila pausada"
+        : !f.publicaSozinho
+          ? "publicação automática desligada"
+          : null,
   }
 }
 
@@ -327,7 +336,9 @@ function LinhaDaConta({ conta, ativa, onClick }: { conta: Conta; ativa: boolean;
           <span className="block truncate text-sm font-medium">{conta.nome}</span>
           <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted-foreground">
             {r.motivo ? (
-              <span className="text-amber-700 dark:text-amber-400">{r.motivo}</span>
+              <span className={r.motivo === "precisa reconectar" ? "font-semibold text-tone-danger-ink" : "text-amber-700 dark:text-amber-400"}>
+                {r.motivo}
+              </span>
             ) : r.proxima ? (
               <>próx. {quando(r.proxima).toLowerCase()}</>
             ) : (
@@ -394,6 +405,95 @@ function CabecalhoDaConta({ conta, onDesconectada }: { conta: Conta; onDesconect
           Desconectar
         </Button>
       )}
+    </div>
+  )
+}
+
+/**
+ * O login da conta ainda vale? Em 09/10/2026 o Instagram cancelou a
+ * autorização de uma conta e a tela continuou dizendo "conectada" - só se
+ * descobriu na hora de publicar. Agora o sistema confere de 6 em 6 horas, e
+ * aqui dá pra conferir na hora e reconectar sem precisar desconectar antes.
+ */
+function SaudeDaConta({
+  conta,
+  disponivel,
+  onMudou,
+  onErro,
+}: {
+  conta: ContaSocial
+  disponivel: boolean
+  onMudou: () => Promise<void>
+  onErro: (texto: string) => void
+}) {
+  const [testando, setTestando] = useState(false)
+  const [resultado, setResultado] = useState<"ok" | "reconectar" | "indefinido" | null>(null)
+  const [indo, setIndo] = useState(false)
+  const nome = REDES[conta.network].nome
+
+  async function testar() {
+    setTestando(true)
+    setResultado(null)
+    try {
+      const r = await api.post<{ resultado: "ok" | "reconectar" | "indefinido" }>(`/api/client/social-accounts/${conta.id}/testar`, {})
+      setResultado(r.resultado)
+      await onMudou()
+    } catch (err) {
+      onErro(err instanceof ApiError ? err.message : "Não foi possível testar a conexão agora.")
+    } finally {
+      setTestando(false)
+    }
+  }
+
+  async function reconectar() {
+    setIndo(true)
+    try {
+      const { url } = await api.post<{ url: string }>(`/api/client/social-accounts/${conta.network}/conectar`, {})
+      window.location.href = url
+    } catch (err) {
+      onErro(err instanceof ApiError ? err.message : "Não foi possível iniciar a reconexão.")
+      setIndo(false)
+    }
+  }
+
+  if (conta.precisaReconectar) {
+    return (
+      <div className="flex flex-col gap-3 rounded-xl border border-tone-danger-ink/30 bg-tone-danger-wash px-4 py-3 sm:flex-row sm:items-center">
+        <IconAlertTriangle className="size-5 shrink-0 text-tone-danger-ink" />
+        <div className="min-w-0 flex-1 text-sm">
+          <p className="font-semibold text-tone-danger-ink">O {nome} cancelou o acesso a esta conta</p>
+          <p className="mt-0.5 text-xs text-foreground/80">
+            Acontece quando a senha é trocada ou a rede encerra as sessões por segurança. A fila desta conta está esperando: reconecte e os cortes
+            voltam a sair nos horários.
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button size="sm" variant="ghost" disabled={testando} onClick={testar}>
+            {testando ? "Testando..." : "Testar de novo"}
+          </Button>
+          <Button size="sm" disabled={indo || !disponivel} onClick={reconectar}>
+            {indo ? "Abrindo..." : "Reconectar"}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5">
+        <span className="size-1.5 rounded-full bg-status-posted" />
+        {resultado === "ok"
+          ? "Conexão funcionando agora."
+          : resultado === "indefinido"
+            ? `O ${nome} não respondeu agora; a conexão não foi alterada.`
+            : conta.conferidaEm
+              ? `Conexão conferida em ${new Date(conta.conferidaEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+              : "Conexão ainda não conferida"}
+      </span>
+      <button type="button" disabled={testando} onClick={testar} className="font-medium text-foreground underline underline-offset-2 disabled:opacity-60">
+        {testando ? "Testando..." : "Testar conexão"}
+      </button>
     </div>
   )
 }

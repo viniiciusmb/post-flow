@@ -357,6 +357,20 @@ async function countTodayForAccount(tiktokAccountId, timezone) {
   return rows[0].count;
 }
 
+// Quantas postagens começaram a sair nas últimas N horas (janela corrida, a
+// mesma conta que o TikTok faz pro limite de spam).
+async function countRecentForAccount(tiktokAccountId, horas) {
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS count
+     FROM postings
+     WHERE tiktok_account_id = $1
+       AND status IN ('queued', 'processing', 'posted')
+       AND queued_at > now() - make_interval(hours => $2::int)`,
+    [tiktokAccountId, horas]
+  );
+  return rows[0].count;
+}
+
 // Quantos itens estao esperando na fila agora (independente de cliente) -
 // usado pra encaixar o proximo slot livre ao criar uma postagem nova.
 async function countPendingForAccount(tiktokAccountId) {
@@ -733,6 +747,7 @@ async function findById(id) {
 }
 
 module.exports = {
+  countRecentForAccount,
   statusByClipIds,
   createIfNotExists,
   listForClient,

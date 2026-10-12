@@ -457,6 +457,9 @@ export interface ClientDashboardResponse {
 export interface ClientProfileResponse {
   businessName: string | null
   email: string
+  criadoEm?: string
+  entraComGoogle?: boolean
+  temSenha?: boolean
 }
 
 export interface DriveStatusResponse {
@@ -1266,12 +1269,15 @@ export interface SupportMessage {
   criadaEm: string
 }
 
-export type SupportConversationStatus = "aberta" | "encaminhada" | "resolvida"
+export type SupportConversationStatus = "aberta" | "encaminhada" | "resolvida" | "encerrada"
 
 export interface SupportConversation {
   id: number
   status: SupportConversationStatus
   mensagens: SupportMessage[]
+  /** Depois de quantos minutos parada a conversa se encerra (painel novo). */
+  minutosDeInatividade?: number
+  encerradaEm?: string | null
 }
 
 export interface SupportCurrentResponse {

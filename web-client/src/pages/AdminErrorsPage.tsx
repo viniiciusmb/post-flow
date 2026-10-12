@@ -39,7 +39,7 @@ function ErrorRow({
   async function copiar() {
     const texto = [
       `${t("adm.copiaOperacao")}: ${erro.operationLabel}`,
-      erro.entityLabel ? `${t("adm.copiaItem")}: ${erro.entityLabel} #${erro.entityId}` : null,
+      erro.entityLabel ? `${t("adm.copiaItem")}: ${erro.entityLabel}${erro.entityId ? ` #${erro.entityId}` : ""}` : null,
       `${t("adm.copiaCliente")}: ${erro.clientName ?? t("adm.copiaDoSistema")}`,
       `${t("adm.copiaOcorrencias")}: ${erro.occurrences} (${t("adm.copiaPrimeira")} ${quando(erro.firstSeenAt)}, ${t("adm.copiaUltima")} ${quando(erro.lastSeenAt)})`,
       `${t("adm.copiaResumo")}: ${erro.message}`,
@@ -78,7 +78,8 @@ function ErrorRow({
             <p className="mt-1 text-xs text-muted-foreground">
               {erro.entityLabel && (
                 <>
-                  {erro.entityLabel} #{erro.entityId} ·{" "}
+                  {erro.entityLabel}
+                  {erro.entityId ? ` #${erro.entityId}` : ""} ·{" "}
                 </>
               )}
               {erro.clientName || t("adm.doSistema")} · última vez {quando(erro.lastSeenAt)}
@@ -119,6 +120,10 @@ function ErrorRow({
   )
 }
 
+// /admin/errors-teste mostra só os erros das novidades em teste (painel novo):
+// redes sociais novas, feed, lives, telas novas. /admin/errors continua igual.
+const EM_TESTE = typeof window !== "undefined" && window.location.pathname.startsWith("/admin/errors-teste")
+
 export function AdminErrorsPage() {
   const t = useT()
   const { user, loading: authLoading, logout } = useAuth()
@@ -128,7 +133,7 @@ export function AdminErrorsPage() {
   const [aviso, setAviso] = useState<string | null>(null)
 
   async function load(f: Filtro = filtro) {
-    const res = await api.get<SystemErrorsResponse>(`/api/admin/errors?status=${f}`)
+    const res = await api.get<SystemErrorsResponse>(`/api/admin/errors?status=${f}${EM_TESTE ? "&grupo=teste" : ""}`)
     setData(res)
   }
 
@@ -154,10 +159,14 @@ export function AdminErrorsPage() {
   }
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title="Erros">
+    <DashboardLayout user={user} onLogout={logout} title={EM_TESTE ? "Erros em teste" : "Erros"}>
       <PageHeader
-        title="Erros"
-        description={t("adm.errosDescricao")}
+        title={EM_TESTE ? "Erros em teste" : "Erros"}
+        description={
+          EM_TESTE
+            ? "Só as novidades que ainda estão em teste com o admin e a Rise Style: redes sociais novas, fila das redes, feed, lives, telas novas e erros de tela dessas páginas. Os erros do que todo cliente usa continuam em Erros."
+            : t("adm.errosDescricao")
+        }
       />
 
       {aviso && <p className="text-sm text-destructive">{aviso}</p>}

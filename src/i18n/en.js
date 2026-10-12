@@ -367,6 +367,7 @@ module.exports = {
     idiomaAudioInvalido: "Invalid audio language.",
     posicaoVideoInvalida: "Invalid video position in the template (0 to 100).",
     postagemNaoNaFila: "Post not found or already out of the waiting queue.",
+    limiteDoTiktok24h: 'This account already posted {n} times in the last 24 hours. TikTok blocks more than that as spam: the clip stays in the queue and goes out at the next slot.',
     postagemSemErro: "Post not found or not in error.",
     programaNaoConectado: "You have not connected the program yet.",
     publicKeyInvalida: "Invalid publicKey.",

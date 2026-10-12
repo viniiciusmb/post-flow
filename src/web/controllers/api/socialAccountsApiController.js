@@ -23,6 +23,8 @@ const socialAccountsRepository = require('../../../repositories/socialAccountsRe
 const socialPostingsRepository = require('../../../repositories/socialPostingsRepository');
 const socialPostingSettingsRepository = require('../../../repositories/socialPostingSettingsRepository');
 const redesSociais = require('../../../lib/redesSociais');
+const errorReportService = require('../../../services/errorReportService');
+const saudeDasContasSociaisService = require('../../../services/saudeDasContasSociaisService');
 const { horariosPadrao } = require('../../../lib/postingSchedule');
 const logger = require('../../../lib/logger');
 
@@ -40,6 +42,9 @@ function paraApi(row) {
     avatarUrl: row.avatar_url,
     accountType: row.account_type,
     connectedAt: row.connected_at,
+    conferidaEm: row.conferida_em || null,
+    precisaReconectar: Boolean(row.precisa_reconectar_em),
+    motivoReconectar: row.motivo_reconectar || null,
   };
 }
 
@@ -47,8 +52,17 @@ function origem(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
 
-function erroDaOutstand(res, err, acao) {
+function erroDaOutstand(res, err, acao, req = null) {
   logger.error(`Outstand (${acao}): ${err.message}`);
+  // Vai pro log de "Erros em teste": conexão de rede social é novidade do
+  // painel novo, e falha nela não aparece em lugar nenhum além do log técnico.
+  errorReportService.report({
+    operation: errorReportService.OPERACOES.SOCIAL_CONEXAO,
+    entityType: 'social_conexao',
+    clientUserId: req && req.session && req.session.user ? req.session.user.id : null,
+    error: err,
+    message: `${acao}: ${err.message}`,
+  });
   if (err instanceof outstandService.OutstandError && err.status === 503) {
     return res.status(503).json({ error: 'A conexão com as redes sociais ainda não está disponível.' });
   }
@@ -102,7 +116,7 @@ async function iniciarConexao(req, res) {
     req.session.conexaoSocial = { network, desde: Date.now() };
     res.json({ url });
   } catch (err) {
-    erroDaOutstand(res, err, 'iniciar conexao');
+    erroDaOutstand(res, err, 'iniciar conexao', req);
   }
 }
 
@@ -204,7 +218,7 @@ async function paginasPendentes(req, res) {
       }));
     res.json({ rede: p.network, paginas });
   } catch (err) {
-    erroDaOutstand(res, err, `paginas pendentes ${p.network}`);
+    erroDaOutstand(res, err, `paginas pendentes ${p.network}`, req);
   }
 }
 
@@ -236,7 +250,7 @@ async function conectarPaginas(req, res) {
     }
     res.json({ conectadas, deOutroCliente, contas: await listaComResumo(req.session.user.id) });
   } catch (err) {
-    erroDaOutstand(res, err, `finalizar ${network}`);
+    erroDaOutstand(res, err, `finalizar ${network}`, req);
   }
 }
 
@@ -250,11 +264,22 @@ async function desconectar(req, res) {
     // Conta que já não existe na Outstand (removida por lá) desconecta aqui
     // mesmo assim - senão ficaria presa na tela pra sempre.
     if (!(err instanceof outstandService.OutstandError && err.status === 404)) {
-      return erroDaOutstand(res, err, 'desconectar');
+      return erroDaOutstand(res, err, 'desconectar', req);
     }
   }
   await socialAccountsRepository.markDisconnected(id, req.session.user.id);
   res.json({ contas: await listaComResumo(req.session.user.id) });
 }
 
-module.exports = { listar, iniciarConexao, retorno, paginasPendentes, conectarPaginas, desconectar };
+// POST /:id/testar - "Testar conexão": usa o login da conta agora mesmo.
+async function testar(req, res) {
+  const id = Number(req.params.id);
+  const conta = Number.isFinite(id) ? await socialAccountsRepository.findOwned(id, req.session.user.id) : null;
+  if (!conta) return res.status(404).json({ error: 'Conta não encontrada.' });
+  if (!outstandService.configurado()) return res.status(503).json({ error: 'A conexão com as redes sociais ainda não está disponível.' });
+  const resultado = await saudeDasContasSociaisService.conferir(conta);
+  const atual = await socialAccountsRepository.findOwned(id, req.session.user.id);
+  res.json({ resultado, conta: paraApi(atual) });
+}
+
+module.exports = { listar, iniciarConexao, retorno, paginasPendentes, conectarPaginas, desconectar, testar };

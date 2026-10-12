@@ -43,13 +43,22 @@ test('erro do conteúdo ou da configuração NÃO fica tentando à toa', () => {
     new Error('TikTok recusou publicar no perfil [invalid_params]: The chunk size is invalid'),
     new Error('TikTok recusou [unaudited_client_can_only_post_to_private_accounts]: ...'),
     new Error('TikTok recusou [scope_not_authorized]: falta permissão'),
-    new Error('TikTok recusou [spam_risk_too_many_posts]: ...'),
     new Error('Arquivo do corte nao esta mais em disco.'),
   ];
   for (const err of definitivos) {
     assert.equal(erroDePostagem.classificar(err), 'permanente', `"${err.message}" não devia ser repetido`);
     assert.equal(erroDePostagem.deveTentarDeNovo(err, 0), false);
   }
+});
+
+test('limite de spam do TikTok não aposenta o corte: espera 6 horas e tenta de novo', () => {
+  // O corte está certo; quem está no limite é a conta. Antes ia pra aba de
+  // erros e o cliente reenviava à mão, piorando o limite (11/10/2026).
+  const err = new Error('TikTok recusou publicar no perfil [spam_risk_too_many_posts]: too many posts');
+  assert.equal(erroDePostagem.classificar(err), 'transitorio');
+  assert.equal(erroDePostagem.deveTentarDeNovo(err, 0), true);
+  assert.equal(erroDePostagem.esperaEspecialEmMinutos(err), 360);
+  assert.equal(erroDePostagem.esperaEspecialEmMinutos(new Error('fetch failed')), null);
 });
 
 test('erro desconhecido tenta de novo, em vez de desistir na primeira', () => {

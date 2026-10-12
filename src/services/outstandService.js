@@ -111,6 +111,14 @@ async function finalizarPendente(sessionToken, pageIds) {
   return dados.connectedAccounts || [];
 }
 
+// Lê os números da conta (seguidores etc.) só pra provar que a autorização
+// ainda vale: a chamada usa o token da rede, então token cancelado aparece
+// aqui antes de aparecer numa publicação. Janela de 1 dia pra ser leve.
+async function conferirConta(accountId) {
+  const ate = Math.floor(Date.now() / 1000);
+  return chamar('GET', `/v1/social-accounts/${encodeURIComponent(accountId)}/metrics?since=${ate - 86400}&until=${ate}`);
+}
+
 async function removerConta(accountId) {
   await chamar('DELETE', `/v1/social-accounts/${encodeURIComponent(accountId)}`);
 }
@@ -152,7 +160,10 @@ async function criarPublicacao({ accountId, legenda, midiaUrl, nomeDoArquivo, ch
     ...configuracao,
   };
   const dados = await chamar('POST', '/v1/posts', corpo, { cabecalhos: { 'Idempotency-Key': chave } });
-  return dados.post;
+  // A Outstand ignora em silêncio campo com nome errado (ex.: post_mode em vez
+  // de postMode) e só avisa em `warnings`. Devolvido pra quem chamou registrar:
+  // é o único jeito de descobrir que uma opção nossa não está chegando na rede.
+  return { ...dados.post, avisos: Array.isArray(dados.warnings) ? dados.warnings : [] };
 }
 
 // As pastas (boards) de uma conta do Pinterest: todo pin precisa de uma.
@@ -183,4 +194,5 @@ module.exports = {
   paginasPendentes,
   finalizarPendente,
   removerConta,
+  conferirConta,
 };

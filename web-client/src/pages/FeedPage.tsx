@@ -74,6 +74,7 @@ type Conta = {
   /** Limite de duração da rede (as do TikTok não mandam: a fila dele confere sozinha). */
   duracaoMinimaS?: number
   duracaoMaximaS?: number
+  precisaReconectar?: boolean
 }
 type Canal = { chave: string; tipo: "youtube" | "live"; id: number; nome: string; avatar: string | null; plataforma: string | null }
 type Contexto = {
@@ -1318,6 +1319,7 @@ function EnviarCorteDialog({
     if (!c.disponivel) return "A publicação nesta rede chega na próxima atualização."
     const limite = motivoDoLimite(c)
     if (limite) return limite
+    if (c.precisaReconectar) return `Precisa reconectar em Redes sociais. O corte entra na fila e sai depois disso.`
     if (c.rede !== "tiktok") {
       if (ja?.status === "posted") return "Já publicado nesta conta"
       if (ja?.status === "error") return `Não saiu: ${ja.erro ?? "a rede recusou"} Marque pra tentar de novo.`

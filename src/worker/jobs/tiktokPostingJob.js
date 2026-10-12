@@ -14,6 +14,9 @@ const publishOptions = require('../../lib/publishOptions');
 const erroDePostagem = require('../../lib/erroDePostagem');
 const logger = require('../../lib/logger');
 
+const JANELA_DO_LIMITE_HORAS = 23;
+const ATRASO_MAXIMO_MS = 2 * 60 * 60 * 1000;
+
 async function run() {
   await checkStaleProcessing();
 
@@ -42,16 +45,33 @@ async function run() {
 // na fila (ver computeNextScheduledFor). O teto de videos_per_day continua
 // como rede de seguranca, mas na pratica ele ja esta embutido na propria
 // projecao dos horarios.
-async function maybePublishNext(account) {
+async function maybePublishNext(account, { publicar = publish } = {}) {
   const settings = await postingScheduleSettingsRepository.findOrCreateByTiktokAccountId(account.id);
   if (settings.paused) return;
 
   const postedToday = await postingsRepository.countTodayForAccount(account.id, settings.timezone);
   if (postedToday >= settings.videos_per_day) return;
+  // O TikTok conta o limite em 24 horas CORRIDAS, não por dia do calendário.
+  // Só com o dia do calendário, a fila "zerava" à meia-noite e o que tinha
+  // ficado represado saía em rajada (4 cortes entre 00:00 e 00:30 numa conta
+  // de cliente, 09/10/2026), e o TikTok marcou a conta como spam. 23 horas, e
+  // não 24, pra não empurrar o horário fixo de cada dia 10 minutos pra frente.
+  const recentes = await postingsRepository.countRecentForAccount(account.id, JANELA_DO_LIMITE_HORAS);
+  if (recentes >= settings.videos_per_day) return;
 
   const posting = await postingsRepository.findOldestDuePendingForAccount(account.id);
   if (!posting) return;
-  await publish(account, posting);
+
+  // Corte que perdeu o horário dele por muito tempo (fila pausada, publicação
+  // desligada, limite do dia) não sai agora fora de hora: a fila inteira é
+  // remarcada pros próximos horários livres. Sair agora é o que fazia os
+  // atrasados virarem rajada.
+  if (posting.scheduled_for && Date.now() - new Date(posting.scheduled_for).getTime() > ATRASO_MAXIMO_MS) {
+    const n = await postingsRepository.reflowScheduledFor(account.id);
+    logger.info(`Conta TikTok ${account.id}: corte ${posting.id} perdeu o horario - ${n} postagens remarcadas pros proximos horarios.`);
+    return;
+  }
+  await publicar(account, posting);
 }
 
 function sleep(ms) {
@@ -74,7 +94,7 @@ async function tratarFalha(account, posting, err) {
   const podeTentarDeNovo = erroDePostagem.deveTentarDeNovo(err, tentativasJaFeitas);
 
   if (podeTentarDeNovo) {
-    const minutos = erroDePostagem.esperaEmMinutos(tentativasJaFeitas);
+    const minutos = erroDePostagem.esperaEspecialEmMinutos(err) ?? erroDePostagem.esperaEmMinutos(tentativasJaFeitas);
     await postingsRepository.agendarNovaTentativa(posting.id, minutos);
     logger.warn(
       `Postagem ${posting.id} falhou (${err.message}) - nova tentativa em ${minutos} min ` +
@@ -264,4 +284,4 @@ async function checkStaleProcessing() {
 // publish() tambem e chamado direto pelo botao "Postar agora" (ver
 // clientPostingsApiController.postNow) - contorna fila/espacamento/pausa
 // de proposito, e o cliente pedindo explicitamente pra sair na hora.
-module.exports = { run, publish };
+module.exports = { run, publish, maybePublishNext };

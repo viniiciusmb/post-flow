@@ -14,6 +14,9 @@
 //      camada que deixa a conversa boa - nao e ela que protege o dinheiro.
 'use strict';
 
+const pool = require('../../db/pool');
+const painelNovo = require('../../lib/painelNovo');
+
 const { Anthropic } = require('@anthropic-ai/sdk');
 const config = require('../../config');
 const logger = require('../../lib/logger');
@@ -121,10 +124,40 @@ function textoVisivel(content) {
 const RESPOSTA_DE_FALHA =
   'Tive um problema técnico para consultar sua conta agora. Tente de novo em alguns minutos — se continuar, escreva para a equipe pelo e-mail de contato.';
 
+// Encerramento por inatividade (12/10/2026, pedido do fundador): depois de
+// MINUTOS_DE_INATIVIDADE sem mensagem, a conversa aberta se encerra e a
+// próxima mensagem começa uma nova. Conversa longa custa mais a cada resposta
+// (o histórico inteiro é reenviado) e traz contexto velho pra uma dúvida nova.
+// Conversa ENCAMINHADA pra equipe não se encerra sozinha: alguém vai responder.
+// Em teste: só no painel novo (admin e Rise Style).
+const MINUTOS_DE_INATIVIDADE = 30;
+
+async function encerraPorInatividade(clientUserId) {
+  const { rows } = await pool.query('SELECT id, role FROM users WHERE id = $1', [clientUserId]);
+  return painelNovo.ehPainelNovo(rows[0]);
+}
+
+function parada(conversa) {
+  return (
+    conversa.status === 'aberta' &&
+    Date.now() - new Date(conversa.updated_at).getTime() > MINUTOS_DE_INATIVIDADE * 60 * 1000
+  );
+}
+
+// Encerra se ficou parada. Devolve a conversa como ficou.
+async function encerrarSeParada(conversa) {
+  if (!conversa || !parada(conversa) || !(await encerraPorInatividade(conversa.client_user_id))) return conversa;
+  return (await supportRepository.encerrarConversa(conversa.id)) || conversa;
+}
+
 async function iniciarOuRetomarConversa(clientUserId, conversationId) {
   if (conversationId) {
-    const conversa = await supportRepository.findConversationForClient(Number(conversationId), clientUserId);
+    let conversa = await supportRepository.findConversationForClient(Number(conversationId), clientUserId);
     if (!conversa) throw new SuporteError(404, 'Conversa não encontrada.');
+    conversa = await encerrarSeParada(conversa);
+    // Mensagem numa conversa encerrada começa uma nova, em vez de recusar:
+    // a pessoa só quer continuar falando com a Flora.
+    if (conversa.status === 'encerrada') return supportRepository.createConversation(clientUserId);
     return conversa;
   }
   return supportRepository.createConversation(clientUserId);
@@ -302,22 +335,42 @@ async function processarMensagem({ clientUserId, conversationId = null, texto, a
 }
 
 async function conversaAtual(clientUserId, conversationId = null) {
-  const conversa = conversationId
+  let conversa = conversationId
     ? await supportRepository.findConversationForClient(Number(conversationId), clientUserId)
     : await supportRepository.latestConversationForClient(clientUserId);
   if (!conversa) return null;
+  conversa = await encerrarSeParada(conversa);
   const mensagens = await supportRepository.listMessages(conversa.id);
   return {
     id: Number(conversa.id),
     status: conversa.status,
+    encerradaEm: conversa.closed_at || null,
+    minutosDeInatividade: MINUTOS_DE_INATIVIDADE,
     mensagens: mensagens
       .filter((m) => m.visible_text)
       .map((m) => ({ id: Number(m.id), autor: m.role === 'user' ? 'cliente' : 'suporte', texto: m.visible_text, criadaEm: m.created_at })),
   };
 }
 
+// Varredura periódica: encerra as conversas paradas de quem está no painel
+// novo (a tela do admin passa a mostrar "encerrada" sem esperar o cliente
+// voltar).
+async function encerrarConversasParadas() {
+  const paradas = await supportRepository.listarConversasParadas(MINUTOS_DE_INATIVIDADE);
+  let n = 0;
+  for (const c of paradas) {
+    if (await encerraPorInatividade(c.client_user_id)) {
+      await supportRepository.encerrarConversa(c.id);
+      n += 1;
+    }
+  }
+  return n;
+}
+
 module.exports = {
   enviarMensagem,
+  encerrarConversasParadas,
+  MINUTOS_DE_INATIVIDADE,
   conversaAtual,
   SuporteError,
   PROMPT_DE_SISTEMA,

@@ -29,6 +29,7 @@ const videoParaRedeService = require('./videoParaRedeService');
 const backfillPostingsService = require('./backfillPostingsService');
 const errorReportService = require('./errorReportService');
 const redesSociais = require('../lib/redesSociais');
+const saudeDasContasSociaisService = require('./saudeDasContasSociaisService');
 const logger = require('../lib/logger');
 
 const MAX_FALHAS_DE_ENVIO = 4;
@@ -167,6 +168,17 @@ async function enviarUma(p) {
     });
     await socialPostingsRepository.marcarEnviada(p.id, post.id);
     logger.info(`Publicacao ${p.id} entregue a Outstand (${d.network}, post ${post.id}).`);
+    if (post.avisos && post.avisos.length) {
+      logger.warn(`Outstand ignorou campos na publicacao ${p.id}: ${post.avisos.join(' | ')}`);
+      await errorReportService.report({
+        operation: errorReportService.OPERACOES.SOCIAL_POSTING,
+        entityType: 'social_posting',
+        entityId: p.id,
+        clientUserId: d.client_user_id,
+        error: new Error(post.avisos.join(' | ')),
+        message: `A Outstand ignorou uma opção enviada pro ${nomeDa(d.network)}: ${post.avisos[0]}`,
+      });
+    }
   } catch (err) {
     const falhas = Number(d.falhas_de_envio) + 1;
     if (passageiro(err) && falhas < MAX_FALHAS_DE_ENVIO) {
@@ -176,6 +188,9 @@ async function enviarUma(p) {
       return;
     }
     logger.error(`Publicacao ${p.id} desistiu no envio: ${err.message}`);
+    if (!passageiro(err) && saudeDasContasSociaisService.ehFalhaDeAutorizacao(err.message)) {
+      await saudeDasContasSociaisService.marcarPrecisaReconectar(p.social_account_id, err.message);
+    }
     await socialPostingsRepository.marcarErro(
       p.id,
       passageiro(err)
@@ -199,6 +214,7 @@ async function conferirUma(p) {
   }
   if (situacao.status === 'published') {
     await socialPostingsRepository.marcarPublicada(p.id, situacao.url);
+    await saudeDasContasSociaisService.marcarSaudavel(p.social_account_id);
     logger.info(`Publicacao ${p.id} saiu na rede (${situacao.url || 'sem link'}).`);
     return;
   }
@@ -226,6 +242,11 @@ async function conferirUma(p) {
     }
     await socialPostingsRepository.marcarErro(p.id, mensagemParaOCliente(p.network, erro));
     logger.error(`Publicacao ${p.id} recusada pela rede: ${erro}`);
+    // Autorização recusada: a conta inteira precisa reconectar, e a fila dela
+    // espera em vez de cada corte seguinte falhar igual.
+    if (saudeDasContasSociaisService.ehFalhaDeAutorizacao(erro)) {
+      await saudeDasContasSociaisService.marcarPrecisaReconectar(p.social_account_id, erro);
+    }
     await registrarErro(p, new Error(erro));
     return;
   }

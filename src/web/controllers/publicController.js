@@ -150,6 +150,8 @@ async function landing(req, res) {
     // versao do problema: vira promessa de venda. So exibicao - ver
     // lib/exibicaoDoTunel.
     mostrarTunel,
+    // Volta da exclusão da própria conta (Configurações): confirma que deu certo.
+    contaExcluida: req.query.conta === 'excluida',
     contact: CONTACT,
     company: COMPANY,
   });

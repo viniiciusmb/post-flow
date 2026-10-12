@@ -24,6 +24,7 @@ router.get('/canais', asyncHandler(publicacao.canais));
 router.put('/canais/:canalId', asyncHandler(publicacao.definirCanal));
 router.post('/:network/conectar', asyncHandler(controller.iniciarConexao));
 router.delete('/:id', asyncHandler(controller.desconectar));
+router.post('/:id/testar', asyncHandler(controller.testar));
 
 router.get('/:id/publicacao', asyncHandler(publicacao.obterConfig));
 router.put('/:id/horarios', asyncHandler(publicacao.salvarHorarios));

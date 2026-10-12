@@ -72,7 +72,14 @@ async function dashboard(req, res) {
 
 async function getProfile(req, res) {
   const user = await usersRepository.findById(req.session.user.id);
-  res.json({ businessName: user.business_name, email: user.email });
+  res.json({
+    businessName: user.business_name,
+    email: user.email,
+    // Pro cabeçalho da tela de Configurações nova (painel novo).
+    criadoEm: user.created_at,
+    entraComGoogle: Boolean(user.google_sub),
+    temSenha: Boolean(user.password_hash),
+  });
 }
 
 async function updateProfile(req, res) {

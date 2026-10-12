@@ -1,5 +1,11 @@
 <%- include('../partials/public-header') %>
 
+<% if (typeof contaExcluida !== 'undefined' && contaExcluida) { %>
+<div class="wrap">
+  <p class="aviso-conta-excluida" role="status">Sua conta foi excluída. Os seus dados e cortes foram apagados e a assinatura foi cancelada.</p>
+</div>
+<% } %>
+
 <section class="hero">
   <div class="wrap">
     <p class="selo-hero">
