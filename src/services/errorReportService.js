@@ -11,6 +11,7 @@
 'use strict';
 
 const systemErrorsRepository = require('../repositories/systemErrorsRepository');
+const contextoDeErro = require('../lib/contextoDeErro');
 const logger = require('../lib/logger');
 
 // As operações que o painel sabe tentar de novo. O valor é o que aparece na
@@ -22,6 +23,12 @@ const OPERACOES = Object.freeze({
   SOCIAL_POSTING: 'social_posting',
   SOCIAL_CONTA: 'social_conta',
   SOCIAL_CONEXAO: 'social_conexao',
+  TIKTOK_CONEXAO: 'tiktok_conexao',
+  LIVES: 'lives',
+  LIVES_CAPACIDADE: 'lives_capacidade',
+  LIMITE_DO_PLANO: 'limite_do_plano',
+  ERRO_SERVIDOR: 'erro_servidor',
+  ERRO_TELA: 'erro_tela',
   PAINEL_NOVO_API: 'painel_novo_api',
   PAINEL_NOVO_TELA: 'painel_novo_tela',
   DRIVE_EXPORT: 'drive_export',
@@ -39,6 +46,12 @@ const ROTULO_OPERACAO = Object.freeze({
   social_posting: 'Publicação nas outras redes',
   social_conta: 'Conta de rede social',
   social_conexao: 'Conexão de rede social',
+  tiktok_conexao: 'Conexão do TikTok',
+  lives: 'Lives',
+  lives_capacidade: 'Lives sem vaga no servidor',
+  limite_do_plano: 'Cliente bateu no limite do plano',
+  erro_servidor: 'Erro no servidor',
+  erro_tela: 'Erro na tela (navegador do cliente)',
   painel_novo_api: 'Erro no servidor (telas em teste)',
   painel_novo_tela: 'Erro na tela (telas em teste)',
   drive_export: 'Envio pro Google Drive',
@@ -102,7 +115,10 @@ function detalhar(err) {
   return partes.join('\n\n').slice(0, 8000);
 }
 
-async function report({ operation, entityType = null, entityId = null, clientUserId = null, error, message = null }) {
+// `contexto`: tudo que ajuda a investigar (conta, rede, arquivo, etapa,
+// tentativa, resposta da API). Vai limpo de segredos pra system_error_events,
+// uma linha por ocorrência - ver lib/contextoDeErro.
+async function report({ operation, entityType = null, entityId = null, clientUserId = null, error, message = null, contexto = null }) {
   try {
     return await systemErrorsRepository.record({
       operation,
@@ -111,6 +127,7 @@ async function report({ operation, entityType = null, entityId = null, clientUse
       clientUserId,
       message: message || resumir(error),
       detail: detalhar(error),
+      contexto: contextoDeErro.montar(contexto, error),
     });
   } catch (falhaAoRegistrar) {
     logger.error('Nao consegui registrar um erro no painel de erros:', falhaAoRegistrar.message);
@@ -133,6 +150,15 @@ async function clear(operation, entityType, entityId) {
 // (painel novo). Ficam numa tela própria ("Erros em teste") pra não se
 // misturarem com os erros do que todo cliente já usa (pedido do fundador em
 // 12/10/2026). Quando uma novidade abrir pra todos, a operação dela sai daqui.
-const OPERACOES_EM_TESTE = Object.freeze(['social_posting', 'social_conta', 'social_conexao', 'painel_novo_api', 'painel_novo_tela']);
+const OPERACOES_EM_TESTE = Object.freeze([
+  'social_posting',
+  'social_conta',
+  'social_conexao',
+  'painel_novo_api',
+  'painel_novo_tela',
+  'lives',
+  'lives_capacidade',
+  'limite_do_plano',
+]);
 
 module.exports = { report, clear, OPERACOES, ROTULO_OPERACAO, OPERACOES_EM_TESTE, resumir };

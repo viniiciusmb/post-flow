@@ -15,6 +15,7 @@ const net = require('net');
 const WebSocket = require('ws');
 const livesRepository = require('../../repositories/livesRepository');
 const logger = require('../../lib/logger');
+const errorReportService = require('../errorReportService');
 
 const HOST = 'irc.chat.twitch.tv';
 const PORTA = 6667;
@@ -93,6 +94,14 @@ function acompanhar({
       await livesRepository.saveChatBuckets(sessionId, prontos.map(([inicio, b]) => ({ bucket_at: new Date(inicio).toISOString(), ...b })));
     } catch (err) {
       logger.error(`Lives: nao consegui gravar o chat da sessao ${sessionId}:`, err.message);
+      errorReportService.report({
+        operation: errorReportService.OPERACOES.LIVES,
+        entityType: 'live_sessao',
+        entityId: sessionId,
+        error: err,
+        message: `Não consegui gravar o chat da live: ${String(err.message).slice(0, 200)}`,
+        contexto: { etapa: 'gravar_chat', baldes: prontos.length },
+      });
     }
   }
 

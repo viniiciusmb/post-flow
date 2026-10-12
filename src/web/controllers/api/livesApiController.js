@@ -15,6 +15,12 @@ const plataformas = require('../../../services/lives/plataformas');
 const config = require('../../../config');
 const admin = require('./adminLivesApiController');
 const liveCreditosService = require('../../../services/lives/liveCreditosService');
+const limitesDasLivesService = require('../../../services/lives/limitesDasLivesService');
+const planLimitsService = require('../../../services/planLimitsService');
+
+function ehAdmin(req) {
+  return req.session.user.role === 'admin';
+}
 
 // O canal como o usuario enxerga: alem do que a tela do admin mostra, se o
 // automatico esta ligado PRA ELE e se ele mandou clipar so esta live.
@@ -27,8 +33,11 @@ function canalDoUsuario(c, usoDaLive) {
     autoClipar,
     clipandoEstaLive,
     clipandoEstaLiveDesde: clipandoEstaLive ? c.clip_this_live_at : null,
-    // Recebe corte desta live: automatico ligado ou "clipar esta live" pedido.
-    recebendoCortes: autoClipar || clipandoEstaLive,
+    // Recebe corte desta live: automatico ligado ou "clipar esta live" pedido,
+    // e o limite do plano deixando (ver limitesDasLivesService).
+    recebendoCortes: (autoClipar || clipandoEstaLive) && !c.bloqueio,
+    // 'fora_do_plano' | 'outra_live' | null - a tela explica cada um.
+    bloqueio: c.bloqueio || null,
     seguindoDesde: c.followed_at || null,
     // Creditos que a gravacao EM ANDAMENTO ja usou pra esta pessoa, e se o
     // credito acabou nela (a pessoa parou de receber cortes desta live).
@@ -40,13 +49,17 @@ function canalDoUsuario(c, usoDaLive) {
 async function estado(req, res) {
   const userId = req.session.user.id;
   await admin.atualizarStatus(await livesRepository.listChannelsForUser(userId));
-  const [ligado, canais, opcoes, usos, saldo, isento] = await Promise.all([
+  // O status ao vivo acabou de ser atualizado: o bloqueio de "uma live por vez"
+  // precisa refletir isso antes de a tela ser montada.
+  await limitesDasLivesService.recalcular();
+  const [ligado, canais, opcoes, usos, saldo, isento, limites] = await Promise.all([
     settingsRepository.getValue('lives_enabled', false),
     livesRepository.listChannelsForUser(userId),
     livesUserSettings.obter(userId),
     livesRepository.creditUsageForUser(userId),
     liveCreditosService.saldo(userId),
     liveCreditosService.isento(userId),
+    planLimitsService.limitesDasNovidadesDoCliente(userId, { admin: ehAdmin(req) }),
   ]);
   const usoPorCanal = new Map(usos.map((u) => [Number(u.live_channel_id), u]));
   res.json({
@@ -65,6 +78,13 @@ async function estado(req, res) {
     // Quantos segundos pra tras o "Clipar este momento" pega - a tela mostra
     // essa janela no relogio da live antes do clique.
     janelaCliparAgoraS: admin.JANELA_CLIPAR_AGORA_S,
+    // Limite do plano (o mesmo número que o servidor usa pra barrar).
+    limites: {
+      semPlano: limites.semPlano,
+      plano: limites.plano,
+      canais: limites.canaisDeLive,
+      aoMesmoTempo: limites.livesAoMesmoTempo,
+    },
     opcoes: admin.opcoesParaApi(opcoes),
     niveis: livesUserSettings.NIVEIS,
     categorias: tiposDeMomento.CATEGORIAS.map(({ id, nome, descricao }) => ({ id, nome, descricao })),
@@ -80,8 +100,8 @@ async function salvarOpcoes(req, res) {
 // Adicionar ja diz se e pra clipar sempre (padrao) ou so quando a pessoa pedir.
 async function adicionarCanal(req, res) {
   const userId = req.session.user.id;
-  const r = await admin.seguirCanal(userId, req.body);
-  if (r.error) return res.status(r.status).json({ error: r.error });
+  const r = await admin.seguirCanal(userId, req.body, { admin: ehAdmin(req) });
+  if (r.error) return res.status(r.status).json({ error: r.error, ...(r.limite ? { limite: true } : {}) });
   if (req.body?.autoClipar === false) await livesRepository.setPaused(userId, r.canal.id, true);
   return estado(req, res);
 }
@@ -89,6 +109,8 @@ async function adicionarCanal(req, res) {
 async function removerCanal(req, res) {
   const removeu = await livesRepository.unfollow(req.session.user.id, Number(req.params.id));
   if (!removeu) return res.status(404).json({ error: 'Voce nao acompanha esse canal.' });
+  // Remover um canal libera vaga pro que estava fora do plano.
+  await limitesDasLivesService.recalcular();
   return estado(req, res);
 }
 
@@ -103,6 +125,7 @@ async function definirAutomatico(req, res) {
   if (!ok) return res.status(404).json({ error: 'Voce nao acompanha esse canal.' });
   // Ligou o automatico: a marca de "so esta live" fica redundante.
   if (req.body.ligado) await livesRepository.setClipThisLive(userId, id, false);
+  await limitesDasLivesService.recalcular();
   return estado(req, res);
 }
 
@@ -110,14 +133,37 @@ async function cliparEstaLive(req, res) {
   const userId = req.session.user.id;
   const id = Number(req.params.id);
   if (!(await livesRepository.isFollowing(userId, id))) return res.status(404).json({ error: 'Voce nao acompanha esse canal.' });
+  const bloqueioAntes = await livesRepository.followBlock(userId, id);
+  if (bloqueioAntes === 'fora_do_plano') {
+    return res.status(403).json({
+      error: 'Este canal passou do limite de canais de live do seu plano. Remova outro canal ou troque de plano em "Plano e uso".',
+    });
+  }
   const ok = await livesRepository.setClipThisLive(userId, id, true);
   if (!ok) return res.status(409).json({ error: 'Esse canal nao esta ao vivo agora.' });
+  await limitesDasLivesService.recalcular();
+  // O plano clipa N lives por vez e as N vagas já estão em uso: desfaz o
+  // pedido e diz qual live está ocupando a vaga, em vez de aceitar e não
+  // gravar nada.
+  if ((await livesRepository.followBlock(userId, id)) === 'outra_live') {
+    await livesRepository.setClipThisLive(userId, id, false);
+    await limitesDasLivesService.recalcular();
+    const ocupando = (await livesRepository.listChannelsForUser(userId)).filter(
+      (c) => Number(c.id) !== id && c.is_live && !c.bloqueio && (!c.paused_at || c.clip_this_live_at)
+    );
+    const nomes = ocupando.map((c) => c.display_name || c.login).join(', ');
+    return res.status(409).json({
+      error: `Seu plano clipa 1 live por vez${nomes ? ` e você já está clipando ${nomes}` : ''}. Pare aquela live antes de clipar esta.`,
+      limite: true,
+    });
+  }
   return estado(req, res);
 }
 
 async function pararEstaLive(req, res) {
   const ok = await livesRepository.setClipThisLive(req.session.user.id, Number(req.params.id), false);
   if (!ok) return res.status(404).json({ error: 'Voce nao acompanha esse canal.' });
+  await limitesDasLivesService.recalcular();
   return estado(req, res);
 }
 

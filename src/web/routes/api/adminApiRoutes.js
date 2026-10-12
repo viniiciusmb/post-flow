@@ -6,6 +6,7 @@ const adminQueueApiController = require('../../controllers/api/adminQueueApiCont
 const adminMetricsApiController = require('../../controllers/api/adminMetricsApiController');
 const adminBandwidthApiController = require('../../controllers/api/adminBandwidthApiController');
 const adminCostsApiController = require('../../controllers/api/adminCostsApiController');
+const adminAtividadeApiController = require('../../controllers/api/adminAtividadeApiController');
 const adminErrorsApiController = require('../../controllers/api/adminErrorsApiController');
 const adminNarratedApiController = require('../../controllers/api/adminNarratedApiController');
 const adminLivesApiController = require('../../controllers/api/adminLivesApiController');
@@ -15,12 +16,16 @@ const asyncHandler = require('../../lib/asyncHandler');
 const { ROLES } = require('../../../config/constants');
 const adminRevenueApiController = require('../../controllers/api/adminRevenueApiController');
 const adminSupportApiController = require('../../controllers/api/adminSupportApiController');
+const maquinaApiController = require('../../controllers/api/maquinaApiController');
 
 const router = express.Router();
 
 router.use(requireAuthApi, requireRoleApi(ROLES.ADMIN));
 
 router.get('/dashboard', asyncHandler(adminApiController.dashboard));
+// A linha de produção do sistema inteiro, pro Início do admin.
+router.get('/maquina', asyncHandler(maquinaApiController.estadoDoSistema));
+router.get('/maquina/resumo', asyncHandler(maquinaApiController.resumoDoSistema));
 router.get('/support', asyncHandler(adminSupportApiController.list));
 router.get('/support/:id', asyncHandler(adminSupportApiController.detail));
 router.post('/support/:id/status', asyncHandler(adminSupportApiController.setStatus));
@@ -78,6 +83,10 @@ router.post('/bandwidth/proxy/purchased', asyncHandler(adminBandwidthApiControll
 // Painel de erros. Fica atras do requireRoleApi(ADMIN) la de cima - a lista
 // junta falhas de TODOS os clientes, entao nao pode vazar pra ninguem mais.
 router.get('/errors', asyncHandler(adminErrorsApiController.list));
+router.get('/atividade', asyncHandler(adminAtividadeApiController.visaoGeral));
+router.get('/atividade/agora', asyncHandler(adminAtividadeApiController.agora));
+router.get('/atividade/pessoas/:id', asyncHandler(adminAtividadeApiController.linhaDoTempo));
+router.get('/errors/:id/ocorrencias', asyncHandler(adminErrorsApiController.events));
 router.post('/errors/:id/retry', asyncHandler(adminErrorsApiController.retry));
 router.post('/errors/:id/resolve', asyncHandler(adminErrorsApiController.resolve));
 

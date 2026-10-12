@@ -23,6 +23,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const config = require('../../config');
 const logger = require('../../lib/logger');
+const errorReportService = require('../errorReportService');
 
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 
@@ -141,7 +142,17 @@ function iniciar({ sessionId, url, dir, qualidade, onFim, spawnImpl = spawn }) {
     const motivo = pedidoParar || (fimNatural ? 'live terminou' : `gravacao caiu (streamlink ${codigoStreamlink})`);
     Promise.resolve()
       .then(() => onFim({ motivo, pedidoParar: Boolean(pedidoParar), fimNatural, codigo: codigoStreamlink, ultimasLinhas: texto }))
-      .catch((err) => logger.error(`Lives: falha ao encerrar a sessao ${sessionId}:`, err))
+      .catch((err) => {
+        logger.error(`Lives: falha ao encerrar a sessao ${sessionId}:`, err);
+        errorReportService.report({
+          operation: errorReportService.OPERACOES.LIVES,
+          entityType: 'live_sessao',
+          entityId: sessionId,
+          error: err,
+          message: `Falha ao encerrar a gravação: ${String(err.message).slice(0, 200)}`,
+          contexto: { etapa: 'encerrar', motivo, codigoDoStreamlink: codigoStreamlink, ultimasLinhasDoGravador: texto },
+        });
+      })
       .finally(resolverTermino);
   }
 

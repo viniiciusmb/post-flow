@@ -51,7 +51,7 @@ import type {
   YoutubeChannel,
 } from "@/types/api"
 import { useT, useI18n } from "@/i18n"
-import { PipelineRail } from "@/components/youtube/PipelineRail"
+import { EtapaDoVideo } from "@/components/maquina/EtapaDoVideo"
 import { nomeDeIdioma } from "@/lib/nomeDeIdioma"
 
 // So aparece quando o cliente tem 2+ contas TikTok - com 0 ou 1, o backend
@@ -621,8 +621,8 @@ export function VideoRow({
 
       {pipeline && isActive && (
         <div className="border-t border-border px-4 py-3">
-          <PipelineRail
-            status={video.status}
+          <EtapaDoVideo
+            video={video}
             percent={progress?.percent ?? null}
             eta={progress && progress.etaSeconds !== null ? formatEta(progress.etaSeconds, t) : null}
           />

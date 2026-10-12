@@ -2,6 +2,7 @@
 
 const metricsRollupJob = require('./jobs/metricsRollupJob');
 const systemMetricsSampleJob = require('./jobs/systemMetricsSampleJob');
+const atividadeRepository = require('../repositories/atividadeRepository');
 const logger = require('../lib/logger');
 
 const QUEUE_METRICS_ROLLUP = 'metrics-rollup';
@@ -16,6 +17,14 @@ async function start(boss) {
     logger.info('Calculando resumo diario de metricas...');
     await metricsRollupJob.run();
     logger.info('Resumo diario de metricas concluido.');
+    // O registro de atividade (paginas e acoes do painel) fica 90 dias.
+    // Isolado: falhar aqui nao pode fazer o pg-boss repetir o resumo do dia.
+    try {
+      const n = await atividadeRepository.apagarAntigos(90);
+      if (n) logger.info(`Registro de atividade: ${n} linha(s) com mais de 90 dias apagada(s).`);
+    } catch (err) {
+      logger.error('Falha ao limpar o registro de atividade antigo:', err.message);
+    }
   });
 
   await boss.createQueue(QUEUE_SYSTEM_METRICS_SAMPLE);

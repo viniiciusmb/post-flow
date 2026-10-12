@@ -10,7 +10,7 @@
  * pra tudo que for cortado dali pra frente; e o canal é o que liga a máquina.
  */
 import { useEffect, useState } from "react"
-import { IconBrandTiktok, IconCheck, IconScissors, IconBrandYoutube, IconArrowRight } from "@tabler/icons-react"
+import { IconBrandTiktok, IconCheck, IconScissors, IconBrandYoutube, IconArrowRight, IconX } from "@tabler/icons-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
@@ -74,10 +74,23 @@ const ZERADO: OnboardingStatus = {
   canais: 0,
 }
 
-export function OnboardingChecklist() {
+// Quem fechou o cartão não quer vê-lo de novo neste navegador. O caminho de
+// volta continua no Tutorial e no "Fazer o tour guiado" do topo.
+const CHAVE_FECHADO = "postflow-checklist-fechado"
+function lerFechado() {
+  try {
+    return localStorage.getItem(CHAVE_FECHADO) === "1"
+  } catch {
+    return false
+  }
+}
+
+/** `podeFechar`: mostra o X (por enquanto só no Início do painel novo). */
+export function OnboardingChecklist({ podeFechar = false }: { podeFechar?: boolean }) {
   const t = useT()
   const [status, setStatus] = useState<OnboardingStatus | null>(null)
   const [previa] = useState(lerPrevia)
+  const [fechado, setFechado] = useState(() => podeFechar && lerFechado())
 
   useEffect(() => {
     // Falha em silêncio de propósito: se esta chamada não responder, a tela
@@ -88,6 +101,7 @@ export function OnboardingChecklist() {
 
   const dados = previa === "novo" ? ZERADO : status
   if (!dados) return null
+  if (fechado && previa === "nao") return null
   // Terminou o checklist? Ele some - a menos que a pessoa tenha pedido a
   // prévia de propósito pelo endereço.
   if (dados.concluido && previa === "nao") return null
@@ -114,6 +128,24 @@ export function OnboardingChecklist() {
             <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
               {t("guia.progresso", { feitos, total: PASSOS.length })}
             </span>
+            {podeFechar && (
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.setItem(CHAVE_FECHADO, "1")
+                  } catch {
+                    /* sem armazenamento: fecha só nesta visita */
+                  }
+                  setFechado(true)
+                }}
+                className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Fechar o guia de primeiros passos"
+                title="Fechar"
+              >
+                <IconX className="size-4" />
+              </button>
+            )}
           </span>
         </div>
 

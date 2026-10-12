@@ -10,7 +10,9 @@ const pool = require('../db/pool');
 // live_channel_follows. Uma regra so pras tres consultas que decidem quem
 // grava e quem recebe - se uma delas esquecesse a parte do credito, a pessoa
 // sem credito continuaria recebendo corte (ou mantendo a gravacao ligada).
-const RECEBE_CORTES = `f.is_active AND (f.paused_at IS NULL OR f.clip_this_live_at IS NOT NULL)
+// `f.bloqueio IS NULL`: limite do plano (canais acompanhados e lives ao mesmo
+// tempo), calculado pelo limitesDasLivesService a cada volta do supervisor.
+const RECEBE_CORTES = `f.is_active AND f.bloqueio IS NULL AND (f.paused_at IS NULL OR f.clip_this_live_at IS NOT NULL)
   AND NOT EXISTS (
     SELECT 1 FROM live_credit_usage u JOIN live_sessions s ON s.id = u.session_id
      WHERE u.user_id = f.user_id AND s.live_channel_id = f.live_channel_id
@@ -39,6 +41,57 @@ async function follow(userId, channelId) {
      ON CONFLICT (user_id, live_channel_id) DO UPDATE SET is_active = true, paused_at = NULL`,
     [userId, channelId]
   );
+}
+
+async function followBlock(userId, channelId) {
+  const { rows } = await pool.query(
+    'SELECT bloqueio FROM live_channel_follows WHERE user_id = $1 AND live_channel_id = $2 AND is_active',
+    [userId, channelId]
+  );
+  return rows[0] ? rows[0].bloqueio : null;
+}
+
+async function countFollowed(userId) {
+  const { rows } = await pool.query('SELECT count(*)::int AS n FROM live_channel_follows WHERE user_id = $1 AND is_active', [userId]);
+  return rows[0].n;
+}
+
+async function isFollowingActive(userId, channelId) {
+  const { rows } = await pool.query(
+    'SELECT 1 FROM live_channel_follows WHERE user_id = $1 AND live_channel_id = $2 AND is_active',
+    [userId, channelId]
+  );
+  return rows.length > 0;
+}
+
+// Quantos "lugares" de live estão em uso no servidor: cada cliente recebendo
+// cortes de cada canal que está sendo gravado conta 1. É o render que pesa, e
+// ele é feito POR CLIENTE (cada um com o seu estilo) - uma live seguida por 3
+// clientes pesa como 3 lives.
+async function seatsInUse() {
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS n
+       FROM live_channel_follows f
+       JOIN live_sessions s ON s.live_channel_id = f.live_channel_id AND s.status = 'gravando'
+      WHERE ${RECEBE_CORTES}`
+  );
+  return rows[0].n;
+}
+
+// Por que este canal ao vivo não está sendo gravado (servidor cheio, disco
+// cheio, horas do dia). NULL apaga. Devolve true quando o motivo MUDOU - é o
+// que decide registrar no painel de erros uma vez só por live, e não a cada
+// volta do supervisor.
+async function setNotRecordingReason(channelId, motivo) {
+  const { rows } = await pool.query(
+    `UPDATE live_channels
+        SET motivo_sem_gravar = $2::text,
+            sem_gravar_desde = CASE WHEN $2::text IS NULL THEN NULL ELSE COALESCE(sem_gravar_desde, now()) END
+      WHERE id = $1 AND motivo_sem_gravar IS DISTINCT FROM $2::text
+      RETURNING id`,
+    [channelId, motivo || null]
+  );
+  return rows.length > 0;
 }
 
 async function unfollow(userId, channelId) {
@@ -150,7 +203,7 @@ async function listChannelsForUser(userId) {
             (SELECT count(*) FROM live_clips k WHERE k.live_channel_id = c.id AND k.user_id = $1 AND k.status = 'pronto') AS clips_prontos,
             (SELECT count(*) FROM live_clips k WHERE k.live_channel_id = c.id AND k.user_id = $1 AND k.status IN ('na_fila','renderizando')) AS clips_em_andamento,
             (SELECT max(started_at) FROM live_sessions x WHERE x.live_channel_id = c.id) AS ultima_gravacao,
-            f.paused_at, f.clip_this_live_at,
+            f.paused_at, f.clip_this_live_at, f.bloqueio,
             f.created_at AS followed_at
        FROM live_channel_follows f
        JOIN live_channels c ON c.id = f.live_channel_id
@@ -849,6 +902,12 @@ async function costSummary(desde) {
 }
 
 module.exports = {
+  followBlock,
+  countFollowed,
+  isFollowingActive,
+  seatsInUse,
+  setNotRecordingReason,
+  RECEBE_CORTES,
   deleteClipById,
   upsertChannel,
   follow,

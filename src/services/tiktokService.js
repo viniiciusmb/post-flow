@@ -2,6 +2,23 @@
 // Referencia: https://developers.tiktok.com/doc/oauth-user-access-token-management
 'use strict';
 
+// Erro com a resposta crua da TikTok junto (status HTTP + corpo, que traz
+// error.code e log_id - o log_id é o que o suporte da TikTok pede). O painel
+// de erros guarda isso por ocorrência (ver lib/contextoDeErro).
+function erroDaTiktok(mensagem, response, data) {
+  const err = new Error(mensagem);
+  // `statusHttp` e nao `status`: o errorHandler do Express usa `err.status` como
+  // status da resposta, e um 400 da TikTok viraria um 400 nosso com a mensagem
+  // crua na tela.
+  err.statusHttp = response ? response.status : null;
+  try {
+    err.resposta = JSON.stringify(data);
+  } catch {
+    err.resposta = String(data);
+  }
+  return err;
+}
+
 const fs = require('fs');
 const config = require('../config');
 const logger = require('../lib/logger');
@@ -186,7 +203,7 @@ async function requestToken(body) {
 
   const data = await response.json();
   if (!response.ok || data.error) {
-    throw new Error(`TikTok recusou a solicitacao de token: ${data.error_description || data.error || response.statusText}`);
+    throw erroDaTiktok(`TikTok recusou a solicitacao de token: ${data.error_description || data.error || response.statusText}`, response, data);
   }
   return data;
 }
@@ -222,7 +239,7 @@ async function getUserInfo(accessToken) {
 
   const data = await response.json();
   if (!response.ok || data.error?.code !== 'ok') {
-    throw new Error(`Falha ao buscar dados do perfil TikTok: ${data.error?.message || response.statusText}`);
+    throw erroDaTiktok(`Falha ao buscar dados do perfil TikTok: ${data.error?.message || response.statusText}`, response, data);
   }
   return data.data.user;
 }
@@ -240,7 +257,7 @@ async function getUserStats(accessToken) {
 
   const data = await response.json();
   if (!response.ok || data.error?.code !== 'ok') {
-    throw new Error(`Falha ao buscar estatisticas do perfil TikTok: ${data.error?.message || response.statusText}`);
+    throw erroDaTiktok(`Falha ao buscar estatisticas do perfil TikTok: ${data.error?.message || response.statusText}`, response, data);
   }
   return data.data.user;
 }
@@ -256,7 +273,7 @@ async function queryCreatorInfo(accessToken) {
   });
   const data = await response.json();
   if (!response.ok || data.error?.code !== 'ok') {
-    throw new Error(`Falha ao consultar as opcoes de publicacao no TikTok: ${data.error?.message || response.statusText}`);
+    throw erroDaTiktok(`Falha ao consultar as opcoes de publicacao no TikTok: ${data.error?.message || response.statusText}`, response, data);
   }
   const d = data.data || {};
   return {
@@ -307,7 +324,7 @@ async function initDirectPost(accessToken, videoSizeBytes, postInfo) {
     // auditoria" de "video longo demais" de "privacidade invalida" - e sem
     // isso o log vira um erro sem pista, que foi o que aconteceu em producao.
     const codigo = data.error?.code || `http_${response.status}`;
-    throw new Error(`TikTok recusou publicar no perfil [${codigo}]: ${data.error?.message || response.statusText}`);
+    throw erroDaTiktok(`TikTok recusou publicar no perfil [${codigo}]: ${data.error?.message || response.statusText}`, response, data);
   }
   return { publishId: data.data.publish_id, uploadUrl: data.data.upload_url, chunkSize, totalChunkCount };
 }
@@ -333,7 +350,7 @@ async function initInboxVideo(accessToken, videoSizeBytes) {
 
   const data = await response.json();
   if (!response.ok || data.error?.code !== 'ok') {
-    throw new Error(`TikTok recusou iniciar a publicacao: ${data.error?.message || response.statusText}`);
+    throw erroDaTiktok(`TikTok recusou iniciar a publicacao: ${data.error?.message || response.statusText}`, response, data);
   }
   return { publishId: data.data.publish_id, uploadUrl: data.data.upload_url, chunkSize, totalChunkCount };
 }
@@ -393,7 +410,7 @@ async function fetchPublishStatus(accessToken, publishId) {
 
   const data = await response.json();
   if (!response.ok || data.error?.code !== 'ok') {
-    throw new Error(`Falha ao consultar status da publicacao no TikTok: ${data.error?.message || response.statusText}`);
+    throw erroDaTiktok(`Falha ao consultar status da publicacao no TikTok: ${data.error?.message || response.statusText}`, response, data);
   }
 
   const status = data.data?.status;
@@ -434,7 +451,7 @@ async function revokeAccess(accessToken) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.error) {
-    throw new Error(`TikTok recusou revogar o acesso: ${data.error_description || data.error || response.statusText}`);
+    throw erroDaTiktok(`TikTok recusou revogar o acesso: ${data.error_description || data.error || response.statusText}`, response, data);
   }
 }
 

@@ -14,9 +14,9 @@ import { cn } from "@/lib/utils"
  * uma horizontal forte logo abaixo do título. É como o painel da Stripe mostra
  * saldo, cobranças e reembolsos.
  */
-export function StatRow({ children }: { children: ReactNode }) {
+export function StatRow({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className="grid grid-cols-2 divide-x divide-y divide-border/70 overflow-hidden rounded-xl bg-card shadow-[var(--shadow-flat)] dark:border dark:border-border sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-5">
+    <div className={cn("grid grid-cols-2 divide-x divide-y divide-border/70 overflow-hidden rounded-xl bg-card shadow-[var(--shadow-flat)] dark:border dark:border-border sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-5", className)}>
       {children}
     </div>
   )

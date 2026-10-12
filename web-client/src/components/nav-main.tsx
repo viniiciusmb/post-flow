@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import type { Icon } from "@tabler/icons-react"
 
 import {
@@ -5,6 +6,7 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
@@ -13,6 +15,8 @@ export interface NavItem {
   title: string
   url: string
   icon: Icon
+  /** Sinal vivo ao lado do item (painel novo): vídeo na linha, live gravando, fila. */
+  sinal?: ReactNode
 }
 
 function NavGroup({ label, items }: { label?: string; items: NavItem[] }) {
@@ -39,6 +43,7 @@ function NavGroup({ label, items }: { label?: string; items: NavItem[] }) {
                   <span>{item.title}</span>
                 </a>
               </SidebarMenuButton>
+              {item.sinal && <SidebarMenuBadge>{item.sinal}</SidebarMenuBadge>}
             </SidebarMenuItem>
           ))}
         </SidebarMenu>

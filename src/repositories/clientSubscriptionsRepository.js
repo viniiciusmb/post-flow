@@ -14,6 +14,7 @@ async function getOrCreate(clientUserId) {
   const { rows } = await pool.query(
     `SELECT cs.*, sp.key AS plan_key, sp.name AS plan_name, sp.weekly_minutes_normal, sp.weekly_minutes_bonus,
             sp.max_youtube_channels, sp.max_tiktok_accounts, sp.queue_priority,
+            sp.max_contas_por_rede, sp.max_canais_de_live, sp.max_lives_ao_mesmo_tempo,
             sp.price_cents AS plan_price_cents, sp.first_month_price_cents AS plan_first_month_price_cents,
             sp.overage_cents_normal, sp.overage_cents_bonus,
             sp.extra_channel_price_cents, sp.extra_tiktok_price_cents, sp.extra_both_price_cents

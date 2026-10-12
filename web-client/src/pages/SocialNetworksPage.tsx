@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { IconAlertTriangle, IconCheck, IconPlus, IconTrash } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { AccountDetailPanel } from "@/pages/TikTokAccountPage"
 import { PainelDaContaSocial, quando, type CanalDestino, type ContaSocial } from "@/components/redes/PainelDaContaSocial"
-import { MiniRegua, ReguaDoDia } from "@/components/redes/ReguaDoDia"
+import { ReguaDoDia } from "@/components/redes/ReguaDoDia"
 import { useAuth } from "@/hooks/useAuth"
 import { useT } from "@/i18n"
 import { api, ApiError } from "@/lib/api"
@@ -37,6 +37,7 @@ const ERROS: Record<string, string> = {
   cancelada: "A conexão foi cancelada antes de terminar.",
   conta: "Não conseguimos confirmar a conta que voltou da autorização. Tente conectar de novo.",
   outro_cliente: "Essa conta já está conectada a outro usuário do Post Flow.",
+  limite: "Seu plano não permite mais contas nessa rede. Para conectar mais, troque de plano em Plano e uso.",
   servico: "O serviço de conexão não respondeu. Tente de novo em instantes.",
 }
 
@@ -52,7 +53,21 @@ function lerUrl() {
     erro: p.get("erro"),
     motivo: p.get("motivo"),
     escolher: p.get("escolher") === "1",
+    ver: p.get("ver"),
   }
+}
+
+type Filtro = Rede | "todas"
+
+/** Limite do plano nas redes (Instagram, Facebook...): vale pra CADA rede. O TikTok tem o limite próprio. */
+type LimitesDasRedes = { semPlano: boolean; contasPorRede: number | null; plano: string | null }
+
+/** Quantas contas ainda cabem nesta rede (null = sem limite; TikTok: o servidor decide na volta). */
+function vagasNaRede(rede: Rede, limites: LimitesDasRedes | null, jaTem: number): number | null {
+  if (rede === "tiktok" || !limites) return null
+  if (limites.semPlano) return 0
+  if (limites.contasPorRede === null) return null
+  return Math.max(0, limites.contasPorRede - jaTem)
 }
 
 function SeloDaRede({ rede, className }: { rede: Rede; className?: string }) {
@@ -82,9 +97,18 @@ export function SocialNetworksPage() {
   const [tiktok, setTiktok] = useState<TikTokAccountSummary[] | null>(null)
   const [sociais, setSociais] = useState<ContaSocial[] | null>(null)
   const [disponivel, setDisponivel] = useState(true)
+  const [limites, setLimites] = useState<LimitesDasRedes | null>(null)
   const [canais, setCanais] = useState<CanalDestino[] | null>(null)
   const [selecionada, setSelecionada] = useState<string | null>(inicial.conta)
   const [conectar, setConectar] = useState<Rede | null>(null)
+  const [escolhendoRede, setEscolhendoRede] = useState(false)
+  // Filtro por rede. Voltando de conectar uma rede, abre direto nela.
+  const [filtro, setFiltro] = useState<Filtro>(() => {
+    if (inicial.ver && inicial.ver in REDES) return inicial.ver as Rede
+    if (inicial.conectada && inicial.rede) return inicial.rede
+    if (inicial.tiktokConectada) return "tiktok"
+    return "todas"
+  })
   const [escolher, setEscolher] = useState(inicial.escolher)
   const [aplicarDe, setAplicarDe] = useState<Conta | null>(null)
   const [aviso, setAviso] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(() => {
@@ -99,12 +123,13 @@ export function SocialNetworksPage() {
   const load = useCallback(async () => {
     const [tk, s, c] = await Promise.all([
       api.get<{ accounts: TikTokAccountSummary[] }>("/api/client/tiktok-accounts"),
-      api.get<{ disponivel: boolean; contas: ContaSocial[] }>("/api/client/social-accounts"),
+      api.get<{ disponivel: boolean; contas: ContaSocial[]; limites?: LimitesDasRedes }>("/api/client/social-accounts"),
       api.get<{ canais: CanalDestino[] }>("/api/client/social-accounts/canais"),
     ])
     setTiktok(tk.accounts.map((a) => ({ ...a, id: Number(a.id) })))
     setSociais(s.contas)
     setDisponivel(s.disponivel)
+    setLimites(s.limites ?? null)
     setCanais(c.canais)
   }, [])
 
@@ -121,26 +146,30 @@ export function SocialNetworksPage() {
     return lista.sort((a, b) => ORDEM_DAS_REDES.indexOf(a.rede) - ORDEM_DAS_REDES.indexOf(b.rede))
   }, [tiktok, sociais])
 
-  // Sem seleção válida: a primeira da rede que acabou de conectar, senão a primeira.
+  // As contas que aparecem com o filtro atual.
+  const visiveis = useMemo(() => (contas ? (filtro === "todas" ? contas : contas.filter((c) => c.rede === filtro)) : null), [contas, filtro])
+
+  // Filtro numa rede sem conta (ela foi desconectada): volta pra "todas".
   useEffect(() => {
-    if (!contas || contas.length === 0) return
-    if (selecionada && contas.some((c) => c.chave === selecionada)) return
-    const daRede = inicial.rede ? [...contas].reverse().find((c) => c.rede === inicial.rede) : null
-    setSelecionada((daRede ?? contas[0]).chave)
-  }, [contas, selecionada, inicial.rede])
+    if (contas && filtro !== "todas" && !contas.some((c) => c.rede === filtro)) setFiltro("todas")
+  }, [contas, filtro])
+
+  // Sem seleção válida no filtro atual: a última da rede que acabou de
+  // conectar, senão a primeira que aparece.
+  useEffect(() => {
+    if (!visiveis || visiveis.length === 0) return
+    if (selecionada && visiveis.some((c) => c.chave === selecionada)) return
+    const daRede = inicial.rede ? [...visiveis].reverse().find((c) => c.rede === inicial.rede) : null
+    setSelecionada((daRede ?? visiveis[0]).chave)
+  }, [visiveis, selecionada, inicial.rede])
 
   useEffect(() => {
-    window.history.replaceState(null, "", `/client/social${selecionada ? `?conta=${selecionada}` : ""}`)
-  }, [selecionada])
-
-  // No celular a lista é uma faixa que rola de lado: a conta aberta fica à vista.
-  const faixa = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const el = faixa.current
-    if (!el || el.scrollWidth <= el.clientWidth) return
-    const ativo = el.querySelector<HTMLElement>('[aria-current="true"]')
-    if (ativo) el.scrollTo({ left: ativo.offsetLeft - 16 })
-  }, [selecionada, contas])
+    const q = new URLSearchParams()
+    if (filtro !== "todas") q.set("ver", filtro)
+    if (selecionada) q.set("conta", selecionada)
+    const qs = q.toString()
+    window.history.replaceState(null, "", `/client/social${qs ? `?${qs}` : ""}`)
+  }, [selecionada, filtro])
 
   if (authLoading || !user) return null
 
@@ -151,7 +180,7 @@ export function SocialNetworksPage() {
 
   return (
     <DashboardLayout user={user} onLogout={logout} title="Redes sociais">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
           <h1 className="font-heading text-[1.65rem] font-semibold leading-tight tracking-[-0.03em]">Redes sociais</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -162,36 +191,30 @@ export function SocialNetworksPage() {
                 : `${contas.length} ${contas.length === 1 ? "conta conectada" : "contas conectadas"} · ${naFila} ${naFila === 1 ? "corte na fila" : "cortes na fila"}`}
           </p>
         </div>
+        <Button onClick={() => setEscolhendoRede(true)} className="gap-1.5">
+          <IconPlus className="size-4" />
+          Conectar rede
+        </Button>
       </header>
 
-      {/* As redes: as conectadas mostram quantas contas; as outras convidam. */}
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
-        {ORDEM_DAS_REDES.map((r) => {
-          const n = porRede(r)
-          const { nome, Icone, fundo } = REDES[r]
-          return (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setConectar(r)}
-              className={cn(
-                "group flex shrink-0 items-center gap-1.5 rounded-full border py-[3px] pl-[3px] pr-2.5 text-[13px] transition-colors",
-                n > 0 ? "border-border bg-card shadow-[var(--shadow-flat)] hover:border-foreground/30" : "border-dashed border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground",
-              )}
-            >
-              <span className={cn("flex size-6 items-center justify-center rounded-full text-white", n === 0 && "opacity-60 grayscale group-hover:opacity-100 group-hover:grayscale-0")} style={{ background: fundo }}>
-                <Icone className="size-3.5" />
-              </span>
-              <span className={cn(n > 0 && "font-medium")}>{nome}</span>
-              {n > 0 ? (
-                <span className="font-mono text-[11px] text-muted-foreground">{n}</span>
-              ) : (
-                <IconPlus className="size-3.5" />
-              )}
-            </button>
-          )
-        })}
-      </div>
+      {contas && contas.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <FiltroDeRedes
+            contas={contas}
+            filtro={filtro}
+            onFiltro={(f) => {
+              setFiltro(f)
+              setSelecionada(null)
+            }}
+          />
+          {filtro !== "todas" && (
+            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => setConectar(filtro)}>
+              <IconPlus className="size-3.5" />
+              Conectar outra conta do {REDES[filtro].nome}
+            </Button>
+          )}
+        </div>
+      )}
 
       {aviso && (
         <p
@@ -205,9 +228,12 @@ export function SocialNetworksPage() {
       )}
 
       {!contas ? (
-        <div className="grid gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]">
-          <Skeleton className="h-72" />
-          <Skeleton className="h-96" />
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Skeleton className="h-32 rounded-xl" />
+            <Skeleton className="h-32 rounded-xl" />
+          </div>
+          <Skeleton className="h-96 rounded-xl" />
         </div>
       ) : contas.length === 0 ? (
         <Card className="items-center gap-0 px-6 py-14 text-center">
@@ -223,42 +249,60 @@ export function SocialNetworksPage() {
           </div>
         </Card>
       ) : (
-        <div className="grid items-start gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]">
-          <nav aria-label="Contas" className="min-w-0 lg:sticky lg:top-4">
-            <div ref={faixa} className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-col lg:gap-1 lg:overflow-visible lg:px-0 lg:pb-0">
-              {contas.map((c) => (
-                <LinhaDaConta key={c.chave} conta={c} ativa={c.chave === selecionada} onClick={() => setSelecionada(c.chave)} />
-              ))}
-            </div>
-          </nav>
+        <>
+          {/* As contas: em "Todas", uma linha por rede; numa rede, só as dela. */}
+          <div className="flex flex-col gap-5">
+            {(filtro === "todas" ? ORDEM_DAS_REDES.filter((r) => contas.some((c) => c.rede === r)) : [filtro]).map((r) => {
+              const daRede = contas.filter((c) => c.rede === r)
+              return (
+                <section key={r} aria-label={`Contas do ${REDES[r].nome}`} className="flex flex-col gap-2.5">
+                  {filtro === "todas" && <RotuloDaRede rede={r} contas={daRede} />}
+                  <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-4">
+                    {daRede.map((c) => (
+                      <CartaoDaConta key={c.chave} conta={c} ativa={c.chave === selecionada} onClick={() => setSelecionada(c.chave)} />
+                    ))}
+                  </div>
+                </section>
+              )
+            })}
+          </div>
 
-          <section className="flex min-w-0 flex-col gap-4">
-            {conta && (
-              <>
-                <CabecalhoDaConta
-                  conta={conta}
-                  onDesconectada={async () => {
-                    setSelecionada(null)
-                    await load()
-                  }}
-                />
-                {conta.rede !== "tiktok" && (
-                  <SaudeDaConta key={`saude-${conta.chave}`} conta={conta.social} disponivel={disponivel} onMudou={load} onErro={(texto) => setAviso({ tipo: "erro", texto })} />
-                )}
-                {conta.rede === "tiktok" ? (
-                  <EspacoDoTiktok key={conta.chave} conta={conta.tiktok} onMudou={load} onAplicarEmTodas={() => setAplicarDe(conta)} />
-                ) : (
-                  <PainelDaContaSocial key={conta.chave} conta={conta.social} canais={canais} onMudou={load} onAplicarEmTodas={() => setAplicarDe(conta)} />
-                )}
-              </>
-            )}
-          </section>
-        </div>
+          {conta && (
+            <section aria-label={`Conta ${conta.nome}`} className="flex min-w-0 flex-col gap-4">
+              <PainelDaConta
+                conta={conta}
+                disponivel={disponivel}
+                onMudou={load}
+                onErro={(texto) => setAviso({ tipo: "erro", texto })}
+                onDesconectada={async () => {
+                  setSelecionada(null)
+                  await load()
+                }}
+              />
+              {conta.rede === "tiktok" ? (
+                <EspacoDoTiktok key={conta.chave} conta={conta.tiktok} onMudou={load} onAplicarEmTodas={() => setAplicarDe(conta)} />
+              ) : (
+                <PainelDaContaSocial key={conta.chave} conta={conta.social} canais={canais} onMudou={load} onAplicarEmTodas={() => setAplicarDe(conta)} />
+              )}
+            </section>
+          )}
+        </>
       )}
 
+      <EscolherRedeDialog
+        aberto={escolhendoRede}
+        porRede={porRede}
+        limites={limites}
+        onFechar={() => setEscolhendoRede(false)}
+        onEscolher={(r) => {
+          setEscolhendoRede(false)
+          setConectar(r)
+        }}
+      />
       <ConectarRedeDialog
         rede={conectar}
         jaTem={conectar ? porRede(conectar) : 0}
+        limites={limites}
         disponivel={disponivel}
         onFechar={() => setConectar(null)}
         onErro={(texto) => setAviso({ tipo: "erro", texto })}
@@ -287,6 +331,141 @@ export function SocialNetworksPage() {
   )
 }
 
+/**
+ * Filtro por rede, no mesmo desenho dos outros filtros do painel (trilho
+ * cinza, escolhido em branco). Antes as pílulas do topo pareciam filtro mas
+ * abriam "conectar outra conta" - aqui filtrar é filtrar.
+ */
+function FiltroDeRedes({ contas, filtro, onFiltro }: { contas: Conta[]; filtro: Filtro; onFiltro: (f: Filtro) => void }) {
+  const redes = ORDEM_DAS_REDES.filter((r) => contas.some((c) => c.rede === r))
+  // No celular o trilho rola de lado: a opção escolhida fica sempre à vista.
+  const trilho = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    trilho.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }, [filtro])
+  const opcao = (f: Filtro, rotulo: ReactNode, n: number) => (
+    <button
+      key={f}
+      type="button"
+      role="tab"
+      aria-selected={filtro === f}
+      onClick={() => onFiltro(f)}
+      className={cn(
+        "flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] transition-colors",
+        filtro === f ? "bg-card font-medium text-foreground shadow-[var(--shadow-flat)]" : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {rotulo}
+      <span className="tabular-nums text-muted-foreground">{n}</span>
+    </button>
+  )
+  return (
+    <div ref={trilho} role="tablist" aria-label="Filtrar por rede" className="flex max-w-full gap-1 overflow-x-auto rounded-xl bg-muted/80 p-1 dark:bg-muted/50">
+      {opcao("todas", "Todas", contas.length)}
+      {redes.map((r) => {
+        const { nome, Icone, fundo } = REDES[r]
+        return opcao(
+          r,
+          <>
+            <span className="flex size-5 items-center justify-center rounded-full text-white" style={{ background: fundo }}>
+              <Icone className="size-3" />
+            </span>
+            {nome}
+          </>,
+          contas.filter((c) => c.rede === r).length,
+        )
+      })}
+    </div>
+  )
+}
+
+/** Em "Todas": o nome da rede em cima das contas dela. */
+function RotuloDaRede({ rede, contas }: { rede: Rede; contas: Conta[] }) {
+  const info = REDES[rede]
+  const naFila = contas.reduce((s, c) => s + resumoDaConta(c).naFila, 0)
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex size-6 items-center justify-center rounded-md text-white" style={{ background: info.fundo }}>
+        <info.Icone className="size-3.5" />
+      </span>
+      <h2 className="text-sm font-semibold">{info.nome}</h2>
+      <span className="text-xs text-muted-foreground">
+        {contas.length} {contas.length === 1 ? "conta" : "contas"} · {naFila} na fila
+      </span>
+    </div>
+  )
+}
+
+/** "Conectar rede": todas as redes, com quantas contas cada uma já tem. */
+function EscolherRedeDialog({
+  aberto,
+  porRede,
+  limites,
+  onFechar,
+  onEscolher,
+}: {
+  aberto: boolean
+  porRede: (r: Rede) => number
+  limites: LimitesDasRedes | null
+  onFechar: () => void
+  onEscolher: (r: Rede) => void
+}) {
+  const porRedeNoPlano = limites && !limites.semPlano ? limites.contasPorRede : null
+  return (
+    <Dialog open={aberto} onOpenChange={(a) => !a && onFechar()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Conectar uma rede</DialogTitle>
+          <DialogDescription>
+            Cada conta conectada ganha a própria fila e os próprios horários.
+            {porRedeNoPlano !== null &&
+              ` Seu plano${limites?.plano ? ` ${limites.plano}` : ""} permite ${porRedeNoPlano} ${porRedeNoPlano === 1 ? "conta" : "contas"} em cada rede.`}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {ORDEM_DAS_REDES.map((r) => {
+            const { nome, Icone, fundo, formato } = REDES[r]
+            const n = porRede(r)
+            const vagas = vagasNaRede(r, limites, n)
+            const cheia = vagas === 0
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => onEscolher(r)}
+                className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition-colors hover:border-foreground/30 hover:bg-muted/40"
+              >
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg text-white" style={{ background: fundo }}>
+                  <Icone className="size-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">{nome}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {cheia
+                      ? limites?.semPlano
+                        ? "Precisa de um plano"
+                        : `${n} de ${limites?.contasPorRede} no seu plano`
+                      : n > 0
+                        ? `${n} ${n === 1 ? "conta conectada" : "contas conectadas"}${vagas !== null ? ` de ${n + vagas}` : ""}`
+                        : formato}
+                  </span>
+                </span>
+                {cheia ? (
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Cheia</span>
+                ) : n > 0 ? (
+                  <IconCheck className="size-4 shrink-0 text-status-posted" />
+                ) : (
+                  <IconPlus className="size-4 shrink-0 text-muted-foreground" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function resumoDaConta(c: Conta) {
   if (c.rede === "tiktok") {
     const a = c.tiktok
@@ -303,8 +482,10 @@ function resumoDaConta(c: Conta) {
     naFila: f.naFila,
     erros: f.erros,
     proxima: f.proxima,
-    parada: f.pausada || !f.publicaSozinho || c.social.precisaReconectar === true,
-    motivo: c.social.precisaReconectar
+    parada: f.pausada || !f.publicaSozinho || c.social.precisaReconectar === true || c.social.foraDoPlano === true,
+    motivo: c.social.foraDoPlano
+      ? "fora do plano"
+      : c.social.precisaReconectar
       ? "precisa reconectar"
       : f.pausada
         ? "fila pausada"
@@ -314,55 +495,85 @@ function resumoDaConta(c: Conta) {
   }
 }
 
-function LinhaDaConta({ conta, ativa, onClick }: { conta: Conta; ativa: boolean; onClick: () => void }) {
+/** O estado da conta em palavras, com a cor do que significa. */
+function estadoDaConta(c: Conta): { texto: string; tom: "ok" | "atencao" | "erro" } {
+  const r = resumoDaConta(c)
+  if (r.motivo === "fora do plano") return { texto: "Fora do seu plano", tom: "erro" }
+  if (r.motivo === "precisa reconectar") return { texto: "Precisa reconectar", tom: "erro" }
+  if (r.motivo === "fila pausada") return { texto: "Fila pausada", tom: "atencao" }
+  if (r.motivo) return { texto: "Não publica sozinha", tom: "atencao" }
+  return { texto: "Publicando sozinha", tom: "ok" }
+}
+
+const COR_DO_TOM = { ok: "bg-status-posted", atencao: "bg-amber-500", erro: "bg-destructive" } as const
+const TEXTO_DO_TOM = { ok: "text-tone-success-ink", atencao: "text-amber-700 dark:text-amber-400", erro: "text-tone-danger-ink" } as const
+
+function CartaoDaConta({ conta, ativa, onClick }: { conta: Conta; ativa: boolean; onClick: () => void }) {
   const r = resumoDaConta(conta)
+  const e = estadoDaConta(conta)
   const info = REDES[conta.rede]
-  const horarios = conta.rede === "tiktok" ? (conta.tiktok.horarios ?? []) : conta.social.fila.horarios
+  const usuario = conta.rede === "tiktok" ? null : conta.social.username
   return (
     <button
       type="button"
       onClick={onClick}
       aria-current={ativa ? "true" : undefined}
       className={cn(
-        "relative flex w-[15.5rem] shrink-0 flex-col gap-2 overflow-hidden rounded-xl border px-3 py-2.5 text-left transition-colors lg:w-auto",
-        ativa ? "bg-card shadow-[var(--shadow-raised)]" : "border-border bg-card/60 hover:bg-card lg:border-transparent lg:bg-transparent",
+        "relative flex w-[16.5rem] shrink-0 snap-start flex-col overflow-hidden rounded-xl bg-card text-left shadow-[var(--shadow-flat)] transition-shadow hover:shadow-[var(--shadow-raised)] sm:w-auto dark:border dark:border-border",
       )}
-      style={ativa ? { borderColor: `${info.cor}55` } : undefined}
+      style={ativa ? { boxShadow: `0 0 0 2px ${info.cor}, var(--shadow-raised)` } : undefined}
     >
-      {ativa && <span aria-hidden className="absolute inset-y-2 left-0 w-[3px] rounded-r-full" style={{ background: info.cor }} />}
-      <span className="flex items-center gap-3">
-        <AvatarDaConta conta={conta} tamanho="size-9" />
+      <span className="flex items-center gap-3 px-3.5 pt-3.5">
+        <AvatarDaConta conta={conta} tamanho="size-11" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{conta.nome}</span>
-          <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted-foreground">
-            {r.motivo ? (
-              <span className={r.motivo === "precisa reconectar" ? "font-semibold text-tone-danger-ink" : "text-amber-700 dark:text-amber-400"}>
-                {r.motivo}
-              </span>
-            ) : r.proxima ? (
-              <>próx. {quando(r.proxima).toLowerCase()}</>
-            ) : (
-              "fila vazia"
-            )}
+          <span className="block truncate text-sm font-semibold">{conta.nome}</span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {usuario && conta.rede !== "facebook" ? `@${usuario.replace(/^@/, "")} · ` : ""}
+            {info.nome}
           </span>
         </span>
-        <span className="flex shrink-0 flex-col items-end gap-0.5">
-          <span className="font-mono text-sm font-semibold tabular-nums">{r.naFila}</span>
-          {r.erros > 0 && <span className="font-mono text-[10px] text-tone-danger-ink">{r.erros} ✕</span>}
-        </span>
       </span>
-      {horarios.length > 0 && <MiniRegua horarios={horarios} cor={info.cor} apagada={r.parada} />}
+      <span className={cn("mt-2.5 flex items-center gap-1.5 px-3.5 text-xs font-medium", TEXTO_DO_TOM[e.tom])}>
+        <span className={cn("size-1.5 rounded-full", COR_DO_TOM[e.tom])} />
+        {e.texto}
+      </span>
+      <span className="mt-3 flex items-center justify-between gap-2 border-t border-border/70 px-3.5 py-2.5 text-xs">
+        <span>
+          <span className="font-semibold tabular-nums">{r.naFila}</span> <span className="text-muted-foreground">na fila</span>
+          {r.erros > 0 && <span className="text-tone-danger-ink"> · {r.erros} com erro</span>}
+        </span>
+        <span className="truncate text-muted-foreground">{r.proxima ? `Próximo ${quando(r.proxima).toLowerCase()}` : "Fila vazia"}</span>
+      </span>
     </button>
   )
 }
 
-function CabecalhoDaConta({ conta, onDesconectada }: { conta: Conta; onDesconectada: () => void }) {
+/**
+ * O topo da conta escolhida: quem é, os números que importam e a conexão.
+ * A fila e as configurações vêm logo abaixo (EspacoDoTiktok / PainelDaContaSocial).
+ */
+function PainelDaConta({
+  conta,
+  disponivel,
+  onMudou,
+  onErro,
+  onDesconectada,
+}: {
+  conta: Conta
+  disponivel: boolean
+  onMudou: () => Promise<void>
+  onErro: (texto: string) => void
+  onDesconectada: () => void
+}) {
   const [confirmando, setConfirmando] = useState(false)
   const [saindo, setSaindo] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const info = REDES[conta.rede]
+  const r = resumoDaConta(conta)
+  const e = estadoDaConta(conta)
   const usuario = conta.rede === "tiktok" ? null : conta.social.username
   const desde = conta.rede === "tiktok" ? conta.tiktok.connectedAt : conta.social.connectedAt
+  const publicados = conta.rede === "tiktok" ? conta.tiktok.postedCount : conta.social.fila.publicados
 
   useEffect(() => setConfirmando(false), [conta.chave])
 
@@ -379,33 +590,73 @@ function CabecalhoDaConta({ conta, onDesconectada }: { conta: Conta; onDesconect
     }
   }
 
+  const numeros: { rotulo: string; valor: ReactNode; destaque?: boolean }[] = [
+    { rotulo: "Na fila", valor: r.naFila },
+    { rotulo: "Próximo corte", valor: r.proxima ? quando(r.proxima) : "—" },
+    { rotulo: "Publicados", valor: publicados },
+    { rotulo: "Não saíram", valor: r.erros, destaque: r.erros > 0 },
+  ]
+
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-      <AvatarDaConta conta={conta} tamanho="size-14" />
-      <div className="min-w-0 flex-1">
-        <h2 className="truncate text-xl font-semibold tracking-[-0.02em]">{conta.nome}</h2>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-          {usuario && conta.rede !== "facebook" ? `@${usuario} · ` : ""}
-          {info.nome} · {info.formato} · conectada em {data(desde)}
-        </p>
-        {erro && <p className="mt-1 text-xs text-destructive">{erro}</p>}
-      </div>
-      {confirmando ? (
-        <div className="flex gap-1.5">
-          <Button size="sm" variant="ghost" onClick={() => setConfirmando(false)}>
-            Manter
-          </Button>
-          <Button size="sm" variant="destructive" disabled={saindo} onClick={desconectar}>
-            {saindo ? "Desconectando..." : "Desconectar"}
-          </Button>
+    <Card className="gap-0 overflow-hidden py-0">
+      <div className="px-5 pt-5 pb-4" style={{ background: `linear-gradient(180deg, ${info.cor}12, transparent 85%)` }}>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+          <AvatarDaConta conta={conta} tamanho="size-11 sm:size-14" />
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-xl font-semibold tracking-[-0.02em]">{conta.nome}</h2>
+            <p className="mt-0.5 truncate text-sm text-muted-foreground">
+              {usuario && conta.rede !== "facebook" ? `@${usuario.replace(/^@/, "")} · ` : ""}
+              {info.nome} · {info.formato} · desde {data(desde)}
+            </p>
+            {erro && <p className="mt-1 text-xs text-destructive">{erro}</p>}
+          </div>
+          {confirmando ? (
+            <div className="flex gap-1.5">
+              <Button size="sm" variant="ghost" onClick={() => setConfirmando(false)}>
+                Manter
+              </Button>
+              <Button size="sm" variant="destructive" disabled={saindo} onClick={desconectar}>
+                {saindo ? "Desconectando..." : "Desconectar"}
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="ghost" className="gap-1.5 text-muted-foreground" onClick={() => setConfirmando(true)} aria-label={`Desconectar ${conta.nome}`}>
+              <IconTrash className="size-3.5" />
+              <span className="hidden sm:inline">Desconectar</span>
+            </Button>
+          )}
         </div>
-      ) : (
-        <Button size="sm" variant="ghost" className="gap-1.5 text-muted-foreground" onClick={() => setConfirmando(true)}>
-          <IconTrash className="size-3.5" />
-          Desconectar
-        </Button>
-      )}
-    </div>
+
+        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+          {numeros.map((n) => (
+            <div key={n.rotulo} className="min-w-0">
+              <dt className="text-xs text-muted-foreground">{n.rotulo}</dt>
+              <dd className={cn("mt-0.5 truncate text-lg font-semibold tabular-nums tracking-[-0.01em]", n.destaque && "text-tone-danger-ink")}>{n.valor}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      <div className="flex flex-col gap-2 border-t border-border/70 px-5 py-3">
+        <p className={cn("flex items-center gap-1.5 text-sm font-medium", TEXTO_DO_TOM[e.tom])}>
+          <span className={cn("size-2 rounded-full", COR_DO_TOM[e.tom])} />
+          {e.tom === "ok"
+            ? "Publicando sozinha nos horários da fila"
+            : r.motivo === "fila pausada"
+              ? "Fila pausada: nada sai até você retomar"
+              : r.motivo === "fora do plano"
+                ? `Fila parada: seu plano permite menos contas do ${info.nome}. Desconecte outra conta desta rede ou troque de plano em Plano e uso.`
+              : e.tom === "erro"
+                ? "A rede cancelou o acesso a esta conta"
+                : conta.rede === "tiktok"
+                  ? "Não publica sozinha: ligue “Postar automaticamente” logo abaixo"
+                  : "Não publica sozinha: ligue “Publicar sozinho” logo abaixo"}
+        </p>
+        {conta.rede !== "tiktok" && (
+          <SaudeDaConta key={`saude-${conta.chave}`} conta={conta.social} disponivel={disponivel} onMudou={onMudou} onErro={onErro} />
+        )}
+      </div>
+    </Card>
   )
 }
 
@@ -448,7 +699,9 @@ function SaudeDaConta({
   async function reconectar() {
     setIndo(true)
     try {
-      const { url } = await api.post<{ url: string }>(`/api/client/social-accounts/${conta.network}/conectar`, {})
+      // `reconectar`: é a MESMA conta voltando, não conta nova - não passa pelo
+      // limite de contas por rede do plano.
+      const { url } = await api.post<{ url: string }>(`/api/client/social-accounts/${conta.network}/conectar`, { reconectar: conta.id })
       window.location.href = url
     } catch (err) {
       onErro(err instanceof ApiError ? err.message : "Não foi possível iniciar a reconexão.")
@@ -523,12 +776,13 @@ function EspacoDoTiktok({ conta, onMudou, onAplicarEmTodas }: { conta: TikTokAcc
           pausada={!conta.autoPostEnabled || horario?.paused}
           itens={fila.map((p) => ({ id: Number(p.id), horario: p.scheduledFor, capaUrl: p.thumbnailUrl, titulo: p.clipTitle }))}
         />
-        {(faltaOpcoes || !conta.autoPostEnabled) && (
+        {/* "Não publica sozinha" já está no topo da conta; aqui fica só o caso
+            que ele não cobre: publicação direta sem as opções escolhidas. */}
+        {faltaOpcoes && conta.autoPostEnabled && (
           <p className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
             <IconAlertTriangle className="mt-px size-3.5 shrink-0" />
             <span>
-              <strong>{faltaOpcoes ? t("pub.avisoNadaSeraPublicado") : t("pub.avisoNaoEstaPublicando")}</strong>{" "}
-              {faltaOpcoes ? t("pub.avisoConfigureOpcoes") : t("pub.avisoLigueAutomatico")}
+              <strong>{t("pub.avisoNadaSeraPublicado")}</strong> {t("pub.avisoConfigureOpcoes")}
             </span>
           </p>
         )}
@@ -570,12 +824,14 @@ function EspacoDoTiktok({ conta, onMudou, onAplicarEmTodas }: { conta: TikTokAcc
 function ConectarRedeDialog({
   rede,
   jaTem,
+  limites,
   disponivel,
   onFechar,
   onErro,
 }: {
   rede: Rede | null
   jaTem: number
+  limites: LimitesDasRedes | null
   disponivel: boolean
   onFechar: () => void
   onErro: (texto: string) => void
@@ -584,6 +840,10 @@ function ConectarRedeDialog({
   useEffect(() => setIndo(false), [rede])
   if (!rede) return null
   const info = REDES[rede]
+  const vagas = vagasNaRede(rede, limites, jaTem)
+  // Rede cheia: nem abre a autorização (o servidor recusaria de qualquer jeito,
+  // mas depois de a pessoa já ter passado pela tela da rede).
+  const cheia = vagas === 0
 
   async function conectar() {
     if (rede === "tiktok") {
@@ -641,13 +901,26 @@ function ConectarRedeDialog({
             )}
           </div>
         )}
-        <DialogFooter className="px-6 pb-6 pt-2">
+        {cheia && (
+          <p className="mx-6 mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+            {limites?.semPlano
+              ? `Assine um plano para conectar o ${info.nome}.`
+              : `Seu plano${limites?.plano ? ` ${limites.plano}` : ""} permite ${limites?.contasPorRede} ${limites?.contasPorRede === 1 ? "conta" : "contas"} do ${info.nome}, e você já ${jaTem === 1 ? "tem 1" : `tem ${jaTem}`}. Para conectar mais, troque de plano.`}
+          </p>
+        )}
+        <DialogFooter className="px-6 pb-6 pt-4">
           <Button variant="ghost" onClick={onFechar}>
             Agora não
           </Button>
-          <Button onClick={conectar} disabled={indo || (rede !== "tiktok" && !disponivel)} className="border-0 text-white hover:opacity-90" style={{ background: info.fundo }}>
-            {indo ? "Abrindo..." : `Conectar ${info.nome}`}
-          </Button>
+          {cheia ? (
+            <Button asChild>
+              <a href="/client/billing">Ver planos</a>
+            </Button>
+          ) : (
+            <Button onClick={conectar} disabled={indo || (rede !== "tiktok" && !disponivel)} className="border-0 text-white hover:opacity-90" style={{ background: info.fundo }}>
+              {indo ? "Abrindo..." : `Conectar ${info.nome}`}
+            </Button>
+          )}
         </DialogFooter>
         {rede !== "tiktok" && !disponivel && <p className="px-6 pb-4 text-xs text-muted-foreground">A conexão com {info.nome} ainda não está disponível.</p>}
       </DialogContent>

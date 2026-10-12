@@ -25,10 +25,10 @@ export function DashboardLayout({
   // O layout monta o menu, então é ele que precisa saber se "Sua conexão"
   // aparece. Reaproveita a MESMA requisição que a página já fez (ver useAuth).
   const { mostrarTunel, painelNovo } = useAuth()
-  // Erros de tela de quem testa as novidades vão pra "Erros em teste".
+  // Erro de JavaScript de qualquer tela vai pro painel de erros do admin.
   useEffect(() => {
-    if (painelNovo) instalarRelatorioDeErros()
-  }, [painelNovo])
+    instalarRelatorioDeErros()
+  }, [])
 
   return (
     <SidebarProvider
@@ -41,7 +41,7 @@ export function DashboardLayout({
     >
       <AppSidebar user={user} onLogout={onLogout} mostrarTunel={mostrarTunel} painelNovo={painelNovo} variant="inset" />
       <SidebarInset>
-        <SiteHeader title={title} />
+        <SiteHeader title={title} maquina={painelNovo ? (user.role === "admin" ? "sistema" : "cliente") : null} />
         <div className="flex flex-1 flex-col">
           {/* Largura máxima: linha de texto longa demais cansa de ler, e num
               monitor grande o conteúdo esticado de ponta a ponta é o que mais

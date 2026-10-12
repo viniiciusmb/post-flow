@@ -18,6 +18,9 @@ const liveCreditosService = require('../../../services/lives/liveCreditosService
 const tiposDeMomento = require('../../../services/lives/tiposDeMomento');
 const clientVideoSettingsRepository = require('../../../repositories/clientVideoSettingsRepository');
 const { toApiWithOptions, validarEstilo } = require('./clientVideoSettingsApiController');
+const planLimitsService = require('../../../services/planLimitsService');
+const errorReportService = require('../../../services/errorReportService');
+const limitesDasLivesService = require('../../../services/lives/limitesDasLivesService');
 
 // "Clipar agora" pega os ultimos ~150s: tempo de a pessoa ver o momento,
 // reagir e clicar, com a preparacao do momento inclusa.
@@ -56,6 +59,8 @@ function canalParaApi(c) {
       : null,
     cortesProntos: Number(c.clips_prontos || 0),
     cortesEmAndamento: Number(c.clips_em_andamento || 0),
+    // Ao vivo e sem gravar: por quê (servidor cheio, disco, horas do dia).
+    semGravar: c.is_live && c.motivo_sem_gravar ? { motivo: c.motivo_sem_gravar, desde: c.sem_gravar_desde } : null,
   };
 }
 
@@ -275,7 +280,7 @@ async function salvarConfig(req, res) {
 // (corpo.plataforma), com Twitch como padrao (era a unica antes). Compartilhado
 // pela tela do admin e pela tela "Lives" dos clientes: devolve o canal salvo
 // (ja seguido por quem pediu) ou { status, error } pra rota responder.
-async function seguirCanal(userId, corpo) {
+async function seguirCanal(userId, corpo, { admin = false } = {}) {
   const alvo = plataformas.identificar(corpo?.canal, corpo?.plataforma);
   const escolhida = alvo?.plataforma || (corpo?.plataforma === 'kick' ? 'kick' : 'twitch');
   const nome = plataformas.NOMES[escolhida];
@@ -286,6 +291,14 @@ async function seguirCanal(userId, corpo) {
   try {
     usuario = await plataformas.buscarUsuario(alvo.plataforma, alvo.login);
   } catch (err) {
+    errorReportService.report({
+      operation: errorReportService.OPERACOES.LIVES,
+      entityType: 'live_canal',
+      clientUserId: userId,
+      error: err,
+      message: `Não consegui consultar o canal ${alvo.login} na ${nome} ao adicionar: ${err.message}`,
+      contexto: { etapa: 'adicionar_canal', plataforma: alvo.plataforma, canal: alvo.login, statusHttp: err.status || err.statusHttp || null },
+    });
     return { status: 502, error: `Nao consegui consultar a ${nome} agora: ${err.message}` };
   }
   if (!usuario) return { status: 404, error: `Nao existe canal ${dominio}/${alvo.login}.` };
@@ -296,13 +309,30 @@ async function seguirCanal(userId, corpo) {
     platformUserId: usuario.id,
     profileImageUrl: usuario.imagem,
   });
+  // Canal novo pra esta pessoa passa pelo limite do plano; voltar a um canal
+  // que ela já acompanha, não.
+  if (!(await livesRepository.isFollowingActive(userId, canal.id))) {
+    const limite = await planLimitsService.checkLiveChannelLimit(userId, await livesRepository.countFollowed(userId), { admin });
+    if (!limite.allowed) {
+      errorReportService.report({
+        operation: errorReportService.OPERACOES.LIMITE_DO_PLANO,
+        entityType: 'live_canal',
+        clientUserId: userId,
+        error: new Error(limite.reason),
+        message: 'Tentou acompanhar mais um canal de live além do plano',
+        contexto: { canal: canal.login, plataforma: canal.platform, limite: limite.limite },
+      });
+      return { status: 403, error: limite.reason, limite: true };
+    }
+  }
   await livesRepository.follow(userId, canal.id);
+  await limitesDasLivesService.recalcular();
   await atualizarStatus([canal], { forcar: true });
   return { canal };
 }
 
 async function adicionarCanal(req, res) {
-  const r = await seguirCanal(req.session.user.id, req.body);
+  const r = await seguirCanal(req.session.user.id, req.body, { admin: req.session.user.role === 'admin' });
   if (r.error) return res.status(r.status).json({ error: r.error });
   return estado(req, res);
 }
@@ -331,10 +361,16 @@ async function retomarCanal(req, res) {
   return estado(req, res);
 }
 
+const MENSAGEM_FORA_DO_PLANO =
+  'Este canal passou do limite de canais de live do seu plano. Remova outro canal ou troque de plano em "Plano e uso".';
+
 async function cliparAgora(req, res) {
   const userId = req.session.user.id;
   const id = Number(req.params.id);
   if (!(await livesRepository.isFollowing(userId, id))) return res.status(404).json({ error: 'Voce nao acompanha esse canal.' });
+  if ((await livesRepository.followBlock(userId, id)) === 'fora_do_plano') {
+    return res.status(403).json({ error: MENSAGEM_FORA_DO_PLANO });
+  }
   const sessao = await livesRepository.recordingSessionForChannel(id);
   if (!sessao) return res.status(409).json({ error: 'Esse canal nao esta sendo gravado agora - so da pra clipar durante a gravacao.' });
   const fim = Number(sessao.recorded_seconds);

@@ -99,7 +99,7 @@ export function ReguaDoDia({
         <div className="absolute inset-x-0 top-[51px] h-px border-t border-dashed border-border" />
         {/* Virada do dia. */}
         <span className="absolute top-[42px] h-[18px] w-px bg-foreground/25" style={{ left: pos(meiaNoite) }} />
-        <span className="absolute top-[40px] -translate-x-1/2 -translate-y-full font-mono text-[9.5px] uppercase tracking-wide text-muted-foreground" style={{ left: pos(meiaNoite) }}>
+        <span className="absolute top-[40px] -translate-x-1/2 -translate-y-full text-[10px] font-medium text-muted-foreground" style={{ left: pos(meiaNoite) }}>
           amanhã
         </span>
         {slots.map((d) => (
@@ -110,8 +110,12 @@ export function ReguaDoDia({
           />
         ))}
         <span className="absolute left-0 top-[40px] h-[24px] w-[3px] rounded-full bg-foreground" />
+        {/* O "agora" pulsa: a régua anda sozinha, e o ponto diz que ela está viva. */}
+        {!pausada && (
+          <span className="maq-lampada absolute top-[36px] -left-[2.5px]" data-viva="true" style={{ color: "var(--signal)" }} />
+        )}
       </div>
-      <div className="relative h-3.5 font-mono text-[10px] text-muted-foreground" aria-hidden>
+      <div className="relative h-3.5 text-[10.5px] tabular-nums text-muted-foreground" aria-hidden>
         {marcas.map((d, k) => (
           <span key={k} className={cn("absolute", k === 0 ? "left-0" : k === marcas.length - 1 ? "right-0" : "-translate-x-1/2")} style={k > 0 && k < marcas.length - 1 ? { left: pos(d) } : undefined}>
             {k === 0 ? "agora" : `${String(d.getHours()).padStart(2, "0")}h`}

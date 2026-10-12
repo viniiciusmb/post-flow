@@ -24,6 +24,7 @@ const clientCreditsRepository = require('../../repositories/clientCreditsReposit
 const usersRepository = require('../../repositories/usersRepository');
 const { ROLES } = require('../../config/constants');
 const logger = require('../../lib/logger');
+const errorReportService = require('../errorReportService');
 
 const SEGUNDOS_POR_CREDITO = 180; // 3 minutos de live = 1 credito
 const CREDITOS_CLIPAR_AGORA = 1;
@@ -95,6 +96,15 @@ async function cobrarSessoes() {
         total += await cobrarUm({ sessao, userId, segundo, ehIsento: await isento(userId) });
       } catch (err) {
         logger.error(`Lives: cobranca de credito do usuario ${userId} na sessao ${sessao.id} falhou:`, err.message);
+        await errorReportService.report({
+          operation: errorReportService.OPERACOES.LIVES,
+          entityType: 'live_sessao',
+          entityId: sessao.id,
+          clientUserId: userId,
+          error: err,
+          message: `Cobrança de crédito da live falhou: ${String(err.message).slice(0, 200)}`,
+          contexto: { etapa: 'cobrar_credito', sessao: sessao.id, canal: sessao.live_channel_id, segundoDaGravacao: segundo },
+        });
       }
     }
   }
@@ -106,6 +116,15 @@ async function cobrarSessoes() {
       }
     } catch (err) {
       logger.error(`Lives: conferir credito do usuario ${uso.user_id} falhou:`, err.message);
+      await errorReportService.report({
+        operation: errorReportService.OPERACOES.LIVES,
+        entityType: 'live_sessao',
+        entityId: uso.session_id,
+        clientUserId: uso.user_id,
+        error: err,
+        message: `Conferir se o cliente voltou a ter crédito falhou: ${String(err.message).slice(0, 200)}`,
+        contexto: { etapa: 'conferir_credito', sessao: uso.session_id },
+      });
     }
   }
   return total;

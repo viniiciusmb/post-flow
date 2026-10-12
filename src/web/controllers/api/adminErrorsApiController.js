@@ -24,6 +24,13 @@ const ROTULO_ENTIDADE = Object.freeze({
   social_posting: 'Publicação',
   social_account: 'Conta de rede social',
   social_conexao: 'Conexão',
+  tiktok_conexao: 'Conexão do TikTok',
+  tiktok_account: 'Conta do TikTok',
+  live_canal: 'Canal de live',
+  live_sessao: 'Gravação de live',
+  live_corte: 'Corte de live',
+  live_laco: 'Rotina das lives',
+  servidor: 'Servidor',
   rota: 'Rota',
   tela: 'Tela',
 });
@@ -53,6 +60,28 @@ function toApi(e) {
 // aparecem na lista sem botão - fingir que dá pra tentar de novo e não fazer
 // nada seria pior que não ter botão.
 const PODE_TENTAR_DE_NOVO = new Set(['video_processing', 'channel_check', 'tiktok_posting', 'drive_export', 'social_posting']);
+
+// GET /errors/:id/ocorrencias - cada vez que o erro aconteceu, com o contexto
+// inteiro (conta, rede, arquivo, etapa, resposta crua da API).
+async function events(req, res) {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Id inválido.' });
+  const erro = await systemErrorsRepository.findById(id);
+  if (!erro) return res.status(404).json({ error: 'Erro não encontrado.' });
+  const linhas = await systemErrorsRepository.listEvents(id, 50);
+  res.json({
+    ocorrencias: linhas.map((e) => ({
+      id: Number(e.id),
+      quando: e.occurred_at,
+      mensagem: e.message,
+      detalhe: e.detail,
+      contexto: e.contexto || null,
+      // O mesmo erro de clientes diferentes é UMA linha agrupada; cada
+      // ocorrência diz de quem foi.
+      cliente: e.client_name || e.client_email || null,
+    })),
+  });
+}
 
 async function list(req, res) {
   const status = ['abertos', 'resolvidos', 'todos'].includes(req.query.status) ? req.query.status : 'abertos';
@@ -169,4 +198,4 @@ async function resolve(req, res) {
   res.json({ error: toApi(atualizado) });
 }
 
-module.exports = { list, retry, resolve };
+module.exports = { events, list, retry, resolve };

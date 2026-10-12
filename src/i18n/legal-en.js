@@ -316,6 +316,11 @@ module.exports = {
                 'Recorded at payment time: the IP goes to Asaas for fraud analysis, and the IP plus the link or campaign that brought you go to Utmify to measure where sales come from',
                 'For as long as the account exists, and for the period required by tax law after closure',
               ],
+              [
+                'Panel usage log',
+                'Which pages you opened and which actions you took (connecting a network, sending a video to be cut, publishing), with the date and whether it worked. We use it to find and fix failures. It does not store what you type (password, card, texts)',
+                'Deleted automatically after 90 days',
+              ],
             ],
           },
         ],

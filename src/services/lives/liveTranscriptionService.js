@@ -9,6 +9,7 @@ const { spawn } = require('child_process');
 const livesRepository = require('../../repositories/livesRepository');
 const transcricaoService = require('../transcricaoService');
 const logger = require('../../lib/logger');
+const errorReportService = require('../errorReportService');
 const { similaridade } = require('../../lib/similaridadeDeTexto');
 
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
@@ -192,6 +193,16 @@ async function processarProximo() {
   } catch (err) {
     logger.error(`Lives: transcricao do bloco ${bloco.id} falhou (tentativa ${bloco.attempts}):`, err.message);
     await livesRepository.failTranscript(bloco.id, err.message);
+    // Agrupado por SESSÃO (não por bloco): uma live com a transcrição quebrada
+    // vira uma linha com contador, e cada bloco fica como ocorrência.
+    await errorReportService.report({
+      operation: errorReportService.OPERACOES.LIVES,
+      entityType: 'live_sessao',
+      entityId: bloco.session_id,
+      error: err,
+      message: `Transcrição da live falhou: ${String(err.message).slice(0, 200)}`,
+      contexto: { etapa: 'transcrever', bloco: bloco.id, tentativa: bloco.attempts, canal: bloco.live_channel_id, sessao: bloco.session_id },
+    });
   }
   return true;
 }

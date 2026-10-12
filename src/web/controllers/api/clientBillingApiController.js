@@ -191,6 +191,10 @@ async function overview(req, res) {
       weeklyMinutesBonus: p.weekly_minutes_bonus,
       maxYoutubeChannels: p.max_youtube_channels,
       maxTiktokAccounts: p.max_tiktok_accounts,
+      // Novidades (12/10/2026): contas por rede social e limites das lives.
+      maxContasPorRede: p.max_contas_por_rede ?? null,
+      maxCanaisDeLive: p.max_canais_de_live ?? null,
+      maxLivesAoMesmoTempo: p.max_lives_ao_mesmo_tempo ?? null,
       overageCentsNormal: p.overage_cents_normal,
       overageCentsBonus: p.overage_cents_bonus,
       extraChannelPriceCents: p.extra_channel_price_cents,

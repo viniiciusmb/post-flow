@@ -14,6 +14,11 @@ const settingsRepository = require('../../repositories/settingsRepository');
 //
 // "Cortes por hora" saiu daqui: agora e o NIVEL DE QUALIDADE de cada usuario
 // que decide (livesUserSettings.NIVEIS).
+// `maxCanais` (nome antigo, mantido pra não perder o que está salvo) agora é o
+// número de LUGARES: cada cliente recebendo cortes de cada live conta 1, porque
+// o corte é montado por cliente (12/10/2026). Medido nesta VPS: uma live com
+// 1 cliente pede ~29 min de núcleo por hora de render, e o live-worker tem 1
+// núcleo - 2 lugares é o que ele sustenta sem os cortes chegarem atrasados.
 const PADRAO = Object.freeze({
   maxCanais: 2,
   qualidade: '720p',

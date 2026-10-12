@@ -234,8 +234,18 @@ async function cancelar(req, res) {
   res.json({ ok: true });
 }
 
+// Mensagem única pra conta que passou do limite do plano (ver
+// socialAccountsRepository.dentroDoPlanoSql): a fila dela fica parada.
+const FORA_DO_PLANO =
+  'Esta conta passou do limite de contas por rede do seu plano, então a fila dela está parada. Desconecte outra conta desta rede ou troque de plano em "Plano e uso".';
+
 async function postarAgora(req, res) {
   const id = idDaPostagem(req);
+  const pedido = id && (await socialPostingsRepository.contaDaPostagem(id, req.session.user.id));
+  if (pedido) {
+    const conta = await socialAccountsRepository.findOwned(pedido.social_account_id, req.session.user.id);
+    if (conta && !conta.dentro_do_plano) return res.status(403).json({ error: FORA_DO_PLANO });
+  }
   const r = id && (await socialPostingsRepository.postarAgora(id, req.session.user.id));
   if (!r) return res.status(404).json({ error: 'Esse corte não está mais na fila.' });
   dispararFila();

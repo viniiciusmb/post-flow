@@ -65,11 +65,24 @@ async function conferir(conta) {
           clientUserId: r.client_user_id,
           error: err,
           message: `Conta de ${conta.network} precisa ser reconectada pelo cliente`,
+          contexto: { etapa: 'conferir_conta', contaSocial: conta.id, rede: conta.network, contaOutstand: conta.outstand_account_id },
         });
       }
       return 'reconectar';
     }
     logger.warn(`Nao deu pra conferir a conta social ${conta.id} (${conta.network}): ${err.message}`);
+    // Não diz nada sobre o login (rede fora do ar, número que a rede não
+    // informa), mas fica registrado: se repetir sempre na mesma rede, é sinal
+    // de que a conferência dela não funciona.
+    await errorReportService.report({
+      operation: errorReportService.OPERACOES.SOCIAL_CONTA,
+      entityType: 'social_account',
+      entityId: conta.id,
+      clientUserId: conta.client_user_id || null,
+      error: err,
+      message: `Não deu pra conferir a conta de ${conta.network} (sem sinal de login vencido): ${err.message}`,
+      contexto: { etapa: 'conferir_conta', contaSocial: conta.id, rede: conta.network, contaOutstand: conta.outstand_account_id },
+    });
     return 'indefinido';
   }
 }
@@ -78,7 +91,7 @@ async function conferir(conta) {
 async function conferirTodas() {
   if (!outstandService.configurado()) return { conferidas: 0 };
   const { rows } = await pool.query(
-    'SELECT id, network, outstand_account_id FROM social_accounts WHERE disconnected_at IS NULL ORDER BY conferida_em NULLS FIRST'
+    'SELECT id, network, outstand_account_id, client_user_id FROM social_accounts WHERE disconnected_at IS NULL ORDER BY conferida_em NULLS FIRST'
   );
   const resultado = { ok: 0, reconectar: 0, indefinido: 0 };
   for (const conta of rows) resultado[await conferir(conta)] += 1;

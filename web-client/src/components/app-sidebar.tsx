@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import {
   IconLayoutDashboard,
   IconUsers,
@@ -21,8 +22,7 @@ import {
   IconTrendingUp,
   IconMessageCircle,
   IconShare3,
-  IconCarouselVertical,
-} from "@tabler/icons-react"
+  IconCarouselVertical, IconActivity } from "@tabler/icons-react"
 
 import { NavMain, type NavItem } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
@@ -37,6 +37,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import type { SessionUser } from "@/types/api"
+import { useResumoDaMaquina } from "@/hooks/useResumoDaMaquina"
 import { useT, type ChaveDeTraducao } from "@/i18n"
 
 // Os nomes do menu descrevem o que a PESSOA controla, nao como o sistema foi
@@ -66,6 +67,7 @@ const ADMIN_GROUPS: Grupo[] = [
       { title: "menu.custos", url: "/admin/costs", icon: IconCoins },
       { title: "menu.assinaturas", url: "/admin/billing", icon: IconReceipt2 },
       { title: "menu.comissoes", url: "/admin/commissions", icon: IconGift },
+      { title: "menu.atividade", url: "/admin/activity", icon: IconActivity },
       { title: "menu.erros", url: "/admin/errors", icon: IconAlertTriangle },
       { title: "menu.errosEmTeste", url: "/admin/errors-teste", icon: IconFlask },
       { title: "menu.suporte", url: "/admin/support", icon: IconMessageCircle },
@@ -165,6 +167,46 @@ export function AppSidebar({
   painelNovo?: boolean
 }) {
   const t = useT()
+  // Sinais vivos no menu (painel novo): o conteúdo do PRÓPRIO usuário - no
+  // admin também, porque estes itens são "Meu conteúdo".
+  const resumo = useResumoDaMaquina(painelNovo ? "/api/client/maquina/resumo" : null)
+  // Admin: o "Processamento" mostra a operação inteira. É a mesma leitura da
+  // barra do topo (compartilhada), então não custa uma consulta a mais.
+  const resumoDoSistema = useResumoDaMaquina(painelNovo && user.role === "admin" ? "/api/admin/maquina/resumo" : null)
+  const sinais: Record<string, ReactNode> = {}
+  if (resumoDoSistema && resumoDoSistema.naLinha > 0) {
+    sinais["/admin/queue"] = (
+      <span className="maq inline-flex items-center gap-1.5 text-[11px]" title={`${resumoDoSistema.naLinha} vídeos na linha (todos os clientes)`}>
+        <span className="maq-lampada" data-viva="true" style={{ color: "var(--signal)", width: 6, height: 6 }} aria-hidden="true" />
+        {resumoDoSistema.naLinha}
+      </span>
+    )
+  }
+  if (resumo) {
+    if (resumo.naLinha > 0) {
+      sinais["/client/youtube"] = (
+        <span className="maq inline-flex items-center gap-1.5 text-[11px]" title={`${resumo.naLinha} na linha agora`}>
+          <span className="maq-lampada" data-viva="true" style={{ color: "var(--signal)", width: 6, height: 6 }} aria-hidden="true" />
+          {resumo.naLinha}
+        </span>
+      )
+    }
+    if (resumo.livesGravando > 0) {
+      sinais["/client/lives"] = (
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--destructive)]" title="Gravando agora">
+          <span className="size-1.5 animate-pulse rounded-full bg-[var(--destructive)] motion-reduce:animate-none" aria-hidden="true" />
+          REC
+        </span>
+      )
+    }
+    if (resumo.naFila > 0) {
+      sinais["/client/social"] = (
+        <span className="font-mono text-[11px] text-muted-foreground tabular-nums" title={`${resumo.naFila} na fila de publicação`}>
+          {resumo.naFila}
+        </span>
+      )
+    }
+  }
   const grupos =
     user.role === "admin"
       ? painelNovo
@@ -177,7 +219,7 @@ export function AppSidebar({
     label: g.label ? t(g.label) : undefined,
     items: g.items
       .filter((i) => mostrarTunel || i.url !== "/client/tunnel")
-      .map((i) => ({ ...i, title: t(i.title) })),
+      .map((i) => ({ ...i, title: t(i.title), sinal: sinais[i.url] })),
   }))
 
   return (

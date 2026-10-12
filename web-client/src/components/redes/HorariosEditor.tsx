@@ -94,7 +94,7 @@ export function HorariosEditor({
               >
                 <IconMinus />
               </Button>
-              <span className="w-8 text-center font-mono text-base font-semibold tabular-nums">{valor.videosPerDay}</span>
+              <span className="w-8 text-center text-base font-semibold tabular-nums">{valor.videosPerDay}</span>
               <Button
                 size="icon-sm"
                 variant="outline"
@@ -108,7 +108,7 @@ export function HorariosEditor({
           </div>
           <div className="flex flex-wrap gap-1.5">
             {valor.defaultTimes.map((h) => (
-              <span key={h} className="rounded-md border border-border bg-muted/40 px-2 py-1 font-mono text-xs tabular-nums">
+              <span key={h} className="rounded-md border border-border bg-muted/40 px-2 py-1 text-xs tabular-nums">
                 {h}
               </span>
             ))}
@@ -123,7 +123,7 @@ export function HorariosEditor({
                 <Input
                   type="time"
                   aria-label={`Horário ${i + 1}`}
-                  className="h-8 w-[7.75rem] border-0 bg-transparent px-1.5 font-mono shadow-none"
+                  className="h-8 w-[7.75rem] border-0 bg-transparent px-1.5 tabular-nums shadow-none"
                   value={h}
                   disabled={salvando}
                   onChange={(e) => setRascunho((r) => r.map((x, k) => (k === i ? e.target.value : x)))}

@@ -317,6 +317,11 @@ module.exports = {
                 'Registrados al momento del pago: la IP va a Asaas para el análisis antifraude, y la IP y el enlace o campaña que te trajo van a Utmify para medir de dónde vienen las ventas',
                 'Mientras exista la cuenta, y durante el plazo exigido por la ley fiscal tras el cierre',
               ],
+              [
+                'Registro de uso del panel',
+                'Qué páginas abriste y qué acciones hiciste (conectar una red, enviar un video a recortar, publicar), con la fecha y si funcionó. Sirve para encontrar y corregir fallas. No guarda lo que escribes (contraseña, tarjeta, textos)',
+                'Se borra automáticamente después de 90 días',
+              ],
             ],
           },
         ],

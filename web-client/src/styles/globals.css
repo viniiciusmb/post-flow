@@ -458,3 +458,129 @@ h1.font-heading,
 @media (prefers-reduced-motion: reduce) {
   .feed-coracao { animation-duration: 0.01s; }
 }
+
+/* ===========================================================================
+   Linha de produção (Início do painel novo)
+   ---------------------------------------------------------------------------
+   Mesmas superfícies e cores do resto do painel: a cor só aparece como SINAL
+   do que está andando. Azul = trabalhando agora; ciano = trabalho passando de
+   uma etapa pra outra; verde = pronto/publicado; âmbar = esperando; vermelho
+   = gravando ao vivo. Nada se mexe sem um dado real por trás: etapa parada
+   fica parada, e a linha até ela fica apagada.
+   =========================================================================== */
+.maq {
+  --maq-work: var(--signal);
+  --maq-flow: var(--cyan);
+  --maq-ok: var(--status-posted);
+  --maq-hold: var(--status-processing);
+  --maq-rec: var(--destructive);
+  --maq-trilho: color-mix(in oklab, var(--foreground) 12%, transparent);
+  /* De onde veio o trabalho: vermelho = YouTube, roxo = live. O vermelho do
+     "gravando" (--maq-rec) fica só no ponto do REC, pequeno, pra não
+     confundir as duas coisas. */
+  --maq-yt: #d92b26;
+  --maq-live: #8146f0;
+}
+.dark .maq { --maq-yt: #ff6b63; --maq-live: #a57bff; }
+/* Coluna de uma origem: o traço e a etapa trabalhando ganham a cor dela. */
+.maq-origem-yt { --maq-work: var(--maq-yt); --maq-flow: var(--maq-yt); --maq-trilho: color-mix(in oklab, var(--maq-yt) 22%, transparent); }
+.maq-origem-live { --maq-work: var(--maq-live); --maq-flow: var(--maq-live); --maq-trilho: color-mix(in oklab, var(--maq-live) 25%, transparent); }
+.maq-origem-yt .maq-no[data-estado="trabalhando"] { background: color-mix(in oklab, var(--maq-yt) 9%, var(--card)); }
+.maq-origem-live .maq-no[data-estado="trabalhando"] { background: color-mix(in oklab, var(--maq-live) 10%, var(--card)); }
+.maq .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+/* Lâmpada de estado. */
+@keyframes maq-lampada { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 55%, transparent); } 100% { box-shadow: 0 0 0 7px transparent; } }
+.maq-lampada { width: 8px; height: 8px; border-radius: 999px; background: currentColor; }
+.maq-lampada[data-viva="true"] { animation: maq-lampada 1.6s ease-out infinite; }
+
+/* Trilho entre etapas: apagado; quando a etapa seguinte trabalha, acende e um
+   pulso de luz corre por ele. */
+.maq-trilho { position: absolute; background: var(--maq-trilho); overflow: hidden; border-radius: 999px; }
+.maq-trilho[data-ativo="true"] { background: color-mix(in oklab, var(--maq-work) 30%, transparent); }
+@keyframes maq-pulso-h { from { transform: translateX(-120%); } to { transform: translateX(420%); } }
+@keyframes maq-pulso-v { from { transform: translateY(-120%); } to { transform: translateY(420%); } }
+.maq-trilho[data-ativo="true"]::after { content: ""; position: absolute; border-radius: 999px; }
+.maq-trilho[data-eixo="h"][data-ativo="true"]::after {
+  top: 0; bottom: 0; left: 0; width: 28%;
+  background: linear-gradient(90deg, transparent, var(--maq-flow), var(--maq-work));
+  animation: maq-pulso-h 1.8s cubic-bezier(0.45, 0, 0.3, 1) infinite;
+}
+.maq-trilho[data-eixo="v"][data-ativo="true"]::after {
+  left: 0; right: 0; top: 0; height: 28%;
+  background: linear-gradient(180deg, transparent, var(--maq-flow), var(--maq-work));
+  animation: maq-pulso-v 1.8s cubic-bezier(0.45, 0, 0.3, 1) infinite;
+}
+
+/* Etapa. O anel gira devagar só quando ela está trabalhando. */
+.maq-no { position: relative; display: grid; place-items: center; border-radius: 999px; background: var(--card); border: 1px solid var(--border); color: var(--muted-foreground); box-shadow: var(--shadow-flat); }
+.maq-no > svg { position: relative; }
+.maq-no[data-estado="trabalhando"] { color: var(--maq-work); background: var(--tone-indigo-wash); border-color: color-mix(in oklab, var(--maq-work) 40%, transparent); box-shadow: 0 0 0 5px color-mix(in oklab, var(--maq-work) 9%, transparent); }
+.maq-no[data-estado="trabalhando"]::before {
+  content: ""; position: absolute; inset: -4px; border-radius: inherit;
+  background: conic-gradient(from 0deg, transparent 0 68%, var(--maq-work) 94%, transparent 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  animation: flora-girar 2.2s linear infinite;
+}
+
+/* Download: faixa listrada correndo (não sabemos os bytes, só que está baixando). */
+@keyframes maq-listras { to { background-position: 28px 0; } }
+.maq-baixando {
+  background-color: var(--tone-indigo-wash);
+  background-image: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--maq-work) 35%, transparent) 0 7px, transparent 7px 14px);
+  background-size: 28px 100%;
+  animation: maq-listras 0.9s linear infinite;
+}
+
+/* Transcrição: onda de áudio. */
+@keyframes maq-onda { from { transform: scaleY(0.25); } to { transform: scaleY(1); } }
+.maq-onda > span { display: block; width: 3px; border-radius: 2px; background: var(--maq-work); transform-origin: center; animation: maq-onda 0.9s ease-in-out infinite alternate; }
+
+/* Seleção dos cortes: a IA percorrendo a transcrição. */
+@keyframes maq-varrer { from { left: 0%; } to { left: 100%; } }
+.maq-cursor { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 2px; background: var(--maq-work); box-shadow: 0 0 10px var(--maq-work); animation: maq-varrer 2.6s ease-in-out infinite alternate; }
+
+/* Corte sendo montado: quadro vertical 9:16. */
+.maq-quadro { position: relative; aspect-ratio: 9 / 16; border-radius: 7px; overflow: hidden; background: var(--muted); border: 1px solid var(--border); }
+.maq-quadro[data-s="pending"] { border-style: dashed; background: transparent; }
+.maq-quadro[data-s="rendering"] {
+  border-color: color-mix(in oklab, var(--maq-work) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--maq-work) 12%, transparent);
+  background-color: var(--tone-indigo-wash);
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--maq-work) 16%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--maq-work) 16%, transparent) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+.maq-quadro > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.maq-quadro[data-s="rendering"] > img { clip-path: inset(calc(100% - var(--p, 0%)) 0 0 0); transition: clip-path 0.9s ease; }
+.maq-quadro[data-s="ready"] > img, .maq-quadro[data-s="error"] > img { filter: none; }
+.maq-scan { position: absolute; left: 0; right: 0; height: 2px; bottom: var(--p, 0%); background: #fff; box-shadow: 0 0 8px 2px var(--maq-work), 0 0 2px #fff; transition: bottom 0.9s ease; }
+@keyframes maq-digitar { 0% { width: 0; } 70%, 100% { width: var(--w); } }
+.maq-legenda { position: absolute; left: 14%; right: 14%; bottom: 22%; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.maq-legenda > span { display: block; height: 3px; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55); animation: maq-digitar 1.6s steps(5, end) infinite; }
+.maq-legenda > span:nth-child(2) { animation-delay: 0.5s; }
+@keyframes maq-concluiu { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--maq-ok) 70%, transparent); transform: scale(1.06); } 100% { box-shadow: 0 0 0 10px transparent; transform: none; } }
+.maq-concluiu { animation: maq-concluiu 0.9s ease-out; }
+
+/* Corte voando pra fila (clone fixo criado no JS). */
+.maq-voo { position: fixed; z-index: 70; pointer-events: none; border-radius: 7px; overflow: hidden; background: var(--muted); box-shadow: 0 12px 32px -8px rgba(8, 9, 10, 0.45), 0 0 0 2px var(--maq-ok); }
+.maq-voo > img { width: 100%; height: 100%; object-fit: cover; }
+@keyframes maq-chegada { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--maq-ok) 60%, transparent); } 100% { box-shadow: 0 0 0 12px transparent; } }
+.maq-chegada { animation: maq-chegada 0.9s ease-out; }
+
+/* Linha nova no registro. */
+@keyframes maq-chegou { from { opacity: 0; transform: translateY(-4px); background: var(--tone-indigo-wash); } to { opacity: 1; transform: none; background: transparent; } }
+.maq-chegou { animation: maq-chegou 1.4s ease-out both; }
+
+@keyframes maq-rec { 50% { opacity: 0.25; } }
+.maq-rec { animation: maq-rec 1.2s steps(1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .maq-lampada, .maq-no::before, .maq-trilho::after, .maq-baixando, .maq-onda > span, .maq-cursor,
+  .maq-legenda > span, .maq-concluiu, .maq-chegada, .maq-chegou, .maq-rec { animation: none !important; }
+  .maq-trilho[data-ativo="true"]::after { display: none; }
+  .maq-cursor { left: 50%; }
+  .maq-legenda > span { width: var(--w); }
+}

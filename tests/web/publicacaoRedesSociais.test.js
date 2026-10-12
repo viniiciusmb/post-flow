@@ -27,6 +27,7 @@ const painelNovo = require('../../src/lib/painelNovo');
 const socialPostingService = require('../../src/services/socialPostingService');
 const filaSocialService = require('../../src/services/filaSocialService');
 const { startServer, stopServer, createLoginableClient, createAgent } = require('../helpers/http');
+const { darPlano } = require('../helpers/plano');
 
 let url;
 let outstand;
@@ -132,6 +133,7 @@ const uid = () => `${process.pid}_${Date.now().toString(36)}_${n++}`;
 
 async function logado() {
   const u = await createLoginableClient();
+  await darPlano(u.id);
   const atuais = await painelNovo.idsLiberados();
   await settingsRepository.setValue(painelNovo.CHAVE, [...atuais, Number(u.id)]);
   const agent = createAgent(url);

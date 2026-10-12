@@ -15,6 +15,25 @@ import type { SystemError, SystemErrorsResponse } from "@/types/api"
 
 type Filtro = "abertos" | "resolvidos" | "todos"
 
+type Ocorrencia = {
+  id: number
+  quando: string
+  mensagem: string
+  detalhe: string | null
+  contexto: Record<string, unknown> | null
+  cliente: string | null
+}
+
+function textoDaOcorrencia(o: Ocorrencia) {
+  return [
+    `${quando(o.quando)}${o.cliente ? ` - ${o.cliente}` : ""} - ${o.mensagem}`,
+    o.contexto ? `Contexto:\n${JSON.stringify(o.contexto, null, 2)}` : null,
+    o.detalhe ? `Detalhe:\n${o.detalhe}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n")
+}
+
 function quando(iso: string) {
   return dataHora(iso)
 }
@@ -33,10 +52,35 @@ function ErrorRow({
   const t = useT()
   const [aberto, setAberto] = useState(false)
   const [copiado, setCopiado] = useState(false)
+  // Cada vez que o erro aconteceu, com o contexto inteiro (conta, rede,
+  // arquivo, etapa, resposta crua da API). Carregado só ao abrir.
+  const [ocorrencias, setOcorrencias] = useState<Ocorrencia[] | null>(null)
+  const [carregando, setCarregando] = useState(false)
+
+  async function carregarOcorrencias() {
+    setCarregando(true)
+    try {
+      const r = await api.get<{ ocorrencias: Ocorrencia[] }>(`/api/admin/errors/${erro.id}/ocorrencias`)
+      setOcorrencias(r.ocorrencias)
+      return r.ocorrencias
+    } catch {
+      setOcorrencias([])
+      return []
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  async function alternar() {
+    const abrir = !aberto
+    setAberto(abrir)
+    if (abrir && !ocorrencias) await carregarOcorrencias()
+  }
 
   // O texto que vai ser colado numa conversa pra alguém consertar. Junta tudo
   // que importa num bloco só - copiar campo por campo da tela seria pior.
   async function copiar() {
+    const lista = ocorrencias ?? (await carregarOcorrencias())
     const texto = [
       `${t("adm.copiaOperacao")}: ${erro.operationLabel}`,
       erro.entityLabel ? `${t("adm.copiaItem")}: ${erro.entityLabel}${erro.entityId ? ` #${erro.entityId}` : ""}` : null,
@@ -45,6 +89,9 @@ function ErrorRow({
       `${t("adm.copiaResumo")}: ${erro.message}`,
       "",
       erro.detail || t("adm.copiaSemDetalhe"),
+      // As 5 ocorrências mais recentes com o contexto: é o que permite comparar
+      // uma vez com a outra sem abrir a tela.
+      ...(lista.length ? ["", "=== Ocorrências mais recentes ===", ...lista.slice(0, 5).map((o) => `\n${textoDaOcorrencia(o)}`)] : []),
     ]
       .filter(Boolean)
       .join("\n")
@@ -101,7 +148,7 @@ function ErrorRow({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setAberto((v) => !v)}>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={alternar}>
             {aberto ? "Esconder detalhe" : t("adm.verDetalheTecnico")}
           </Button>
           <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs" onClick={copiar}>
@@ -111,9 +158,32 @@ function ErrorRow({
         </div>
 
         {aberto && (
-          <pre className="max-h-64 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-[11.5px] leading-relaxed whitespace-pre-wrap">
-            {erro.detail || t("adm.semDetalheTecnico")}
-          </pre>
+          <div className="flex flex-col gap-2">
+            <pre className="max-h-64 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-[11.5px] leading-relaxed whitespace-pre-wrap">
+              {erro.detail || t("adm.semDetalheTecnico")}
+            </pre>
+            <p className="text-xs font-medium">
+              Ocorrências {ocorrencias ? `(${ocorrencias.length}${ocorrencias.length === 50 ? " mais recentes" : ""})` : ""}
+            </p>
+            {carregando && <Skeleton className="h-16" />}
+            {ocorrencias && ocorrencias.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Sem ocorrências guardadas (este erro é anterior ao registro detalhado).
+              </p>
+            )}
+            {ocorrencias?.map((o) => (
+              <details key={o.id} className="rounded-lg border border-border bg-muted/20 p-2.5 text-xs">
+                <summary className="cursor-pointer break-words">
+                  <span className="tabular-nums text-muted-foreground">{quando(o.quando)}</span>
+                  {o.cliente && <span className="text-muted-foreground"> · {o.cliente}</span>} · {o.mensagem}
+                </summary>
+                <pre className="mt-2 max-h-72 overflow-auto rounded-md bg-muted/40 p-2 text-[11px] leading-relaxed whitespace-pre-wrap break-words">
+                  {o.contexto ? JSON.stringify(o.contexto, null, 2) : "Sem contexto."}
+                  {o.detalhe && o.detalhe !== erro.detail ? `\n\n${o.detalhe}` : ""}
+                </pre>
+              </details>
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -164,7 +234,7 @@ export function AdminErrorsPage() {
         title={EM_TESTE ? "Erros em teste" : "Erros"}
         description={
           EM_TESTE
-            ? "Só as novidades que ainda estão em teste com o admin e a Rise Style: redes sociais novas, fila das redes, feed, lives, telas novas e erros de tela dessas páginas. Os erros do que todo cliente usa continuam em Erros."
+            ? "As novidades do painel novo: conexão e publicação nas redes sociais, lives, quem bateu no limite do plano, telas novas e erros de tela dessas páginas. Abra o detalhe de um erro pra ver cada ocorrência com o contexto inteiro."
             : t("adm.errosDescricao")
         }
       />

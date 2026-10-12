@@ -44,6 +44,7 @@ export default defineConfig({
         'client-commissions': path.resolve(__dirname, 'client-commissions.html'),
         'admin-commissions': path.resolve(__dirname, 'admin-commissions.html'),
         'admin-errors': path.resolve(__dirname, 'admin-errors.html'),
+        'admin-activity': path.resolve(__dirname, 'admin-activity.html'),
         'admin-narrated': path.resolve(__dirname, 'admin-narrated.html'),
         'admin-lives': path.resolve(__dirname, 'admin-lives.html'),
         'client-lives': path.resolve(__dirname, 'client-lives.html'),

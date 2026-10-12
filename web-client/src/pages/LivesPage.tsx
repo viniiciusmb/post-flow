@@ -34,6 +34,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useAuth } from "@/hooks/useAuth"
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { Onda } from "@/components/maquina/Processamento"
 
 // Tela "Lives" - a que vai pros clientes. A "Lives Admin" continua sendo onde
 // se liga o módulo, se mexe nos limites do servidor e se vê o custo.
@@ -72,6 +73,11 @@ type Canal = {
   recebendoCortes: boolean
   creditosNestaLive: number
   semCredito: boolean
+  // Limite do plano: acompanha mais canais do que o plano dá, ou outra live já
+  // está sendo clipada (o plano clipa 1 por vez).
+  bloqueio?: "fora_do_plano" | "outra_live" | null
+  // Ao vivo e sem gravar no servidor: por quê.
+  semGravar?: { motivo: "servidor_cheio" | "disco_cheio" | "limite_de_horas"; desde: string } | null
 }
 
 type Estado = {
@@ -84,7 +90,14 @@ type Estado = {
   creditos: { disponiveis: number; isento: boolean; minutosDeLivePorCredito: number; cliparAgora: number }
   // Quantos segundos pra trás o "Clipar este momento" pega.
   janelaCliparAgoraS: number
+  limites?: { semPlano: boolean; plano: string | null; canais: number | null; aoMesmoTempo: number | null }
 }
+
+const TEXTO_SEM_GRAVAR = {
+  servidor_cheio: "Servidor cheio agora: a gravação começa sozinha assim que abrir vaga",
+  disco_cheio: "Gravações pausadas no servidor por alguns minutos (manutenção)",
+  limite_de_horas: "Este canal já foi gravado o máximo de horas de hoje",
+} as const
 
 type Corte = {
   id: number
@@ -290,6 +303,12 @@ function Interruptor({
 
 // O que está acontecendo com o canal, em uma linha.
 function situacao(c: Canal, servicoAtivo: boolean): { texto: string; tom: "vermelho" | "ambar" | "verde" | "neutro" } {
+  if (c.bloqueio === "fora_do_plano") {
+    return { texto: "Fora do seu plano: este canal não está sendo clipado. Remova outro canal ou troque de plano", tom: "ambar" }
+  }
+  if (c.aoVivo && c.bloqueio === "outra_live") {
+    return { texto: "Ao vivo · seu plano clipa 1 live por vez e outra já está sendo clipada", tom: "ambar" }
+  }
   if (c.aoVivo && c.semCredito) return { texto: "Seus créditos acabaram — esta live parou de ser clipada", tom: "ambar" }
   if (c.aoVivo && c.recebendoCortes && c.gravacao) {
     const gasto = c.creditosNestaLive ? ` · ${c.creditosNestaLive} ${c.creditosNestaLive === 1 ? "crédito" : "créditos"}` : ""
@@ -299,6 +318,7 @@ function situacao(c: Canal, servicoAtivo: boolean): { texto: string; tom: "verme
     }
   }
   if (c.aoVivo && c.recebendoCortes) {
+    if (servicoAtivo && c.semGravar) return { texto: TEXTO_SEM_GRAVAR[c.semGravar.motivo], tom: "ambar" }
     return { texto: servicoAtivo ? "Preparando a gravação…" : "Aguardando o serviço voltar", tom: "ambar" }
   }
   if (c.aoVivo) return { texto: "Ao vivo · clipagem automática desligada", tom: "neutro" }
@@ -448,9 +468,16 @@ function CartaoCanal({
 
   let rotuloClipar = "Clipar"
   let ajuda = "Disponível quando o canal estiver ao vivo"
-  if (c.aoVivo && c.semCredito) {
+  const foraDoPlano = c.bloqueio === "fora_do_plano"
+  if (foraDoPlano) {
+    rotuloClipar = "Fora do seu plano"
+    ajuda = "Remova outro canal ou troque de plano em Plano e uso"
+  } else if (c.aoVivo && c.semCredito) {
     rotuloClipar = "Sem créditos"
     ajuda = "Compre créditos em Plano e uso pra voltar a clipar"
+  } else if (preparando && c.semGravar?.motivo === "servidor_cheio") {
+    rotuloClipar = "Esperando vaga…"
+    ajuda = "O servidor está cheio agora; a gravação começa sozinha quando abrir vaga"
   } else if (c.aoVivo && !c.recebendoCortes) {
     rotuloClipar = "Clipar esta live"
     ajuda = "Grava e corta os melhores momentos desta live, até ela acabar"
@@ -525,6 +552,22 @@ function CartaoCanal({
         <span className="min-w-0 flex-1 text-left">{sit.texto}</span>
       </div>
 
+      {/* Clipando agora: o que a máquina está fazendo com esta live. Com o
+          serviço pausado nada está sendo gravado, e a tela não pode dizer que está. */}
+      {clipandoAgora && servicoAtivo && (
+        <div className="maq maq-origem-live mx-4 mt-2 rounded-lg border border-border px-3 py-2 text-left sm:mx-5">
+          <Onda barras={44} altura="h-4" />
+          <p className="mt-1.5 text-[11.5px] leading-snug text-muted-foreground">
+            Gravando e ouvindo · a IA escolhe os melhores momentos
+            {c.cortesEmAndamento > 0 && (
+              <span className="text-[var(--maq-live)]">
+                {" "}· {c.cortesEmAndamento} {c.cortesEmAndamento === 1 ? "sendo cortado" : "sendo cortados"}
+              </span>
+            )}
+          </p>
+        </div>
+      )}
+
       {/* Clipar sempre: a escolha principal do canal, sempre à vista. */}
       <label className="mx-4 mt-2 flex cursor-pointer items-center justify-between gap-3 rounded-lg px-1 py-2 sm:mx-5">
         <span className="min-w-0 text-left">
@@ -563,12 +606,12 @@ function CartaoCanal({
           </>
         ) : (
           <Button
-            variant={c.aoVivo ? "default" : "outline"}
+            variant={c.aoVivo && !foraDoPlano ? "default" : "outline"}
             className={cn(
               "w-full",
-              c.aoVivo && !preparando && !c.semCredito && "bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:text-white dark:hover:bg-red-700",
+              c.aoVivo && !preparando && !c.semCredito && !foraDoPlano && "bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:text-white dark:hover:bg-red-700",
             )}
-            disabled={!c.aoVivo || preparando || ocupado || c.semCredito}
+            disabled={!c.aoVivo || preparando || ocupado || c.semCredito || foraDoPlano}
             onClick={onClipar}
             title={ajuda}
           >
@@ -655,16 +698,34 @@ function CartaoCorte({
             Não deu para cortar
           </div>
         ) : (
-          <div className="flex size-full flex-col items-center justify-center gap-3 p-4 text-center">
-            <IconLoader2 className="size-6 animate-spin text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground">
-              {k.status === "renderizando" ? `Cortando… ${k.progresso}%` : "Na fila"}
+          // O corte sendo montado: o mesmo desenho da linha de produção do
+          // Início (quadriculado, linha subindo com o progresso REAL do render,
+          // legenda sendo escrita). Na fila: só a moldura tracejada.
+          <div className="maq maq-origem-live absolute inset-0">
+            <div
+              className="maq-quadro absolute inset-0 rounded-none border-0"
+              data-s={k.status === "renderizando" ? "rendering" : "pending"}
+              style={{ ["--p" as string]: `${Math.max(4, k.progresso)}%` }}
+            >
+              {k.status === "renderizando" && (
+                <>
+                  <span className="maq-scan" />
+                  <span className="maq-legenda" aria-hidden="true">
+                    <span style={{ ["--w" as string]: "100%" }} />
+                    <span style={{ ["--w" as string]: "64%" }} />
+                  </span>
+                </>
+              )}
+            </div>
+            <span className="absolute inset-x-0 top-1/3 text-center text-xs font-medium text-muted-foreground">
+              {k.status === "renderizando" ? (
+                <>
+                  Cortando <span className="font-mono tabular-nums text-[var(--maq-live)]">{k.progresso}%</span>
+                </>
+              ) : (
+                "Na fila"
+              )}
             </span>
-            {k.status === "renderizando" && (
-              <span className="h-1 w-3/4 overflow-hidden rounded-full bg-background">
-                <span className="block h-full rounded-full bg-foreground transition-[width]" style={{ width: `${k.progresso}%` }} />
-              </span>
-            )}
           </div>
         )}
 
@@ -1015,6 +1076,12 @@ export function LivesPage() {
                 Seus canais
                 {aoVivo > 0 && (
                   <span className="ml-2 normal-case tracking-normal text-red-600 dark:text-red-400">· {aoVivo} ao vivo agora</span>
+                )}
+                {estado.limites && estado.limites.canais !== null && (
+                  <span className="ml-2 normal-case tracking-normal text-muted-foreground">
+                    · seu plano: até {estado.limites.canais} {estado.limites.canais === 1 ? "canal" : "canais"}
+                    {estado.limites.aoMesmoTempo !== null && `, ${estado.limites.aoMesmoTempo} ${estado.limites.aoMesmoTempo === 1 ? "live clipada" : "lives clipadas"} por vez`}
+                  </span>
                 )}
               </SectionLabel>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

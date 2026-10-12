@@ -23,6 +23,7 @@ const claude = require('../../src/services/claudeClipSelectionService');
 const tiktokPostingJob = require('../../src/worker/jobs/tiktokPostingJob');
 const painelNovo = require('../../src/lib/painelNovo');
 const { startServer, stopServer, createLoginableClient, createAgent } = require('../helpers/http');
+const { darPlano } = require('../helpers/plano');
 const { comAsaasFalso } = require('../helpers/asaasFalso');
 
 let url;
@@ -57,6 +58,7 @@ const uid = () => `${process.pid}_${Date.now().toString(36)}_${n++}`;
 
 async function logado({ noPainelNovo = true, role = 'client' } = {}) {
   const u = await createLoginableClient({ role });
+  if (role === 'client') await darPlano(u.id);
   if (noPainelNovo && role === 'client') {
     const atuais = await painelNovo.idsLiberados();
     await settingsRepository.setValue(painelNovo.CHAVE, [...atuais, Number(u.id)]);
@@ -258,7 +260,7 @@ test('erros das novidades em teste vão pra lista própria; os de sempre continu
   assert.ok(!emTeste.body.errors.some((e) => e.entityId === 999001));
 });
 
-test('erro de tela das páginas novas é registrado no log em teste (e só pra quem está no painel novo)', async () => {
+test('erro de tela é registrado: painel novo em "Erros em teste", o resto em "Erros"', async () => {
   const { agent } = await logado();
   const marca = uid();
   const r = await agent.post('/api/client/erros-de-tela', { mensagem: `Cannot read properties of undefined ${marca}`, pagina: '/client/social?conta=1', pilha: 'at X' });
@@ -269,8 +271,18 @@ test('erro de tela das páginas novas é registrado no log em teste (e só pra q
   assert.equal(e.operation, 'painel_novo_tela');
   assert.match(e.message, /^\/client\/social: /, 'sem a parte depois do ?');
 
+  // Desde 12/10/2026 vale pra todo cliente logado: quem não está no painel
+  // novo cai no grupo principal, com o contexto (tela, navegador) guardado.
   const fora = await logado({ noPainelNovo: false });
-  assert.equal((await fora.agent.post('/api/client/erros-de-tela', { mensagem: 'x' })).status, 403);
+  const marca2 = uid();
+  assert.equal((await fora.agent.post('/api/client/erros-de-tela', { mensagem: `quebrou ${marca2}`, pagina: '/client', tela: '390x844' })).status, 204);
+  const principal = await systemErrorsRepository.list({ grupo: 'principal', status: 'todos' });
+  const e2 = principal.find((x) => x.message.includes(marca2));
+  assert.ok(e2, 'erro de quem está no painel antigo também é registrado');
+  assert.equal(e2.operation, 'erro_tela');
+  const [ocorrencia] = await systemErrorsRepository.listEvents(e2.id);
+  assert.equal(ocorrencia.contexto.tela, '390x844');
+  assert.equal(ocorrencia.contexto.painelNovo, false);
 });
 
 // ---------------------------------------------------------------------------

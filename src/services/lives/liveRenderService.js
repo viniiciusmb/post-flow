@@ -29,6 +29,7 @@ const openaiLives = require('./openaiLives');
 const { ajustarIntervalo } = require('./liveAnalysisService');
 const tiposDeMomento = require('./tiposDeMomento');
 const logger = require('../../lib/logger');
+const errorReportService = require('../errorReportService');
 
 // Quanto de video em volta do trecho pedido entra no arquivo de trabalho: e o
 // espaco que o ajuste fino tem pra mover o inicio (achar o gancho) e o fim.
@@ -579,6 +580,25 @@ async function renderizarProximo() {
   } catch (err) {
     logger.error(`Lives: corte ${clip.id} falhou:`, err.message);
     await livesRepository.failClip(clip.id, err.message);
+    await errorReportService.report({
+      operation: errorReportService.OPERACOES.LIVES,
+      entityType: 'live_corte',
+      entityId: clip.id,
+      clientUserId: clip.user_id || null,
+      error: err,
+      message: `O corte de live #${clip.id} falhou na montagem: ${String(err.message).slice(0, 200)}`,
+      contexto: {
+        etapa: 'renderizar',
+        corte: clip.id,
+        sessao: clip.session_id,
+        canal: clip.live_channel_id,
+        origem: clip.source,
+        inicio: clip.start_offset,
+        fim: clip.end_offset,
+        duracaoSegundos: Number(clip.end_offset) - Number(clip.start_offset),
+        titulo: clip.title || null,
+      },
+    });
   }
   return true;
 }

@@ -21,11 +21,18 @@ const logger = require('../lib/logger');
 const BASE_URL = 'https://api.outstand.so';
 const TIMEOUT_MS = 20000;
 
+// Carrega tudo que a investigação precisa: método e caminho chamados, status
+// HTTP e a resposta CRUA da Outstand (o painel de erros guarda isso por
+// ocorrência - ver lib/contextoDeErro). O caminho vai sem query string.
 class OutstandError extends Error {
-  constructor(message, status) {
+  constructor(message, status, { metodo = null, caminho = null, resposta = null, etapa = null } = {}) {
     super(message);
     this.name = 'OutstandError';
     this.status = status;
+    this.metodo = metodo;
+    this.caminho = caminho ? String(caminho).split('?')[0] : null;
+    this.resposta = resposta === null || resposta === undefined ? null : String(resposta).slice(0, 4000);
+    this.etapa = etapa;
   }
 }
 
@@ -65,7 +72,11 @@ async function chamar(metodo, caminho, corpo, { cabecalhos = {} } = {}) {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (err) {
-    throw new OutstandError(`Não foi possível falar com a Outstand (${err.message}).`, 502);
+    throw new OutstandError(`Não foi possível falar com a Outstand (${err.message}).`, 502, {
+      metodo,
+      caminho,
+      resposta: err.cause ? `${err.message} (${err.cause.code || err.cause.message || err.cause})` : err.message,
+    });
   }
   const texto = await resposta.text();
   let dados = null;
@@ -76,7 +87,11 @@ async function chamar(metodo, caminho, corpo, { cabecalhos = {} } = {}) {
   }
   if (!resposta.ok || (dados && dados.success === false)) {
     const msg = (dados && (dados.error || dados.message)) || `HTTP ${resposta.status}`;
-    throw new OutstandError(`Outstand recusou ${metodo} ${caminho.split('?')[0]}: ${msg}`, resposta.status);
+    throw new OutstandError(`Outstand recusou ${metodo} ${caminho.split('?')[0]}: ${msg}`, resposta.status, {
+      metodo,
+      caminho,
+      resposta: texto,
+    });
   }
   return dados;
 }
@@ -129,7 +144,13 @@ async function removerConta(accountId) {
 const TIMEOUT_ENVIO_MS = 10 * 60 * 1000;
 async function enviarMidia(caminhoDoArquivo, nomeDoArquivo) {
   const tamanho = fs.statSync(caminhoDoArquivo).size;
-  const pedido = await chamar('POST', '/v1/media/upload', { filename: nomeDoArquivo, content_type: 'video/mp4' });
+  let pedido;
+  try {
+    pedido = await chamar('POST', '/v1/media/upload', { filename: nomeDoArquivo, content_type: 'video/mp4' });
+  } catch (err) {
+    err.etapa = 'pedir_url_de_envio';
+    throw err;
+  }
   const { id, upload_url: uploadUrl } = pedido.data;
   let resposta;
   try {
@@ -141,11 +162,29 @@ async function enviarMidia(caminhoDoArquivo, nomeDoArquivo) {
       signal: AbortSignal.timeout(TIMEOUT_ENVIO_MS),
     });
   } catch (err) {
-    throw new OutstandError(`Não foi possível enviar o vídeo pra Outstand (${err.message}).`, 502);
+    throw new OutstandError(`Não foi possível enviar o vídeo pra Outstand (${err.message}).`, 502, {
+      metodo: 'PUT',
+      caminho: 'armazenamento da Outstand',
+      resposta: `${err.message} - ${tamanho} bytes`,
+      etapa: 'enviar_arquivo',
+    });
   }
-  if (!resposta.ok) throw new OutstandError(`O armazenamento da Outstand recusou o vídeo (HTTP ${resposta.status}).`, resposta.status);
-  const confirmado = await chamar('POST', `/v1/media/${encodeURIComponent(id)}/confirm`, { size: tamanho });
-  return confirmado.data.url;
+  if (!resposta.ok) {
+    const corpo = await resposta.text().catch(() => '');
+    throw new OutstandError(`O armazenamento da Outstand recusou o vídeo (HTTP ${resposta.status}).`, resposta.status, {
+      metodo: 'PUT',
+      caminho: 'armazenamento da Outstand',
+      resposta: corpo,
+      etapa: 'enviar_arquivo',
+    });
+  }
+  try {
+    const confirmado = await chamar('POST', `/v1/media/${encodeURIComponent(id)}/confirm`, { size: tamanho });
+    return confirmado.data.url;
+  } catch (err) {
+    err.etapa = 'confirmar_envio';
+    throw err;
+  }
 }
 
 // Cria a publicação, pra sair AGORA (sem scheduledAt: o horário é decidido

@@ -10,6 +10,8 @@ import {
   IconRouter,
   IconBrandYoutube,
   IconBrandTiktok,
+  IconShare,
+  IconBroadcast,
   IconPlus,
   IconCopy,
   IconLoader2,
@@ -204,7 +206,7 @@ function SeloDeConfianca({ cnpj, empresa }: { cnpj: string; empresa: string }) {
 type Metodo = "cartao" | "pix"
 
 export function CheckoutPage() {
-  const { mostrarTunel } = useAuth()
+  const { mostrarTunel, painelNovo } = useAuth()
   const [ctx, setCtx] = useState<CheckoutContexto | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -527,7 +529,7 @@ export function CheckoutPage() {
               {/* O resumo vem PRIMEIRO no celular (order-first) e à direita no
                   desktop: quanto se vai pagar não pode depender de rolar. */}
               <aside className="order-first flex flex-col gap-4 lg:order-last lg:sticky lg:top-6">
-                <ResumoDoPedido ctx={ctx} item={item} plano={plano} preco={preco} mostrarTunel={mostrarTunel} />
+                <ResumoDoPedido ctx={ctx} item={item} plano={plano} preco={preco} mostrarTunel={mostrarTunel} painelNovo={painelNovo} />
                 <SeloDeConfianca cnpj={ctx.empresa.cnpj} empresa={ctx.empresa.nome} />
               </aside>
 
@@ -1089,12 +1091,14 @@ function ResumoDoPedido({
   plano,
   preco,
   mostrarTunel,
+  painelNovo,
 }: {
   ctx: CheckoutContexto
   item: CheckoutItem
   plano: CheckoutContexto["plans"][number] | null
   preco: { hojeCents: number; depoisCents: number | null; promo: boolean }
   mostrarTunel: boolean
+  painelNovo: boolean
 }) {
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border bg-background p-5 shadow-[var(--shadow-raised)]">
@@ -1128,6 +1132,18 @@ function ResumoDoPedido({
               icone={<IconBrandTiktok className="size-4" />}
               texto={`${plano.maxTiktokAccounts ?? "∞"} ${plano.maxTiktokAccounts === 1 ? "conta do TikTok" : "contas do TikTok"}`}
             />
+            {painelNovo && plano.maxContasPorRede != null && (
+              <Beneficio
+                icone={<IconShare className="size-4" />}
+                texto={`${plano.maxContasPorRede} ${plano.maxContasPorRede === 1 ? "conta" : "contas"} em cada rede social (Instagram, Facebook, Threads, LinkedIn, Pinterest, Bluesky e YouTube)`}
+              />
+            )}
+            {painelNovo && plano.maxCanaisDeLive != null && (
+              <Beneficio
+                icone={<IconBroadcast className="size-4" />}
+                texto={`${plano.maxCanaisDeLive} ${plano.maxCanaisDeLive === 1 ? "canal de live" : "canais de live"} (Twitch ou Kick), 1 live clipada por vez`}
+              />
+            )}
             {plano.extraBothPriceCents && (
               <Beneficio
                 icone={<IconPlus className="size-4" />}

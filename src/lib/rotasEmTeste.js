@@ -10,6 +10,7 @@ const PREFIXOS = [
   '/api/client/social-accounts',
   '/api/client/social-postings',
   '/api/client/feed',
+  '/api/client/maquina',
   '/api/client/lives',
   '/api/client/video-settings/modelos',
   '/api/client/conta',

@@ -5,7 +5,16 @@ const pool = require('../db/pool');
 
 // Mesma lista de errorReportService.OPERACOES_EM_TESTE (repetida aqui porque
 // aquele módulo depende deste; há teste conferindo que as duas batem).
-const OPERACOES_EM_TESTE = ['social_posting', 'social_conta', 'social_conexao', 'painel_novo_api', 'painel_novo_tela'];
+const OPERACOES_EM_TESTE = [
+  'social_posting',
+  'social_conta',
+  'social_conexao',
+  'painel_novo_api',
+  'painel_novo_tela',
+  'lives',
+  'lives_capacidade',
+  'limite_do_plano',
+];
 
 // A assinatura decide o que é "o mesmo erro". Inclui a operação, a entidade e o
 // começo da mensagem - não a mensagem inteira, porque quase todo erro carrega
@@ -26,6 +35,7 @@ async function record({
   clientUserId = null,
   message,
   detail = null,
+  contexto = null,
 }) {
   const fingerprint = assinatura({ operation, entityType, entityId, message });
   const { rows } = await pool.query(
@@ -45,7 +55,39 @@ async function record({
      RETURNING *`,
     [operation, entityType, entityId, clientUserId, String(message || '').slice(0, 500), detail, fingerprint]
   );
-  return rows[0];
+  const erro = rows[0];
+  // Cada ocorrência, com o contexto completo (a linha acima guarda só o último
+  // detalhe). Limitado às 300 mais recentes por erro: um erro que repete a
+  // cada 30 segundos o dia inteiro não pode encher o banco.
+  await pool.query(
+    `INSERT INTO system_error_events (error_id, client_user_id, message, detail, contexto)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [erro.id, clientUserId, String(message || '').slice(0, 500), detail, contexto ? JSON.stringify(contexto) : null]
+  );
+  if (erro.occurrences % 50 === 0) {
+    await pool.query(
+      `DELETE FROM system_error_events
+        WHERE error_id = $1
+          AND id NOT IN (SELECT id FROM system_error_events WHERE error_id = $1 ORDER BY occurred_at DESC, id DESC LIMIT ${MAX_OCORRENCIAS_POR_ERRO})`,
+      [erro.id]
+    );
+  }
+  return erro;
+}
+
+const MAX_OCORRENCIAS_POR_ERRO = 300;
+
+// As ocorrências de um erro, da mais recente pra mais antiga.
+async function listEvents(errorId, limit = 50) {
+  const { rows } = await pool.query(
+    `SELECT ev.id, ev.occurred_at, ev.message, ev.detail, ev.contexto, ev.client_user_id,
+            u.email AS client_email, u.business_name AS client_name
+       FROM system_error_events ev LEFT JOIN users u ON u.id = ev.client_user_id
+      WHERE ev.error_id = $1
+      ORDER BY ev.occurred_at DESC, ev.id DESC LIMIT $2`,
+    [errorId, limit]
+  );
+  return rows;
 }
 
 // `grupo`: 'principal' (o que todo cliente usa) ou 'teste' (novidades do
@@ -140,6 +182,9 @@ async function deleteResolvedOlderThan(dias = 30) {
     `DELETE FROM system_errors WHERE status = 'resolvido' AND resolved_at < now() - ($1 || ' days')::interval`,
     [String(dias)]
   );
+  // Ocorrências de erro ainda aberto também envelhecem: 90 dias bastam pra
+  // investigar, e o contador de system_errors continua contando tudo.
+  await pool.query("DELETE FROM system_error_events WHERE occurred_at < now() - interval '90 days'");
   return rowCount;
 }
 
@@ -147,6 +192,7 @@ module.exports = {
   OPERACOES_EM_TESTE,
   record,
   list,
+  listEvents,
   findById,
   counts,
   markRetrying,

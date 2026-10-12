@@ -1,4 +1,5 @@
 import { useT } from "@/i18n"
+import { useAuth } from "@/hooks/useAuth"
 import { IconDotsVertical, IconLogout } from "@tabler/icons-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -31,6 +32,8 @@ export function NavUser({
 }) {
   const t = useT()
   const { isMobile } = useSidebar()
+  // Mesma resposta do /api/auth/me que a página já pediu (useAuth compartilha).
+  const { plano } = useAuth()
 
   return (
     <SidebarMenu>
@@ -46,8 +49,12 @@ export function NavUser({
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.email}</span>
-                <span className="truncate text-xs text-muted-foreground capitalize">
-                  {user.role === "admin" ? t("menu.admin") : t("menu.cliente")}
+                <span className="truncate text-xs text-muted-foreground">
+                  {user.role === "admin"
+                    ? t("menu.admin")
+                    : plano
+                      ? `${t("menu.plano", { nome: plano.nome })}${plano.situacao === "inadimplente" ? ` · ${t("menu.pagamentoPendente")}` : ""}`
+                      : t("menu.semPlano")}
                 </span>
               </div>
               <IconDotsVertical className="ml-auto size-4" />

@@ -102,7 +102,7 @@ type Corte = {
 }
 
 const CAMPOS: { chave: keyof Config; rotulo: string; ajuda: string; sufixo: string }[] = [
-  { chave: "maxCanais", rotulo: "Canais gravando ao mesmo tempo", ajuda: "Acima disso, quem entrar ao vivo espera vaga.", sufixo: "canais" },
+  { chave: "maxCanais", rotulo: "Lives clipadas ao mesmo tempo", ajuda: "Cada cliente recebendo cortes de cada live conta 1 (o corte é montado por cliente). Acima disso, quem entrar ao vivo espera vaga e o cliente vê o aviso. Com 2 núcleos, 2 é o recomendado.", sufixo: "lugares" },
   { chave: "horasPorCanalDia", rotulo: "Horas gravadas por canal por dia", ajuda: "Protege contra live de 24h.", sufixo: "horas" },
   { chave: "retencaoHoras", rotulo: "Apagar a gravação bruta depois de", ajuda: "Os cortes prontos não são apagados.", sufixo: "horas" },
   { chave: "discoMaxPercent", rotulo: "Parar de gravar com o disco em", ajuda: "Protege os cortes do YouTube.", sufixo: "%" },

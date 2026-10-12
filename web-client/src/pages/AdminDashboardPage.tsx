@@ -1,4 +1,5 @@
 import { useT } from "@/i18n"
+import { SalaDeMaquinas } from "@/components/maquina/SalaDeMaquinas"
 import { useEffect, useState } from "react"
 import { IconUsers, IconListDetails, IconBrandYoutube, IconClockHour4, IconScissors, IconCoins, IconCurrencyDollar, IconTrendingUp, IconReceipt2 } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
@@ -53,6 +54,8 @@ export function AdminDashboardPage() {
   return (
     <DashboardLayout user={user} onLogout={logout} title={t("menu.inicio")}>
       <SaldoBaixoAlerta />
+      {/* A linha de produção do sistema inteiro, ao vivo. */}
+      <SalaDeMaquinas escopo="sistema" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-muted-foreground">{t("inicio.periodo")}</h2>
         <DateRangeFilter value={range} onChange={setRange} />

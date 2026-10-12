@@ -5,6 +5,22 @@ const exibicaoDoTunel = require('../../../lib/exibicaoDoTunel');
 const authService = require('../../../services/authService');
 const usersRepository = require('../../../repositories/usersRepository');
 const subscriptionCheckoutService = require('../../../services/subscriptionCheckoutService');
+const clientSubscriptionsRepository = require('../../../repositories/clientSubscriptionsRepository');
+
+// O plano que aparece no rodapé do menu, no lugar de "Cliente" (pedido do
+// fundador, 12/10/2026). Admin não tem plano. Cancelado ou sem plano = null
+// (a tela escreve "Sem plano"). Falhar aqui nunca derruba o /me, que toda tela
+// do painel usa.
+async function planoParaMenu(user) {
+  if (!user || user.role === 'admin') return null;
+  try {
+    const sub = await clientSubscriptionsRepository.getOrCreate(user.id);
+    if (!sub || !sub.plan_id || sub.status === 'cancelado') return null;
+    return { nome: sub.plan_name, situacao: sub.status === 'inadimplente' ? 'inadimplente' : 'ativo' };
+  } catch {
+    return null;
+  }
+}
 
 const SEVEN_DAYS_MS = 1000 * 60 * 60 * 24 * 7;
 const THIRTY_DAYS_MS = 1000 * 60 * 60 * 24 * 30;
@@ -52,6 +68,7 @@ async function me(req, res) {
       mostrarTunel: await exibicaoDoTunel.mostrarTunel(),
       // Menu remodelado (Videos do YouTube / Lives / Redes sociais), em teste.
       painelNovo: await painelNovo.ehPainelNovo(req.session.user),
+      plano: await planoParaMenu(req.session.user),
     },
   });
 }

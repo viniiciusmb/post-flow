@@ -5,6 +5,32 @@ const tiktokService = require('../../services/tiktokService');
 const tiktokAccountsRepository = require('../../repositories/tiktokAccountsRepository');
 const backfillPostingsService = require('../../services/backfillPostingsService');
 const planLimitsService = require('../../services/planLimitsService');
+const errorReportService = require('../../services/errorReportService');
+const logger = require('../../lib/logger');
+
+// Toda falha ao conectar o TikTok vai pro painel de erros com o que se sabe
+// dela (etapa, o que a TikTok devolveu na URL, navegador). Antes nenhuma era
+// registrada: o cliente via a mensagem na tela e ninguém mais ficava sabendo.
+function registrarFalha(req, etapa, mensagem, err = null, extra = {}) {
+  const clientUserId = req.session && req.session.user ? req.session.user.id : null;
+  logger.warn(`Conexao do TikTok do cliente #${clientUserId} falhou (${etapa}): ${mensagem}`);
+  errorReportService.report({
+    operation: errorReportService.OPERACOES.TIKTOK_CONEXAO,
+    entityType: 'tiktok_conexao',
+    clientUserId,
+    error: err || new Error(mensagem),
+    message: `TikTok - ${mensagem}`.slice(0, 300),
+    contexto: {
+      etapa,
+      clienteId: clientUserId,
+      parametrosDaVolta: Object.keys(req.query || {}),
+      erroDaTiktok: req.query && req.query.error ? String(req.query.error) : null,
+      descricaoDaTiktok: req.query && req.query.error_description ? String(req.query.error_description).slice(0, 500) : null,
+      navegador: req.get('user-agent'),
+      ...extra,
+    },
+  });
+}
 
 // Pra onde voltar depois de conectar. Antes caia sempre no Inicio, mesmo tendo
 // saido da tela de Publicacao - a pessoa perdia o lugar e tinha que navegar de
@@ -34,15 +60,35 @@ async function callback(req, res) {
   const voltarPara = destinoDeRetorno(req.session.tiktokRetorno);
 
   if (error) {
+    registrarFalha(req, 'autorizar', `a TikTok devolveu erro na autorização: ${errorDescription || error}`);
     return res.redirect(`${voltarPara}?tiktok_error=${encodeURIComponent(errorDescription || error)}`);
   }
 
   if (!state || state !== req.session.tiktokOAuthState) {
+    registrarFalha(
+      req,
+      'voltar',
+      !req.session.tiktokOAuthState
+        ? 'voltou da autorização sem conexão iniciada nesta sessão (sessão perdida ou outro navegador)'
+        : 'o state da volta não confere com o da sessão'
+    );
     return res.redirect(`${voltarPara}?tiktok_error=Sessao+expirada,+tente+conectar+novamente`);
   }
   delete req.session.tiktokOAuthState;
   delete req.session.tiktokRetorno;
 
+  let etapa = 'trocar_codigo';
+  try {
+    return await concluirConexao(req, res, code, voltarPara, (e) => {
+      etapa = e;
+    });
+  } catch (err) {
+    registrarFalha(req, etapa, err.message, err);
+    return res.redirect(`${voltarPara}?tiktok_error=${encodeURIComponent('Não foi possível concluir a conexão com o TikTok. Tente de novo.')}`);
+  }
+}
+
+async function concluirConexao(req, res, code, voltarPara, marcarEtapa) {
   const tokens = await tiktokService.exchangeCodeForToken(code);
 
   // Reconectar a MESMA conta (mesmo open_id) nunca deve esbarrar no limite
@@ -52,11 +98,21 @@ async function callback(req, res) {
   if (!isReconnect) {
     const limitCheck = await planLimitsService.checkTiktokAccountLimit(req.session.user.id, existingAccounts.length);
     if (!limitCheck.allowed) {
-      return res.redirect(`/client?tiktok_error=${encodeURIComponent(limitCheck.reason)}`);
+      errorReportService.report({
+        operation: errorReportService.OPERACOES.LIMITE_DO_PLANO,
+        entityType: 'tiktok_conexao',
+        clientUserId: req.session.user.id,
+        error: new Error(limitCheck.reason),
+        message: 'Tentou conectar mais uma conta do TikTok além do plano',
+        contexto: { contasConectadas: existingAccounts.length },
+      });
+      return res.redirect(`${voltarPara}?tiktok_error=${encodeURIComponent(limitCheck.reason)}`);
     }
   }
 
+  marcarEtapa('ler_perfil');
   const userInfo = await tiktokService.getUserInfo(tokens.access_token);
+  marcarEtapa('gravar_conta');
 
   const conta = await tiktokAccountsRepository.upsertForClient({
     clientUserId: req.session.user.id,
@@ -73,12 +129,13 @@ async function callback(req, res) {
   // Cortes que ficaram prontos antes desta conta existir nao tinham pra onde
   // ir, e conectar depois nao voltava atras pra busca-los - a fila abria vazia
   // sem explicacao. Ver backfillPostingsService.
+  marcarEtapa('enfileirar_cortes_prontos');
   await backfillPostingsService.enfileirarCortesProntos({
     clientUserId: req.session.user.id,
     tiktokAccountId: conta.id,
   });
 
-  res.redirect(`${voltarPara}?tiktok_connected=1`);
+  return res.redirect(`${voltarPara}?tiktok_connected=1`);
 }
 
 module.exports = { connect, callback };

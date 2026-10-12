@@ -72,7 +72,7 @@ export function Interruptor({
       onClick={onClick}
       className="group inline-flex items-center gap-2.5 disabled:opacity-60"
     >
-      <span className={cn("font-mono text-[11px] uppercase tracking-wide", ligado ? "text-tone-success-ink" : "text-muted-foreground")}>
+      <span className={cn("text-xs font-medium", ligado ? "text-tone-success-ink" : "text-muted-foreground")}>
         {ligado ? "Ligado" : "Desligado"}
       </span>
       <span

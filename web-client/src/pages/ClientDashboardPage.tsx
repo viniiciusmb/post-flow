@@ -16,6 +16,7 @@ import { useDateRange } from "@/hooks/useDateRange"
 import { api } from "@/lib/api"
 import type { ClientDashboardResponse } from "@/types/api"
 import { useT } from "@/i18n"
+import { SalaDeMaquinas } from "@/components/maquina/SalaDeMaquinas"
 
 function useFlashFromQuery() {
   const params = new URLSearchParams(window.location.search)
@@ -29,7 +30,7 @@ function useFlashFromQuery() {
 
 export function ClientDashboardPage() {
   const t = useT()
-  const { user, loading: authLoading, logout } = useAuth()
+  const { user, loading: authLoading, logout, painelNovo } = useAuth()
   const { range, setRange } = useDateRange()
   const [data, setData] = useState<ClientDashboardResponse | null>(null)
   const [flash] = useState(useFlashFromQuery)
@@ -56,7 +57,11 @@ export function ClientDashboardPage() {
     <DashboardLayout user={user} onLogout={logout} title={t("inicio.titulo")} autoIniciarTour>
       <PageHeader
         title={t("inicio.titulo")}
-        description={t("inicio.descricao")}
+        description={
+          painelNovo
+            ? "Sua máquina de cortes trabalhando agora: o que entrou, o que está sendo cortado e o que vai ao ar em cada rede."
+            : t("inicio.descricao")
+        }
         action={
           <Button variant="outline" size="sm" onClick={() => iniciarTour(true)} className="gap-1.5">
             <IconRoute className="size-4" />
@@ -92,65 +97,88 @@ export function ClientDashboardPage() {
       {/* Antes dos números: quem ainda não configurou não tem número nenhum
           pra ver, e o que ele precisa é do caminho, não do painel vazio.
           Some sozinho quando os três passos terminam. */}
-      <OnboardingChecklist />
+      <OnboardingChecklist podeFechar={painelNovo} />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-xs font-semibold uppercase tracking-[0.07em] text-muted-foreground">{t("inicio.periodo")}</span>
-        <DateRangeFilter value={range} onChange={setRange} />
-      </div>
-
-      {data ? (
-        <TikTokConnectionCard accounts={data.tiktokAccounts} />
+      {/* Painel novo (admin e Rise Style, em teste): só o essencial - o
+          resultado do período numa linha e a linha de produção ao vivo.
+          Quem não está no teste continua com a tela de sempre. */}
+      {painelNovo ? (
+        <>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-xs font-semibold tracking-[0.07em] text-muted-foreground uppercase">Resultado do período</span>
+              <DateRangeFilter value={range} onChange={setRange} />
+            </div>
+            {data ? (
+              <StatRow className="sm:grid-cols-4 lg:grid-cols-4">
+                <Stat label="Cortes gerados" value={data.counts.clipsInRange} emphasis href="/client/feed" hrefLabel="Ver os cortes" />
+                <Stat label="Cortes publicados" value={data.counts.clipsPostedInRange} href="/client/social" hrefLabel="Ver publicados" />
+                <Stat label="Na fila pra publicar" value={data.counts.pendingInQueue} href="/client/social" hrefLabel="Ver as filas" />
+                <Stat label="Vídeos que entraram" value={data.counts.videosInRange} href="/client/youtube" hrefLabel="Ver os vídeos" />
+              </StatRow>
+            ) : (
+              <Skeleton className="h-[6.5rem] rounded-xl" />
+            )}
+          </div>
+          <SalaDeMaquinas escopo="cliente" />
+        </>
       ) : (
-        <Skeleton className="h-24" />
-      )}
+        <>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-xs font-semibold uppercase tracking-[0.07em] text-muted-foreground">{t("inicio.periodo")}</span>
+          <DateRangeFilter value={range} onChange={setRange} />
+        </div>
 
-      {data ? (
-        <StatRow>
-          <Stat
-            label={t("inicio.cortesGerados")}
-            value={data.counts.clipsInRange}
-            emphasis
-          />
-          <Stat
-            label={t("inicio.cortesPostados")}
-            value={data.counts.clipsPostedInRange}
-            href="/client/videos-clips"
-            hrefLabel={t("inicio.verCortes")}
-          />
-          <Stat
-            label={t("inicio.naFila")}
-            value={data.counts.pendingInQueue}
-            href="/client/tiktok-account"
-            hrefLabel={t("inicio.verAFila")}
-          />
-          <Stat label={t("inicio.videosDetectados")} value={data.counts.videosInRange} />
-          <Stat
-            label={t("inicio.canaisMonitorados")}
-            value={data.counts.youtubeChannels}
-            href="/client/youtube-channels"
-            hrefLabel={t("inicio.verCanais")}
-          />
-        </StatRow>
-      ) : (
-        <Skeleton className="h-[7.5rem] rounded-xl" />
-      )}
+        {data ? <TikTokConnectionCard accounts={data.tiktokAccounts} /> : <Skeleton className="h-24" />}
 
-      <UsageCard range={range} />
-
-      <div className="flex flex-col gap-3">
-        <SectionLabel>{t("inicio.meusVideos")}</SectionLabel>
         {data ? (
-          <PostingsTable
-            rows={rows}
-            showOrigin
-            showChannel
-            emptyMessage={t("inicio.vazio")}
-          />
+          <StatRow>
+            <Stat
+              label={t("inicio.cortesGerados")}
+              value={data.counts.clipsInRange}
+              emphasis
+            />
+            <Stat
+              label={t("inicio.cortesPostados")}
+              value={data.counts.clipsPostedInRange}
+              href="/client/videos-clips"
+              hrefLabel={t("inicio.verCortes")}
+            />
+            <Stat
+              label={t("inicio.naFila")}
+              value={data.counts.pendingInQueue}
+              href="/client/tiktok-account"
+              hrefLabel={t("inicio.verAFila")}
+            />
+            <Stat label={t("inicio.videosDetectados")} value={data.counts.videosInRange} />
+            <Stat
+              label={t("inicio.canaisMonitorados")}
+              value={data.counts.youtubeChannels}
+              href="/client/youtube-channels"
+              hrefLabel={t("inicio.verCanais")}
+            />
+          </StatRow>
         ) : (
-          <Skeleton className="h-64" />
+          <Skeleton className="h-[7.5rem] rounded-xl" />
         )}
-      </div>
+
+        <UsageCard range={range} />
+
+        <div className="flex flex-col gap-3">
+          <SectionLabel>{t("inicio.meusVideos")}</SectionLabel>
+          {data ? (
+            <PostingsTable
+              rows={rows}
+              showOrigin
+              showChannel
+              emptyMessage={t("inicio.vazio")}
+            />
+          ) : (
+            <Skeleton className="h-64" />
+          )}
+        </div>
+        </>
+      )}
     </DashboardLayout>
   )
 }

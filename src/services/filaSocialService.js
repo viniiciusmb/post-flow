@@ -15,6 +15,7 @@ const youtubeChannelSocialTargetsRepository = require('../repositories/youtubeCh
 const backfillPostingsService = require('./backfillPostingsService');
 const redesSociais = require('../lib/redesSociais');
 const logger = require('../lib/logger');
+const errorReportService = require('./errorReportService');
 
 // corte: { tipo: 'youtube'|'live', id, titulo, legenda, duracao }
 async function enfileirarCorte({ clientUserId, conta, corte }) {
@@ -53,6 +54,15 @@ async function corteFicouPronto({ sourceVideo, clip }) {
     }
   } catch (err) {
     logger.error(`Falha ao por o corte ${clip.id} na fila das redes sociais:`, err);
+    await errorReportService.report({
+      operation: errorReportService.OPERACOES.SOCIAL_POSTING,
+      entityType: 'clip',
+      entityId: clip.id,
+      clientUserId: sourceVideo.client_user_id || sourceVideo.owner_client_user_id || null,
+      error: err,
+      message: `O corte ficou pronto mas não entrou na fila das redes sociais: ${err.message}`,
+      contexto: { etapa: 'enfileirar', corte: clip.id, video: sourceVideo.id, canal: sourceVideo.youtube_channel_id, jaEnfileiradas: n },
+    });
   }
   return n;
 }

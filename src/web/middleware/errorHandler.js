@@ -33,15 +33,26 @@ function errorHandler(err, req, res, next) {
   const status = err.status || 500;
   const message = status === 500 ? 'Algo deu errado. Tente novamente.' : err.message;
 
-  // Erro de servidor numa novidade em teste vai pra tela "Erros em teste". Sem
-  // await: registrar não pode atrasar a resposta, e report() nunca lança.
-  if (status >= 500 && rotasEmTeste.ehRotaEmTeste(req.path)) {
+  // Todo erro de servidor vai pro painel de erros: os das novidades em teste
+  // pra "Erros em teste", o resto pra "Erros". Sem await: registrar não pode
+  // atrasar a resposta, e report() nunca lança. O corpo da requisição NÃO vai
+  // (pode ter senha, cartão); só os nomes dos campos.
+  if (status >= 500) {
+    const emTeste = rotasEmTeste.ehRotaEmTeste(req.path);
     errorReportService.report({
-      operation: errorReportService.OPERACOES.PAINEL_NOVO_API,
+      operation: emTeste ? errorReportService.OPERACOES.PAINEL_NOVO_API : errorReportService.OPERACOES.ERRO_SERVIDOR,
       entityType: 'rota',
       clientUserId: req.session && req.session.user ? req.session.user.id : null,
       error: err,
       message: `${req.method} ${rotasEmTeste.rotaSemIds(req.path)}: ${String(err.message || err).slice(0, 200)}`,
+      contexto: {
+        metodoHttp: req.method,
+        rota: req.originalUrl ? req.originalUrl.split('?')[0] : req.path,
+        parametrosDaUrl: Object.keys(req.query || {}),
+        camposEnviados: req.body && typeof req.body === 'object' ? Object.keys(req.body).slice(0, 40) : [],
+        papel: req.session && req.session.user ? req.session.user.role : null,
+        navegador: req.get('user-agent'),
+      },
     });
   }
 

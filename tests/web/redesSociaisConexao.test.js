@@ -15,6 +15,7 @@ const config = require('../../src/config');
 const settingsRepository = require('../../src/repositories/settingsRepository');
 const painelNovo = require('../../src/lib/painelNovo');
 const { startServer, stopServer, createLoginableClient, createAgent } = require('../helpers/http');
+const { darPlano } = require('../helpers/plano');
 
 let url;
 let outstand;
@@ -83,6 +84,7 @@ test.after(async () => {
 
 async function logado({ noPainelNovo = true, role = 'client' } = {}) {
   const u = await createLoginableClient({ role });
+  if (role === 'client') await darPlano(u.id);
   if (noPainelNovo && role === 'client') {
     const atuais = await painelNovo.idsLiberados();
     await settingsRepository.setValue(painelNovo.CHAVE, [...atuais, Number(u.id)]);

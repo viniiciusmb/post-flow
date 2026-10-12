@@ -2,7 +2,10 @@ import { useEffect, useState } from "react"
 import { api, ApiError } from "@/lib/api"
 import type { SessionUser } from "@/types/api"
 
-type MeResponse = { user: SessionUser; ui?: { mostrarTunel?: boolean; painelNovo?: boolean } }
+/** O plano do cliente, pro rodapé do menu. null = admin ou sem plano. */
+export type PlanoDoMenu = { nome: string; situacao: "ativo" | "inadimplente" } | null
+
+type MeResponse = { user: SessionUser; ui?: { mostrarTunel?: boolean; painelNovo?: boolean; plano?: PlanoDoMenu } }
 
 /**
  * Uma requisição só por carregamento de página, compartilhada por quem chamar.
@@ -46,6 +49,7 @@ export function useAuth() {
   const [mostrarTunel, setMostrarTunel] = useState(resposta?.ui?.mostrarTunel === true)
   /** Menu remodelado (Vídeos do YouTube / Lives / Redes sociais), em teste. */
   const [painelNovo, setPainelNovo] = useState(resposta?.ui?.painelNovo === true)
+  const [plano, setPlano] = useState<PlanoDoMenu>(resposta?.ui?.plano ?? null)
 
   useEffect(() => {
     let cancelled = false
@@ -56,6 +60,7 @@ export function useAuth() {
         setUser(data.user)
         setMostrarTunel(data.ui?.mostrarTunel === true)
         setPainelNovo(data.ui?.painelNovo === true)
+        setPlano(data.ui?.plano ?? null)
       })
       .catch((err) => {
         // Uma sessão vencida não pode deixar a promessa compartilhada envenenada
@@ -81,5 +86,5 @@ export function useAuth() {
     window.location.href = "/login"
   }
 
-  return { user, loading, logout, mostrarTunel, painelNovo }
+  return { user, loading, logout, mostrarTunel, painelNovo, plano }
 }

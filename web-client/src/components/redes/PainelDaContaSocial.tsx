@@ -35,6 +35,8 @@ export type ContaSocial = {
   /** O login da conta não vale mais (senha trocada, sessão encerrada pela rede). */
   precisaReconectar?: boolean
   motivoReconectar?: string | null
+  /** Passou do limite de contas por rede do plano: a fila dela fica parada. */
+  foraDoPlano?: boolean
   fila: {
     naFila: number
     publicados: number
@@ -157,6 +159,7 @@ export function PainelDaContaSocial({
       <Card className="gap-0 py-0">
         <div className="flex flex-col gap-4 px-5 pb-4 pt-5">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <span className="text-sm font-semibold">Publicar sozinho</span>
             <Interruptor
               ligado={cfg.autoPostEnabled}
               rotulo="Publicar sozinho"
@@ -257,7 +260,7 @@ function AbaBotao({
       {n !== undefined && n > 0 && (
         <span
           className={cn(
-            "rounded-full px-1.5 font-mono text-[10.5px]",
+            "rounded-full px-1.5 text-[11px] tabular-nums",
             alerta ? "bg-tone-danger-wash text-tone-danger-ink" : "bg-muted text-muted-foreground",
           )}
         >
@@ -333,7 +336,7 @@ function Fila({ itens, cfg, rede, base, onMudou }: { itens: Item[] | null; cfg: 
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                   <p className="min-w-0 truncate text-sm font-medium">{i.titulo ?? "Corte"}</p>
                   <span
-                    className={cn("shrink-0 font-mono text-xs font-semibold tabular-nums", saindo && "text-tone-indigo-ink")}
+                    className={cn("shrink-0 text-xs font-semibold tabular-nums", saindo && "text-tone-indigo-ink")}
                     style={!saindo && !i.esperandoVaga ? { color: r.cor } : undefined}
                   >
                     {saindo ? "Publicando…" : i.postarAgora ? "Agora" : i.esperandoVaga ? `Esperando vaga · ${quando(i.horario)}` : quando(i.horario)}
@@ -354,7 +357,7 @@ function Fila({ itens, cfg, rede, base, onMudou }: { itens: Item[] | null; cfg: 
                       className="w-full resize-y rounded-md border border-input bg-background px-2.5 py-2 text-sm"
                     />
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-[10.5px] text-muted-foreground">
+                      <span className="text-[11px] tabular-nums text-muted-foreground">
                         {legenda.length}/{cfg.limites.legendaMax}
                       </span>
                       <span className="flex gap-1.5">

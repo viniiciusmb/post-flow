@@ -23,6 +23,7 @@ router.get('/commissions', serveSpaPage('admin-commissions'));
 router.get('/narrated', serveSpaPage('admin-narrated'));
 router.get('/lives', serveSpaPage('admin-lives'));
 router.get('/errors', serveSpaPage('admin-errors'));
+router.get('/activity', serveSpaPage('admin-activity'));
 // Mesma tela, só com os erros das novidades em teste (painel novo).
 router.get('/errors-teste', serveSpaPage('admin-errors'));
 router.get('/support', serveSpaPage('admin-support'));

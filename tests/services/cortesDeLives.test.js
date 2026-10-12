@@ -49,6 +49,15 @@ const liveRenderService = require('../../src/services/lives/liveRenderService');
 const liveFormatoService = require('../../src/services/lives/liveFormatoService');
 const tiposDeMomento = require('../../src/services/lives/tiposDeMomento');
 const { createClient } = require('../helpers/db');
+const { darPlano } = require('../helpers/plano');
+
+// Cliente que pode receber cortes de live: desde 12/10/2026 cliente sem plano
+// fica "fora do plano" e o supervisor não grava pra ele.
+async function clienteComPlano() {
+  const u = await createClient();
+  await darPlano(u.id, 'max');
+  return u;
+}
 
 test.after(async () => {
   await pool.end();
@@ -1020,11 +1029,12 @@ test('com o modulo desligado o supervisor nao consulta a Twitch nem grava nada',
   assert.deepEqual(cap.iniciadas, []);
 });
 
-test('supervisor grava quem esta ao vivo ate o limite de canais, e para quando a live acaba', async () => {
+test('supervisor grava quem esta ao vivo ate o limite de lugares, e para quando a live acaba', async () => {
   await limparVigiados();
-  const u = await createClient();
+  // Um cliente por canal: o plano clipa 1 live por vez POR CLIENTE, e o limite
+  // do servidor conta cada cliente recebendo cortes como 1 lugar.
   const canais = [await novoCanal(), await novoCanal(), await novoCanal()];
-  for (const c of canais) await livesRepository.follow(u.id, c.id);
+  for (const c of canais) await livesRepository.follow((await clienteComPlano()).id, c.id);
   const cap = capturaFalsa();
   let aoVivo = new Map(canais.map((c) => [c.login, { streamId: '1', titulo: 't', jogo: 'j', espectadores: 10 }]));
   const desfazer = [
@@ -1035,7 +1045,12 @@ test('supervisor grava quem esta ao vivo ate o limite de canais, e para quando a
   ];
   try {
     await liveSupervisor.monitorar();
-    assert.equal(cap.iniciadas.length, 2, 'limite de 2 canais gravando');
+    assert.equal(cap.iniciadas.length, 2, 'limite de 2 lugares');
+    const { rows: espera } = await pool.query(
+      "SELECT count(*)::int AS n FROM live_channels WHERE id = ANY($1::bigint[]) AND motivo_sem_gravar = 'servidor_cheio'",
+      [canais.map((c) => c.id)]
+    );
+    assert.equal(espera[0].n, 1, 'o terceiro fica marcado como esperando vaga (a tela explica)');
     await liveSupervisor.monitorar();
     assert.equal(cap.iniciadas.length, 2, 'nao abre gravacao repetida');
 
@@ -1052,7 +1067,7 @@ test('supervisor grava quem esta ao vivo ate o limite de canais, e para quando a
 
 test('Kick: grava pelo endereco da Kick, ouve o chat da sala certa, e a Kick fora do ar NAO para a gravacao', async () => {
   await limparVigiados();
-  const u = await createClient();
+  const u = await clienteComPlano();
   const login = `kick_${Date.now().toString(36)}`;
   const canal = await livesRepository.upsertChannel({ platform: 'kick', login, displayName: login, platformUserId: '77', profileImageUrl: null });
   await livesRepository.follow(u.id, canal.id);
@@ -1088,7 +1103,7 @@ test('Kick: grava pelo endereco da Kick, ouve o chat da sala certa, e a Kick for
 
 test('canal PAUSADO: fica salvo, nao e gravado, mas o status ao vivo/offline continua sendo atualizado', async () => {
   await limparVigiados();
-  const u = await createClient();
+  const u = await clienteComPlano();
   const canal = await novoCanal();
   await livesRepository.follow(u.id, canal.id);
   assert.equal(await livesRepository.setPaused(u.id, canal.id, true), true);
@@ -1120,7 +1135,7 @@ test('canal PAUSADO: fica salvo, nao e gravado, mas o status ao vivo/offline con
 
 test('pausar no meio da gravacao para de gravar na proxima volta', async () => {
   await limparVigiados();
-  const u = await createClient();
+  const u = await clienteComPlano();
   const canal = await novoCanal();
   await livesRepository.follow(u.id, canal.id);
   const cap = capturaFalsa();

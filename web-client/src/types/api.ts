@@ -828,6 +828,11 @@ export interface BillingPlan {
   weeklyMinutesBonus: number
   maxYoutubeChannels: number | null
   maxTiktokAccounts: number | null
+  /** Contas em CADA rede social (Instagram, Facebook...). null = sem limite. */
+  maxContasPorRede?: number | null
+  /** Canais de live acompanhados e lives clipadas ao mesmo tempo. */
+  maxCanaisDeLive?: number | null
+  maxLivesAoMesmoTempo?: number | null
   /** Quanto custa o minuto que passa da cota, neste plano. */
   overageCentsNormal?: number
   overageCentsBonus?: number
@@ -1368,4 +1373,116 @@ export interface SaldosDasIasResponse {
   limiteAlertaUsd: number
   provedores: SaldoDeIa[]
   algumAbaixo: boolean
+}
+
+/** GET /api/client/maquina e /api/admin/maquina - a linha de produção agora. */
+export interface MaquinaResponse {
+  escopo: "cliente" | "sistema"
+  agora: string
+  avgProcessingSeconds: number
+  fontes: {
+    canaisAtivos: number
+    canaisTotal: number
+    ultimaChecagem: string | null
+    canais: { id: number; nome: string | null; avatarUrl: string | null }[]
+    livesSeguidas: number
+    lives: { id: number; nome: string; avatarUrl: string | null; plataforma: string; aoVivo: boolean }[]
+  }
+  etapas: {
+    esperando: number
+    baixando: number
+    transcrevendo: number
+    escolhendo: number
+    cortando: number
+    bloqueados: number
+    pausados: number
+  }
+  processando: {
+    id: number
+    titulo: string
+    thumbnailUrl: string | null
+    canal: string | null
+    cliente: string | null
+    avulso: boolean
+    status: SourceVideoStatus
+    duracaoSegundos: number | null
+    iniciadoEm: string | null
+    baixadoEm: string | null
+    transcritoEm: string | null
+    escolhidoEm: string | null
+    reaproveitado: boolean
+    /** Faixas da saída pra onde os cortes deste vídeo vão (mesma chave de `filas[].chave`). */
+    destinos: string[]
+    cortes: {
+      id: number
+      status: "pending" | "rendering" | "ready" | "error"
+      progresso: number
+      titulo: string | null
+      capaUrl: string | null
+    }[]
+  }[]
+  proximosNaLinha: { id: number; titulo: string; thumbnailUrl: string | null; canal: string | null }[]
+  aoVivo: {
+    id: number
+    nome: string
+    avatarUrl: string | null
+    plataforma: string
+    titulo: string | null
+    liveDesde: string | null
+    gravandoDesde: string
+    segundosGravados: number
+    segundosAnalisados: number
+    cortesProntos: number
+    cortesProduzindo: number
+    /** Até onde da gravação a fala já virou texto. */
+    segundosTranscritos: number
+    /** Trechos que a IA ainda está julgando se viram corte. */
+    trechosEmAvaliacao: number
+    cortes: {
+      id: number
+      status: "na_fila" | "renderizando" | "pronto" | "erro"
+      progresso: number
+      /** Segundos desde o início da gravação. */
+      inicio: number
+      fim: number
+      titulo: string | null
+      capaUrl: string | null
+    }[]
+  }[]
+  /** Cortes de live prontos, esperando no Feed a pessoa escolher o que postar. */
+  feed: { prontos: number; ultimos: { id: number; titulo: string | null; prontoEm: string; capaUrl: string | null }[] }
+  fila: {
+    total: number
+    publicandoAgora: number
+    publicadosHoje: number
+    proximas: {
+      rede: string
+      id: number
+      quando: string | null
+      conta: string | null
+      avatarUrl: string | null
+      titulo: string | null
+      capaUrl: string | null
+    }[]
+  }
+  /** Uma faixa por conta conectada (no Início do admin, uma por rede). */
+  filas: {
+    /** "tiktok:12" (por conta) ou "tiktok" (por rede, visão do admin). Os destinos dos vídeos usam a mesma chave. */
+    chave: string
+    rede: string
+    contas: number
+    avatarUrl: string | null
+    nomesDasContas: string[]
+    naFila: number
+    publicandoAgora: number
+    publicadosHoje: number
+    proximas: { id: number; quando: string | null; conta: string | null; titulo: string | null; capaUrl: string | null }[]
+  }[]
+  registro: {
+    tipo: "detectado" | "baixado" | "transcrito" | "escolhido" | "corte_pronto" | "publicado" | "live_gravando" | "live_corte"
+    em: string
+    titulo: string | null
+    extra: string | null
+    n: number | null
+  }[]
 }

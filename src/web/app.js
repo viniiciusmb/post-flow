@@ -39,6 +39,7 @@ const socialPostingsApiRoutes = require('./routes/api/socialPostingsApiRoutes');
 const contaApiRoutes = require('./routes/api/contaApiRoutes');
 const errosDeTelaApiRoutes = require('./routes/api/errosDeTelaApiRoutes');
 const feedApiRoutes = require('./routes/api/feedApiRoutes');
+const maquinaApiRoutes = require('./routes/api/maquinaApiRoutes');
 const adminCommissionsApiRoutes = require('./routes/api/adminCommissionsApiRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const csrf = require('./middleware/csrf');
@@ -46,6 +47,7 @@ const affiliateAttribution = require('./middleware/affiliateAttribution');
 const i18n = require('../i18n');
 const rateLimits = require('./middleware/rateLimits');
 const slowRequestLogger = require('./middleware/slowRequestLogger');
+const registroDeAtividade = require('./middleware/registroDeAtividade');
 
 const app = express();
 
@@ -171,6 +173,12 @@ app.use(
   })
 );
 
+// Registro de atividade (paginas abertas e acoes, com o resultado). Depois da
+// sessao (precisa saber quem e) e ANTES do CSRF e dos limites: uma acao barrada
+// por eles tambem e algo que o cliente viu dar errado. Ver
+// middleware/registroDeAtividade.js.
+app.use(registroDeAtividade);
+
 // Segunda camada anti-CSRF (token de dupla submissao). Precisa vir depois da
 // sessao (guarda o token nela) e antes das rotas. Ver middleware/csrf.js.
 app.use(csrf.middleware);
@@ -270,6 +278,7 @@ app.use('/api/client/social-postings', socialPostingsApiRoutes);
 app.use('/api/client/conta', contaApiRoutes);
 app.use('/api/client/erros-de-tela', errosDeTelaApiRoutes);
 app.use('/api/client/feed', feedApiRoutes);
+app.use('/api/client/maquina', maquinaApiRoutes);
 app.use('/api/admin/commissions', adminCommissionsApiRoutes);
 app.use('/api/stripe/webhook', stripeWebhookApiRoutes);
 app.use('/api/asaas/webhook', asaasWebhookApiRoutes);

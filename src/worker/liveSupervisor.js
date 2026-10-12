@@ -20,7 +20,46 @@ const liveCleanupService = require('../services/lives/liveCleanupService');
 const liveChatService = require('../services/lives/liveChatService');
 const liveViewerClipsService = require('../services/lives/liveViewerClipsService');
 const liveCreditosService = require('../services/lives/liveCreditosService');
+const limitesDasLivesService = require('../services/lives/limitesDasLivesService');
+const errorReportService = require('../services/errorReportService');
 const logger = require('../lib/logger');
+
+// Falha das lives no painel de erros (grupo "Erros em teste"), com contexto.
+// Antes elas só iam pro log do container, que é apagado a cada deploy.
+function registrar({ entityType, entityId = null, clientUserId = null, err, message, contexto = {}, operation = null }) {
+  return errorReportService.report({
+    operation: operation || errorReportService.OPERACOES.LIVES,
+    entityType,
+    entityId,
+    clientUserId,
+    error: err instanceof Error ? err : new Error(String(err || message)),
+    message,
+    contexto,
+  });
+}
+
+const MOTIVO_SEM_GRAVAR = {
+  servidor_cheio: 'servidor cheio',
+  disco_cheio: 'disco cheio',
+  limite_de_horas: 'limite de horas do dia',
+};
+
+// Grava por que o canal ao vivo não está sendo gravado e, na PRIMEIRA vez que
+// isso acontece nesta live, registra no painel - servidor cheio é o sinal de
+// que está na hora de um servidor maior.
+async function semGravar(canal, motivo, contexto = {}) {
+  const mudou = await livesRepository.setNotRecordingReason(canal.id, motivo);
+  if (!mudou) return;
+  logger.warn(`Lives: ${canal.login} esta ao vivo e NAO esta sendo gravado (${MOTIVO_SEM_GRAVAR[motivo]}).`);
+  await registrar({
+    operation: motivo === 'servidor_cheio' ? errorReportService.OPERACOES.LIVES_CAPACIDADE : errorReportService.OPERACOES.LIVES,
+    entityType: 'live_canal',
+    entityId: canal.id,
+    err: new Error(MOTIVO_SEM_GRAVAR[motivo]),
+    message: `${canal.display_name || canal.login} ao vivo sem gravar: ${MOTIVO_SEM_GRAVAR[motivo]}`,
+    contexto: { canal: canal.login, plataforma: canal.platform, motivo, ...contexto },
+  });
+}
 
 // Ate este tanto de blocos transcritos por volta do laço: da conta de uma
 // live em tempo real (1 bloco a cada 30s por canal) com folga pra recuperar
@@ -34,11 +73,21 @@ async function encerrarSessao(sessao, { motivo, pedidoParar, fimNatural, ultimas
     await liveSegmentsService.sincronizar(sessao);
   } catch (err) {
     logger.error(`Lives: inventario final da sessao ${sessao.id} falhou:`, err.message);
+    await registrar({ entityType: 'live_sessao', entityId: sessao.id, err, message: `Inventário final da gravação falhou: ${err.message}`, contexto: { etapa: 'encerrar', canal: sessao.login } });
   }
   const status = pedidoParar || fimNatural ? 'encerrada' : 'interrompida';
   const fim = await livesRepository.endSession(sessao.id, { status, motivo });
   if (fim) logger.info(`Lives: sessao ${sessao.id} ${status} (${motivo}).`);
-  if (status === 'interrompida') logger.warn(`Lives: sessao ${sessao.id} caiu. Ultimas linhas:\n${ultimasLinhas}`);
+  if (status === 'interrompida') {
+    logger.warn(`Lives: sessao ${sessao.id} caiu. Ultimas linhas:\n${ultimasLinhas}`);
+    await registrar({
+      entityType: 'live_sessao',
+      entityId: sessao.id,
+      err: new Error(`gravação caiu: ${motivo}`),
+      message: `A gravação da live de ${sessao.login} caiu no meio (${motivo})`,
+      contexto: { etapa: 'gravar', canal: sessao.login, motivo, ultimasLinhasDoGravador: ultimasLinhas || null },
+    });
+  }
 }
 
 async function comecarGravacao(canal, stream, cfg) {
@@ -70,8 +119,16 @@ async function comecarGravacao(canal, stream, cfg) {
     });
   } catch (err) {
     await livesRepository.endSession(sessao.id, { status: 'erro', motivo: err.message });
+    await registrar({
+      entityType: 'live_canal',
+      entityId: canal.id,
+      err,
+      message: `Não consegui começar a gravar a live de ${canal.login}: ${err.message}`,
+      contexto: { etapa: 'iniciar_gravacao', canal: canal.login, plataforma: canal.platform, sessao: sessao.id, qualidade: cfg.qualidade },
+    });
     throw err;
   }
+  await livesRepository.setNotRecordingReason(canal.id, null);
 }
 
 // A cada minuto: quem esta ao vivo, quem comeca e quem para de gravar.
@@ -85,6 +142,9 @@ async function monitorar() {
     return;
   }
   const cfg = await livesSettings.obterConfig();
+  // Limite do plano (canais acompanhados, lives ao mesmo tempo) ANTES de
+  // decidir quem grava: é ele que tira do RECEBE_CORTES quem passou do limite.
+  await limitesDasLivesService.recalcular();
   const canais = await livesRepository.listWatchedChannels();
   const seguidos = await livesRepository.listFollowedChannels();
   const recording = await livesRepository.listRecordingSessions();
@@ -116,6 +176,12 @@ async function monitorar() {
   if (discoPercent >= cfg.discoMaxPercent) {
     if (liveCaptureService.quantasGravando()) {
       logger.warn(`Lives: disco em ${discoPercent.toFixed(0)}% (limite ${cfg.discoMaxPercent}%) - parando as gravacoes.`);
+      await registrar({
+        entityType: 'servidor',
+        err: new Error('disco cheio'),
+        message: `Disco do servidor em ${discoPercent.toFixed(0)}% - todas as gravações de live foram paradas`,
+        contexto: { discoPercent: Math.round(discoPercent), limite: cfg.discoMaxPercent, gravando: liveCaptureService.quantasGravando() },
+      });
       await liveCaptureService.pararTodas(`disco acima de ${cfg.discoMaxPercent}%`);
     }
   }
@@ -129,6 +195,13 @@ async function monitorar() {
     } catch (err) {
       // Um canal com problema nao pode impedir os outros de serem olhados.
       logger.error(`Lives: canal ${canal.login} falhou nesta volta:`, err.message);
+      await registrar({
+        entityType: 'live_canal',
+        entityId: canal.id,
+        err,
+        message: `O canal ${canal.login} falhou nesta volta do supervisor: ${err.message}`,
+        contexto: { etapa: 'monitorar', canal: canal.login, plataforma: canal.platform },
+      });
     }
   }
 }
@@ -148,6 +221,13 @@ async function cuidarDoCanal(canal, stream, cfg, discoPercent) {
     if (!liveCaptureService.gravando(Number(sessao.id))) {
       // Banco diz "gravando" mas nao ha processo: morreu sem avisar.
       await livesRepository.endSession(sessao.id, { status: 'interrompida', motivo: 'processo sumiu' });
+      await registrar({
+        entityType: 'live_sessao',
+        entityId: sessao.id,
+        err: new Error('processo de gravação sumiu'),
+        message: `A gravação da live de ${canal.login} parou sem avisar (o processo sumiu)`,
+        contexto: { etapa: 'gravar', canal: canal.login, plataforma: canal.platform, sessao: sessao.id },
+      });
     } else if (!stream) {
       await liveCaptureService.parar(Number(sessao.id), 'live terminou');
     } else if (horasHoje >= cfg.horasPorCanalDia) {
@@ -156,11 +236,31 @@ async function cuidarDoCanal(canal, stream, cfg, discoPercent) {
     return;
   }
 
-  if (!stream) return;
-  if (discoPercent >= cfg.discoMaxPercent) return;
-  if (horasHoje >= cfg.horasPorCanalDia) return;
-  if (liveCaptureService.quantasGravando() >= cfg.maxCanais) {
-    logger.info(`Lives: ${canal.login} esta ao vivo, mas ja ha ${cfg.maxCanais} canal(is) gravando (limite).`);
+  if (!stream) {
+    await livesRepository.setNotRecordingReason(canal.id, null);
+    return;
+  }
+  if (discoPercent >= cfg.discoMaxPercent) {
+    await semGravar(canal, 'disco_cheio', { discoPercent: Math.round(discoPercent), limite: cfg.discoMaxPercent });
+    return;
+  }
+  if (horasHoje >= cfg.horasPorCanalDia) {
+    await semGravar(canal, 'limite_de_horas', { horasHoje: Math.round(horasHoje * 10) / 10, limite: cfg.horasPorCanalDia });
+    return;
+  }
+  // Vaga no servidor: cada cliente recebendo cortes de cada live conta 1 (o
+  // render é feito por cliente). Sem nenhuma gravação em andamento, a live
+  // entra mesmo com mais clientes do que o limite - senão um canal muito
+  // seguido nunca seria gravado.
+  const emUso = await livesRepository.seatsInUse();
+  const precisa = Math.max(1, (await livesRepository.activeFollowerIds(canal.id)).length);
+  if (liveCaptureService.quantasGravando() > 0 && emUso + precisa > cfg.maxCanais) {
+    await semGravar(canal, 'servidor_cheio', {
+      lugaresEmUso: emUso,
+      lugaresQueEstaLivePrecisa: precisa,
+      limiteDoServidor: cfg.maxCanais,
+      gravandoAgora: liveCaptureService.quantasGravando(),
+    });
     return;
   }
   await comecarGravacao(canal, stream, cfg);
@@ -198,6 +298,13 @@ async function analisar() {
         await etapa(sessao);
       } catch (err) {
         logger.error(`Lives: ${nome} da sessao ${s.id} falhou:`, err.message);
+        await registrar({
+          entityType: 'live_sessao',
+          entityId: s.id,
+          err,
+          message: `A etapa "${nome}" da live de ${s.login} falhou: ${err.message}`,
+          contexto: { etapa: nome, canal: s.login, sessao: s.id },
+        });
       }
     }
   }
@@ -246,6 +353,7 @@ function laco(nome, fn, intervaloMs) {
       await fn();
     } catch (err) {
       logger.error(`Lives: laço "${nome}" falhou:`, err.message);
+      await registrar({ entityType: 'live_laco', err, message: `O laço "${nome}" das lives falhou: ${err.message}`, contexto: { etapa: nome } });
     } finally {
       rodando = false;
     }

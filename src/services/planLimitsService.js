@@ -81,6 +81,69 @@ function comoConseguirMais(subscription) {
     : 'Troque de plano pra adicionar mais.';
 }
 
+// ------------------------------------------------ redes sociais e lives
+//
+// Contas por rede (Instagram, Facebook, Threads, LinkedIn, Pinterest, Bluesky,
+// YouTube): o número do plano vale pra CADA rede - Starter 1, Pro 3, Max 6
+// (decisão do fundador, 12/10/2026). Lives: quantos canais acompanhar e
+// quantas lives clipadas ao mesmo tempo.
+//
+// Diferente de canal/conta do TikTok, aqui assinatura CANCELADA conta como sem
+// plano: são as novidades que geram custo por uso (Outstand cobra por post,
+// live gasta IA), e quem cancelou não tem mais o que justifique o gasto.
+// Inadimplente continua com o limite (é a carência até o pagamento).
+//
+// O admin não tem limite: é quem testa tudo, com quantas contas precisar.
+function limitesDasNovidades(subscription, { admin = false } = {}) {
+  if (admin) return { semPlano: false, contasPorRede: null, canaisDeLive: null, livesAoMesmoTempo: null };
+  if (!subscription || !subscription.plan_id || subscription.status === 'cancelado') {
+    return { semPlano: true, contasPorRede: 0, canaisDeLive: 0, livesAoMesmoTempo: 0 };
+  }
+  const n = (v) => (v === null || v === undefined ? null : Number(v));
+  return {
+    semPlano: false,
+    contasPorRede: n(subscription.max_contas_por_rede),
+    canaisDeLive: n(subscription.max_canais_de_live),
+    livesAoMesmoTempo: n(subscription.max_lives_ao_mesmo_tempo),
+  };
+}
+
+async function limitesDasNovidadesDoCliente(clientUserId, opcoes = {}) {
+  const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
+  return { ...limitesDasNovidades(subscription, opcoes), plano: subscription && subscription.plan_name ? subscription.plan_name : null };
+}
+
+const TROCAR_DE_PLANO = 'Para conectar mais, troque de plano em "Plano e uso".';
+
+// `contasNaRede`: quantas contas ATIVAS desta rede o cliente já tem.
+async function checkSocialAccountLimit(clientUserId, nomeDaRede, contasNaRede, opcoes = {}) {
+  const l = await limitesDasNovidadesDoCliente(clientUserId, opcoes);
+  if (l.semPlano) return { allowed: false, limite: 0, reason: NO_PLAN_MESSAGE };
+  if (l.contasPorRede === null) return { allowed: true, limite: null };
+  if (contasNaRede >= l.contasPorRede) {
+    return {
+      allowed: false,
+      limite: l.contasPorRede,
+      reason: `Seu plano${l.plano ? ` ${l.plano}` : ''} permite ${plural(l.contasPorRede, 'conta', 'contas')} em cada rede social, e você já tem ${plural(contasNaRede, 'conta', 'contas')} do ${nomeDaRede}. ${TROCAR_DE_PLANO}`,
+    };
+  }
+  return { allowed: true, limite: l.contasPorRede };
+}
+
+async function checkLiveChannelLimit(clientUserId, canaisAcompanhados, opcoes = {}) {
+  const l = await limitesDasNovidadesDoCliente(clientUserId, opcoes);
+  if (l.semPlano) return { allowed: false, limite: 0, reason: NO_PLAN_MESSAGE };
+  if (l.canaisDeLive === null) return { allowed: true, limite: null };
+  if (canaisAcompanhados >= l.canaisDeLive) {
+    return {
+      allowed: false,
+      limite: l.canaisDeLive,
+      reason: `Seu plano${l.plano ? ` ${l.plano}` : ''} acompanha ${plural(l.canaisDeLive, 'canal de live', 'canais de live')}. Remova um canal ou troque de plano em "Plano e uso".`,
+    };
+  }
+  return { allowed: true, limite: l.canaisDeLive };
+}
+
 async function checkChannelLimit(clientUserId, currentCount) {
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
   const limites = limitesDe(subscription);
@@ -110,6 +173,10 @@ async function checkTiktokAccountLimit(clientUserId, currentCount) {
 }
 
 module.exports = {
+  limitesDasNovidades,
+  limitesDasNovidadesDoCliente,
+  checkSocialAccountLimit,
+  checkLiveChannelLimit,
   checkChannelLimit,
   checkTiktokAccountLimit,
   limitesDe,

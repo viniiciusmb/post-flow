@@ -1,7 +1,7 @@
 import { Rico } from "@/components/dashboard/Rico"
 import { useT, type ChaveDeTraducao } from "@/i18n"
 import { useEffect, useState } from "react"
-import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter, IconClock, IconBrandYoutube, IconBrandTiktok, IconReceipt, IconPlus } from "@tabler/icons-react"
+import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter, IconClock, IconBrandYoutube, IconBrandTiktok, IconReceipt, IconPlus, IconShare, IconBroadcast } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -282,7 +282,7 @@ function formatarData(iso: string) {
 
 export function ClientBillingPage() {
   const t = useT()
-  const { user, loading: authLoading, logout, mostrarTunel } = useAuth()
+  const { user, loading: authLoading, logout, mostrarTunel, painelNovo } = useAuth()
   const [data, setData] = useState<ClientBillingOverviewResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
@@ -952,6 +952,24 @@ export function ClientBillingPage() {
                         <IconBrandTiktok className="mt-0.5 size-4 shrink-0 text-primary" />
                         {plural(plan.maxTiktokAccounts, t("plano.contaTiktok"), t("plano.contasTiktok"), t("plano.contasIlimitadas"))}
                       </li>
+                      {/* Redes sociais e lives: só pra quem já vê essas telas
+                          (painel novo) - anunciar o que a pessoa não tem como
+                          usar seria vender o que não existe pra ela. */}
+                      {painelNovo && plan.maxContasPorRede != null && (
+                        <li className="flex items-start gap-2">
+                          <IconShare className="mt-0.5 size-4 shrink-0 text-primary" />
+                          <span>
+                            {t(plan.maxContasPorRede === 1 ? "plano.contaPorRede" : "plano.contasPorRede", { n: plan.maxContasPorRede })}
+                            <span className="block text-xs text-muted-foreground">{t("plano.redesQuais")}</span>
+                          </span>
+                        </li>
+                      )}
+                      {painelNovo && plan.maxCanaisDeLive != null && (
+                        <li className="flex items-start gap-2">
+                          <IconBroadcast className="mt-0.5 size-4 shrink-0 text-primary" />
+                          {t(plan.maxCanaisDeLive === 1 ? "plano.canalDeLive" : "plano.canaisDeLive", { n: plan.maxCanaisDeLive })}
+                        </li>
+                      )}
                     </ul>
                   </div>
                 )

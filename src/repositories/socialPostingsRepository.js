@@ -1,6 +1,7 @@
 'use strict';
 
 const pool = require('../db/pool');
+const { dentroDoPlanoSql } = require('./socialAccountsRepository');
 const logger = require('../lib/logger');
 const socialPostingSettingsRepository = require('./socialPostingSettingsRepository');
 const { projectQueueTimes } = require('../lib/postingSchedule');
@@ -178,6 +179,7 @@ async function contasQuePublicamSozinhas() {
        FROM social_accounts sa
        LEFT JOIN social_posting_settings s ON s.social_account_id = sa.id
       WHERE sa.disconnected_at IS NULL AND sa.precisa_reconectar_em IS NULL
+        AND ${dentroDoPlanoSql('sa')}
         AND COALESCE(s.auto_post_enabled, true) AND NOT COALESCE(s.paused, false)
         AND EXISTS (SELECT 1 FROM social_postings sp WHERE sp.social_account_id = sa.id AND sp.status = 'pending')`
   );
@@ -191,7 +193,7 @@ async function contasComPostarAgora() {
     `SELECT DISTINCT sa.id, sa.network, sa.client_user_id
        FROM social_postings sp JOIN social_accounts sa ON sa.id = sp.social_account_id
       WHERE sp.status = 'pending' AND sp.ignora_limite_diario AND sa.disconnected_at IS NULL
-        AND sa.precisa_reconectar_em IS NULL`
+        AND sa.precisa_reconectar_em IS NULL AND ${dentroDoPlanoSql('sa')}`
   );
   return rows;
 }
@@ -254,7 +256,8 @@ async function pegarSeVenceu(socialAccountId, { soPostarAgora = false } = {}) {
 // Dados que o envio precisa: a conta na Outstand, o arquivo e a duração.
 async function detalhesParaEnviar(id) {
   const { rows } = await pool.query(
-    `SELECT sp.*, sa.network, sa.outstand_account_id, sa.disconnected_at,
+    `SELECT sp.*, sa.network, sa.outstand_account_id, sa.disconnected_at, sa.username AS conta_usuario,
+            sa.account_type AS conta_tipo,
             COALESCE(c.local_clip_path, k.local_clip_path) AS caminho,
             COALESCE(c.end_seconds - c.start_seconds, k.end_offset - k.start_offset) AS duracao,
             COALESCE(s.options, '{}'::jsonb) AS opcoes
@@ -324,7 +327,7 @@ async function marcarErro(id, mensagem, tipo = null) {
 
 async function emAndamento() {
   const { rows } = await pool.query(
-    `SELECT sp.*, sa.outstand_account_id, sa.network
+    `SELECT sp.*, sa.outstand_account_id, sa.network, sa.username AS conta_usuario
        FROM social_postings sp JOIN social_accounts sa ON sa.id = sp.social_account_id
       WHERE sp.status = 'processing' ORDER BY sp.sent_at`
   );
@@ -440,6 +443,11 @@ async function daConta(id, clientUserId) {
     [id, clientUserId]
   );
   return rows[0] || null;
+}
+
+// A postagem (só se for do cliente), pra quem precisa saber de que conta ela é.
+async function contaDaPostagem(id, clientUserId) {
+  return daConta(id, clientUserId);
 }
 
 async function editarLegenda(id, clientUserId, caption) {
@@ -577,6 +585,7 @@ async function publicadosParaLimpar(horas) {
 }
 
 module.exports = {
+  contaDaPostagem,
   ORDEM,
   publicadosParaLimpar,
   proximoHorario,

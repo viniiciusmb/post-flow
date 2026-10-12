@@ -15,6 +15,40 @@ const erroDePostagem = require('../../lib/erroDePostagem');
 const logger = require('../../lib/logger');
 
 const JANELA_DO_LIMITE_HORAS = 23;
+
+function tamanhoDoArquivo(caminho) {
+  try {
+    return caminho ? fs.statSync(caminho).size : null;
+  } catch {
+    return null;
+  }
+}
+
+// Tudo que se sabe da publicação no momento da falha (vai pro painel de erros,
+// uma linha por ocorrência). Nunca leva token: só ids, modo, tamanho e etapa.
+function contextoTiktok(account, posting, extra = {}) {
+  return {
+    postagem: posting.id,
+    contaTiktok: account ? account.id : posting.tiktok_account_id || null,
+    contaNome: account ? account.display_name || account.creator_nickname || null : null,
+    modo: account ? account.publish_mode || 'inbox' : null,
+    limiteDeDuracaoDaConta: account ? account.max_video_post_duration_sec || null : null,
+    vencimentoDoAcesso: account ? account.token_expires_at || null : null,
+    corte: posting.clip_id || posting.video_id || null,
+    corteTitulo: posting.clip_title || null,
+    arquivo: posting.local_clip_path || null,
+    arquivoBytes: tamanhoDoArquivo(posting.local_clip_path),
+    duracaoSegundos:
+      posting.clip_end_seconds !== undefined && posting.clip_start_seconds !== undefined
+        ? Number(posting.clip_end_seconds) - Number(posting.clip_start_seconds)
+        : null,
+    legendaCaracteres: posting.caption ? String(posting.caption).length : 0,
+    tentativasAnteriores: Number(posting.attempts || 0),
+    horarioMarcado: posting.scheduled_for || null,
+    publishId: posting.tiktok_publish_id || null,
+    ...extra,
+  };
+}
 const ATRASO_MAXIMO_MS = 2 * 60 * 60 * 1000;
 
 async function run() {
@@ -27,6 +61,15 @@ async function run() {
       await maybePublishNext(account);
     } catch (err) {
       logger.error(`Falha ao processar fila de postagem da conta TikTok ${account.id}:`, err);
+      await errorReportService.report({
+        operation: errorReportService.OPERACOES.TIKTOK_POSTING,
+        entityType: 'tiktok_account',
+        entityId: account.id,
+        clientUserId: account.client_user_id || null,
+        error: err,
+        message: `A fila da conta do TikTok falhou nesta rodada: ${err.message}`,
+        contexto: { etapa: 'fila_da_conta', contaTiktok: account.id },
+      });
     }
   }
 }
@@ -114,6 +157,13 @@ async function tratarFalha(account, posting, err) {
     entityId: posting.id,
     clientUserId: account.client_user_id || null,
     error: err,
+    contexto: contextoTiktok(account, posting, {
+      etapa: err.etapa || null,
+      classificacao: erroDePostagem.classificar(err),
+      vaiTentarDeNovo: podeTentarDeNovo,
+      tentativaNumero: tentativasJaFeitas + 1,
+      maximoDeTentativas: erroDePostagem.MAX_TENTATIVAS,
+    }),
   });
 }
 
@@ -128,6 +178,8 @@ async function publish(account, posting) {
 
   await postingsRepository.updateStatus(posting.id, { status: 'queued' });
 
+  let etapa = 'renovar_token';
+  let publishIdAtual = null;
   try {
     const accessToken = await tiktokAccountsRepository.getValidAccessToken(tiktokService, account);
     const videoSizeBytes = posting.file_size_bytes || fs.statSync(posting.local_clip_path).size;
@@ -170,10 +222,12 @@ async function publish(account, posting) {
         error: new Error(
           `Corte de ${Math.round(duracaoCorte)}s excede o maximo de ${limiteSegundos}s que a conta do TikTok aceita.`
         ),
+        contexto: contextoTiktok(account, posting, { etapa: 'conferir_duracao' }),
       });
       return;
     }
 
+    etapa = modoDireto ? 'iniciar_publicacao_direta' : 'iniciar_rascunho';
     const { publishId, uploadUrl, chunkSize, totalChunkCount } = modoDireto
       ? await tiktokService.initDirectPost(accessToken, videoSizeBytes, {
           caption: posting.caption,
@@ -185,6 +239,8 @@ async function publish(account, posting) {
           brandOrganicToggle: opcoes.brandOrganicToggle,
         })
       : await tiktokService.initInboxVideo(accessToken, videoSizeBytes);
+    publishIdAtual = publishId;
+    etapa = `enviar_arquivo (${totalChunkCount} pedaco(s) de ${chunkSize} bytes)`;
     await tiktokService.uploadVideoFile(uploadUrl, posting.local_clip_path, videoSizeBytes, chunkSize, totalChunkCount);
     await postingsRepository.updateStatus(posting.id, { status: 'processing', tiktokPublishId: publishId });
     // PONTO SEM VOLTA. Os bytes ja estao com a TikTok e ela pode publicar a
@@ -192,6 +248,7 @@ async function publish(account, posting) {
     // ACOMPANHAMENTO, nao de envio - reenviar o arquivo publicaria o mesmo
     // corte duas vezes no perfil do cliente.
     jaEntregueAoTiktok = true;
+    etapa = 'confirmar_publicacao';
     logger.info(`Corte "${posting.clip_title}" enviado pro TikTok (conta ${account.id}), aguardando confirmacao.`);
 
     // Tenta confirmar rapido (a TikTok as vezes processa em segundos); se nao
@@ -216,11 +273,13 @@ async function publish(account, posting) {
           entityId: posting.id,
           clientUserId: account.client_user_id || null,
           error: new Error(result.failReason || 'A TikTok recusou a publicacao.'),
+          contexto: contextoTiktok(account, posting, { etapa, publishId: publishIdAtual, respostaDaTiktok: result }),
         });
         return;
       }
     }
   } catch (err) {
+    if (!err.etapa) err.etapa = etapa;
     if (jaEntregueAoTiktok) {
       // Nao reenviar: o video ja esta la. Fica em 'processing' e o
       // checkStaleProcessing do proximo ciclo pergunta pra TikTok como ficou -
@@ -236,6 +295,8 @@ async function publish(account, posting) {
         entityId: posting.id,
         clientUserId: account.client_user_id || null,
         error: err,
+        message: `Falha depois de o vídeo já estar com a TikTok (não vai reenviar): ${err.message}`,
+        contexto: contextoTiktok(account, posting, { etapa, publishId: publishIdAtual, jaEntregueAoTiktok: true }),
       });
       return;
     }
@@ -267,6 +328,7 @@ async function checkStaleProcessing() {
           entityId: posting.id,
           clientUserId: account.client_user_id || null,
           error: new Error(result.failReason || 'A TikTok recusou a publicacao.'),
+          contexto: contextoTiktok(account, posting, { etapa: 'conferir_publicacao_atrasada', respostaDaTiktok: result }),
         });
       }
     } catch (err) {
@@ -275,7 +337,9 @@ async function checkStaleProcessing() {
         operation: errorReportService.OPERACOES.TIKTOK_POSTING,
         entityType: 'posting',
         entityId: posting.id,
+        clientUserId: posting.client_user_id || null,
         error: err,
+        contexto: contextoTiktok(null, posting, { etapa: 'conferir_publicacao_atrasada' }),
       });
     }
   }
