@@ -66,10 +66,11 @@ test('cliente no painel novo vê a própria linha, e só a dele', async () => {
   assert.ok(!JSON.stringify(r.body).includes('video de outro cliente'), 'nada do outro cliente vaza, nem no registro');
 });
 
-test('cliente fora do teste não acessa a máquina', async () => {
+// Painel novo aberto pra todos desde 12/10/2026.
+test('qualquer cliente acessa a própria máquina', async () => {
   const { agent } = await logado({ noPainelNovo: false });
   const r = await agent.get('/api/client/maquina');
-  assert.equal(r.status, 403);
+  assert.equal(r.status, 200);
 });
 
 test('o sistema inteiro é só do admin', async () => {
@@ -176,9 +177,7 @@ test('várias contas por rede: cada corte vai pra faixa da conta certa', async (
 });
 
 // Resumo da barra do topo / menu: as mesmas travas do estado completo.
-test('resumo do topo: só painel novo, só o que é do cliente, sistema só pro admin', async () => {
-  const fora = await logado({ noPainelNovo: false });
-  assert.equal((await fora.agent.get('/api/client/maquina/resumo')).status, 403);
+test('resumo do topo: só o que é do cliente, sistema só pro admin', async () => {
 
   const { u, agent } = await logado();
   const outro = await logado();

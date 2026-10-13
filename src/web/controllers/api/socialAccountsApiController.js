@@ -152,7 +152,10 @@ async function listaComResumo(clientUserId) {
 // servidor usa pra barrar (planLimitsService), nunca um calculado na tela.
 async function limitesParaApi(req) {
   const l = await planLimitsService.limitesDasNovidadesDoCliente(req.session.user.id, { admin: ehAdmin(req) });
-  return { semPlano: l.semPlano, contasPorRede: l.contasPorRede, plano: l.plano };
+  // `porRede`: o limite EFETIVO de cada rede (plano + extras comprados).
+  const porRede = {};
+  for (const rede of REDES) porRede[rede] = planLimitsService.limiteNaRede(l, rede);
+  return { semPlano: l.semPlano, contasPorRede: l.contasPorRede, porRede, extras: l.extrasPorRede, plano: l.plano };
 }
 
 async function listar(req, res) {
@@ -176,7 +179,7 @@ async function iniciarConexao(req, res) {
     const ehReconexao = Boolean(reconectando && reconectando.network === network);
     const limite = ehReconexao
       ? { allowed: true }
-      : await planLimitsService.checkSocialAccountLimit(req.session.user.id, nomeDaRede(network), naRede, { admin: ehAdmin(req) });
+      : await planLimitsService.checkSocialAccountLimit(req.session.user.id, network, naRede, { admin: ehAdmin(req) });
     if (!limite.allowed) {
       registrarLimite(req, network, limite.reason, { contasNaRede: naRede, limite: limite.limite, etapa: 'iniciar' });
       return res.status(403).json({ error: limite.reason, limite: true });
@@ -216,7 +219,7 @@ async function cabeNoPlano(req, network, outstandAccountId, extra = {}) {
   const p = req.session.conexaoSocial;
   if (p && p.reconectar && p.network === network) return { ok: true, substitui: p.reconectar };
   const naRede = await socialAccountsRepository.contarNaRede(req.session.user.id, network);
-  const limite = await planLimitsService.checkSocialAccountLimit(req.session.user.id, nomeDaRede(network), naRede, {
+  const limite = await planLimitsService.checkSocialAccountLimit(req.session.user.id, network, naRede, {
     admin: ehAdmin(req),
   });
   if (limite.allowed) return { ok: true };
@@ -405,7 +408,7 @@ async function conectarPaginas(req, res) {
   // Escolher mais páginas do que o plano comporta: recusado ANTES de pedir à
   // Outstand, senão as contas seriam criadas lá e ficariam sem dono aqui.
   const naRede = await socialAccountsRepository.contarNaRede(req.session.user.id, network);
-  const limite = await planLimitsService.checkSocialAccountLimit(req.session.user.id, nomeDaRede(network), naRede + ids.length - 1, {
+  const limite = await planLimitsService.checkSocialAccountLimit(req.session.user.id, network, naRede + ids.length - 1, {
     admin: ehAdmin(req),
   });
   if (!limite.allowed) {

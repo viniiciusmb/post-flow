@@ -145,10 +145,11 @@ async function listarAssinaturas() {
     `SELECT cs.client_user_id, cs.status, cs.first_plan_at, cs.canceled_at, cs.cancel_at, cs.created_at,
             cs.asaas_subscription_id, cs.asaas_pix_authorization_id, cs.stripe_subscription_id,
             cs.subscription_provider, cs.asaas_card_brand, cs.asaas_card_last4,
-            cs.extra_channels, cs.extra_tiktok_accounts,
+            cs.extra_channels, cs.extra_tiktok_accounts, cs.extra_redes,
             u.email, u.business_name,
             sp.id AS plan_id, sp.key AS plan_key, sp.name AS plan_name, sp.price_cents AS plan_price_cents,
             sp.extra_channel_price_cents, sp.extra_tiktok_price_cents, sp.extra_both_price_cents,
+            sp.extra_rede_price_cents,
             COALESCE(r.total_pago, 0) AS total_pago,
             COALESCE(r.parcelas, 0) AS parcelas,
             r.primeiro_pagamento, r.ultimo_pagamento

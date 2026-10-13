@@ -83,9 +83,10 @@ async function contaTiktok(userId) {
   return Number(rows[0].id);
 }
 
-test('quem nao esta no painel novo nao abre o feed', async () => {
+// Painel novo aberto pra todos desde 12/10/2026.
+test('qualquer cliente abre o feed', async () => {
   const { agent } = await logado({ noPainelNovo: false });
-  assert.equal((await agent.get('/api/client/feed')).status, 403);
+  assert.equal((await agent.get('/api/client/feed')).status, 200);
 });
 
 test('mostra so os cortes prontos do proprio cliente, do mais novo pro mais antigo, sem repetir entre paginas', async () => {

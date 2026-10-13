@@ -16,6 +16,8 @@
 'use strict';
 
 const clientSubscriptionsRepository = require('../repositories/clientSubscriptionsRepository');
+const redesSociais = require('../lib/redesSociais');
+const { normalizarRedes } = require('../lib/precoDasConexoesExtras');
 
 // As mensagens daqui aparecem direto na tela do cliente, entao sao escritas
 // como frase, com acento e plural de verdade. "1 canal(is) monitorado(s)" era
@@ -94,18 +96,28 @@ function comoConseguirMais(subscription) {
 // Inadimplente continua com o limite (é a carência até o pagamento).
 //
 // O admin não tem limite: é quem testa tudo, com quantas contas precisar.
+// `extrasPorRede`: as contas extras compradas ({instagram: 1}), que somam ao
+// número do plano SÓ naquela rede (R$ 9,90 cada, 12/10/2026).
 function limitesDasNovidades(subscription, { admin = false } = {}) {
-  if (admin) return { semPlano: false, contasPorRede: null, canaisDeLive: null, livesAoMesmoTempo: null };
+  if (admin) return { semPlano: false, contasPorRede: null, extrasPorRede: {}, canaisDeLive: null, livesAoMesmoTempo: null };
   if (!subscription || !subscription.plan_id || subscription.status === 'cancelado') {
-    return { semPlano: true, contasPorRede: 0, canaisDeLive: 0, livesAoMesmoTempo: 0 };
+    return { semPlano: true, contasPorRede: 0, extrasPorRede: {}, canaisDeLive: 0, livesAoMesmoTempo: 0 };
   }
   const n = (v) => (v === null || v === undefined ? null : Number(v));
   return {
     semPlano: false,
     contasPorRede: n(subscription.max_contas_por_rede),
+    extrasPorRede: normalizarRedes(subscription.extra_redes),
     canaisDeLive: n(subscription.max_canais_de_live),
     livesAoMesmoTempo: n(subscription.max_lives_ao_mesmo_tempo),
   };
+}
+
+// O limite EFETIVO numa rede: plano + extras daquela rede. null = sem limite.
+function limiteNaRede(limites, network) {
+  if (limites.semPlano) return 0;
+  if (limites.contasPorRede === null) return null;
+  return limites.contasPorRede + ((limites.extrasPorRede || {})[network] || 0);
 }
 
 async function limitesDasNovidadesDoCliente(clientUserId, opcoes = {}) {
@@ -116,18 +128,21 @@ async function limitesDasNovidadesDoCliente(clientUserId, opcoes = {}) {
 const TROCAR_DE_PLANO = 'Para conectar mais, troque de plano em "Plano e uso".';
 
 // `contasNaRede`: quantas contas ATIVAS desta rede o cliente já tem.
-async function checkSocialAccountLimit(clientUserId, nomeDaRede, contasNaRede, opcoes = {}) {
+// `network`: a chave da rede (instagram, facebook...).
+async function checkSocialAccountLimit(clientUserId, network, contasNaRede, opcoes = {}) {
   const l = await limitesDasNovidadesDoCliente(clientUserId, opcoes);
   if (l.semPlano) return { allowed: false, limite: 0, reason: NO_PLAN_MESSAGE };
-  if (l.contasPorRede === null) return { allowed: true, limite: null };
-  if (contasNaRede >= l.contasPorRede) {
+  const limite = limiteNaRede(l, network);
+  if (limite === null) return { allowed: true, limite: null };
+  if (contasNaRede >= limite) {
+    const nome = (redesSociais.info(network) || {}).nome || network;
     return {
       allowed: false,
-      limite: l.contasPorRede,
-      reason: `Seu plano${l.plano ? ` ${l.plano}` : ''} permite ${plural(l.contasPorRede, 'conta', 'contas')} em cada rede social, e você já tem ${plural(contasNaRede, 'conta', 'contas')} do ${nomeDaRede}. ${TROCAR_DE_PLANO}`,
+      limite,
+      reason: `Seu plano${l.plano ? ` ${l.plano}` : ''} permite ${plural(limite, 'conta', 'contas')} do ${nome}, e você já tem ${plural(contasNaRede, 'conta', 'contas')}. Compre uma conta extra por R$ 9,90/mês ou troque de plano em "Plano e uso".`,
     };
   }
-  return { allowed: true, limite: l.contasPorRede };
+  return { allowed: true, limite };
 }
 
 async function checkLiveChannelLimit(clientUserId, canaisAcompanhados, opcoes = {}) {
@@ -173,6 +188,7 @@ async function checkTiktokAccountLimit(clientUserId, currentCount) {
 }
 
 module.exports = {
+  limiteNaRede,
   limitesDasNovidades,
   limitesDasNovidadesDoCliente,
   checkSocialAccountLimit,

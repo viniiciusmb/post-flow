@@ -205,6 +205,17 @@ function SeloDeConfianca({ cnpj, empresa }: { cnpj: string; empresa: string }) {
 
 type Metodo = "cartao" | "pix"
 
+// Nome de cada rede pra escrever o resumo da compra ("2 contas do Instagram").
+const NOME_DA_REDE: Record<string, string> = {
+  instagram: "Instagram",
+  facebook: "Facebook",
+  threads: "Threads",
+  linkedin: "LinkedIn",
+  pinterest: "Pinterest",
+  bluesky: "Bluesky",
+  youtube: "YouTube",
+}
+
 export function CheckoutPage() {
   const { mostrarTunel, painelNovo } = useAuth()
   const [ctx, setCtx] = useState<CheckoutContexto | null>(null)
@@ -236,9 +247,17 @@ export function CheckoutPage() {
       // botão do par.
       const canais = Number(q.get("canais")) || 0
       const contas = Number(q.get("contas")) || 0
-      return canais + contas > 0
-        ? { tipo: "extras", canais, contas }
-        : { tipo: "extras", canais: 1, contas: 1 }
+      // Contas extras nas redes sociais (12/10/2026): redes=instagram:1,facebook:2
+      const redes: Record<string, number> = {}
+      for (const parte of (q.get("redes") || "").split(",")) {
+        const [rede, qtd] = parte.split(":")
+        const n = Math.trunc(Number(qtd) || 0)
+        if (rede && n > 0 && n <= 20) redes[rede] = n
+      }
+      const nasRedes = Object.values(redes).reduce((a, b) => a + b, 0)
+      return canais + contas + nasRedes > 0
+        ? { tipo: "extras", canais, contas, redes }
+        : { tipo: "extras", canais: 1, contas: 1, redes: {} }
     }
     return { tipo: "cartao" }
   }, [])
@@ -320,8 +339,12 @@ export function CheckoutPage() {
       const p = ctx.subscription.precosExtras
       if (!p) return { hojeCents: 0, depoisCents: null, promo: false }
       const pares = Math.min(item.canais, item.contas)
+      const nasRedes = Object.values(item.redes ?? {}).reduce((a, b) => a + b, 0)
       const total =
-        pares * p.ambos + (item.canais - pares) * p.canal + (item.contas - pares) * p.conta
+        (pares ? pares * (p.ambos ?? 0) : 0) +
+        (item.canais - pares ? (item.canais - pares) * (p.canal ?? 0) : 0) +
+        (item.contas - pares ? (item.contas - pares) * (p.conta ?? 0) : 0) +
+        (nasRedes ? nasRedes * (p.rede ?? 0) : 0)
       return { hojeCents: total, depoisCents: total, promo: false }
     }
     return { hojeCents: 0, depoisCents: null, promo: false }
@@ -387,6 +410,7 @@ export function CheckoutPage() {
       if (item.tipo === "extras") {
         corpo.canais = item.canais
         corpo.contas = item.contas
+        corpo.redes = item.redes ?? {}
       }
       if (precisaDoFormulario || metodo === "pix") Object.assign(corpo, corpoDoCartao())
       // O cartão salvo é usado pelo token guardado no servidor: nada de cartão
@@ -1170,15 +1194,18 @@ function ResumoDoPedido({
             rotulo={[
               item.canais > 0 ? `${item.canais} canal${item.canais > 1 ? "is" : ""} do YouTube` : null,
               item.contas > 0 ? `${item.contas} conta${item.contas > 1 ? "s" : ""} do TikTok` : null,
+              ...Object.entries(item.redes ?? {}).map(
+                ([rede, n]) => `${n} conta${n > 1 ? "s" : ""} do ${NOME_DA_REDE[rede] ?? rede}`,
+              ),
             ]
               .filter(Boolean)
               .join(" + ")}
             valor={formatCents(preco.hojeCents)}
           />
           <p className="border-t border-border pt-4 text-[12.5px] leading-relaxed text-muted-foreground">
-            Cada conexão libera <strong className="text-foreground">1 canal do YouTube e 1 conta do TikTok</strong>{" "}
-            a mais, cobrada todo mês junto com o seu plano. Você pode cancelar quando quiser — o mês já pago
-            não é devolvido.
+            Cada conexão libera <strong className="text-foreground">uma conta a mais</strong> naquela rede,
+            cobrada todo mês junto com o seu plano. Você pode devolver quando quiser em Plano e uso — o mês já
+            pago não é devolvido.
           </p>
         </>
       )}
@@ -1257,7 +1284,7 @@ function ConcluidoView({
               : item.tipo === "creditos"
                 ? "Os minutos já estão no seu saldo."
                 : item.tipo === "extras"
-                  ? "Você já pode conectar mais um canal e mais uma conta do TikTok."
+                  ? "Você já pode conectar as contas a mais em Redes sociais."
                   : "Ele será usado nas cobranças automáticas."}
         </p>
       </div>

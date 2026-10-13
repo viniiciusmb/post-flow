@@ -103,13 +103,14 @@ function contaNaOutstand({ network = 'instagram', tenant }) {
 
 const local = (r) => r.headers.get('location') || '';
 
-test('quem nao esta no painel novo nao ve as telas nem as rotas novas', async () => {
+// Painel novo aberto pra todos desde 12/10/2026.
+test('qualquer cliente ve as telas e as rotas novas', async () => {
   const { agent } = await logado({ noPainelNovo: false });
-  assert.equal((await agent.get('/api/client/social-accounts')).status, 403);
-  assert.equal((await agent.get('/api/client/lives')).status, 403);
-  assert.equal(local(await agent.get('/client/social')), '/client/tiktok-account');
-  assert.equal(local(await agent.get('/client/youtube')), '/client/youtube-channels');
-  assert.equal((await agent.get('/api/auth/me')).body.ui.painelNovo, false);
+  assert.equal((await agent.get('/api/client/social-accounts')).status, 200);
+  assert.equal((await agent.get('/api/client/lives')).status, 200);
+  assert.notEqual(local(await agent.get('/client/social')), '/client/tiktok-account');
+  assert.notEqual(local(await agent.get('/client/youtube')), '/client/youtube-channels');
+  assert.equal((await agent.get('/api/auth/me')).body.ui.painelNovo, true);
 });
 
 test('admin e as contas da lista veem o painel novo', async () => {

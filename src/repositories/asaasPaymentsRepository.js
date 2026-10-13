@@ -20,6 +20,8 @@ async function create({
   slots = null,
   extraChannels = null,
   extraTiktokAccounts = null,
+  // Contas extras nas redes compradas nesta cobrança ({instagram: 1}).
+  extraRedes = null,
   // Cartao usado NESTA compra. Guardado aqui, e nao lido de
   // client_subscriptions na hora de exibir: o cliente troca de cartao, e o
   // extrato inteiro passaria a dizer que tudo foi pago no cartao novo -
@@ -34,11 +36,12 @@ async function create({
   const { rows } = await pool.query(
     `INSERT INTO asaas_payments
        (asaas_payment_id, client_user_id, purpose, billing_type, amount_cents, plan_id, credit_purchase_id,
-        slots, extra_channels, extra_tiktok_accounts, card_brand, card_last4, customer_ip)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        slots, extra_channels, extra_tiktok_accounts, card_brand, card_last4, customer_ip, extra_redes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      RETURNING *`,
     [asaasPaymentId, clientUserId, purpose, billingType, amountCents, planId, creditPurchaseId,
-     slots, extraChannels, extraTiktokAccounts, cardBrand, cardLast4, customerIp]
+     slots, extraChannels, extraTiktokAccounts, cardBrand, cardLast4, customerIp,
+     extraRedes ? JSON.stringify(extraRedes) : null]
   );
   return rows[0];
 }

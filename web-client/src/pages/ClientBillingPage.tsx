@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ExtrasNasRedes, QuantoGasta, UsoDoPlano } from "@/components/plano/PartesDoPlano"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
@@ -290,6 +292,19 @@ export function ClientBillingPage() {
   const [payments, setPayments] = useState<ClientPaymentsResponse | null>(null)
   const [removerPedido, setRemoverPedido] = useState<"canais" | "contas" | null>(null)
   const [cancelarPedido, setCancelarPedido] = useState(false)
+  // Aba aberta, guardada na URL (?aba=comprar) pra os links de outras telas
+  // ("comprar conta extra", "ver planos") abrirem direto no lugar certo.
+  const [aba, setAba] = useState<string>(() => {
+    const q = new URLSearchParams(window.location.search).get("aba")
+    return q && ["resumo", "comprar", "planos", "faturas"].includes(q) ? q : "resumo"
+  })
+  function trocarAba(v: string) {
+    setAba(v)
+    const url = new URL(window.location.href)
+    url.searchParams.set("aba", v)
+    window.history.replaceState({}, "", url)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
 
   async function load() {
     const res = await api.get<ClientBillingOverviewResponse>("/api/client/billing/overview")
@@ -307,9 +322,19 @@ export function ClientBillingPage() {
     }
   }
 
+  // Falha ao abrir a tela não pode virar esqueleto eterno (nem erro solto no
+  // navegador): mostra o motivo e um botão pra tentar de novo.
+  const [erroAoAbrir, setErroAoAbrir] = useState<string | null>(null)
+  function abrir() {
+    setErroAoAbrir(null)
+    load().catch((err) =>
+      setErroAoAbrir(err instanceof ApiError ? err.message : t("plano.naoFoiPossivelCompletar"))
+    )
+  }
+
   useEffect(() => {
     if (!user) return
-    load()
+    abrir()
     loadPayments()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
@@ -489,7 +514,16 @@ export function ClientBillingPage() {
         title={t("plano.titulo")}
         description={t("plano.descricao")}
       />
-      {!data ? (
+      {!data && erroAoAbrir ? (
+        <Card>
+          <CardContent className="flex flex-col items-start gap-3 py-6">
+            <p className="text-sm text-destructive">{erroAoAbrir}</p>
+            <Button variant="outline" size="sm" onClick={abrir}>
+              Tentar de novo
+            </Button>
+          </CardContent>
+        </Card>
+      ) : !data ? (
         <Skeleton className="h-64" />
       ) : (
         <>
@@ -548,701 +582,750 @@ export function ClientBillingPage() {
             />
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2" data-tour="creditos">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">{t("plano.creditosNormais")}</CardTitle>
-                <CardDescription>
-                  {mostrarTunel ? t("plano.creditosNormaisTexto") : t("plano.creditosNormaisTextoSozinho")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <BucketMeter label="Normais" bucket={data.credits.normal} />
-              </CardContent>
-            </Card>
-            {/* Cota bônus: só existe pra quem instala o programa e faz os
-                downloads saírem pela internet dele. Com a exibição do túnel
-                desligada, mostrar esse cartão seria oferecer minutos que o
-                cliente não tem como liberar. A cota continua no banco e
-                continua sendo usada por quem já pareou. */}
-            {mostrarTunel && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">{t("plano.creditosBonus")}</CardTitle>
-                  <CardDescription>{t("plano.creditosBonusTexto")}</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3">
-                  <BucketMeter label={t("plano.bonus")} bucket={data.credits.bonus} />
-                  {/* Quem chega aqui e vê "0 min disponíveis" no bônus precisa
-                      saber onde ligar isso. Sem o caminho, a cota bônus vira um
-                      número sem explicação. */}
-                  <Button variant="outline" size="sm" asChild className="w-fit gap-1.5">
-                    <a href="/client/tunnel">
-                      <IconRouter className="size-4" />{t("plano.configurarConexao")}</a>
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </div>
 
-          {/* As duas formas de nao ficar sem credito no meio do mes ficam
-              ACIMA dos planos: quem chega nesta tela quase sempre chega porque
-              o credito esta acabando agora, nao pra comparar plano. */}
-          <div className="grid gap-4 lg:grid-cols-2" data-tour="nao-ficar-sem-credito">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <IconCreditCard className="size-4 text-muted-foreground" />{t("plano.cartaoCobranca")}</CardTitle>
-                <CardDescription>{t("plano.maquinaDeViews")}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col gap-4">
-                {/* Com o túnel escondido só existe UMA tarifa, então a grade
-                    de duas colunas viraria uma caixa solta e torta no meio da
-                    largura. */}
-                <div className={mostrarTunel ? "grid gap-2 sm:grid-cols-2" : "grid gap-2"}>
-                  <RateBox
-                    titulo={mostrarTunel ? t("plano.pelaNossaInternet") : t("plano.porMinuto")}
-                    valor={`${formatCents(data.overage.rateCentsNormal)} / min`}
-                    detalhe={mostrarTunel ? t("plano.semInstalarNada") : undefined}
-                  />
-                  {mostrarTunel && (
-                    <RateBox
-                      titulo={t("plano.pelaSuaInternet")}
-                      valor={`${formatCents(data.overage.rateCentsBonus)} / min`}
-                      detalhe={t("plano.comProgramaInstalado")}
-                      destaque
-                    />
-                  )}
-                </div>
+          <Tabs value={aba} onValueChange={trocarAba} className="min-w-0">
+            <TabsList variant="line" className="justify-start">
+              <TabsTrigger value="resumo">Resumo</TabsTrigger>
+              <TabsTrigger value="comprar">Comprar</TabsTrigger>
+              <TabsTrigger value="planos">Planos</TabsTrigger>
+              <TabsTrigger value="faturas">Faturas</TabsTrigger>
+            </TabsList>
 
-                {/* Fechado por padrão: quem só quer saber o preço já viu os dois
-                    valores acima. Isto aqui é pra quem tem a pergunta seguinte
-                    ("quando exatamente me cobram?") - e essa merece resposta
-                    completa, não uma linha espremida. */}
-                <details className="group rounded-lg border border-border">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3.5 text-sm font-medium [&::-webkit-details-marker]:hidden">{t("plano.comoGastosProcessados")}<IconChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                  </summary>
+            <TabsContent value="resumo" className="flex min-w-0 flex-col gap-4">
+              <div className="grid gap-4 sm:grid-cols-2" data-tour="creditos">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">{t("plano.creditosNormais")}</CardTitle>
+                    <CardDescription>
+                      {mostrarTunel ? t("plano.creditosNormaisTexto") : t("plano.creditosNormaisTextoSozinho")}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <BucketMeter label="Normais" bucket={data.credits.normal} />
+                  </CardContent>
+                </Card>
+                {/* Cota bônus: só existe pra quem instala o programa e faz os
+                    downloads saírem pela internet dele. Com a exibição do túnel
+                    desligada, mostrar esse cartão seria oferecer minutos que o
+                    cliente não tem como liberar. A cota continua no banco e
+                    continua sendo usada por quem já pareou. */}
+                {mostrarTunel && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">{t("plano.creditosBonus")}</CardTitle>
+                      <CardDescription>{t("plano.creditosBonusTexto")}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-3">
+                      <BucketMeter label={t("plano.bonus")} bucket={data.credits.bonus} />
+                      {/* Quem chega aqui e vê "0 min disponíveis" no bônus precisa
+                          saber onde ligar isso. Sem o caminho, a cota bônus vira um
+                          número sem explicação. */}
+                      <Button variant="outline" size="sm" asChild className="w-fit gap-1.5">
+                        <a href="/client/tunnel">
+                          <IconRouter className="size-4" />{t("plano.configurarConexao")}</a>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
 
-                  <div className="flex flex-col gap-3 border-t border-border p-3.5 text-sm leading-relaxed text-muted-foreground">
-                    {/* Estes parágrafos têm negrito no meio da frase. Cortá-los
-                        em pedaços pra montar o JSX deixaria o dicionário
-                        ilegível pra quem traduz — o Rico resolve isso. */}
-                    <Rico html={t("plano.cobrancaExplicacao1", { min: VIDEO_EXEMPLO_MIN })} />
-                    <Rico html={t("plano.cobrancaExplicacao2")} />
 
-                    <div className="rounded-md bg-muted/60 p-3">
-                      <p className="text-xs font-medium text-foreground">{t("adm.exemplo")}</p>
-                      <Rico
-                        className="mt-1 block text-[13px]"
-                        html={t("plano.cobrancaExemplo1", {
-                          min: VIDEO_EXEMPLO_MIN,
-                          total: formatCents(data.overage.rateCentsNormal * VIDEO_EXEMPLO_MIN),
-                          tarifa: formatCents(data.overage.rateCentsNormal),
-                        })}
+              {data.regrasDeCredito && (
+                <QuantoGasta
+                  regras={data.regrasDeCredito}
+                  disponiveis={data.credits.normal.availableMinutes}
+                  isento={data.isExempt}
+                  onComprar={() => trocarAba("comprar")}
+                />
+              )}
+              {data.uso && <UsoDoPlano uso={data.uso} onComprarExtra={() => trocarAba("comprar")} />}
+            </TabsContent>
+
+            <TabsContent value="comprar" className="flex min-w-0 flex-col gap-4">
+              {/* As duas formas de nao ficar sem credito no meio do mes ficam
+                  ACIMA dos planos: quem chega nesta tela quase sempre chega porque
+                  o credito esta acabando agora, nao pra comparar plano. */}
+              <div className="grid gap-4 lg:grid-cols-2" data-tour="nao-ficar-sem-credito">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <IconCreditCard className="size-4 text-muted-foreground" />{t("plano.cartaoCobranca")}</CardTitle>
+                    <CardDescription>{t("plano.maquinaDeViews")}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-1 flex-col gap-4">
+                    {/* Com o túnel escondido só existe UMA tarifa, então a grade
+                        de duas colunas viraria uma caixa solta e torta no meio da
+                        largura. */}
+                    <div className={mostrarTunel ? "grid gap-2 sm:grid-cols-2" : "grid gap-2"}>
+                      <RateBox
+                        titulo={mostrarTunel ? t("plano.pelaNossaInternet") : t("plano.porMinuto")}
+                        valor={`${formatCents(data.overage.rateCentsNormal)} / min`}
+                        detalhe={mostrarTunel ? t("plano.semInstalarNada") : undefined}
                       />
                       {mostrarTunel && (
-                        <Rico
-                          className="mt-2 block text-[13px]"
-                          html={t("plano.cobrancaExemplo2", {
-                            total: formatCents(data.overage.rateCentsBonus * VIDEO_EXEMPLO_MIN),
-                          })}
+                        <RateBox
+                          titulo={t("plano.pelaSuaInternet")}
+                          valor={`${formatCents(data.overage.rateCentsBonus)} / min`}
+                          detalhe={t("plano.comProgramaInstalado")}
+                          destaque
                         />
                       )}
                     </div>
 
-                    <p className="text-xs">{t("plano.cotaPrimeiro")}</p>
-                  </div>
-                </details>
+                    {/* Fechado por padrão: quem só quer saber o preço já viu os dois
+                        valores acima. Isto aqui é pra quem tem a pergunta seguinte
+                        ("quando exatamente me cobram?") - e essa merece resposta
+                        completa, não uma linha espremida. */}
+                    <details className="group rounded-lg border border-border">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3.5 text-sm font-medium [&::-webkit-details-marker]:hidden">{t("plano.comoGastosProcessados")}<IconChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                      </summary>
 
-                {data.overage.pendingCents > 0 && (
-                  <TonePill tone="danger">
-                    {t("plano.excedenteAcumulado", { valor: formatCents(data.overage.pendingCents) })}
-                  </TonePill>
-                )}
+                      <div className="flex flex-col gap-3 border-t border-border p-3.5 text-sm leading-relaxed text-muted-foreground">
+                        {/* Estes parágrafos têm negrito no meio da frase. Cortá-los
+                            em pedaços pra montar o JSX deixaria o dicionário
+                            ilegível pra quem traduz — o Rico resolve isso. */}
+                        <Rico html={t("plano.cobrancaExplicacao1", { min: VIDEO_EXEMPLO_MIN })} />
+                        <Rico html={t("plano.cobrancaExplicacao2")} />
 
-                <div className="mt-auto flex flex-col gap-3">
-                  {data.subscription.overageCardEnabled ? (
-                    <>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <TonePill tone="success" icon={<IconCircleCheck className="size-3.5" />}>{t("plano.cartaoAtivo")}</TonePill>
-                        {/* Com 1 cartão só, a bandeira e os 4 dígitos ficam
-                            aqui mesmo; com vários, a lista abaixo já mostra
-                            qual está selecionado e repetir seria ruído. */}
-                        {data.asaasCard && data.asaasCard.last4 ? (
-                          <span className="text-sm text-muted-foreground">
-                            <CartaoLinha
-                              card={{
-                                brand: (data.asaasCard.brand ?? "").toLowerCase(),
-                                last4: data.asaasCard.last4,
-                              }}
+                        <div className="rounded-md bg-muted/60 p-3">
+                          <p className="text-xs font-medium text-foreground">{t("adm.exemplo")}</p>
+                          <Rico
+                            className="mt-1 block text-[13px]"
+                            html={t("plano.cobrancaExemplo1", {
+                              min: VIDEO_EXEMPLO_MIN,
+                              total: formatCents(data.overage.rateCentsNormal * VIDEO_EXEMPLO_MIN),
+                              tarifa: formatCents(data.overage.rateCentsNormal),
+                            })}
+                          />
+                          {mostrarTunel && (
+                            <Rico
+                              className="mt-2 block text-[13px]"
+                              html={t("plano.cobrancaExemplo2", {
+                                total: formatCents(data.overage.rateCentsBonus * VIDEO_EXEMPLO_MIN),
+                              })}
                             />
-                          </span>
-                        ) : (
-                          payments &&
-                          payments.cards.length === 1 && (
-                            <span className="text-sm text-muted-foreground">
-                              <CartaoLinha card={payments.cards[0]} />
-                            </span>
-                          )
-                        )}
-                      </div>
-
-                      {payments && payments.cards.length > 1 && (
-                        <div className="flex flex-col gap-1.5">
-                          <span className="text-xs text-muted-foreground">{t("plano.cartaoUsadoNasCobrancas")}</span>
-                          {payments.cards.map((card) => {
-                            const selecionado = card.isDefault
-                            return (
-                              <button
-                                key={card.id}
-                                type="button"
-                                disabled={selecionado || busyKey === `card-${card.id}`}
-                                onClick={() => selecionarCartao(card.id)}
-                                className={`flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
-                                  selecionado
-                                    ? "border-primary bg-primary/[0.04]"
-                                    : "border-border hover:bg-muted disabled:opacity-60"
-                                }`}
-                              >
-                                <CartaoLinha card={card} />
-                                <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <span className="tabular-nums">
-                                    {String(card.expMonth).padStart(2, "0")}/{card.expYear}
-                                  </span>
-                                  {selecionado ? (
-                                    <IconCircleCheck className="size-4 text-primary" />
-                                  ) : (
-                                    <span>{busyKey === `card-${card.id}` ? "…" : t("plano.usarEste")}</span>
-                                  )}
-                                </span>
-                              </button>
-                            )
-                          })}
+                          )}
                         </div>
-                      )}
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={busyKey === "overage-disable"}
-                          onClick={disableOverageCard}
-                        >{t("plano.desligarCobranca")}</Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={busyKey === "overage-setup"}
-                          onClick={setupOverageCard}
-                        >{t("plano.cadastrarOutroCartao")}</Button>
+                        <p className="text-xs">{t("plano.cotaPrimeiro")}</p>
                       </div>
-                    </>
-                  ) : temCartaoSalvo ? (
-                    /* Cartão salvo, cobrança automática DESLIGADA. É o estado
-                       normal de quem acabou de pagar: guardar o cartão não
-                       autoriza cobrá-lo sozinho, e essa autorização precisa de
-                       um clique dedicado — é a única cobrança do sistema que
-                       acontece sem ninguém clicar em nada. */
-                    <div className="flex flex-col gap-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <TonePill tone="neutral">Cartão salvo · cobrança automática desligada</TonePill>
-                        {cartaoSalvo && (
-                          <span className="text-sm text-muted-foreground">
-                            <CartaoLinha card={cartaoSalvo} />
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        Enquanto estiver desligada, os vídeos param quando a cota da semana acabar. Ligando,
-                        eles continuam saindo e você paga só o que passou do plano.
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button disabled={busyKey === "overage-enable"} onClick={enableOverageCard}>
-                          {busyKey === "overage-enable" ? "Ativando..." : "Ativar cobrança automática"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={busyKey === "overage-setup"}
-                          onClick={setupOverageCard}
-                        >{t("plano.cadastrarOutroCartao")}</Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button disabled={busyKey === "overage-setup"} onClick={setupOverageCard}>{t("plano.cadastrarCartao")}</Button>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                    </details>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <IconCoins className="size-4 text-muted-foreground" />{t("plano.comprarCreditos")}</CardTitle>
-                <CardDescription>{t("plano.preferePagarAdiantado")}</CardDescription>
-              </CardHeader>
-              {/* Sem plano ativo não há venda: sem plano o cliente não conecta
-                  conta do TikTok nem canal, então o minuto comprado não tinha
-                  como virar corte publicado. O servidor recusa do mesmo jeito. */}
-              {!data.package.podeComprar ? (
-                <CardContent className="flex flex-1 flex-col gap-4">
-                  <p className="text-sm leading-relaxed text-muted-foreground">{t("plano.creditoSoComPlano")}</p>
-                </CardContent>
-              ) : (
-              <CardContent className="flex flex-1 flex-col gap-4">
-                <div className="rounded-lg border border-border p-4">
-                  <div className="flex items-end justify-between gap-4">
-                    <div>
-                      <div className="text-xs text-muted-foreground">{t("plano.quantosMinutos")}</div>
-                      <div className="font-heading text-3xl leading-tight font-semibold tabular-nums">
-                        {minutos} min
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs text-muted-foreground">{t("plano.vocePaga")}</div>
-                      <div className="font-heading text-3xl leading-tight font-semibold tabular-nums">
-                        {formatCents(totalAvulso)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
-                    <MinutosSlider
-                      value={minutos}
-                      min={data.package.minMinutes}
-                      max={data.package.maxMinutes}
-                      step={data.package.stepMinutes}
-                      onChange={setMinutosAvulsos}
-                      rotuloSlider={t("plano.quantosMinutosComprar")}
-                    />
-                  </div>
-
-                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                    {t("plano.mesmoPreco", { valor: formatCents(data.package.centsPerMinute) })}{" "}
-                    {estimativaVideos(minutos, t)}
-                  </p>
-                </div>
-
-                {/* Atalhos pros valores mais pedidos: arrastar até um número
-                    exato é chato, e a barra sozinha deixava um vazio aqui. */}
-                <div className="flex flex-wrap gap-2">
-                  {[25, 100, 250, 500].map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setMinutosAvulsos(v)}
-                      className={`rounded-full border px-3 py-1.5 text-[13px] font-medium tabular-nums transition-colors ${
-                        minutos === v
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {v} min
-                    </button>
-                  ))}
-                </div>
-
-                <Button
-                  className="mt-auto"
-                  disabled={busyKey === "package-normal"}
-                  onClick={() => buyPackage("normal", minutos)}
-                >
-                  Comprar {minutos} min por {formatCents(totalAvulso)}
-                </Button>
-              </CardContent>
-              )}
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base" data-tour="planos">{t("plano.seuPlano")}</CardTitle>
-              <CardDescription>
-                {data.subscription.planName
-                  ? `Plano atual: ${data.subscription.planName}`
-                  : t("plano.escolhaUmPlano")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-5 sm:grid-cols-3 sm:items-start">
-              {data.plans.map((plan, index) => {
-                const isCurrent = plan.key === data.subscription.planKey
-                // Sem conceito de "recomendado" vindo do backend - o plano do
-                // meio (Pro) e o candidato natural, igual a referencia visual.
-                const isPopular = data.plans.length === 3 && index === 1
-                const emphasized = isCurrent || isPopular
-                return (
-                  <div
-                    key={plan.key}
-                    className={`relative flex flex-col gap-4 rounded-xl border p-5 ${
-                      emphasized
-                        ? "border-primary bg-primary/[0.03] shadow-[var(--shadow-raised)]"
-                        : "border-border"
-                    }`}
-                  >
-                    {isPopular && (
-                      <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
-                        {t("plano.maisPopular")}
-                      </span>
+                    {data.overage.pendingCents > 0 && (
+                      <TonePill tone="danger">
+                        {t("plano.excedenteAcumulado", { valor: formatCents(data.overage.pendingCents) })}
+                      </TonePill>
                     )}
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-heading text-lg font-semibold">{plan.name}</span>
-                      {isCurrent && (
-                        <TonePill tone="success" icon={<IconCircleCheck className="size-3.5" />}>
-                          Atual
-                        </TonePill>
-                      )}
-                    </div>
-                    {/* Os DOIS degraus do preço, sempre juntos. Mostrar só o
-                        promocional e deixar o valor cheio para a fatura do mês
-                        seguinte é o que gera estorno e reclamação. */}
-                    {promoVale(plan) ? (
-                      <div>
-                        <div className="font-heading text-3xl font-semibold tabular-nums">
-                          {formatCents(plan.firstMonthPriceCents!)}
-                          <span className="text-sm font-normal text-muted-foreground">
-                            {" "}no 1º mês
-                          </span>
-                        </div>
-                        <div className="mt-1 text-[13px] text-muted-foreground">
-                          depois{" "}
-                          <span className="tabular-nums">{formatCents(plan.priceCents)}</span>/mês ·{" "}
-                          <span className="font-medium text-primary">
-                            {descontoPercentual(plan)}% de desconto agora
-                          </span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="font-heading text-3xl font-semibold tabular-nums">
-                        {formatCents(plan.priceCents)}
-                        <span className="text-sm font-normal text-muted-foreground">/mês</span>
-                      </div>
-                    )}
-                    <div className="flex flex-col gap-2">
-                      <Button
-                        variant={isCurrent ? "outline" : "default"}
-                        disabled={isCurrent || busyKey === `subscribe-${plan.key}`}
-                        onClick={() => subscribe(plan.key)}
-                      >
-                        {isCurrent ? "Plano atual" : t("plano.assinarTrocar")}
-                      </Button>
-                      {/* O PIX Automático saiu daqui em 01/09/2026.
-                          Dois botões lado a lado pediam a decisão do MEIO DE
-                          PAGAMENTO antes da decisão que importa nesta tela, que
-                          é qual plano. Agora existe um botão só, e o meio de
-                          pagamento é escolhido no checkout - com cartão em
-                          primeiro e PIX Automático como alternativa. */}
-                    </div>
-                    <ul className="flex flex-1 flex-col gap-2 border-t border-border pt-4 text-sm text-muted-foreground">
-                      <li className="flex items-start gap-2">
-                        <IconClock className="mt-0.5 size-4 shrink-0 text-primary" />
-                        {t("plano.minutosPorSemana", { n: plan.weeklyMinutesNormal })}
-                      </li>
-                      {mostrarTunel && (
-                        <li className="flex items-start gap-2">
-                          <IconRouter className="mt-0.5 size-4 shrink-0 text-primary" />
-                          {t("plano.minutosSuaInternet", { n: plan.weeklyMinutesBonus })}
-                        </li>
-                      )}
-                      <li className="flex items-start gap-2">
-                        <IconBrandYoutube className="mt-0.5 size-4 shrink-0 text-primary" />
-                        {plural(plan.maxYoutubeChannels, t("plano.canalYoutube"), t("plano.canaisYoutube"), t("plano.canaisIlimitados"))}
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <IconBrandTiktok className="mt-0.5 size-4 shrink-0 text-primary" />
-                        {plural(plan.maxTiktokAccounts, t("plano.contaTiktok"), t("plano.contasTiktok"), t("plano.contasIlimitadas"))}
-                      </li>
-                      {/* Redes sociais e lives: só pra quem já vê essas telas
-                          (painel novo) - anunciar o que a pessoa não tem como
-                          usar seria vender o que não existe pra ela. */}
-                      {painelNovo && plan.maxContasPorRede != null && (
-                        <li className="flex items-start gap-2">
-                          <IconShare className="mt-0.5 size-4 shrink-0 text-primary" />
-                          <span>
-                            {t(plan.maxContasPorRede === 1 ? "plano.contaPorRede" : "plano.contasPorRede", { n: plan.maxContasPorRede })}
-                            <span className="block text-xs text-muted-foreground">{t("plano.redesQuais")}</span>
-                          </span>
-                        </li>
-                      )}
-                      {painelNovo && plan.maxCanaisDeLive != null && (
-                        <li className="flex items-start gap-2">
-                          <IconBroadcast className="mt-0.5 size-4 shrink-0 text-primary" />
-                          {t(plan.maxCanaisDeLive === 1 ? "plano.canalDeLive" : "plano.canaisDeLive", { n: plan.maxCanaisDeLive })}
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                )
-              })}
-            </CardContent>
-          </Card>
 
-          {/* Conexões extras. Desde 01/09/2026 são dois produtos separados —
-              canal do YouTube e conta do TikTok — em vez de um pacote fechado
-              que valia os dois. Quem leva o par paga menos que os dois avulsos.
-
-              Só aparece nos planos que vendem: nos outros a saída é trocar de
-              plano, e um card vazio aqui ensinaria a ignorar esta parte da tela. */}
-          {data.subscription.precosExtras && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <IconPlus className="size-4 text-muted-foreground" />
-                  Conexões extras
-                </CardTitle>
-                <CardDescription>
-                  Adicione só o que faltar: mais um canal para monitorar, mais uma conta para publicar, ou os
-                  dois. O par sai por {formatCents(data.subscription.precosExtras.ambos)} — mais barato que
-                  comprar separado.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <RateBox
-                    titulo="Canais do YouTube"
-                    valor={`${data.subscription.limiteCanais ?? "∞"}`}
-                    detalhe={
-                      data.subscription.extraChannels > 0
-                        ? `${data.subscription.extraChannels} extra(s) que você comprou`
-                        : "Total que você pode monitorar"
-                    }
-                  />
-                  <RateBox
-                    titulo="Contas do TikTok"
-                    valor={`${data.subscription.limiteContas ?? "∞"}`}
-                    detalhe={
-                      data.subscription.extraTiktokAccounts > 0
-                        ? `${data.subscription.extraTiktokAccounts} extra(s) que você comprou`
-                        : "Total em que você pode publicar"
-                    }
-                  />
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <Button asChild variant="outline" className="h-auto flex-col items-start gap-0.5 py-2.5">
-                    <a href="/client/checkout?extras=1&canais=1">
-                      <span className="text-xs font-normal text-muted-foreground">+1 canal do YouTube</span>
-                      <span className="font-semibold">{formatCents(data.subscription.precosExtras.canal)}/mês</span>
-                    </a>
-                  </Button>
-                  <Button asChild variant="outline" className="h-auto flex-col items-start gap-0.5 py-2.5">
-                    <a href="/client/checkout?extras=1&contas=1">
-                      <span className="text-xs font-normal text-muted-foreground">+1 conta do TikTok</span>
-                      <span className="font-semibold">{formatCents(data.subscription.precosExtras.conta)}/mês</span>
-                    </a>
-                  </Button>
-                  <Button asChild className="h-auto flex-col items-start gap-0.5 py-2.5">
-                    <a href="/client/checkout?extras=1&canais=1&contas=1">
-                      <span className="text-xs font-normal opacity-80">+1 canal e +1 conta</span>
-                      <span className="font-semibold">{formatCents(data.subscription.precosExtras.ambos)}/mês</span>
-                    </a>
-                  </Button>
-                </div>
-
-                {/* A primeira cobrança sai agora; a partir do ciclo seguinte ela
-                    cai no mesmo dia da mensalidade. Dizer isso aqui evita a
-                    dúvida de "por que fui cobrado duas vezes esse mês". */}
-                <p className="text-xs text-muted-foreground">
-                  Você paga a conexão agora e, a partir do mês seguinte, ela é cobrada junto com a sua
-                  mensalidade, numa data só.
-                </p>
-
-                {(data.subscription.extraChannels > 0 || data.subscription.extraTiktokAccounts > 0) && (
-                  <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-                    {data.subscription.extraChannels > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busyKey === "extras-remover"}
-                        onClick={() => removerConexaoExtra("canais")}
-                      >
-                        {removerPedido === "canais" ? "Confirmar remoção" : "Remover 1 canal"}
-                      </Button>
-                    )}
-                    {data.subscription.extraTiktokAccounts > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busyKey === "extras-remover"}
-                        onClick={() => removerConexaoExtra("contas")}
-                      >
-                        {removerPedido === "contas" ? "Confirmar remoção" : "Remover 1 conta"}
-                      </Button>
-                    )}
-                    {removerPedido && (
-                      <p className="w-full text-xs text-muted-foreground">
-                        O mês já pago não é devolvido — a cobrança some a partir do próximo.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* FATURAS PAGAS: tudo que o cliente já pagou, com dia, hora, valor,
-              produto e o cartão usado NAQUELA compra.
-
-              O cartão vem gravado na fatura, e não lido do cadastro atual: o
-              cliente troca de cartão e o extrato inteiro passaria a dizer que
-              tudo foi pago no cartão novo — reescrevendo o passado numa tela
-              que existe justamente para provar o que aconteceu. */}
-          {data.faturas.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <IconReceipt className="size-4 text-muted-foreground" />
-                  Faturas pagas
-                </CardTitle>
-                <CardDescription>Tudo que você já pagou no Post Flow.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {/* A tabela rola dentro do próprio cartão: sem isto, no celular
-                    ela empurra a PÁGINA inteira de lado. */}
-                <div className="-mx-2 overflow-x-auto px-2">
-                  <table className="w-full min-w-[34rem] text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                        <th className="pb-2 pr-3 font-medium">Quando</th>
-                        <th className="pb-2 pr-3 font-medium">Produto</th>
-                        <th className="pb-2 pr-3 font-medium">Pago com</th>
-                        <th className="pb-2 text-right font-medium">Valor</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.faturas.map((f) => (
-                        <tr key={f.id} className="border-b border-border/60 last:border-0">
-                          <td className="py-2.5 pr-3 whitespace-nowrap text-muted-foreground tabular-nums">
-                            {dataHora(f.pagoEm)}
-                          </td>
-                          <td className="py-2.5 pr-3">{f.produto}</td>
-                          <td className="py-2.5 pr-3 whitespace-nowrap text-muted-foreground">
-                            {f.cartao && f.cartao.final ? (
-                              <span
-                                className="inline-flex items-center gap-1.5"
-                                title={f.cartao.bandeira ? nomeDaBandeira(f.cartao.bandeira) : "Cartão"}
-                              >
-                                <SeloDoCartao brand={f.cartao.bandeira} />
-                                <span className="tabular-nums">•••• {f.cartao.final}</span>
+                    <div className="mt-auto flex flex-col gap-3">
+                      {data.subscription.overageCardEnabled ? (
+                        <>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <TonePill tone="success" icon={<IconCircleCheck className="size-3.5" />}>{t("plano.cartaoAtivo")}</TonePill>
+                            {/* Com 1 cartão só, a bandeira e os 4 dígitos ficam
+                                aqui mesmo; com vários, a lista abaixo já mostra
+                                qual está selecionado e repetir seria ruído. */}
+                            {data.asaasCard && data.asaasCard.last4 ? (
+                              <span className="text-sm text-muted-foreground">
+                                <CartaoLinha
+                                  card={{
+                                    brand: (data.asaasCard.brand ?? "").toLowerCase(),
+                                    last4: data.asaasCard.last4,
+                                  }}
+                                />
                               </span>
                             ) : (
-                              f.meio
-                            )}
-                          </td>
-                          <td className="py-2.5 text-right font-medium tabular-nums">{formatCents(f.valorCents)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {payments && payments.statement.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <IconReceipt className="size-4 text-muted-foreground" />
-                  {t("plano.extrato")}
-                </CardTitle>
-                <CardDescription>{t("plano.extratoDescricao")}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="hover:bg-transparent">
-                        <TableHead>{t("plano.data")}</TableHead>
-                        <TableHead>{t("plano.oQueFoi")}</TableHead>
-                        <TableHead>{t("plano.cartao")}</TableHead>
-                        <TableHead className="text-right">{t("plano.valor")}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {payments.statement.map((linha) => (
-                        <TableRow key={linha.id}>
-                          <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
-                            {formatarData(linha.createdAt)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span>{t(EXTRATO_ROTULO[linha.kind])}</span>
-                              {linha.minutes !== null && (
-                                <span className="text-xs text-muted-foreground tabular-nums">
-                                  {linha.minutes} min
+                              payments &&
+                              payments.cards.length === 1 && (
+                                <span className="text-sm text-muted-foreground">
+                                  <CartaoLinha card={payments.cards[0]} />
                                 </span>
-                              )}
-                              {linha.status !== "pago" && (
-                                <TonePill tone={linha.status === "reembolsado" ? "neutral" : "danger"}>
-                                  {t(linha.status === "reembolsado" ? "plano.reembolsado" : "plano.falhou")}
-                                </TonePill>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {linha.card ? <CartaoLinha card={linha.card} /> : "—"}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {linha.receiptUrl ? (
-                              <a
-                                href={linha.receiptUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="underline decoration-dotted underline-offset-4 hover:decoration-solid"
-                                title={t("plano.verRecibo")}
-                              >
-                                {formatCents(linha.amountCents)}
-                              </a>
-                            ) : (
-                              formatCents(linha.amountCents)
+                              )
                             )}
-                            {linha.refundedCents > 0 && (
-                              <div className="text-xs text-muted-foreground">
-                                −{formatCents(linha.refundedCents)} {t("plano.devolvido")}
-                              </div>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                          </div>
 
-          {data.recentTransactions.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Consumo recente</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                {data.recentTransactions.map((lancamento) => (
-                  <div key={lancamento.id} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {t("tabela.video")} #{lancamento.sourceVideoId}
-                    </span>
-                    <span>
-                      {lancamento.minutesCharged} min ·{" "}
-                      {lancamento.bucket === "bonus" ? t("plano.bonusMinusculo") : t("plano.normalMinusculo")}
-                    </span>
-                    <TonePill
-                      tone={
-                        lancamento.status === "confirmado"
-                          ? "success"
-                          : lancamento.status === "liberado"
-                            ? "neutral"
-                            : "cyan"
-                      }
+                          {payments && payments.cards.length > 1 && (
+                            <div className="flex flex-col gap-1.5">
+                              <span className="text-xs text-muted-foreground">{t("plano.cartaoUsadoNasCobrancas")}</span>
+                              {payments.cards.map((card) => {
+                                const selecionado = card.isDefault
+                                return (
+                                  <button
+                                    key={card.id}
+                                    type="button"
+                                    disabled={selecionado || busyKey === `card-${card.id}`}
+                                    onClick={() => selecionarCartao(card.id)}
+                                    className={`flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                                      selecionado
+                                        ? "border-primary bg-primary/[0.04]"
+                                        : "border-border hover:bg-muted disabled:opacity-60"
+                                    }`}
+                                  >
+                                    <CartaoLinha card={card} />
+                                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                                      <span className="tabular-nums">
+                                        {String(card.expMonth).padStart(2, "0")}/{card.expYear}
+                                      </span>
+                                      {selecionado ? (
+                                        <IconCircleCheck className="size-4 text-primary" />
+                                      ) : (
+                                        <span>{busyKey === `card-${card.id}` ? "…" : t("plano.usarEste")}</span>
+                                      )}
+                                    </span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={busyKey === "overage-disable"}
+                              onClick={disableOverageCard}
+                            >{t("plano.desligarCobranca")}</Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={busyKey === "overage-setup"}
+                              onClick={setupOverageCard}
+                            >{t("plano.cadastrarOutroCartao")}</Button>
+                          </div>
+                        </>
+                      ) : temCartaoSalvo ? (
+                        /* Cartão salvo, cobrança automática DESLIGADA. É o estado
+                           normal de quem acabou de pagar: guardar o cartão não
+                           autoriza cobrá-lo sozinho, e essa autorização precisa de
+                           um clique dedicado — é a única cobrança do sistema que
+                           acontece sem ninguém clicar em nada. */
+                        <div className="flex flex-col gap-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <TonePill tone="neutral">Cartão salvo · cobrança automática desligada</TonePill>
+                            {cartaoSalvo && (
+                              <span className="text-sm text-muted-foreground">
+                                <CartaoLinha card={cartaoSalvo} />
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs leading-relaxed text-muted-foreground">
+                            Enquanto estiver desligada, os vídeos param quando a cota da semana acabar. Ligando,
+                            eles continuam saindo e você paga só o que passou do plano.
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button disabled={busyKey === "overage-enable"} onClick={enableOverageCard}>
+                              {busyKey === "overage-enable" ? "Ativando..." : "Ativar cobrança automática"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={busyKey === "overage-setup"}
+                              onClick={setupOverageCard}
+                            >{t("plano.cadastrarOutroCartao")}</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button disabled={busyKey === "overage-setup"} onClick={setupOverageCard}>{t("plano.cadastrarCartao")}</Button>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <IconCoins className="size-4 text-muted-foreground" />{t("plano.comprarCreditos")}</CardTitle>
+                    <CardDescription>{t("plano.preferePagarAdiantado")}</CardDescription>
+                  </CardHeader>
+                  {/* Sem plano ativo não há venda: sem plano o cliente não conecta
+                      conta do TikTok nem canal, então o minuto comprado não tinha
+                      como virar corte publicado. O servidor recusa do mesmo jeito. */}
+                  {!data.package.podeComprar ? (
+                    <CardContent className="flex flex-1 flex-col gap-4">
+                      <p className="text-sm leading-relaxed text-muted-foreground">{t("plano.creditoSoComPlano")}</p>
+                    </CardContent>
+                  ) : (
+                  <CardContent className="flex flex-1 flex-col gap-4">
+                    <div className="rounded-lg border border-border p-4">
+                      <div className="flex items-end justify-between gap-4">
+                        <div>
+                          <div className="text-xs text-muted-foreground">{t("plano.quantosMinutos")}</div>
+                          <div className="font-heading text-3xl leading-tight font-semibold tabular-nums">
+                            {minutos} min
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-muted-foreground">{t("plano.vocePaga")}</div>
+                          <div className="font-heading text-3xl leading-tight font-semibold tabular-nums">
+                            {formatCents(totalAvulso)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <MinutosSlider
+                          value={minutos}
+                          min={data.package.minMinutes}
+                          max={data.package.maxMinutes}
+                          step={data.package.stepMinutes}
+                          onChange={setMinutosAvulsos}
+                          rotuloSlider={t("plano.quantosMinutosComprar")}
+                        />
+                      </div>
+
+                      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                        {t("plano.mesmoPreco", { valor: formatCents(data.package.centsPerMinute) })}{" "}
+                        {estimativaVideos(minutos, t)}
+                      </p>
+                    </div>
+
+                    {/* Atalhos pros valores mais pedidos: arrastar até um número
+                        exato é chato, e a barra sozinha deixava um vazio aqui. */}
+                    <div className="flex flex-wrap gap-2">
+                      {[25, 100, 250, 500].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setMinutosAvulsos(v)}
+                          className={`rounded-full border px-3 py-1.5 text-[13px] font-medium tabular-nums transition-colors ${
+                            minutos === v
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border text-muted-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {v} min
+                        </button>
+                      ))}
+                    </div>
+
+                    <Button
+                      className="mt-auto"
+                      disabled={busyKey === "package-normal"}
+                      onClick={() => buyPackage("normal", minutos)}
                     >
-                      {lancamento.status}
-                    </TonePill>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+                      Comprar {minutos} min por {formatCents(totalAvulso)}
+                    </Button>
+                  </CardContent>
+                  )}
+                </Card>
+              </div>
+
+
+              {data.uso && data.subscription.precosExtras?.rede ? (
+                <ExtrasNasRedes
+                  uso={data.uso}
+                  precoCents={data.subscription.precosExtras.rede}
+                  ocupado={busyKey === "extras-remover"}
+                  onRemover={(rede) =>
+                    runAction("extras-remover", () => api.post("/api/client/checkout/extras/remover", { redes: { [rede]: 1 } }))
+                  }
+                />
+              ) : null}
+              {/* Conexões extras. Desde 01/09/2026 são dois produtos separados —
+                  canal do YouTube e conta do TikTok — em vez de um pacote fechado
+                  que valia os dois. Quem leva o par paga menos que os dois avulsos.
+
+                  Só aparece nos planos que vendem: nos outros a saída é trocar de
+                  plano, e um card vazio aqui ensinaria a ignorar esta parte da tela. */}
+              {data.subscription.precosExtras?.canal ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <IconPlus className="size-4 text-muted-foreground" />
+                      Canais do YouTube e contas do TikTok extras
+                    </CardTitle>
+                    <CardDescription>
+                      Adicione só o que faltar: mais um canal para monitorar, mais uma conta para publicar, ou os
+                      dois. O par sai por {formatCents(data.subscription.precosExtras.ambos!)} — mais barato que
+                      comprar separado.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <RateBox
+                        titulo="Canais do YouTube"
+                        valor={`${data.subscription.limiteCanais ?? "∞"}`}
+                        detalhe={
+                          data.subscription.extraChannels > 0
+                            ? `${data.subscription.extraChannels} extra(s) que você comprou`
+                            : "Total que você pode monitorar"
+                        }
+                      />
+                      <RateBox
+                        titulo="Contas do TikTok"
+                        valor={`${data.subscription.limiteContas ?? "∞"}`}
+                        detalhe={
+                          data.subscription.extraTiktokAccounts > 0
+                            ? `${data.subscription.extraTiktokAccounts} extra(s) que você comprou`
+                            : "Total em que você pode publicar"
+                        }
+                      />
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <Button asChild variant="outline" className="h-auto flex-col items-start gap-0.5 py-2.5">
+                        <a href="/client/checkout?extras=1&canais=1">
+                          <span className="text-xs font-normal text-muted-foreground">+1 canal do YouTube</span>
+                          <span className="font-semibold">{formatCents(data.subscription.precosExtras.canal!)}/mês</span>
+                        </a>
+                      </Button>
+                      <Button asChild variant="outline" className="h-auto flex-col items-start gap-0.5 py-2.5">
+                        <a href="/client/checkout?extras=1&contas=1">
+                          <span className="text-xs font-normal text-muted-foreground">+1 conta do TikTok</span>
+                          <span className="font-semibold">{formatCents(data.subscription.precosExtras.conta!)}/mês</span>
+                        </a>
+                      </Button>
+                      <Button asChild className="h-auto flex-col items-start gap-0.5 py-2.5">
+                        <a href="/client/checkout?extras=1&canais=1&contas=1">
+                          <span className="text-xs font-normal opacity-80">+1 canal e +1 conta</span>
+                          <span className="font-semibold">{formatCents(data.subscription.precosExtras.ambos!)}/mês</span>
+                        </a>
+                      </Button>
+                    </div>
+
+                    {/* A primeira cobrança sai agora; a partir do ciclo seguinte ela
+                        cai no mesmo dia da mensalidade. Dizer isso aqui evita a
+                        dúvida de "por que fui cobrado duas vezes esse mês". */}
+                    <p className="text-xs text-muted-foreground">
+                      Você paga a conexão agora e, a partir do mês seguinte, ela é cobrada junto com a sua
+                      mensalidade, numa data só.
+                    </p>
+
+                    {(data.subscription.extraChannels > 0 || data.subscription.extraTiktokAccounts > 0) && (
+                      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                        {data.subscription.extraChannels > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={busyKey === "extras-remover"}
+                            onClick={() => removerConexaoExtra("canais")}
+                          >
+                            {removerPedido === "canais" ? "Confirmar remoção" : "Remover 1 canal"}
+                          </Button>
+                        )}
+                        {data.subscription.extraTiktokAccounts > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={busyKey === "extras-remover"}
+                            onClick={() => removerConexaoExtra("contas")}
+                          >
+                            {removerPedido === "contas" ? "Confirmar remoção" : "Remover 1 conta"}
+                          </Button>
+                        )}
+                        {removerPedido && (
+                          <p className="w-full text-xs text-muted-foreground">
+                            O mês já pago não é devolvido — a cobrança some a partir do próximo.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ) : null}
+
+
+            </TabsContent>
+
+            <TabsContent value="planos" className="flex min-w-0 flex-col gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base" data-tour="planos">{t("plano.seuPlano")}</CardTitle>
+                  <CardDescription>
+                    {data.subscription.planName
+                      ? `Plano atual: ${data.subscription.planName}`
+                      : t("plano.escolhaUmPlano")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-5 sm:grid-cols-3 sm:items-start">
+                  {data.plans.map((plan, index) => {
+                    const isCurrent = plan.key === data.subscription.planKey
+                    // Sem conceito de "recomendado" vindo do backend - o plano do
+                    // meio (Pro) e o candidato natural, igual a referencia visual.
+                    const isPopular = data.plans.length === 3 && index === 1
+                    const emphasized = isCurrent || isPopular
+                    return (
+                      <div
+                        key={plan.key}
+                        className={`relative flex flex-col gap-4 rounded-xl border p-5 ${
+                          emphasized
+                            ? "border-primary bg-primary/[0.03] shadow-[var(--shadow-raised)]"
+                            : "border-border"
+                        }`}
+                      >
+                        {isPopular && (
+                          <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
+                            {t("plano.maisPopular")}
+                          </span>
+                        )}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-heading text-lg font-semibold">{plan.name}</span>
+                          {isCurrent && (
+                            <TonePill tone="success" icon={<IconCircleCheck className="size-3.5" />}>
+                              Atual
+                            </TonePill>
+                          )}
+                        </div>
+                        {/* Os DOIS degraus do preço, sempre juntos. Mostrar só o
+                            promocional e deixar o valor cheio para a fatura do mês
+                            seguinte é o que gera estorno e reclamação. */}
+                        {promoVale(plan) ? (
+                          <div>
+                            <div className="font-heading text-3xl font-semibold tabular-nums">
+                              {formatCents(plan.firstMonthPriceCents!)}
+                              <span className="text-sm font-normal text-muted-foreground">
+                                {" "}no 1º mês
+                              </span>
+                            </div>
+                            <div className="mt-1 text-[13px] text-muted-foreground">
+                              depois{" "}
+                              <span className="tabular-nums">{formatCents(plan.priceCents)}</span>/mês ·{" "}
+                              <span className="font-medium text-primary">
+                                {descontoPercentual(plan)}% de desconto agora
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="font-heading text-3xl font-semibold tabular-nums">
+                            {formatCents(plan.priceCents)}
+                            <span className="text-sm font-normal text-muted-foreground">/mês</span>
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            variant={isCurrent ? "outline" : "default"}
+                            disabled={isCurrent || busyKey === `subscribe-${plan.key}`}
+                            onClick={() => subscribe(plan.key)}
+                          >
+                            {isCurrent ? "Plano atual" : t("plano.assinarTrocar")}
+                          </Button>
+                          {/* O PIX Automático saiu daqui em 01/09/2026.
+                              Dois botões lado a lado pediam a decisão do MEIO DE
+                              PAGAMENTO antes da decisão que importa nesta tela, que
+                              é qual plano. Agora existe um botão só, e o meio de
+                              pagamento é escolhido no checkout - com cartão em
+                              primeiro e PIX Automático como alternativa. */}
+                        </div>
+                        <ul className="flex flex-1 flex-col gap-2 border-t border-border pt-4 text-sm text-muted-foreground">
+                          <li className="flex items-start gap-2">
+                            <IconClock className="mt-0.5 size-4 shrink-0 text-primary" />
+                            {t("plano.minutosPorSemana", { n: plan.weeklyMinutesNormal })}
+                          </li>
+                          {mostrarTunel && (
+                            <li className="flex items-start gap-2">
+                              <IconRouter className="mt-0.5 size-4 shrink-0 text-primary" />
+                              {t("plano.minutosSuaInternet", { n: plan.weeklyMinutesBonus })}
+                            </li>
+                          )}
+                          <li className="flex items-start gap-2">
+                            <IconBrandYoutube className="mt-0.5 size-4 shrink-0 text-primary" />
+                            {plural(plan.maxYoutubeChannels, t("plano.canalYoutube"), t("plano.canaisYoutube"), t("plano.canaisIlimitados"))}
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <IconBrandTiktok className="mt-0.5 size-4 shrink-0 text-primary" />
+                            {plural(plan.maxTiktokAccounts, t("plano.contaTiktok"), t("plano.contasTiktok"), t("plano.contasIlimitadas"))}
+                          </li>
+                          {/* Redes sociais e lives: só pra quem já vê essas telas
+                              (painel novo) - anunciar o que a pessoa não tem como
+                              usar seria vender o que não existe pra ela. */}
+                          {painelNovo && plan.maxContasPorRede != null && (
+                            <li className="flex items-start gap-2">
+                              <IconShare className="mt-0.5 size-4 shrink-0 text-primary" />
+                              <span>
+                                {t(plan.maxContasPorRede === 1 ? "plano.contaPorRede" : "plano.contasPorRede", { n: plan.maxContasPorRede })}
+                                <span className="block text-xs text-muted-foreground">{t("plano.redesQuais")}</span>
+                              </span>
+                            </li>
+                          )}
+                          {painelNovo && plan.maxCanaisDeLive != null && (
+                            <li className="flex items-start gap-2">
+                              <IconBroadcast className="mt-0.5 size-4 shrink-0 text-primary" />
+                              {t(plan.maxCanaisDeLive === 1 ? "plano.canalDeLive" : "plano.canaisDeLive", { n: plan.maxCanaisDeLive })}
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    )
+                  })}
+                </CardContent>
+              </Card>
+
+
+            </TabsContent>
+
+            <TabsContent value="faturas" className="flex min-w-0 flex-col gap-4">
+              {/* FATURAS PAGAS: tudo que o cliente já pagou, com dia, hora, valor,
+                  produto e o cartão usado NAQUELA compra.
+
+                  O cartão vem gravado na fatura, e não lido do cadastro atual: o
+                  cliente troca de cartão e o extrato inteiro passaria a dizer que
+                  tudo foi pago no cartão novo — reescrevendo o passado numa tela
+                  que existe justamente para provar o que aconteceu. */}
+              {data.faturas.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <IconReceipt className="size-4 text-muted-foreground" />
+                      Faturas pagas
+                    </CardTitle>
+                    <CardDescription>Tudo que você já pagou no Post Flow.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {/* A tabela rola dentro do próprio cartão: sem isto, no celular
+                        ela empurra a PÁGINA inteira de lado. */}
+                    <div className="-mx-2 overflow-x-auto px-2">
+                      <table className="w-full min-w-[34rem] text-sm">
+                        <thead>
+                          <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                            <th className="pb-2 pr-3 font-medium">Quando</th>
+                            <th className="pb-2 pr-3 font-medium">Produto</th>
+                            <th className="pb-2 pr-3 font-medium">Pago com</th>
+                            <th className="pb-2 text-right font-medium">Valor</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {data.faturas.map((f) => (
+                            <tr key={f.id} className="border-b border-border/60 last:border-0">
+                              <td className="py-2.5 pr-3 whitespace-nowrap text-muted-foreground tabular-nums">
+                                {dataHora(f.pagoEm)}
+                              </td>
+                              <td className="py-2.5 pr-3">{f.produto}</td>
+                              <td className="py-2.5 pr-3 whitespace-nowrap text-muted-foreground">
+                                {f.cartao && f.cartao.final ? (
+                                  <span
+                                    className="inline-flex items-center gap-1.5"
+                                    title={f.cartao.bandeira ? nomeDaBandeira(f.cartao.bandeira) : "Cartão"}
+                                  >
+                                    <SeloDoCartao brand={f.cartao.bandeira} />
+                                    <span className="tabular-nums">•••• {f.cartao.final}</span>
+                                  </span>
+                                ) : (
+                                  f.meio
+                                )}
+                              </td>
+                              <td className="py-2.5 text-right font-medium tabular-nums">{formatCents(f.valorCents)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {payments && payments.statement.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <IconReceipt className="size-4 text-muted-foreground" />
+                      {t("plano.extrato")}
+                    </CardTitle>
+                    <CardDescription>{t("plano.extratoDescricao")}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead>{t("plano.data")}</TableHead>
+                            <TableHead>{t("plano.oQueFoi")}</TableHead>
+                            <TableHead>{t("plano.cartao")}</TableHead>
+                            <TableHead className="text-right">{t("plano.valor")}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {payments.statement.map((linha) => (
+                            <TableRow key={linha.id}>
+                              <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
+                                {formatarData(linha.createdAt)}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span>{t(EXTRATO_ROTULO[linha.kind])}</span>
+                                  {linha.minutes !== null && (
+                                    <span className="text-xs text-muted-foreground tabular-nums">
+                                      {linha.minutes} min
+                                    </span>
+                                  )}
+                                  {linha.status !== "pago" && (
+                                    <TonePill tone={linha.status === "reembolsado" ? "neutral" : "danger"}>
+                                      {t(linha.status === "reembolsado" ? "plano.reembolsado" : "plano.falhou")}
+                                    </TonePill>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {linha.card ? <CartaoLinha card={linha.card} /> : "—"}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {linha.receiptUrl ? (
+                                  <a
+                                    href={linha.receiptUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline decoration-dotted underline-offset-4 hover:decoration-solid"
+                                    title={t("plano.verRecibo")}
+                                  >
+                                    {formatCents(linha.amountCents)}
+                                  </a>
+                                ) : (
+                                  formatCents(linha.amountCents)
+                                )}
+                                {linha.refundedCents > 0 && (
+                                  <div className="text-xs text-muted-foreground">
+                                    −{formatCents(linha.refundedCents)} {t("plano.devolvido")}
+                                  </div>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {data.recentTransactions.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Consumo recente</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-2">
+                    {data.recentTransactions.map((lancamento) => (
+                      <div key={lancamento.id} className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          {t("tabela.video")} #{lancamento.sourceVideoId}
+                        </span>
+                        <span>
+                          {lancamento.minutesCharged} min ·{" "}
+                          {lancamento.bucket === "bonus" ? t("plano.bonusMinusculo") : t("plano.normalMinusculo")}
+                        </span>
+                        <TonePill
+                          tone={
+                            lancamento.status === "confirmado"
+                              ? "success"
+                              : lancamento.status === "liberado"
+                                ? "neutral"
+                                : "cyan"
+                          }
+                        >
+                          {lancamento.status}
+                        </TonePill>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+
+              {data.faturas.length === 0 && (!payments || payments.statement.length === 0) && data.recentTransactions.length === 0 && (
+                <p className="py-10 text-center text-sm text-muted-foreground">Nenhuma fatura ainda.</p>
+              )}
+            </TabsContent>
+          </Tabs>
 
           {/* Cancelar plano: de propósito uma frase pequena e apagada no fim
               da página, não um botão (decisão do fundador). */}

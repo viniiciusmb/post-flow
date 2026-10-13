@@ -5,16 +5,7 @@ const pool = require('../db/pool');
 
 // Mesma lista de errorReportService.OPERACOES_EM_TESTE (repetida aqui porque
 // aquele módulo depende deste; há teste conferindo que as duas batem).
-const OPERACOES_EM_TESTE = [
-  'social_posting',
-  'social_conta',
-  'social_conexao',
-  'painel_novo_api',
-  'painel_novo_tela',
-  'lives',
-  'lives_capacidade',
-  'limite_do_plano',
-];
+const OPERACOES_EM_TESTE = ['limite_do_plano', 'lives_capacidade'];
 
 // A assinatura decide o que é "o mesmo erro". Inclui a operação, a entidade e o
 // começo da mensagem - não a mensagem inteira, porque quase todo erro carrega

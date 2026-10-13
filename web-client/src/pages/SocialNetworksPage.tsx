@@ -60,14 +60,29 @@ function lerUrl() {
 type Filtro = Rede | "todas"
 
 /** Limite do plano nas redes (Instagram, Facebook...): vale pra CADA rede. O TikTok tem o limite próprio. */
-type LimitesDasRedes = { semPlano: boolean; contasPorRede: number | null; plano: string | null }
+type LimitesDasRedes = {
+  semPlano: boolean
+  contasPorRede: number | null
+  /** Limite EFETIVO de cada rede: plano + contas extras compradas. */
+  porRede?: Record<string, number | null>
+  extras?: Record<string, number>
+  plano: string | null
+}
+
+/** Limite efetivo da rede (plano + extras); null = sem limite. */
+function limiteDaRede(rede: Rede, limites: LimitesDasRedes | null): number | null {
+  if (!limites) return null
+  if (limites.semPlano) return 0
+  const efetivo = limites.porRede?.[rede]
+  return efetivo === undefined ? limites.contasPorRede : efetivo
+}
 
 /** Quantas contas ainda cabem nesta rede (null = sem limite; TikTok: o servidor decide na volta). */
 function vagasNaRede(rede: Rede, limites: LimitesDasRedes | null, jaTem: number): number | null {
   if (rede === "tiktok" || !limites) return null
-  if (limites.semPlano) return 0
-  if (limites.contasPorRede === null) return null
-  return Math.max(0, limites.contasPorRede - jaTem)
+  const limite = limiteDaRede(rede, limites)
+  if (limite === null) return null
+  return Math.max(0, limite - jaTem)
 }
 
 function SeloDaRede({ rede, className }: { rede: Rede; className?: string }) {
@@ -191,7 +206,7 @@ export function SocialNetworksPage() {
                 : `${contas.length} ${contas.length === 1 ? "conta conectada" : "contas conectadas"} · ${naFila} ${naFila === 1 ? "corte na fila" : "cortes na fila"}`}
           </p>
         </div>
-        <Button onClick={() => setEscolhendoRede(true)} className="gap-1.5">
+        <Button onClick={() => setEscolhendoRede(true)} className="gap-1.5" data-tour="conectar-rede">
           <IconPlus className="size-4" />
           Conectar rede
         </Button>
@@ -444,7 +459,7 @@ function EscolherRedeDialog({
                     {cheia
                       ? limites?.semPlano
                         ? "Precisa de um plano"
-                        : `${n} de ${limites?.contasPorRede} no seu plano`
+                        : `${n} de ${limiteDaRede(r, limites)} no seu plano`
                       : n > 0
                         ? `${n} ${n === 1 ? "conta conectada" : "contas conectadas"}${vagas !== null ? ` de ${n + vagas}` : ""}`
                         : formato}
@@ -905,7 +920,7 @@ function ConectarRedeDialog({
           <p className="mx-6 mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
             {limites?.semPlano
               ? `Assine um plano para conectar o ${info.nome}.`
-              : `Seu plano${limites?.plano ? ` ${limites.plano}` : ""} permite ${limites?.contasPorRede} ${limites?.contasPorRede === 1 ? "conta" : "contas"} do ${info.nome}, e você já ${jaTem === 1 ? "tem 1" : `tem ${jaTem}`}. Para conectar mais, troque de plano.`}
+              : `Seu plano${limites?.plano ? ` ${limites.plano}` : ""} permite ${limiteDaRede(rede, limites)} ${limiteDaRede(rede, limites) === 1 ? "conta" : "contas"} do ${info.nome}, e você já ${jaTem === 1 ? "tem 1" : `tem ${jaTem}`}. Para conectar mais, compre uma conta extra por R$ 9,90/mês ou troque de plano.`}
           </p>
         )}
         <DialogFooter className="px-6 pb-6 pt-4">
@@ -913,9 +928,20 @@ function ConectarRedeDialog({
             Agora não
           </Button>
           {cheia ? (
-            <Button asChild>
-              <a href="/client/billing">Ver planos</a>
-            </Button>
+            limites?.semPlano ? (
+              <Button asChild>
+                <a href="/client/billing">Ver planos</a>
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" asChild>
+                  <a href="/client/billing">Ver planos</a>
+                </Button>
+                <Button asChild>
+                  <a href={`/client/checkout?extras=1&redes=${rede}:1`}>Comprar conta extra · R$ 9,90/mês</a>
+                </Button>
+              </>
+            )
           ) : (
             <Button onClick={conectar} disabled={indo || (rede !== "tiktok" && !disponivel)} className="border-0 text-white hover:opacity-90" style={{ background: info.fundo }}>
               {indo ? "Abrindo..." : `Conectar ${info.nome}`}

@@ -638,7 +638,7 @@ function EspacoDoCanal({
           </div>
         )}
 
-        <div role="tablist" className="flex gap-5 overflow-x-auto border-t border-border px-5 pt-2 sm:gap-6">
+        <div role="tablist" data-tour="abas-do-canal" className="flex gap-5 overflow-x-auto border-t border-border px-5 pt-2 sm:gap-6">
           <AbaBotao ativa={aba === "videos"} onClick={() => setAba("videos")}>
             <IconMovie className="size-4" /> Vídeos e cortes
             <span className="rounded-full bg-muted px-1.5 font-mono text-[10.5px] text-muted-foreground">{videos.length}</span>

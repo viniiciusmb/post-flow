@@ -35,6 +35,7 @@ const creditsUnlockService = require('./creditsUnlockService');
 const affiliateService = require('./affiliateService');
 const utmifyService = require('./utmifyService');
 const cpfCnpj = require('../lib/cpfCnpj');
+const redesSociais = require('../lib/redesSociais');
 const precosDasConexoes = require('../lib/precoDasConexoesExtras');
 const { aplicaPromocao } = require('../lib/promocaoDePrimeiroMes');
 const logger = require('../lib/logger');
@@ -591,24 +592,32 @@ async function liberarCreditoPago({ asaasPaymentId, clientUserId, creditPurchase
 // Mesma estrutura de dois passos da assinatura: uma cobrança avulsa cobre o
 // período corrente (e é ela que libera as conexões na hora), e a recorrência
 // passa a valer a partir do ciclo seguinte, JUNTO com o do plano.
-async function comprarExtras({ clientUserId, canais = 0, contas = 0, remoteIp }) {
+async function comprarExtras({ clientUserId, canais = 0, contas = 0, redes = {}, remoteIp }) {
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
-  if (!subscription.plan_id) throw new DadosInvalidosError('Assine um plano antes de comprar conexões extras.');
+  if (!subscription.plan_id || subscription.status === 'cancelado') {
+    throw new DadosInvalidosError('Assine um plano antes de comprar conexões extras.');
+  }
 
   const precos = precosDasConexoes.precosDoPlano(subscription);
-  if (!precos) {
-    throw new DadosInvalidosError('Seu plano não vende conexões extras — troque para o plano maior.');
-  }
-  if (!subscription.asaas_card_token || !subscription.asaas_customer_id) {
-    throw new DadosInvalidosError('Nenhum cartão salvo — cadastre um cartão antes de comprar.');
-  }
-
   const pedido = {
     canais: Math.max(0, Math.trunc(Number(canais) || 0)),
     contas: Math.max(0, Math.trunc(Number(contas) || 0)),
+    redes: precosDasConexoes.normalizarRedes(redes),
   };
-  if (pedido.canais + pedido.contas === 0) {
+  const contasNasRedes = precosDasConexoes.totalDeRedes(pedido.redes);
+  if (pedido.canais + pedido.contas + contasNasRedes === 0) {
     throw new DadosInvalidosError('Escolha pelo menos uma conexão para adicionar.');
+  }
+  // Canal do YouTube e conta do TikTok extras: só no plano maior. Conta nas
+  // redes: em todos (decisão de 12/10/2026).
+  if ((pedido.canais || pedido.contas) && !(precos && precos.canal)) {
+    throw new DadosInvalidosError('Canal do YouTube e conta do TikTok extras só existem no plano Max — troque de plano para adicionar.');
+  }
+  if (contasNasRedes && !(precos && precos.rede)) {
+    throw new DadosInvalidosError('Seu plano não vende contas extras nas redes sociais.');
+  }
+  if (!subscription.asaas_card_token || !subscription.asaas_customer_id) {
+    throw new DadosInvalidosError('Nenhum cartão salvo — cadastre um cartão antes de comprar.');
   }
 
   // O preço vem do PLANO, nunca do que o navegador mandou. Aceitar valor do
@@ -621,7 +630,7 @@ async function comprarExtras({ clientUserId, canais = 0, contas = 0, remoteIp })
     amountCents: totalCents,
     dueDate: dataAsaas(0),
     description: descricaoDosExtras(pedido),
-    externalReference: `extras:${clientUserId}:${pedido.canais}c:${pedido.contas}t`,
+    externalReference: `extras:${clientUserId}:${pedido.canais}c:${pedido.contas}t:${contasNasRedes}r`,
     creditCardToken: subscription.asaas_card_token,
     remoteIp,
   });
@@ -632,9 +641,10 @@ async function comprarExtras({ clientUserId, canais = 0, contas = 0, remoteIp })
     purpose: 'extra_slots',
     billingType: 'CREDIT_CARD',
     amountCents: totalCents,
-    slots: pedido.canais + pedido.contas,
+    slots: pedido.canais + pedido.contas + contasNasRedes,
     extraChannels: pedido.canais,
     extraTiktokAccounts: pedido.contas,
+    extraRedes: contasNasRedes ? pedido.redes : null,
     customerIp: remoteIp || null,
     cardBrand: subscription.asaas_card_brand,
     cardLast4: subscription.asaas_card_last4,
@@ -652,11 +662,26 @@ async function comprarExtras({ clientUserId, canais = 0, contas = 0, remoteIp })
 // Texto que o cliente vê na fatura do cartão. Precisa dizer o que ele comprou:
 // "conexao extra" não diferencia mais canal de conta, e é justamente essa a
 // dúvida de quem olha a fatura um mês depois.
-function descricaoDosExtras({ canais, contas }) {
+function descricaoDosExtras({ canais, contas, redes = {} }) {
   const partes = [];
   if (canais) partes.push(`${canais} canal(is) do YouTube`);
   if (contas) partes.push(`${contas} conta(s) do TikTok`);
+  for (const [rede, n] of Object.entries(redes || {})) {
+    partes.push(`${n} conta(s) do ${(redesSociais.info(rede) || {}).nome || rede}`);
+  }
   return `Post Flow - conexao extra: ${partes.join(' + ')}`;
+}
+
+// Soma dois mapas de contas por rede ({instagram: 1} + {instagram: 1, facebook: 2}).
+// `sinal` -1 subtrai (estorno, devolução), sem nunca passar de zero.
+function somarRedes(atual, pedido, sinal = 1) {
+  const saida = { ...precosDasConexoes.normalizarRedes(atual) };
+  for (const [rede, n] of Object.entries(precosDasConexoes.normalizarRedes(pedido))) {
+    const novo = Math.max(0, (saida[rede] || 0) + sinal * n);
+    if (novo) saida[rede] = novo;
+    else delete saida[rede];
+  }
+  return saida;
 }
 
 // Ponto único de liberação — síncrono e webhook caem aqui.
@@ -685,7 +710,8 @@ async function liberarExtrasPagos({ asaasPaymentId, clientUserId, pedido }) {
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
   const canais = Number(subscription.extra_channels) + Number(pedido.canais);
   const contas = Number(subscription.extra_tiktok_accounts) + Number(pedido.contas);
-  await clientSubscriptionsRepository.setExtras(clientUserId, { canais, contas });
+  const redes = somarRedes(subscription.extra_redes, pedido.redes);
+  await clientSubscriptionsRepository.setExtras(clientUserId, { canais, contas, redes });
 
   try {
     await sincronizarAssinaturaDeExtras(clientUserId);
@@ -695,8 +721,8 @@ async function liberarExtrasPagos({ asaasPaymentId, clientUserId, pedido }) {
       err.message
     );
   }
-  logger.info(`Cliente ${clientUserId} agora tem ${canais} canal(is) e ${contas} conta(s) extras.`);
-  return { canais, contas };
+  logger.info(`Cliente ${clientUserId} agora tem ${canais} canal(is), ${contas} conta(s) do TikTok e ${JSON.stringify(redes)} nas redes extras.`);
+  return { canais, contas, redes };
 }
 
 // QUANDO a recorrência das conexões extras começa a cobrar.
@@ -767,11 +793,12 @@ async function sincronizarAssinaturaDeExtras(clientUserId) {
 
 // Devolver conexões extras. Sem reembolso do mês em curso (está escrito na
 // tela): o que muda é o que será cobrado daqui para frente.
-async function removerExtras({ clientUserId, canais = 0, contas = 0 }) {
+async function removerExtras({ clientUserId, canais = 0, contas = 0, redes = {} }) {
   const subscription = await clientSubscriptionsRepository.getOrCreate(clientUserId);
   const totais = {
     canais: Math.max(Number(subscription.extra_channels) - (Number(canais) || 0), 0),
     contas: Math.max(Number(subscription.extra_tiktok_accounts) - (Number(contas) || 0), 0),
+    redes: somarRedes(subscription.extra_redes, redes, -1),
   };
   await clientSubscriptionsRepository.setExtras(clientUserId, totais);
   await sincronizarAssinaturaDeExtras(clientUserId);
@@ -830,6 +857,7 @@ async function aplicarPagamentoConfirmado(registro) {
       pedido: {
         canais: Number(registro.extra_channels) || 0,
         contas: Number(registro.extra_tiktok_accounts) || 0,
+        redes: registro.extra_redes || {},
       },
     });
   }
@@ -908,7 +936,8 @@ async function aplicarEstorno(registro, motivo) {
       Number(subscription.extra_tiktok_accounts) - (Number(registro.extra_tiktok_accounts) || 0),
       0
     );
-    await clientSubscriptionsRepository.setExtras(clientUserId, { canais, contas });
+    const redes = somarRedes(subscription.extra_redes, registro.extra_redes || {}, -1);
+    await clientSubscriptionsRepository.setExtras(clientUserId, { canais, contas, redes });
     try {
       await sincronizarAssinaturaDeExtras(clientUserId);
     } catch (err) {

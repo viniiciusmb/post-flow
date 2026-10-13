@@ -141,7 +141,7 @@ test('devolver a última conexão cancela a assinatura de extras', async () => {
 
     chamadas.length = 0;
     const totais = await checkoutService.removerExtras({ clientUserId: cliente.id, canais: 1 });
-    assert.deepEqual(totais, { canais: 0, contas: 0 });
+    assert.deepEqual(totais, { canais: 0, contas: 0, redes: {} });
 
     assert.ok(
       chamadas.some((c) => c.metodo === 'DELETE' && c.caminho.startsWith('/subscriptions/')),
@@ -163,7 +163,7 @@ test('plano que não vende conexão extra recusa a compra', async () => {
       () => checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 1, remoteIp: '1.2.3.4' }),
       (err) => {
         assert.equal(err.name, 'DadosInvalidosError');
-        assert.match(err.message, /não vende conexões extras/);
+        assert.match(err.message, /só existem no plano Max/);
         return true;
       }
     );

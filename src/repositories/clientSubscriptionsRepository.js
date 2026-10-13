@@ -17,7 +17,8 @@ async function getOrCreate(clientUserId) {
             sp.max_contas_por_rede, sp.max_canais_de_live, sp.max_lives_ao_mesmo_tempo,
             sp.price_cents AS plan_price_cents, sp.first_month_price_cents AS plan_first_month_price_cents,
             sp.overage_cents_normal, sp.overage_cents_bonus,
-            sp.extra_channel_price_cents, sp.extra_tiktok_price_cents, sp.extra_both_price_cents
+            sp.extra_channel_price_cents, sp.extra_tiktok_price_cents, sp.extra_both_price_cents,
+            sp.extra_rede_price_cents
      FROM client_subscriptions cs
      LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
      WHERE cs.client_user_id = $1`,
@@ -232,16 +233,18 @@ async function clearAsaasCard(clientUserId) {
 // Canal e conta sao contadores INDEPENDENTES desde 01/09/2026 (antes era um
 // slot so, valendo os dois). `canais`/`contas` ausentes preservam o valor
 // atual: quem compra so canal nao pode zerar as contas que ja pagou.
-async function setExtras(clientUserId, { canais = null, contas = null, asaasSubscriptionId = null }) {
+// `redes` ({instagram: 2}) substitui o mapa inteiro quando vem; ausente, fica.
+async function setExtras(clientUserId, { canais = null, contas = null, redes = null, asaasSubscriptionId = null }) {
   const { rows } = await pool.query(
     `UPDATE client_subscriptions
         SET extra_channels = COALESCE($2, extra_channels),
             extra_tiktok_accounts = COALESCE($3, extra_tiktok_accounts),
             asaas_extra_slots_subscription_id = COALESCE($4, asaas_extra_slots_subscription_id),
+            extra_redes = COALESCE($5::jsonb, extra_redes),
             updated_at = now()
       WHERE client_user_id = $1
       RETURNING *`,
-    [clientUserId, canais, contas, asaasSubscriptionId]
+    [clientUserId, canais, contas, asaasSubscriptionId, redes ? JSON.stringify(redes) : null]
   );
   return rows[0] || null;
 }
@@ -249,7 +252,7 @@ async function setExtras(clientUserId, { canais = null, contas = null, asaasSubs
 async function clearExtraSlotsSubscription(clientUserId) {
   await pool.query(
     `UPDATE client_subscriptions
-        SET extra_channels = 0, extra_tiktok_accounts = 0,
+        SET extra_channels = 0, extra_tiktok_accounts = 0, extra_redes = '{}'::jsonb,
             asaas_extra_slots_subscription_id = NULL, updated_at = now()
       WHERE client_user_id = $1`,
     [clientUserId]
@@ -339,7 +342,8 @@ const ENCERRAR_SQL = (onde) => `
            overage_card_enabled = false,
            -- Conexão extra só existe junto de um plano: sem plano, ela acaba.
            -- Até aqui (período pago) ela continuou valendo.
-           extra_channels = 0, extra_tiktok_accounts = 0, asaas_extra_slots_subscription_id = NULL,
+           extra_channels = 0, extra_tiktok_accounts = 0, extra_redes = '{}'::jsonb,
+           asaas_extra_slots_subscription_id = NULL,
            updated_at = now()
      WHERE ${onde}
      RETURNING *
@@ -374,7 +378,7 @@ async function finalizarCancelamentosVencidos() {
 async function removerExtrasDaAssinatura(clientUserId, subscriptionId) {
   const { rows } = await pool.query(
     `UPDATE client_subscriptions
-        SET extra_channels = 0, extra_tiktok_accounts = 0,
+        SET extra_channels = 0, extra_tiktok_accounts = 0, extra_redes = '{}'::jsonb,
             asaas_extra_slots_subscription_id = NULL, updated_at = now()
       WHERE client_user_id = $1 AND asaas_extra_slots_subscription_id = $2
       RETURNING *`,

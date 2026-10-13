@@ -357,6 +357,46 @@ function SaldoDeCreditos({ creditos }: { creditos: Estado["creditos"] }) {
   )
 }
 
+// Quanto vale o crédito nas lives (pedido de 12/10/2026): os mesmos créditos
+// dos cortes do YouTube, e a conta escrita com os números do servidor.
+function QuantoValeOCredito({ creditos }: { creditos: Estado["creditos"] }) {
+  const porHora = Math.round(60 / creditos.minutosDeLivePorCredito)
+  const minutos = creditos.disponiveis * creditos.minutosDeLivePorCredito
+  const tempo =
+    minutos >= 60
+      ? `${Math.floor(minutos / 60)} h${minutos % 60 ? ` ${Math.round(minutos % 60)} min` : ""}`
+      : `${minutos} min`
+  return (
+    <div data-tour="lives-credito" className="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-3">
+      <div className="bg-card px-4 py-3">
+        <p className="text-xs text-muted-foreground">Live clipada</p>
+        <p className="font-heading text-base font-semibold">{creditos.minutosDeLivePorCredito} min = 1 crédito</p>
+        <p className="text-xs text-muted-foreground">1 hora de live gasta {porHora} créditos</p>
+      </div>
+      <div className="bg-card px-4 py-3">
+        <p className="text-xs text-muted-foreground">Clipar este momento</p>
+        <p className="font-heading text-base font-semibold">{creditos.cliparAgora} crédito por clique</p>
+        <p className="text-xs text-muted-foreground">Só gasta enquanto a live é clipada pra você</p>
+      </div>
+      <div className="bg-card px-4 py-3">
+        <p className="text-xs text-muted-foreground">Seu saldo</p>
+        {creditos.isento ? (
+          <p className="font-heading text-base font-semibold">Isento (admin)</p>
+        ) : (
+          <>
+            <p className="font-heading text-base font-semibold tabular-nums">
+              {creditos.disponiveis} créditos ≈ {tempo} de live
+            </p>
+            <a href="/client/billing?aba=comprar" className="text-xs font-medium text-primary underline-offset-4 hover:underline">
+              Comprar mais créditos →
+            </a>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- clipar este momento
 
 // Secundário de propósito (pequeno e preto): com a live já sendo clipada, o
@@ -417,7 +457,7 @@ function ClipeDesteMomento({
         title={`Cria um corte com o melhor trecho dos últimos ${relogio(janelaS)}`}
       >
         {ocupado ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconScissors className="size-3.5" />}
-        <span className="truncate">{ocupado ? "Enviando…" : "Clipar este momento"}</span>
+        <span className="truncate">{ocupado ? "Enviando…" : "Clipar este momento · 1 crédito"}</span>
       </Button>
     </div>
   )
@@ -998,7 +1038,7 @@ export function LivesPage() {
                 <SaldoDeCreditos creditos={estado.creditos} />
               </span>
             )}
-            <Button onClick={() => setAdicionarAberto(true)}>
+            <Button onClick={() => setAdicionarAberto(true)} data-tour="adicionar-live">
               <IconPlus className="size-4" /> Adicionar canal
             </Button>
           </>
@@ -1053,6 +1093,7 @@ export function LivesPage() {
         </TabsList>
 
         <TabsContent value="canais" className="flex min-w-0 flex-col gap-8">
+          {estado && <QuantoValeOCredito creditos={estado.creditos} />}
           {!estado ? (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {[0, 1, 2].map((i) => (

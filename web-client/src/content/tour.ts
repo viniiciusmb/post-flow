@@ -31,18 +31,27 @@ export type PassoDoTour = {
   textoSemTunel?: Record<Idioma, string>
 }
 
+// Roteiro reescrito em 12/10/2026 para o painel novo (Redes sociais, Vídeos
+// do YouTube, Lives, Feed, Início em linha de produção). Mesma ordem do
+// Tutorial: redes → estilo → canal → lives → feed → créditos.
 export const PASSOS_DO_TOUR: PassoDoTour[] = [
   {
     pagina: "/client",
-    titulo: {
-      pt: "Bem-vindo ao Post Flow",
-      en: "Welcome to Post Flow",
-      es: "Bienvenido a Post Flow",
-    },
+    titulo: { pt: "Bem-vindo ao Post Flow", en: "Welcome to Post Flow", es: "Bienvenido a Post Flow" },
     texto: {
-      pt: "Vou te mostrar o painel em 1 minuto. São três coisas para configurar, e depois o sistema trabalha sozinho: ele vê vídeo novo no seu canal, corta e publica. Use “Próximo” para seguir — ou as setas do teclado.",
-      en: "Let me show you around in about a minute. There are three things to set up, then the system works on its own: it spots a new video on your channel, cuts it and publishes. Use “Next” to continue — or the arrow keys.",
-      es: "Te muestro el panel en 1 minuto. Son tres cosas para configurar y luego el sistema trabaja solo: ve un vídeo nuevo en tu canal, lo corta y lo publica. Usa “Siguiente” para seguir — o las flechas del teclado.",
+      pt: "Vou te mostrar o painel em 2 minutos. Você conecta suas redes, escolhe o estilo e diz quais canais e lives acompanhar. Depois o sistema trabalha sozinho. Use “Próximo” para seguir, ou as setas do teclado.",
+      en: "Let me show you around in 2 minutes. You connect your networks, choose the style and say which channels and lives to follow. Then the system works on its own. Use “Next” to continue, or the arrow keys.",
+      es: "Te muestro el panel en 2 minutos. Conectas tus redes, eliges el estilo y dices qué canales y lives seguir. Después el sistema trabaja solo. Usa “Siguiente” para seguir, o las flechas del teclado.",
+    },
+  },
+  {
+    pagina: "/client",
+    alvo: '[data-tour="linha-de-producao"]',
+    titulo: { pt: "A máquina trabalhando", en: "The machine at work", es: "La máquina trabajando" },
+    texto: {
+      pt: "Esta é a linha de produção: cada vídeo do YouTube e cada live passa por download, transcrição, escolha dos cortes e montagem. Quando um corte fica pronto, ele vai para a fila da conta onde vai ser publicado.",
+      en: "This is the production line: each YouTube video and each live goes through download, transcription, clip selection and editing. When a clip is ready, it goes to the queue of the account where it will be published.",
+      es: "Esta es la línea de producción: cada vídeo de YouTube y cada live pasa por descarga, transcripción, elección de clips y montaje. Cuando un clip está listo, va a la cola de la cuenta donde se publicará.",
     },
   },
   {
@@ -50,204 +59,97 @@ export const PASSOS_DO_TOUR: PassoDoTour[] = [
     alvo: '[data-tour="menu-lateral"]',
     titulo: { pt: "O menu", en: "The menu", es: "El menú" },
     texto: {
-      pt: "Tudo fica aqui. “Canais” é onde você diz qual canal do YouTube monitorar, “Cortes” é onde configura como o corte fica, e “Publicação” é onde conecta o TikTok e define os horários. No celular, esse menu abre no botão do canto.",
-      en: "Everything lives here. “Channels” is where you pick which YouTube channel to watch, “Clips” is where you set how the clip looks, and “Publishing” is where you connect TikTok and set the times. On a phone, this menu opens from the corner button.",
-      es: "Todo está aquí. “Canales” es donde eliges qué canal de YouTube monitorear, “Clips” donde configuras cómo queda el clip, y “Publicación” donde conectas TikTok y defines los horarios. En el móvil, este menú se abre con el botón de la esquina.",
+      pt: "Vídeos do YouTube, Lives e Feed de cortes são de onde os cortes vêm. Redes sociais é para onde eles vão. Plano e uso mostra seus créditos. No celular, o menu abre no botão do canto.",
+      en: "YouTube videos, Lives and Clip feed are where clips come from. Social networks is where they go. Plan & usage shows your credits. On a phone, the menu opens from the corner button.",
+      es: "Vídeos de YouTube, Lives y Feed de clips son de donde vienen los clips. Redes sociales es adonde van. Plan y uso muestra tus créditos. En el móvil, el menú se abre con el botón de la esquina.",
     },
   },
   {
-    pagina: "/client",
-    alvo: '[data-tour="checklist"]',
-    titulo: { pt: "Seus três passos", en: "Your three steps", es: "Tus tres pasos" },
+    pagina: "/client/social",
+    alvo: '[data-tour="conectar-rede"]',
+    titulo: { pt: "Passo 1: conecte suas redes", en: "Step 1: connect your networks", es: "Paso 1: conecta tus redes" },
     texto: {
-      pt: "Este quadro acompanha o que falta configurar e some sozinho quando você termina os três. O botão “Ir” de cada linha leva direto para a tela certa.",
-      en: "This card tracks what's left to set up and disappears once you finish all three. The “Go” button on each row takes you straight to the right screen.",
-      es: "Este cuadro sigue lo que falta configurar y desaparece solo cuando terminas los tres. El botón “Ir” de cada línea te lleva directo a la pantalla correcta.",
+      pt: "Comece por aqui: TikTok, Instagram, Facebook, YouTube Shorts e outras. Você autoriza dentro da própria rede. Cada conta ganha a própria fila e os próprios horários, que você vê clicando nela.",
+      en: "Start here: TikTok, Instagram, Facebook, YouTube Shorts and more. You authorize inside the network itself. Each account gets its own queue and its own times, which you see by clicking it.",
+      es: "Empieza aquí: TikTok, Instagram, Facebook, YouTube Shorts y más. Autorizas dentro de la propia red. Cada cuenta tiene su propia cola y sus propios horarios, que ves haciendo clic en ella.",
     },
   },
   {
-    pagina: "/client/tiktok-account",
-    alvo: '[data-tour="conectar-tiktok"]',
-    titulo: {
-      pt: "Passo 1: conecte o TikTok",
-      en: "Step 1: connect TikTok",
-      es: "Paso 1: conecta TikTok",
-    },
-    texto: {
-      pt: "Clique aqui e o próprio TikTok abre para você autorizar. Sua senha é digitada lá dentro, nunca aqui. Comece por este passo: é a conta que vai receber os cortes, e o canal do YouTube aponta para ela depois.",
-      en: "Click here and TikTok itself opens for you to authorize. Your password is typed there, never here. Start with this step: it's the account that receives the clips, and the YouTube channel points to it later.",
-      es: "Haz clic aquí y el propio TikTok se abre para que autorices. Tu contraseña se escribe allí, nunca aquí. Empieza por este paso: es la cuenta que recibe los clips, y el canal de YouTube apunta a ella después.",
-    },
-  },
-  {
-    pagina: "/client/tiktok-account",
-    titulo: {
-      pt: "Depois de conectar",
-      en: "After connecting",
-      es: "Después de conectar",
-    },
-    texto: {
-      pt: "Aqui nesta tela aparecem: as opções que o TikTok exige (quem pode ver, comentários, dueto), os horários de publicação, e as abas Fila, Postados e Erro. A aba Fila mostra a que horas cada corte vai sair — e sai naquela hora mesmo.",
-      en: "Once connected, this screen shows: the options TikTok requires (who can view, comments, duet), the publishing times, and the Queue, Posted and Error tabs. The Queue tab shows what time each clip goes out — and it goes out at that exact time.",
-      es: "Aquí aparecen: las opciones que TikTok exige (quién puede ver, comentarios, dúo), los horarios de publicación, y las pestañas Cola, Publicados y Error. La pestaña Cola muestra a qué hora sale cada clip — y sale a esa hora exacta.",
-    },
-  },
-  {
-    pagina: "/client/videos-clips",
-    alvo: '[data-tour="abrir-config-cortes"]',
-    titulo: {
-      pt: "Passo 2: o estilo do corte",
-      en: "Step 2: the clip style",
-      es: "Paso 2: el estilo del clip",
-    },
-    texto: {
-      pt: "Este botão abre tudo sobre o corte num painel só: quantos sair de cada vídeo, quanto tempo cada um tem e como ele aparece na tela. Vou abrir para você ver por dentro.",
-      en: "This button opens everything about the clip in one panel: how many come out of each video, how long each one is, and how it looks on screen. Let me open it so you can see inside.",
-      es: "Este botón abre todo sobre el clip en un solo panel: cuántos salen de cada vídeo, cuánto dura cada uno y cómo se ve en pantalla. Lo abro para que veas por dentro.",
-    },
-  },
-  {
-    pagina: "/client/videos-clips",
-    abrir: '[data-tour="abrir-config-cortes"]',
-    alvo: '[data-tour="como-funcionam-cortes"]',
-    titulo: {
-      pt: "Quantos cortes e de que tamanho",
-      en: "How many clips and how long",
-      es: "Cuántos clips y de qué tamaño",
-    },
-    texto: {
-      pt: "“Melhores partes” deixa a IA escolher os trechos mais fortes. “Cortar o vídeo inteiro em partes” não descarta nada e vira uma série (Parte 1, Parte 2...). “Escolher quantidade” dá exatamente o número que você pedir. Logo abaixo você define a duração e a legenda da publicação.",
-      en: "“Best parts” lets the AI pick the strongest moments. “Split the whole video into parts” discards nothing and turns it into a series (Part 1, Part 2...). “Pick a number” gives exactly the count you ask for. Below it you set the length and the post caption.",
-      es: "“Mejores partes” deja que la IA elija los momentos más fuertes. “Cortar el vídeo entero en partes” no descarta nada y lo vuelve una serie (Parte 1, Parte 2...). “Elegir cantidad” da exactamente el número que pidas. Debajo defines la duración y el texto de la publicación.",
-    },
-  },
-  {
-    pagina: "/client/videos-clips",
-    abrir: '[data-tour="abrir-config-cortes"]',
-    alvo: '[data-tour="estilo-visual"]',
-    titulo: {
-      pt: "A aparência do corte",
-      en: "How the clip looks",
-      es: "La apariencia del clip",
-    },
-    texto: {
-      pt: "Em “Automático” usamos o padrão e você não precisa decidir nada. Em “Manual” abrem o fundo, o enquadramento, o estilo da legenda, o título e a numeração — com uma prévia ao lado mostrando o resultado enquanto você escolhe.",
-      en: "On “Automatic” we use the default and you decide nothing. On “Manual” you get background, framing, caption style, title and numbering — with a preview beside it showing the result as you choose.",
-      es: "En “Automático” usamos el estándar y no decides nada. En “Manual” se abren el fondo, el encuadre, el estilo del subtítulo, el título y la numeración — con una vista previa al lado que muestra el resultado mientras eliges.",
-    },
-  },
-  {
-    pagina: "/client/youtube-channels",
+    pagina: "/client/youtube",
     alvo: '[data-tour="canal-endereco"]',
-    titulo: {
-      pt: "Passo 3: o canal do YouTube",
-      en: "Step 3: the YouTube channel",
-      es: "Paso 3: el canal de YouTube",
-    },
+    titulo: { pt: "Passo 2: o canal do YouTube", en: "Step 2: the YouTube channel", es: "Paso 2: el canal de YouTube" },
     texto: {
-      pt: "Cole aqui o endereço do canal que você quer clipar. Funciona com o @arroba ou com o endereço completo da página do canal.",
-      en: "Paste the address of the channel you want to clip. Works with the @handle or the full channel page URL.",
-      es: "Pega aquí la dirección del canal que quieres clipar. Funciona con el @arroba o con la dirección completa de la página del canal.",
+      pt: "Cole o link ou o @ do canal que você quer cortar e clique em Conectar canal. O Post Flow pergunta se quer cortar o vídeo mais recente e, daí pra frente, pega cada vídeo novo sozinho.",
+      en: "Paste the link or @ of the channel you want to clip and click Connect channel. Post Flow asks whether to cut the latest video and, from then on, takes each new video on its own.",
+      es: "Pega el enlace o el @ del canal que quieres recortar y haz clic en Conectar canal. Post Flow pregunta si quieres recortar el vídeo más reciente y, desde ahí, toma cada vídeo nuevo solo.",
     },
   },
   {
-    pagina: "/client/youtube-channels",
-    alvo: '[data-tour="canal-adicionar"]',
-    titulo: {
-      pt: "E é só adicionar",
-      en: "And just add it",
-      es: "Y solo añádelo",
-    },
+    pagina: "/client/youtube",
+    alvo: '[data-tour="abas-do-canal"]',
+    titulo: { pt: "Estilo e destinos do canal", en: "The channel's style and destinations", es: "Estilo y destinos del canal" },
     texto: {
-      pt: "O canal entra PAUSADO de propósito, para você conferir tudo antes. No cartão dele você liga a chave “Baixar e cortar automaticamente”, escolhe em qual conta do TikTok publicar e, se quiser, uma pasta do Google Drive para receber os cortes prontos.",
-      en: "The channel starts PAUSED on purpose, so you can check everything first. On its card you flip the “Download and cut automatically” switch, choose which TikTok account to publish to and, if you want, a Google Drive folder to receive the finished clips.",
-      es: "El canal entra PAUSADO a propósito, para que compruebes todo antes. En su tarjeta activas el interruptor “Descargar y cortar automáticamente”, eliges en qué cuenta de TikTok publicar y, si quieres, una carpeta de Google Drive para recibir los clips listos.",
+      pt: "Em “Estilo do corte” você escolhe um modelo pronto ou ajusta legenda, título e quantos cortes saem. Em “Monitoramento e destinos” você marca em quais contas os cortes deste canal são publicados.",
+      en: "In “Clip style” you pick a ready-made template or adjust captions, title and how many clips come out. In “Monitoring and destinations” you tick which accounts this channel's clips are published to.",
+      es: "En “Estilo del clip” eliges una plantilla lista o ajustas subtítulos, título y cuántos clips salen. En “Monitoreo y destinos” marcas en qué cuentas se publican los clips de este canal.",
     },
   },
   {
-    pagina: "/client/youtube-channels",
-    alvo: '[data-tour="freio-de-fila"]',
-    titulo: {
-      pt: "O freio contra fila entupida",
-      en: "The anti-pile-up brake",
-      es: "El freno contra la cola atascada",
-    },
+    pagina: "/client/lives",
+    alvo: '[data-tour="lives-credito"]',
+    titulo: { pt: "Lives: quanto vale o crédito", en: "Lives: what a credit is worth", es: "Lives: cuánto vale el crédito" },
     texto: {
-      pt: "Já vem ligado. Com ele, o canal só busca um vídeo novo quando restar no máximo 1 corte esperando publicação. Sem ele, um canal que publica todo dia gera cortes mais rápido do que a fila posta — a fila só cresce e o corte que sai já é de assunto velho. Enquanto segura, nada fica acumulado: quando a fila baixa, ele pega o vídeo mais recente daquele momento.",
-      en: "On by default. With it, the channel only fetches a new video when at most 1 clip is still waiting to be published. Without it, a daily channel produces clips faster than the queue posts them — the queue only grows and the clip that goes out is already old news. While it holds, nothing piles up: when the queue drops, it picks the most recent video at that moment.",
-      es: "Ya viene activado. Con él, el canal solo busca un vídeo nuevo cuando queda como máximo 1 clip esperando publicación. Sin él, un canal que publica a diario genera clips más rápido de lo que la cola publica — la cola solo crece y el clip que sale ya es de tema viejo. Mientras frena, nada se acumula: cuando la cola baja, toma el vídeo más reciente de ese momento.",
+      pt: "As lives usam os mesmos créditos dos vídeos: 3 minutos de live clipada = 1 crédito (1 hora = 20 créditos). “Clipar este momento” custa 1 crédito por clique. Só gasta enquanto a live está sendo clipada pra você.",
+      en: "Lives use the same credits as videos: 3 minutes of clipped live = 1 credit (1 hour = 20 credits). “Clip this moment” costs 1 credit per click. It only spends while the live is being clipped for you.",
+      es: "Los lives usan los mismos créditos que los vídeos: 3 minutos de live recortado = 1 crédito (1 hora = 20 créditos). “Recortar este momento” cuesta 1 crédito por clic. Solo gasta mientras el live se recorta para ti.",
     },
   },
   {
-    pagina: "/client/billing",
-    alvo: '[data-tour="creditos"]',
-    titulo: {
-      pt: "Seu crédito de processamento",
-      en: "Your processing credit",
-      es: "Tu crédito de procesamiento",
-    },
+    pagina: "/client/lives",
+    alvo: '[data-tour="adicionar-live"]',
+    titulo: { pt: "Adicione um streamer", en: "Add a streamer", es: "Agrega un streamer" },
     texto: {
-      pt: "Cortar vídeo custa: baixar, transcrever e renderizar. Seu plano dá uma cota semanal em minutos de vídeo, e é ela que roda quando o download sai pela nossa internet. Do lado, a cota BÔNUS — extra, liberada quando o programa do seu computador está conectado.",
-      en: "Cutting video costs money: downloading, transcribing and rendering. Your plan gives a weekly quota in minutes of video, and that's what runs when the download goes through our internet. Beside it, the BONUS quota — extra, unlocked when the program on your computer is connected.",
-      es: "Cortar vídeo cuesta: descargar, transcribir y renderizar. Tu plan da una cuota semanal en minutos de vídeo, y es la que corre cuando la descarga sale por nuestra internet. Al lado, la cuota BONO — extra, liberada cuando el programa de tu ordenador está conectado.",
+      pt: "Cole o link do canal da Twitch ou da Kick. Com “Clipar sempre que estiver ao vivo” ligado, toda live vira cortes sozinha. Os cortes de live aparecem no Feed de cortes, de onde você escolhe onde publicar.",
+      en: "Paste the Twitch or Kick channel link. With “Clip every time it's live” on, every live becomes clips on its own. Live clips appear in the Clip feed, where you choose where to publish.",
+      es: "Pega el enlace del canal de Twitch o Kick. Con “Recortar siempre que esté en vivo” activado, cada live se vuelve clips solo. Los clips de live aparecen en el Feed de clips, desde donde eliges dónde publicar.",
     },
-    textoSemTunel: {
-      pt: "Cortar vídeo custa: baixar, transcrever e renderizar. Seu plano dá uma cota semanal, medida em minutos de vídeo processado — não em quantidade de cortes. Um vídeo de 30 minutos gasta 30, renda ele 3 ou 12 cortes.",
-      en: "Cutting video costs money: downloading, transcribing and rendering. Your plan gives a weekly quota measured in minutes of processed video — not in number of clips. A 30-minute video spends 30, whether it yields 3 clips or 12.",
-      es: "Cortar vídeo cuesta: descargar, transcribir y renderizar. Tu plan da una cuota semanal medida en minutos de vídeo procesado — no en cantidad de cortes. Un vídeo de 30 minutos gasta 30, rinda 3 cortes o 12.",
+  },
+  {
+    pagina: "/client/feed",
+    titulo: { pt: "O Feed de cortes", en: "The Clip feed", es: "El Feed de clips" },
+    texto: {
+      pt: "Todos os seus cortes, de vídeos e de lives, um por tela. Role para passar, toque para ligar o som, curta os melhores e use “Postar” para mandar um corte para a fila das suas contas.",
+      en: "All your clips, from videos and lives, one per screen. Scroll to move on, tap to turn the sound on, like the best ones and use “Post” to send a clip to your accounts' queue.",
+      es: "Todos tus clips, de vídeos y de lives, uno por pantalla. Desliza para pasar, toca para activar el sonido, dale me gusta a los mejores y usa “Publicar” para mandar un clip a la cola de tus cuentas.",
     },
   },
   {
     pagina: "/client/billing",
-    alvo: '[data-tour="nao-ficar-sem-credito"]',
-    titulo: {
-      pt: "Não parar no meio do mês",
-      en: "Not stopping mid-month",
-      es: "No parar a mitad de mes",
-    },
+    alvo: '[data-tour="quanto-gasta"]',
+    titulo: { pt: "Quanto cada coisa gasta", en: "What each thing costs", es: "Cuánto gasta cada cosa" },
     texto: {
-      pt: "Duas saídas quando a cota acaba. Com um cartão cadastrado, o processamento continua e você paga só o que passou do plano. Ou compre um pacote avulso, que não expira. Sem nenhum dos dois, os vídeos ficam esperando em vez de serem cortados.",
-      en: "Two ways out when the quota runs out. With a card on file, processing continues and you only pay for what went over the plan. Or buy a one-off package, which never expires. With neither, videos wait instead of being cut.",
-      es: "Dos salidas cuando se acaba la cuota. Con una tarjeta registrada, el procesamiento continúa y pagas solo lo que pasó del plan. O compra un paquete suelto, que no caduca. Sin ninguno de los dos, los vídeos esperan en vez de ser cortados.",
+      pt: "1 minuto de vídeo = 1 crédito, 3 minutos de live = 1 crédito. Seu plano renova a cota toda semana, e na aba Comprar você adiciona minutos avulsos ou liga o cartão para não parar quando a cota acaba.",
+      en: "1 minute of video = 1 credit, 3 minutes of live = 1 credit. Your plan renews the quota every week, and in the Buy tab you add one-off minutes or turn on the card so nothing stops when the quota runs out.",
+      es: "1 minuto de vídeo = 1 crédito, 3 minutos de live = 1 crédito. Tu plan renueva la cuota cada semana, y en la pestaña Comprar agregas minutos sueltos o activas la tarjeta para no parar cuando se acaba la cuota.",
     },
   },
   {
     pagina: "/client/billing",
-    alvo: '[data-tour="planos"]',
-    titulo: { pt: "Trocar de plano", en: "Changing plan", es: "Cambiar de plan" },
+    alvo: '[data-tour="uso-do-plano"]',
+    titulo: { pt: "O que seu plano inclui", en: "What your plan includes", es: "Qué incluye tu plan" },
     texto: {
-      pt: "Aqui você compara os planos e troca quando quiser. O plano define a cota semanal, quantos canais e contas do TikTok você pode ter, e a prioridade na fila quando há vários vídeos processando ao mesmo tempo.",
-      en: "Here you compare plans and switch whenever you like. The plan sets your weekly quota, how many channels and TikTok accounts you can have, and your priority in the queue when several videos are processing at once.",
-      es: "Aquí comparas los planes y cambias cuando quieras. El plan define la cuota semanal, cuántos canales y cuentas de TikTok puedes tener, y la prioridad en la cola cuando hay varios vídeos procesándose a la vez.",
-    },
-  },
-  {
-    soComTunel: true,
-    pagina: "/client/tunnel",
-    alvo: '[data-tour="conexao-explicacao"]',
-    titulo: {
-      pt: "Sua conexão (opcional, mas vale a pena)",
-      en: "Your connection (optional, but worth it)",
-      es: "Tu conexión (opcional, pero vale la pena)",
-    },
-    texto: {
-      pt: "O YouTube limita downloads vindos de servidores. Instalando um programinha no seu computador, os downloads dos SEUS vídeos passam a sair pela sua internet: falham bem menos e liberam a cota bônus, que é mais barata. É só baixar, abrir e colar o código de pareamento aqui.",
-      en: "YouTube throttles downloads coming from servers. By installing a small program on your computer, YOUR downloads start going out through your own internet: they fail far less and unlock the bonus quota, which is cheaper. Just download it, open it and paste the pairing code here.",
-      es: "YouTube limita las descargas que vienen de servidores. Instalando un programita en tu ordenador, las descargas de TUS vídeos pasan a salir por tu internet: fallan mucho menos y liberan la cuota bono, que es más barata. Solo descárgalo, ábrelo y pega aquí el código de emparejamiento.",
+      pt: "Quantos canais, lives e contas em cada rede você pode ter, e quanto já está usando. Precisa de mais contas numa rede só? Compre uma conta extra por R$ 9,90/mês na aba Comprar.",
+      en: "How many channels, lives and accounts per network you can have, and how much you already use. Need more accounts on just one network? Buy an extra account for R$ 9.90/month in the Buy tab.",
+      es: "Cuántos canales, lives y cuentas en cada red puedes tener, y cuánto ya usas. ¿Necesitas más cuentas en una sola red? Compra una cuenta extra por R$ 9,90/mes en la pestaña Comprar.",
     },
   },
   {
     pagina: "/client",
     titulo: { pt: "É isso!", en: "That's it!", es: "¡Eso es todo!" },
     texto: {
-      pt: "Feitos os três passos, o sistema toca sozinho: vídeo novo no canal vira cortes e sai no TikTok nos seus horários. “Plano e uso” mostra quanto crédito resta, e “Sua conexão” é o jeito de gastar menos. Se quiser rever qualquer detalhe, o menu “Tutorial” tem tudo explicado com imagens — e você pode repetir este tour por lá quando quiser.",
-      en: "With those three done, the system runs itself: a new video on the channel becomes clips and goes out on TikTok at your times. “Plan and usage” shows how much credit is left, and “Your connection” is how you spend less. To revisit any detail, the “Tutorial” menu explains everything with pictures — and you can replay this tour from there any time.",
-      es: "Con los tres pasos hechos, el sistema funciona solo: un vídeo nuevo en el canal se vuelve clips y sale en TikTok en tus horarios. “Plan y uso” muestra cuánto crédito queda, y “Tu conexión” es la forma de gastar menos. Para repasar cualquier detalle, el menú “Tutorial” lo explica todo con imágenes — y puedes repetir este tour desde allí cuando quieras.",
-    },
-    textoSemTunel: {
-      pt: "Feitos os três passos, o sistema toca sozinho: vídeo novo no canal vira cortes e sai no TikTok nos seus horários. “Plano e uso” mostra quanto crédito resta. Se quiser rever qualquer detalhe, o menu “Tutorial” tem tudo explicado com imagens — e você pode repetir este tour por lá quando quiser.",
-      en: "With those three done, the system runs itself: a new video on the channel becomes clips and goes out on TikTok at your times. “Plan and usage” shows how much credit is left. To revisit any detail, the “Tutorial” menu explains everything with pictures — and you can replay this tour from there any time.",
-      es: "Con los tres pasos hechos, el sistema funciona solo: un vídeo nuevo en el canal se vuelve clips y sale en TikTok en tus horarios. “Plan y uso” muestra cuánto crédito queda. Para repasar cualquier detalle, el menú “Tutorial” lo explica todo con imágenes — y puedes repetir este tour desde allí cuando quieras.",
+      pt: "Com as redes conectadas e um canal ou live acompanhado, o sistema toca sozinho. O menu “Tutorial” explica cada tela com imagens, e você pode repetir este tour por lá quando quiser.",
+      en: "With your networks connected and a channel or live followed, the system runs itself. The “Tutorial” menu explains every screen with pictures, and you can replay this tour from there any time.",
+      es: "Con las redes conectadas y un canal o live seguido, el sistema funciona solo. El menú “Tutorial” explica cada pantalla con imágenes, y puedes repetir este tour desde allí cuando quieras.",
     },
   },
 ]

@@ -229,12 +229,12 @@ export function AdminErrorsPage() {
   }
 
   return (
-    <DashboardLayout user={user} onLogout={logout} title={EM_TESTE ? "Erros em teste" : "Erros"}>
+    <DashboardLayout user={user} onLogout={logout} title={EM_TESTE ? "Limites e vagas" : "Erros"}>
       <PageHeader
-        title={EM_TESTE ? "Erros em teste" : "Erros"}
+        title={EM_TESTE ? "Limites e vagas" : "Erros"}
         description={
           EM_TESTE
-            ? "As novidades do painel novo: conexão e publicação nas redes sociais, lives, quem bateu no limite do plano, telas novas e erros de tela dessas páginas. Abra o detalhe de um erro pra ver cada ocorrência com o contexto inteiro."
+            ? "Avisos que não são defeito: cliente que tentou passar do limite do plano (sinal de quem quer um plano maior) e live que ficou sem vaga no servidor (sinal de que está na hora de um servidor maior). Os erros de verdade ficam em Erros."
             : t("adm.errosDescricao")
         }
       />

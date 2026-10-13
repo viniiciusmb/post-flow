@@ -45,10 +45,10 @@ async function canalSeguido(userId, { aoVivo = false, pausado = false } = {}) {
 const doCanal = (r, id) => r.body.canais.find((c) => c.id === id);
 const gravados = async () => (await livesRepository.listWatchedChannels()).map((c) => Number(c.id));
 
-test('enquanto esta em teste, cliente nao abre a tela nova', async () => {
+// Painel novo aberto pra todos desde 12/10/2026.
+test('qualquer cliente abre a tela de lives', async () => {
   const { agent } = await logado('client');
-  assert.equal((await agent.get('/api/client/lives')).status, 403);
-  assert.equal((await agent.post('/api/client/lives/canais', { canal: 'gaules' })).status, 403);
+  assert.equal((await agent.get('/api/client/lives')).status, 200);
 });
 
 test('ligar e desligar o automatico decide se o canal e gravado', async () => {

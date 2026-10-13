@@ -6,17 +6,9 @@
 // volta a ser só do log técnico, como as outras.
 'use strict';
 
-const PREFIXOS = [
-  '/api/client/social-accounts',
-  '/api/client/social-postings',
-  '/api/client/feed',
-  '/api/client/maquina',
-  '/api/client/lives',
-  '/api/client/video-settings/modelos',
-  '/api/client/conta',
-  '/api/client/erros-de-tela',
-  '/client/social/retorno',
-];
+// Vazia desde 12/10/2026: o painel novo abriu para todos, e erro de servidor
+// nessas rotas vai pra tela "Erros" como qualquer outro.
+const PREFIXOS = [];
 
 function ehRotaEmTeste(caminho) {
   return PREFIXOS.some((p) => caminho === p || caminho.startsWith(`${p}/`));

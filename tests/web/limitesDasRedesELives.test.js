@@ -185,7 +185,8 @@ test('Starter: a 2ª conta do Instagram é barrada antes de abrir a autorizaçã
   const ig = await agent.post('/api/client/social-accounts/instagram/conectar', {});
   assert.equal(ig.status, 403);
   assert.equal(ig.body.limite, true);
-  assert.match(ig.body.error, /1 conta em cada rede social/);
+  assert.match(ig.body.error, /permite 1 conta do Instagram/);
+  assert.match(ig.body.error, /conta extra por R\$ 9,90/);
 
   const fb = await agent.post('/api/client/social-accounts/facebook/conectar', {});
   assert.equal(fb.status, 200, 'o limite é POR rede');

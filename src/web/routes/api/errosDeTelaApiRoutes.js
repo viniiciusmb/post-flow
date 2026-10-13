@@ -26,7 +26,7 @@ router.post(
     err.stack = `${mensagem}\n${limpar(req.body?.pilha, 3000)}`;
     const novo = await painelNovo.ehPainelNovo(req.session.user);
     await errorReportService.report({
-      operation: novo ? errorReportService.OPERACOES.PAINEL_NOVO_TELA : errorReportService.OPERACOES.ERRO_TELA,
+      operation: errorReportService.OPERACOES.ERRO_TELA,
       entityType: 'tela',
       clientUserId: req.session.user.id,
       error: err,

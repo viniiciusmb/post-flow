@@ -20,10 +20,12 @@ async function idsLiberados() {
   return Array.isArray(lista) ? lista.map(Number).filter(Number.isFinite) : [];
 }
 
+// ABERTO PARA TODOS em 12/10/2026 (decisão do fundador). A lista em
+// settings.painel_novo_user_ids não decide mais nada; ficou só pra não quebrar
+// quem ainda a lê. Para voltar a restringir, devolva a regra antiga:
+//   admin sempre; os outros só se estiverem na lista.
 async function ehPainelNovo(user) {
-  if (!user) return false;
-  if (user.role === ROLES.ADMIN) return true;
-  return (await idsLiberados()).includes(Number(user.id));
+  return Boolean(user);
 }
 
 module.exports = { CHAVE, ehPainelNovo, idsLiberados };

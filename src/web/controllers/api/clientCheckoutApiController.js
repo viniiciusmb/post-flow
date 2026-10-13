@@ -83,6 +83,8 @@ async function contexto(req, res) {
       extraChannelPriceCents: p.extra_channel_price_cents,
       extraTiktokPriceCents: p.extra_tiktok_price_cents,
       extraBothPriceCents: p.extra_both_price_cents,
+      // Conta extra nas redes sociais, em todos os planos (12/10/2026).
+      extraRedePriceCents: p.extra_rede_price_cents ?? null,
     })),
     subscription: {
       planKey: subscription.plan_key || null,
@@ -95,6 +97,7 @@ async function contexto(req, res) {
       promoDisponivel: promocaoDisponivel(subscription),
       extraChannels: Number(subscription.extra_channels) || 0,
       extraTiktokAccounts: Number(subscription.extra_tiktok_accounts) || 0,
+      extraRedes: precosDasConexoes.normalizarRedes(subscription.extra_redes),
       precosExtras: precosDasConexoes.precosDoPlano(subscription),
       limites: { canais: limites.canais, contas: limites.contas },
       emUso: { canais, contas: contasAtivas },
@@ -180,15 +183,18 @@ async function resolverItem(req, clientUserId) {
     // Dois contadores independentes desde 01/09/2026: canal do YouTube e conta
     // do TikTok. O cliente pode levar só um dos dois, ou os dois (que sai mais
     // barato - ver lib/precoDasConexoesExtras).
+    // Desde 12/10/2026 também contas nas redes sociais: {instagram: 1}.
     const canais = Math.trunc(Number(req.body.canais) || 0);
     const contas = Math.trunc(Number(req.body.contas) || 0);
-    if (canais < 0 || contas < 0 || canais + contas < 1) {
+    const redes = precosDasConexoes.normalizarRedes(req.body.redes);
+    const nasRedes = precosDasConexoes.totalDeRedes(redes);
+    if (canais < 0 || contas < 0 || canais + contas + nasRedes < 1) {
       throw new DadosInvalidosError('Escolha pelo menos uma conexão para adicionar.');
     }
-    if (canais > MAX_SLOTS_POR_COMPRA || contas > MAX_SLOTS_POR_COMPRA) {
+    if (canais > MAX_SLOTS_POR_COMPRA || contas > MAX_SLOTS_POR_COMPRA || Object.values(redes).some((n) => n > MAX_SLOTS_POR_COMPRA)) {
       throw new DadosInvalidosError(`Escolha no máximo ${MAX_SLOTS_POR_COMPRA} de cada por compra.`);
     }
-    return { tipo, canais, contas };
+    return { tipo, canais, contas, redes };
   }
 
   throw new DadosInvalidosError('Não entendi o que você quer comprar.');
@@ -261,6 +267,7 @@ async function pagar(req, res) {
       clientUserId,
       canais: item.canais,
       contas: item.contas,
+      redes: item.redes,
       remoteIp: req.ip,
     });
     return res.json({ ...r, tipo: 'extras' });
@@ -280,12 +287,13 @@ async function statusDoPagamento(req, res) {
 async function removerExtras(req, res) {
   const canais = Math.max(0, Math.trunc(Number(req.body.canais) || 0));
   const contas = Math.max(0, Math.trunc(Number(req.body.contas) || 0));
-  if (canais + contas < 1) {
+  const redes = precosDasConexoes.normalizarRedes(req.body.redes);
+  if (canais + contas + precosDasConexoes.totalDeRedes(redes) < 1) {
     return res.status(400).json({ error: 'Escolha o que quer remover.' });
   }
   try {
-    const totais = await checkoutService.removerExtras({ clientUserId: req.session.user.id, canais, contas });
-    res.json({ extraChannels: totais.canais, extraTiktokAccounts: totais.contas });
+    const totais = await checkoutService.removerExtras({ clientUserId: req.session.user.id, canais, contas, redes });
+    res.json({ extraChannels: totais.canais, extraTiktokAccounts: totais.contas, extraRedes: totais.redes });
   } catch (err) {
     logger.error(`Falha ao remover conexoes extras do cliente ${req.session.user.id}:`, err);
     return responderErro(res, err);

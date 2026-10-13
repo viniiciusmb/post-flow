@@ -14,7 +14,7 @@ const pool = require('../db/pool');
 function dentroDoPlanoSql(alias) {
   return `EXISTS (
     SELECT 1
-      FROM (SELECT x.id, row_number() OVER (PARTITION BY x.network ORDER BY x.connected_at, x.id) AS posicao
+      FROM (SELECT x.id, x.network, row_number() OVER (PARTITION BY x.network ORDER BY x.connected_at, x.id) AS posicao
               FROM social_accounts x
              WHERE x.client_user_id = ${alias}.client_user_id AND x.disconnected_at IS NULL) r
       JOIN users u ON u.id = ${alias}.client_user_id
@@ -23,7 +23,8 @@ function dentroDoPlanoSql(alias) {
      WHERE r.id = ${alias}.id
        AND (u.role = 'admin'
             OR (cs.plan_id IS NOT NULL AND cs.status <> 'cancelado'
-                AND (pl.max_contas_por_rede IS NULL OR r.posicao <= pl.max_contas_por_rede))))`;
+                AND (pl.max_contas_por_rede IS NULL
+                     OR r.posicao <= pl.max_contas_por_rede + COALESCE((cs.extra_redes ->> r.network)::int, 0)))))`;
 }
 
 const CAMPOS = `id, client_user_id, network, outstand_account_id, username, display_name, avatar_url, account_type, connected_at,

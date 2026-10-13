@@ -840,13 +840,15 @@ export interface BillingPlan {
   extraChannelPriceCents?: number | null
   extraTiktokPriceCents?: number | null
   extraBothPriceCents?: number | null
+  /** Conta extra nas redes sociais (todos os planos). */
+  extraRedePriceCents?: number | null
 }
 
 /** O que está sendo comprado na tela de checkout, lido da barra de endereço. */
 export type CheckoutItem =
   | { tipo: "plano"; planKey: string }
   | { tipo: "creditos"; minutos: number }
-  | { tipo: "extras"; canais: number; contas: number }
+  | { tipo: "extras"; canais: number; contas: number; redes?: Record<string, number> }
   | { tipo: "cartao" }
 
 export interface CheckoutContexto {
@@ -861,7 +863,8 @@ export interface CheckoutContexto {
     extraChannels: number
     extraTiktokAccounts: number
     /** Preços das conexões extras, ou null quando o plano não vende. */
-    precosExtras: { canal: number; conta: number; ambos: number } | null
+    precosExtras: { canal: number | null; conta: number | null; ambos: number | null; rede: number | null } | null
+    extraRedes?: Record<string, number>
     limites: { canais: number | null; contas: number | null }
     emUso: { canais: number; contas: number }
     overageCardEnabled: boolean
@@ -961,11 +964,27 @@ export interface ClientBillingOverviewResponse {
     promoDisponivel: boolean
     extraChannels: number
     extraTiktokAccounts: number
-    /** Preços das conexões extras, ou null quando o plano não vende. */
-    precosExtras: { canal: number; conta: number; ambos: number } | null
+    /** Preços das conexões extras, ou null quando o plano não vende. Canal/conta do TikTok só no Max; rede em todos. */
+    precosExtras: { canal: number | null; conta: number | null; ambos: number | null; rede: number | null } | null
     /** Limite EFETIVO: o que o plano dá mais as conexões compradas. */
     limiteCanais: number | null
     limiteContas: number | null
+    /** Contas extras compradas em cada rede social ({instagram: 1}). */
+    extraRedes?: Record<string, number>
+  }
+  /** O que o plano inclui e o quanto já está em uso. */
+  uso?: {
+    canaisYoutube: { usados: number; limite: number | null }
+    contasTiktok: { usados: number; limite: number | null }
+    redes: { rede: string; nome: string; usadas: number; limite: number | null; extras: number }[]
+    canaisDeLive: { usados: number; limite: number | null }
+    livesAoMesmoTempo: number | null
+  }
+  /** Quanto cada coisa gasta de crédito (os mesmos números que o sistema cobra). */
+  regrasDeCredito?: {
+    minutosDeVideoPorCredito: number
+    minutosDeLivePorCredito: number
+    creditosCliparEsteMomento: number
   }
   /** Cartão tokenizado no Asaas (independente do cartão antigo da Stripe). */
   asaasCard: { brand: string | null; last4: string | null; exp: string | null } | null

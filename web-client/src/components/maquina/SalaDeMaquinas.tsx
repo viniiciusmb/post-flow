@@ -201,7 +201,7 @@ export function SalaDeMaquinas({ escopo }: { escopo: "cliente" | "sistema" }) {
 
   return (
     <div className="maq grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <section className="min-w-0 rounded-xl bg-card shadow-[var(--shadow-flat)] dark:border dark:border-border" aria-label="Linha de produção">
+      <section data-tour="linha-de-producao" className="min-w-0 rounded-xl bg-card shadow-[var(--shadow-flat)] dark:border dark:border-border" aria-label="Linha de produção">
         <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-border/70 px-4 py-3.5 sm:px-5">
           <div className="min-w-0">
             <div className="flex items-center gap-2.5">

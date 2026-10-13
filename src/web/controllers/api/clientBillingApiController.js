@@ -27,6 +27,12 @@ const subscriptionCheckoutService = require('../../../services/subscriptionCheck
 const checkoutService = require('../../../services/checkoutService');
 const cicloDeCredito = require('../../../lib/cicloDeCredito');
 const cancelamentoDeAssinaturaService = require('../../../services/cancelamentoDeAssinaturaService');
+const redesSociais = require('../../../lib/redesSociais');
+const socialAccountsRepository = require('../../../repositories/socialAccountsRepository');
+const livesRepository = require('../../../repositories/livesRepository');
+const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
+const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
+const liveCreditosService = require('../../../services/lives/liveCreditosService');
 const { resolveStripeCustomerId } = subscriptionCheckoutService;
 
 // Credito avulso: o cliente escolhe MINUTOS numa barra, e o preco por minuto e
@@ -82,6 +88,9 @@ function nomeDoProduto(f) {
     const contas = Number(f.extra_tiktok_accounts) || 0;
     if (canais) partes.push(`${canais} canal${canais > 1 ? 'is' : ''} do YouTube`);
     if (contas) partes.push(`${contas} conta${contas > 1 ? 's' : ''} do TikTok`);
+    for (const [rede, n] of Object.entries(precosDasConexoes.normalizarRedes(f.extra_redes))) {
+      partes.push(`${n} conta${n > 1 ? 's' : ''} do ${(redesSociais.info(rede) || {}).nome || rede}`);
+    }
     // Compras feitas antes de 01/09/2026 só têm o total em `slots`, sem saber
     // quantos de cada - naquele modelo cada slot valia os dois.
     if (!partes.length) return `Conexões extras (${Number(f.slots) || 0})`;
@@ -105,6 +114,16 @@ async function overview(req, res) {
 
   const taxas = creditsService.taxasDoPlano(subscription);
   const limites = planLimitsService.limitesDe(subscription);
+  const admin = req.session.user.role === 'admin';
+  const novidades = planLimitsService.limitesDasNovidades(subscription, { admin });
+  const [contasSociais, canaisDeLive, canaisYoutube, contasTiktok] = await Promise.all([
+    socialAccountsRepository.listActive(clientUserId),
+    livesRepository.countFollowed(clientUserId),
+    youtubeChannelsRepository.countByClientId(clientUserId),
+    tiktokAccountsRepository.listActiveByClientId(clientUserId),
+  ]);
+  const usoPorRede = {};
+  for (const c of contasSociais) usoPorRede[c.network] = (usoPorRede[c.network] || 0) + 1;
 
   res.json({
     // O que o cliente pagou: dia, hora, valor, produto e cartão usado.
@@ -155,6 +174,30 @@ async function overview(req, res) {
       // servidor aceita 3 faz o cliente achar que pagou por algo que nao veio.
       limiteCanais: limites.canais,
       limiteContas: limites.contas,
+      extraRedes: novidades.extrasPorRede,
+    },
+    // O que o plano inclui e o quanto já está em uso, rede por rede - a tela
+    // nova de Plano e uso mostra "1 de 2 Instagram" com o mesmo número que o
+    // servidor usa pra barrar (planLimitsService.limiteNaRede).
+    uso: {
+      canaisYoutube: { usados: Number(canaisYoutube) || 0, limite: limites.canais },
+      contasTiktok: { usados: contasTiktok.length, limite: limites.contas },
+      redes: redesSociais.LISTA.map((rede) => ({
+        rede,
+        nome: redesSociais.info(rede).nome,
+        usadas: usoPorRede[rede] || 0,
+        limite: planLimitsService.limiteNaRede(novidades, rede),
+        extras: (novidades.extrasPorRede || {})[rede] || 0,
+      })),
+      canaisDeLive: { usados: canaisDeLive, limite: novidades.canaisDeLive },
+      livesAoMesmoTempo: novidades.livesAoMesmoTempo,
+    },
+    // Quanto cada coisa gasta de crédito (os mesmos números que o sistema
+    // cobra - ver creditsService e liveCreditosService).
+    regrasDeCredito: {
+      minutosDeVideoPorCredito: 1,
+      minutosDeLivePorCredito: liveCreditosService.SEGUNDOS_POR_CREDITO / 60,
+      creditosCliparEsteMomento: liveCreditosService.CREDITOS_CLIPAR_AGORA,
     },
     // O cartao agora e tokenizado no Asaas. Devolvido aqui (e nao so no
     // /payments, que fala com a Stripe) pra tela saber que ha cartao salvo
@@ -200,6 +243,8 @@ async function overview(req, res) {
       extraChannelPriceCents: p.extra_channel_price_cents,
       extraTiktokPriceCents: p.extra_tiktok_price_cents,
       extraBothPriceCents: p.extra_both_price_cents,
+      // Conta extra nas redes sociais, em todos os planos (12/10/2026).
+      extraRedePriceCents: p.extra_rede_price_cents ?? null,
     })),
     overage: {
       rateCentsNormal: taxas.normal,

@@ -235,21 +235,21 @@ test('conta com autorização cancelada fica marcada, a fila dela espera, e reco
   const outro = await logado();
   assert.equal((await outro.agent.post(`/api/client/social-accounts/${conta.id}/testar`, {})).status, 404);
 
-  // O aviso vai pro log de erros EM TESTE, não pro principal.
-  const emTeste = await systemErrorsRepository.list({ grupo: 'teste', status: 'todos' });
-  assert.ok(emTeste.some((e) => e.operation === 'social_conta' && Number(e.entity_id) === Number(conta.id)));
+  // Desde que o painel novo abriu pra todos (12/10/2026), o aviso vai pra
+  // lista principal de erros.
   const principal = await systemErrorsRepository.list({ grupo: 'principal', status: 'todos' });
-  assert.ok(!principal.some((e) => e.operation === 'social_conta'));
+  assert.ok(principal.some((e) => e.operation === 'social_conta' && Number(e.entity_id) === Number(conta.id)));
 });
 
 // ---------------------------------------------------------------------------
 // Log de erros separado
 
-test('erros das novidades em teste vão pra lista própria; os de sempre continuam na principal', async () => {
+test('"Limites e vagas" tem só os avisos que não são defeito; erro de verdade (inclusive das redes novas) fica em Erros', async () => {
   assert.deepEqual([...systemErrorsRepository.OPERACOES_EM_TESTE].sort(), [...errorReportService.OPERACOES_EM_TESTE].sort());
+  assert.deepEqual([...errorReportService.OPERACOES_EM_TESTE].sort(), ['limite_do_plano', 'lives_capacidade']);
 
-  await errorReportService.report({ operation: 'tiktok_posting', entityType: 'posting', entityId: 999001, error: new Error(`principal ${uid()}`) });
-  await errorReportService.report({ operation: 'social_posting', entityType: 'social_posting', entityId: 999002, error: new Error(`teste ${uid()}`) });
+  await errorReportService.report({ operation: 'social_posting', entityType: 'social_posting', entityId: 999001, error: new Error(`principal ${uid()}`) });
+  await errorReportService.report({ operation: 'limite_do_plano', entityType: 'social_conexao', entityId: 999002, error: new Error(`teste ${uid()}`) });
 
   const admin = await logado({ role: 'admin' });
   const principal = await admin.agent.get('/api/admin/errors?status=todos');
@@ -260,19 +260,17 @@ test('erros das novidades em teste vão pra lista própria; os de sempre continu
   assert.ok(!emTeste.body.errors.some((e) => e.entityId === 999001));
 });
 
-test('erro de tela é registrado: painel novo em "Erros em teste", o resto em "Erros"', async () => {
+test('erro de tela de qualquer cliente vai pra lista "Erros", com o contexto', async () => {
   const { agent } = await logado();
   const marca = uid();
   const r = await agent.post('/api/client/erros-de-tela', { mensagem: `Cannot read properties of undefined ${marca}`, pagina: '/client/social?conta=1', pilha: 'at X' });
   assert.equal(r.status, 204);
-  const emTeste = await systemErrorsRepository.list({ grupo: 'teste', status: 'todos' });
-  const e = emTeste.find((x) => x.message.includes(marca));
+  const todos = await systemErrorsRepository.list({ grupo: 'principal', status: 'todos' });
+  const e = todos.find((x) => x.message.includes(marca));
   assert.ok(e);
-  assert.equal(e.operation, 'painel_novo_tela');
+  assert.equal(e.operation, 'erro_tela');
   assert.match(e.message, /^\/client\/social: /, 'sem a parte depois do ?');
 
-  // Desde 12/10/2026 vale pra todo cliente logado: quem não está no painel
-  // novo cai no grupo principal, com o contexto (tela, navegador) guardado.
   const fora = await logado({ noPainelNovo: false });
   const marca2 = uid();
   assert.equal((await fora.agent.post('/api/client/erros-de-tela', { mensagem: `quebrou ${marca2}`, pagina: '/client', tela: '390x844' })).status, 204);
@@ -282,7 +280,7 @@ test('erro de tela é registrado: painel novo em "Erros em teste", o resto em "E
   assert.equal(e2.operation, 'erro_tela');
   const [ocorrencia] = await systemErrorsRepository.listEvents(e2.id);
   assert.equal(ocorrencia.contexto.tela, '390x844');
-  assert.equal(ocorrencia.contexto.painelNovo, false);
+  assert.equal(ocorrencia.contexto.painelNovo, true, 'painel novo aberto pra todos');
 });
 
 // ---------------------------------------------------------------------------
@@ -298,11 +296,11 @@ test('Flora: conversa parada há mais de 30 min se encerra e a próxima mensagem
   assert.equal(atual.status, 'encerrada');
   assert.equal(atual.mensagens.length, 1, 'o histórico continua visível');
 
-  // Quem NÃO está no painel novo segue como antes.
-  const fora = await createLoginableClient();
-  const c2 = await supportRepository.createConversation(fora.id);
+  // Painel novo aberto pra todos (12/10/2026): vale pra qualquer cliente.
+  const outro = await createLoginableClient();
+  const c2 = await supportRepository.createConversation(outro.id);
   await pool.query(`UPDATE support_conversations SET updated_at = now() - interval '45 minutes' WHERE id = $1`, [c2.id]);
-  assert.equal((await suporteService.conversaAtual(fora.id)).status, 'aberta');
+  assert.equal((await suporteService.conversaAtual(outro.id)).status, 'encerrada');
 
   // Conversa encaminhada pra equipe nunca se encerra sozinha.
   const c3 = await supportRepository.createConversation(u.id);
@@ -368,9 +366,7 @@ test('excluir conta: cancela a assinatura antes, apaga o conteúdo, anonimiza e 
   assert.notEqual(login.status, 200);
 });
 
-test('excluir conta: admin não se exclui por aqui, e quem não está no painel novo não tem a rota', async () => {
+test('excluir conta: admin não se exclui por aqui', async () => {
   const admin = await logado({ role: 'admin' });
   assert.equal((await admin.agent.request('DELETE', '/api/client/conta', { confirmacao: 'EXCLUIR', senha: admin.u.password })).status, 403);
-  const fora = await logado({ noPainelNovo: false });
-  assert.equal((await fora.agent.request('DELETE', '/api/client/conta', { confirmacao: 'EXCLUIR', senha: fora.u.password })).status, 403);
 });

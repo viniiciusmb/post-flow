@@ -11,6 +11,7 @@
 'use strict';
 
 const tiktokAccountsRepository = require('../../../repositories/tiktokAccountsRepository');
+const socialAccountsRepository = require('../../../repositories/socialAccountsRepository');
 const youtubeChannelsRepository = require('../../../repositories/youtubeChannelsRepository');
 const clientVideoSettingsRepository = require('../../../repositories/clientVideoSettingsRepository');
 const pool = require('../../../db/pool');
@@ -30,14 +31,17 @@ async function estiloFoiConfigurado(clientUserId) {
 async function status(req, res) {
   const clientUserId = req.session.user.id;
 
-  const [contas, canais, estilo] = await Promise.all([
+  const [contas, sociais, canais, estilo] = await Promise.all([
     tiktokAccountsRepository.listActiveByClientId(clientUserId),
+    socialAccountsRepository.listActive(clientUserId),
     youtubeChannelsRepository.listByClientId(clientUserId),
     estiloFoiConfigurado(clientUserId),
   ]);
 
   const passos = {
-    tiktokConectado: contas.length > 0,
+    // O nome ficou do tempo em que só havia TikTok; desde 12/10/2026 vale
+    // qualquer rede conectada (a tela diz "Conectar uma rede social").
+    tiktokConectado: contas.length > 0 || sociais.length > 0,
     estiloConfigurado: estilo,
     canalMonitorado: canais.length > 0,
   };

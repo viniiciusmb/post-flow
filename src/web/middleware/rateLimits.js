@@ -16,10 +16,11 @@ function keyByUserOrIp(req) {
   return req.session?.user?.id ? `u:${req.session.user.id}` : `ip:${req.ip}`;
 }
 
-function build({ windowMs, max, message }) {
+function build({ windowMs, max, message, skip }) {
   return rateLimit({
     windowMs,
     max,
+    skip,
     keyGenerator: keyByUserOrIp,
     standardHeaders: true,
     legacyHeaders: false,
@@ -48,10 +49,16 @@ const publicApi = build({
 // Billing/pagamento: mexe com dinheiro (assinar plano, comprar avulso,
 // cadastrar cartao). Limite baixo de proposito - ninguem precisa fazer isso
 // dezenas de vezes por minuto, e um loop acidental aqui cobraria de verdade.
+//
+// So conta ENVIO (POST/PUT/DELETE): leitura nao move dinheiro, e contar leitura
+// travava a tela do QR do PIX, que pergunta "ja pagou?" a cada 4s - depois de
+// ~80s ela levava 429 calada e quem pagou no app do banco nunca via a
+// confirmacao. Leitura fica no limite `geral`, como o resto da API.
 const billing = build({
   windowMs: 10 * 60 * 1000,
   max: 20,
   message: 'Muitas operacoes de cobranca em pouco tempo. Aguarde alguns minutos.',
+  skip: (req) => req.method === 'GET' || req.method === 'HEAD',
 });
 
 // Upload de video: cada arquivo pode ter ate 2GB e ocupa disco na VPS.

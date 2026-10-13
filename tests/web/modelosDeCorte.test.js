@@ -65,9 +65,10 @@ test('todo modelo pronto passa na mesma validacao da tela', () => {
   }
 });
 
-test('quem nao esta no painel novo nao usa modelos', async () => {
+// Painel novo aberto pra todos desde 12/10/2026.
+test('qualquer cliente usa modelos', async () => {
   const { agent } = await logado({ noPainelNovo: false });
-  assert.equal((await agent.get('/api/client/video-settings/modelos')).status, 403);
+  assert.equal((await agent.get('/api/client/video-settings/modelos')).status, 200);
 });
 
 test('salvar o estilo de um canal e aplicar em outros dois', async () => {

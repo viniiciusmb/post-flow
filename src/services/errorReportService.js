@@ -146,19 +146,12 @@ async function clear(operation, entityType, entityId) {
   }
 }
 
+// Desde 12/10/2026 (painel novo aberto pra todos) este grupo virou "Limites e
+// vagas": avisos que não são defeito. O resto vai pra "Erros".
 // Erros das novidades que ainda estão em teste com o admin e a Rise Style
 // (painel novo). Ficam numa tela própria ("Erros em teste") pra não se
 // misturarem com os erros do que todo cliente já usa (pedido do fundador em
 // 12/10/2026). Quando uma novidade abrir pra todos, a operação dela sai daqui.
-const OPERACOES_EM_TESTE = Object.freeze([
-  'social_posting',
-  'social_conta',
-  'social_conexao',
-  'painel_novo_api',
-  'painel_novo_tela',
-  'lives',
-  'lives_capacidade',
-  'limite_do_plano',
-]);
+const OPERACOES_EM_TESTE = Object.freeze(['limite_do_plano', 'lives_capacidade']);
 
 module.exports = { report, clear, OPERACOES, ROTULO_OPERACAO, OPERACOES_EM_TESTE, resumir };
