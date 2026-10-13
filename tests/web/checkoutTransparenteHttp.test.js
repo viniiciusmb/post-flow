@@ -101,8 +101,11 @@ test('o contexto traz os dois degraus de preço e NUNCA o token do cartão', asy
   assert.equal(r.body.subscription.limites.contas, plano.max_tiktok_accounts + 3, 'canal e conta são contados separado');
   assert.equal(r.body.subscription.extraChannels, 2);
   assert.equal(r.body.subscription.extraTiktokAccounts, 3);
-  assert.ok(r.body.subscription.precosExtras.canal < r.body.subscription.precosExtras.conta,
-    'a tela precisa dos três preços para montar a escolha');
+  // Desde 12/10/2026: conta do TikTok = conta nas outras redes, e o canal do
+  // YouTube é o extra mais caro. A tela precisa dos três para montar a lista.
+  const precos = r.body.subscription.precosExtras;
+  assert.equal(precos.conta, precos.rede, 'conta do TikTok custa o mesmo que nas outras redes');
+  assert.ok(precos.canal > precos.conta, 'o canal do YouTube é o extra mais caro');
 
   // O minuto avulso segue a taxa do plano, não uma constante.
   assert.equal(r.body.package.centsPerMinute, plano.overage_cents_normal);
