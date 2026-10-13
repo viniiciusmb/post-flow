@@ -1315,15 +1315,18 @@
 }
 
 /* --- 2. redes --- */
+/* Flex em vez de grade: com 7 redes a última linha não fecha, e numa grade
+   ela ficava encostada à esquerda. Com flex ela sai centralizada. */
 .lp-arte-redes {
-  display: grid;
-  grid-template-columns: repeat(4, 54px);
-  grid-auto-rows: 54px;
+  display: flex;
+  flex-wrap: wrap;
   gap: 14px;
   justify-content: center;
   align-content: center;
 }
 .lp-arte-rede {
+  width: 54px;
+  height: 54px;
   display: grid;
   place-items: center;
   border-radius: 15px;
@@ -1336,6 +1339,17 @@
 .lp-arte-rede .ico {
   width: 26px;
   height: 26px;
+}
+/* Num celular estreito (320px) o quadro tem ~250px: com ícone de 54px só
+   cabem 3 por linha, e a terceira linha passaria da altura do quadro. */
+@media (max-width: 420px) {
+  .lp-arte-redes {
+    gap: 10px;
+  }
+  .lp-arte-rede {
+    width: 46px;
+    height: 46px;
+  }
 }
 
 /* --- 3. notas da IA --- */
