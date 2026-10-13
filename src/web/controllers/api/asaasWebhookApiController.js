@@ -493,16 +493,46 @@ function avisarUtmifyDaRenovacao(payment, clientUserId, { purpose, planId = null
 // O estorno PARCIAL desfaz tudo, e não uma parte proporcional. É o lado seguro
 // do erro: comissão sobre dinheiro devolvido é prejuízo, e o caso não existe
 // hoje (nossas cobranças são mensalidades cheias).
+// Status do Asaas de uma cobrança em que o dinheiro chegou a entrar.
+const STATUS_DE_COBRANCA_PAGA = [
+  'CONFIRMED',
+  'RECEIVED',
+  'RECEIVED_IN_CASH',
+  'DUNNING_RECEIVED',
+  'REFUNDED',
+  'REFUND_REQUESTED',
+  'REFUND_IN_PROGRESS',
+  'CHARGEBACK_REQUESTED',
+  'CHARGEBACK_DISPUTE',
+  'AWAITING_CHARGEBACK_REVERSAL',
+];
+
+function cobrancaFoiPaga(payment) {
+  if (payment.paymentDate || payment.clientPaymentDate || payment.confirmedDate) return true;
+  return STATUS_DE_COBRANCA_PAGA.includes(payment.status);
+}
+
 async function handlePaymentRefunded(payment, motivo) {
   if (!payment.id) return;
 
   // Receita primeiro e para QUALQUER cobranca: renovacao, checkout, excedente.
   // Idempotente (so marca o que ainda nao estava estornado).
-  await receitaService.marcarEstorno({ provider: 'asaas', externalId: payment.id });
+  const estornouNaReceita = await receitaService.marcarEstorno({ provider: 'asaas', externalId: payment.id });
 
   const registro = await asaasPaymentsRepository.findByAsaasId(payment.id);
   if (registro) {
     await checkoutService.aplicarEstorno(registro, motivo);
+    return;
+  }
+
+  // Cobrança removida que nunca foi paga não é estorno. É o que acontece ao
+  // cancelar uma assinatura: o Asaas apaga junto a mensalidade seguinte, já
+  // gerada e ainda em aberto. Tratá-la como estorno marcava inadimplente quem
+  // tinha acabado de cancelar com o mês pago, e o SUBSCRIPTION_DELETED que
+  // chega logo depois via "inadimplente" e cortava o acesso na hora (cliente
+  // #344, 13/10/2026: pagou até 07/11 e perdeu o acesso no dia 12/10).
+  if (motivo === 'cobranca removida' && !(estornouNaReceita || cobrancaFoiPaga(payment))) {
+    logger.info(`Asaas: cobranca ${payment.id} removida sem ter sido paga - nada a desfazer.`);
     return;
   }
 

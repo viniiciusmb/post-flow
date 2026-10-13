@@ -39,19 +39,19 @@ module.exports = {
   },
 
   landing: {
-    tituloPagina: 'Cortes com IA de vídeos e lives, publicados em 8 redes',
+    tituloPagina: 'Cortes com IA de vídeos e lives, publicados em 7 redes',
     metaDescricao:
-      'O Post Flow acompanha seu canal do YouTube e as lives da Twitch e da Kick, escolhe os melhores momentos com IA, corta no vertical com legenda e publica no TikTok, Instagram, YouTube Shorts e mais 5 redes, sozinho.',
+      'O Post Flow acompanha seu canal do YouTube e as lives da Twitch e da Kick, escolhe os melhores momentos com IA, corta no vertical com legenda e publica no TikTok, Instagram, Facebook e mais 4 redes, sozinho.',
 
     // --- Topo ---
     seloNovo: 'Novo',
-    seloTexto: 'Cortes de lives e publicação em 8 redes sociais',
+    seloTexto: 'Cortes de lives e publicação em 7 redes sociais',
     h1a: 'Do vídeo longo ao corte publicado',
     h1Prep: 'no',
     // Nome das redes que se alternam no fim do título. São nomes próprios,
     // iguais nos três idiomas; só a preposição antes muda (no / on / en).
-    h1Redes: ['TikTok', 'Instagram', 'YouTube Shorts', 'Facebook', 'Threads', 'LinkedIn', 'Pinterest', 'Bluesky'],
-    h1Leitor: 'Do vídeo longo ao corte publicado no TikTok, Instagram, YouTube Shorts, Facebook, Threads, LinkedIn, Pinterest e Bluesky.',
+    h1Redes: ['TikTok', 'Instagram', 'Facebook', 'Threads', 'LinkedIn', 'Pinterest', 'Bluesky'],
+    h1Leitor: 'Do vídeo longo ao corte publicado no TikTok, Instagram, Facebook, Threads, LinkedIn, Pinterest e Bluesky.',
     lead:
       'O Post Flow acompanha seu canal do YouTube e as lives da Twitch e da Kick, encontra os melhores momentos com IA, corta no vertical com legenda e publica nas suas redes no horário que você escolher.',
     leadForte: 'Sem abrir editor. Sem subir vídeo um por um.',
@@ -75,7 +75,7 @@ module.exports = {
 
     // Faixa de números do produto. Fatos do produto, não estatística de uso.
     fatos: [
-      { v: '8', r: 'redes sociais com publicação automática' },
+      { v: '7', r: 'redes sociais com publicação automática' },
       { v: '3', r: 'fontes: YouTube, Twitch e Kick' },
       { v: '27', r: 'estilos de legenda e 12 de título' },
       { v: '24h', r: 'por dia, mesmo com o computador desligado' },
@@ -139,8 +139,8 @@ module.exports = {
         p: 'Acompanhe canais da Twitch e da Kick. A IA assiste a transmissão e os cortes ficam prontos enquanto a live ainda está no ar. Viu um momento bom? Aperte “Clipar este momento”.',
       },
       {
-        h: '8 redes, uma fila por conta',
-        p: 'TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest e Bluesky. Horários fixos ou distribuídos sozinhos, e a mesma configuração aplicada a todas as contas de uma vez.',
+        h: '7 redes, uma fila por conta',
+        p: 'TikTok, Instagram, Facebook, Threads, LinkedIn, Pinterest e Bluesky. Horários fixos ou distribuídos sozinhos, e a mesma configuração aplicada a todas as contas de uma vez.',
       },
       {
         h: 'A IA escolhe os momentos',
@@ -242,8 +242,8 @@ module.exports = {
     contasTiktok: '{n} contas do TikTok',
     contaTiktok: '{n} conta do TikTok',
     contasIlimitadas: 'Contas do TikTok ilimitadas',
-    contasPorRede: '{n} contas em cada uma das outras 7 redes',
-    contaPorRede: '{n} conta em cada uma das outras 7 redes',
+    contasPorRede: '{n} contas em cada uma das outras 6 redes',
+    contaPorRede: '{n} conta em cada uma das outras 6 redes',
     canaisLive: '{n} canais de live (Twitch ou Kick)',
     canalLive: '{n} canal de live (Twitch ou Kick)',
     contaExtraRede: 'Conta extra no TikTok e em mais 6 redes por R$ {valor}/mês',
@@ -295,7 +295,7 @@ module.exports = {
   perguntas: [
     {
       p: 'Em quais redes o Post Flow publica?',
-      r: 'TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest e Bluesky. Você conecta cada conta pelo login oficial da rede e escolhe quais contas recebem os cortes de cada canal. No Instagram e no Facebook o corte precisa ter até 90 segundos.',
+      r: 'TikTok, Instagram, Facebook, Threads, LinkedIn, Pinterest e Bluesky. Você conecta cada conta pelo login oficial da rede e escolhe quais contas recebem os cortes de cada canal. No Instagram e no Facebook o corte precisa ter até 90 segundos.',
     },
     {
       p: 'O Post Flow publica sozinho?',

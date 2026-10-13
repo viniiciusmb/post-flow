@@ -149,3 +149,53 @@ test('recusa de uma cobrança avulsa não mexe na assinatura de quem já está a
   });
   assert.equal((await clientSubscriptionsRepository.getOrCreate(cliente.id)).asaas_subscription_id, subId);
 });
+
+// Sequência real de 13/10/2026 (cliente #344): ao cancelar a assinatura, o
+// Asaas apaga a mensalidade seguinte (gerada e ainda em aberto) e manda
+// PAYMENT_DELETED antes do SUBSCRIPTION_DELETED. A cobrança apagada era tratada
+// como estorno, o cliente virava inadimplente e o aviso seguinte cortava o
+// acesso na hora - com o mês pago até 07/11.
+test('cancelar não corta o acesso: a mensalidade seguinte apagada pelo Asaas não é estorno', async () => {
+  const cliente = await createClient();
+  const [plano] = await subscriptionPlansRepository.listActive();
+  await clientSubscriptionsRepository.setPlan(cliente.id, plano.id);
+  const subId = idUnico('sub_cancelada');
+  await clientSubscriptionsRepository.setAsaasSubscription(cliente.id, { customerId: 'cus_canc', subscriptionId: subId });
+  await pool.query(
+    `INSERT INTO revenue_entries (client_user_id, kind, provider, external_id, plan_id, amount_cents, paid_at)
+     VALUES ($1, 'primeira_mensalidade', 'asaas', $2, $3, 9990, now() - interval '5 days')`,
+    [cliente.id, idUnico('pay_pago'), plano.id]
+  );
+
+  const r1 = await enviarWebhook({
+    event: 'PAYMENT_DELETED',
+    payment: { id: idUnico('pay_seguinte'), subscription: subId, status: 'PENDING', deleted: true, paymentDate: null },
+  });
+  assert.equal(r1.status, 200);
+  assert.equal((await clientSubscriptionsRepository.getOrCreate(cliente.id)).status, 'ativo');
+
+  await enviarWebhook({
+    event: 'SUBSCRIPTION_DELETED',
+    subscription: { id: subId, customer: 'cus_canc', status: 'INACTIVE', deleted: true },
+  });
+  const depois = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+  assert.equal(depois.status, 'ativo', 'quem cancela com o mês pago continua com acesso até o fim dele');
+  assert.ok(depois.cancel_at && new Date(depois.cancel_at) > new Date());
+});
+
+test('mensalidade PAGA removida no painel do Asaas continua desfazendo o acesso', async () => {
+  const cliente = await createClient();
+  const [plano] = await subscriptionPlansRepository.listActive();
+  await clientSubscriptionsRepository.setPlan(cliente.id, plano.id);
+  const subId = idUnico('sub_removida');
+  const payId = idUnico('pay_renovacao');
+  await clientSubscriptionsRepository.setAsaasSubscription(cliente.id, { customerId: 'cus_rem', subscriptionId: subId });
+  await pool.query(
+    `INSERT INTO revenue_entries (client_user_id, kind, provider, external_id, plan_id, amount_cents, paid_at)
+     VALUES ($1, 'recorrencia', 'asaas', $2, $3, 9990, now() - interval '2 days')`,
+    [cliente.id, payId, plano.id]
+  );
+
+  await enviarWebhook({ event: 'PAYMENT_DELETED', payment: { id: payId, subscription: subId, deleted: true } });
+  assert.equal((await clientSubscriptionsRepository.getOrCreate(cliente.id)).status, 'inadimplente');
+});

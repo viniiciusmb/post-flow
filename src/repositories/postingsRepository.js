@@ -261,7 +261,9 @@ const YOUTUBE_CHANNEL_JOIN = `LEFT JOIN youtube_channels yc ON yc.id = sv.youtub
 // escolhe o "proximo" da fila pendente - se so a tela usasse isso e o job
 // de publicacao continuasse por created_at, arrastar pareceria funcionar
 // mas nao mudaria o que sai de verdade no TikTok.
-const PENDING_ORDER = 'COALESCE(p.queue_order, p.id) ASC';
+// O p.id desempata: quem volta pro fim da fila recebe max+1, que pode coincidir
+// com o id do próximo corte criado - e aí quem voltou primeiro sai primeiro.
+const PENDING_ORDER = 'COALESCE(p.queue_order, p.id) ASC, p.id ASC';
 
 // O proximo de CADA conta, pra caixa fechada da tela de Publicacao mostrar
 // o que sai a seguir sem precisar abrir as configuracoes.
@@ -613,13 +615,29 @@ async function listErrorForClient(clientUserId, tiktokAccountId = null) {
 // agora"): so mexe se a postagem realmente estiver em erro - evita reenviar
 // algo que ja saiu ou que o cliente cancelou. Ganha um scheduled_for novo
 // (entra no fim da fila, como se fosse recem-criada).
+// Posição de FIM da fila pendente da conta, para quem volta para ela.
+//
+// O horário novo (computeNextScheduledFor) já vai pro fim; a POSIÇÃO tem que ir
+// junto. A fila segue COALESCE(queue_order, id) e é estrita (só olha o
+// primeiro): um corte antigo devolvido mantinha o id baixo, ficava na frente
+// com um horário de amanhã e travava todos os outros, já vencidos, até lá.
+// Aconteceu em 13/10/2026 (conta 61): um "Tentar de novo" às 10:39 segurou os
+// cortes de 12:30 e 19:00 do mesmo dia.
+const FIM_DA_FILA_SQL = `(
+  SELECT COALESCE(max(COALESCE(o.queue_order, o.id)), 0) + 1
+    FROM postings o
+   WHERE o.tiktok_account_id = postings.tiktok_account_id AND o.status = 'pending' AND o.id <> postings.id
+)`;
+
 async function retryOwnedByClient(id, clientUserId) {
   const posting = await findByIdOwnedByClient(id, clientUserId);
   if (!posting || posting.status !== 'error') return null;
 
   const scheduledFor = await computeNextScheduledFor(posting.tiktok_account_id);
   const { rows } = await pool.query(
-    `UPDATE postings SET status = 'pending', error_message = NULL, scheduled_for = $2, updated_at = now()
+    `UPDATE postings
+        SET status = 'pending', error_message = NULL, scheduled_for = $2,
+            queue_order = ${FIM_DA_FILA_SQL}, updated_at = now()
      WHERE id = $1
      RETURNING *`,
     [id, scheduledFor]
@@ -640,7 +658,8 @@ async function requeueSkipped(id, tiktokAccountId) {
   const scheduledFor = await computeNextScheduledFor(tiktokAccountId);
   const { rows } = await pool.query(
     `UPDATE postings
-        SET status = 'pending', error_message = NULL, scheduled_for = $2, updated_at = now()
+        SET status = 'pending', error_message = NULL, scheduled_for = $2,
+            queue_order = ${FIM_DA_FILA_SQL}, updated_at = now()
       WHERE id = $1 AND status = 'skipped'
       RETURNING *`,
     [id, scheduledFor]

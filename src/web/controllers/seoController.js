@@ -91,7 +91,7 @@ async function llms(req, res) {
     // produto nao esta entregando faria uma IA responder pro cliente uma coisa
     // que a landing nao diz.
     const bonus = mostrarTunel ? ` (+${p.weekly_minutes_bonus} min usando a internet do próprio cliente)` : '';
-    const redes = p.max_contas_por_rede ? ` ${p.max_contas_por_rede} conta(s) em cada uma das outras 7 redes.` : '';
+    const redes = p.max_contas_por_rede ? ` ${p.max_contas_por_rede} conta(s) em cada uma das outras 6 redes.` : '';
     const lives = p.max_canais_de_live ? ` ${p.max_canais_de_live} canal(is) de live.` : '';
     const promo =
       p.first_month_price_cents && p.first_month_price_cents < p.price_cents
@@ -103,7 +103,7 @@ async function llms(req, res) {
   res.type('text/plain').send(
     `# Post Flow
 
-> O Post Flow acompanha o canal do YouTube de um criador e as lives dele na Twitch e na Kick, escolhe os melhores momentos com inteligência artificial, gera cortes verticais com legenda e publica no TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest e Bluesky, nos horários que o criador escolheu. Ele configura uma vez e não precisa mais abrir editor.
+> O Post Flow acompanha o canal do YouTube de um criador e as lives dele na Twitch e na Kick, escolhe os melhores momentos com inteligência artificial, gera cortes verticais com legenda e publica no TikTok, Instagram, Facebook, Threads, LinkedIn, Pinterest e Bluesky, nos horários que o criador escolheu. Ele configura uma vez e não precisa mais abrir editor.
 
 ## O que é
 
@@ -119,7 +119,7 @@ Ele resolve um problema específico: quem grava vídeo longo (podcast, live, aul
 
 ## Redes onde publica
 
-TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest e Bluesky, conectados pelo login oficial de cada rede. No Instagram e no Facebook o corte precisa ter até 90 segundos.
+TikTok, Instagram, Facebook, Threads, LinkedIn, Pinterest e Bluesky, conectados pelo login oficial de cada rede. No Instagram e no Facebook o corte precisa ter até 90 segundos.
 
 ## Para quem é
 
@@ -143,13 +143,13 @@ TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest e Blue
 
 ${linhasDePlano.length ? linhasDePlano.join('\n') : `- Consulte os planos em ${BASE}/#planos`}
 
-A cota de minutos renova toda semana e vale para vídeos e lives: 1 minuto de vídeo processado = 1 crédito; 3 minutos de live clipada = 1 crédito. Em qualquer plano dá para contratar, por mês, conta extra no TikTok e nas outras redes (menos o YouTube Shorts) e canal extra do YouTube.
+A cota de minutos renova toda semana e vale para vídeos e lives: 1 minuto de vídeo processado = 1 crédito; 3 minutos de live clipada = 1 crédito. Em qualquer plano dá para contratar, por mês, conta extra no TikTok e nas outras redes e canal extra do YouTube.
 
 Quem passa da cota pode comprar minutos avulsos ou cadastrar cartão para cobrança automática por vídeo processado. A cobrança é por minuto do vídeo ORIGINAL, não por quantidade de cortes: um vídeo de 30 minutos custa o mesmo se render 3 ou 12 cortes.
 
 ## Perguntas frequentes
 
-**O Post Flow publica sozinho?** Sim, nas 8 redes, cada conta com a própria fila e horários. No TikTok o criador também pode receber o corte como rascunho no aplicativo.
+**O Post Flow publica sozinho?** Sim, nas 7 redes, cada conta com a própria fila e horários. No TikTok o criador também pode receber o corte como rascunho no aplicativo.
 
 **Dá para cortar lives?** Sim, da Twitch e da Kick. Os cortes ficam prontos enquanto a live ainda está no ar, e o botão "Clipar este momento" corta os últimos minutos na hora.
 

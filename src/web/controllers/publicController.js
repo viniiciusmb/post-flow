@@ -16,7 +16,6 @@ const { icone } = require('../lib/iconesDaLanding');
 const REDES_DA_LANDING = [
   { icone: 'brand-tiktok', nome: 'TikTok', fundo: 'linear-gradient(135deg, #111 0%, #111 55%, #25F4EE 140%)' },
   { icone: 'brand-instagram', nome: 'Instagram', fundo: 'linear-gradient(45deg, #F58529 0%, #DD2A7B 45%, #8134AF 75%, #515BD4 100%)' },
-  { icone: 'brand-youtube', nome: 'YouTube Shorts', fundo: '#FF0033' },
   { icone: 'brand-facebook', nome: 'Facebook', fundo: '#1877F2' },
   { icone: 'brand-threads', nome: 'Threads', fundo: '#111111' },
   { icone: 'brand-linkedin', nome: 'LinkedIn', fundo: '#0A66C2' },

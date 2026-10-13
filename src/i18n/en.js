@@ -31,16 +31,16 @@ module.exports = {
   },
 
   landing: {
-    tituloPagina: 'AI clips from videos and live streams, posted to 8 networks',
+    tituloPagina: 'AI clips from videos and live streams, posted to 7 networks',
     metaDescricao:
-      'Post Flow watches your YouTube channel and Twitch and Kick live streams, picks the best moments with AI, cuts them vertically with captions and posts them to TikTok, Instagram, YouTube Shorts and 5 more networks, on its own.',
+      'Post Flow watches your YouTube channel and Twitch and Kick live streams, picks the best moments with AI, cuts them vertically with captions and posts them to TikTok, Instagram, Facebook and 4 more networks, on its own.',
 
     seloNovo: 'New',
-    seloTexto: 'Live stream clips and posting to 8 social networks',
+    seloTexto: 'Live stream clips and posting to 7 social networks',
     h1a: 'From long video to a clip posted',
     h1Prep: 'on',
-    h1Redes: ['TikTok', 'Instagram', 'YouTube Shorts', 'Facebook', 'Threads', 'LinkedIn', 'Pinterest', 'Bluesky'],
-    h1Leitor: 'From long video to a clip posted on TikTok, Instagram, YouTube Shorts, Facebook, Threads, LinkedIn, Pinterest and Bluesky.',
+    h1Redes: ['TikTok', 'Instagram', 'Facebook', 'Threads', 'LinkedIn', 'Pinterest', 'Bluesky'],
+    h1Leitor: 'From long video to a clip posted on TikTok, Instagram, Facebook, Threads, LinkedIn, Pinterest and Bluesky.',
     lead:
       'Post Flow watches your YouTube channel and Twitch and Kick live streams, finds the best moments with AI, cuts them vertically with captions and posts them to your networks at the times you choose.',
     leadForte: 'No editor. No uploading videos one by one.',
@@ -61,7 +61,7 @@ module.exports = {
     painelPublicado: 'Posted',
 
     fatos: [
-      { v: '8', r: 'social networks with automatic posting' },
+      { v: '7', r: 'social networks with automatic posting' },
       { v: '3', r: 'sources: YouTube, Twitch and Kick' },
       { v: '27', r: 'caption styles and 12 title styles' },
       { v: '24h', r: 'a day, even with your computer off' },
@@ -121,8 +121,8 @@ module.exports = {
         p: 'Follow Twitch and Kick channels. The AI watches the broadcast and clips are ready while the stream is still on air. Saw a great moment? Hit “Clip this moment”.',
       },
       {
-        h: '8 networks, one queue per account',
-        p: 'TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest and Bluesky. Fixed times or spread out automatically, and the same settings applied to every account at once.',
+        h: '7 networks, one queue per account',
+        p: 'TikTok, Instagram, Facebook, Threads, LinkedIn, Pinterest and Bluesky. Fixed times or spread out automatically, and the same settings applied to every account at once.',
       },
       {
         h: 'AI picks the moments',
@@ -219,8 +219,8 @@ module.exports = {
     contasTiktok: '{n} TikTok accounts',
     contaTiktok: '{n} TikTok account',
     contasIlimitadas: 'Unlimited TikTok accounts',
-    contasPorRede: '{n} accounts on each of the other 7 networks',
-    contaPorRede: '{n} account on each of the other 7 networks',
+    contasPorRede: '{n} accounts on each of the other 6 networks',
+    contaPorRede: '{n} account on each of the other 6 networks',
     canaisLive: '{n} live channels (Twitch or Kick)',
     canalLive: '{n} live channel (Twitch or Kick)',
     contaExtraRede: 'Extra account on TikTok and 6 more networks for R$ {valor}/month',
@@ -271,7 +271,7 @@ module.exports = {
   perguntas: [
     {
       p: 'Which networks does Post Flow post to?',
-      r: 'TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest and Bluesky. You connect each account through the network’s official login and choose which accounts receive each channel’s clips. On Instagram and Facebook, clips must be 90 seconds or shorter.',
+      r: 'TikTok, Instagram, Facebook, Threads, LinkedIn, Pinterest and Bluesky. You connect each account through the network’s official login and choose which accounts receive each channel’s clips. On Instagram and Facebook, clips must be 90 seconds or shorter.',
     },
     {
       p: 'Does Post Flow post on its own?',

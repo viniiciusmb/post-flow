@@ -76,16 +76,20 @@ async function registrarMensalidade({ clientUserId, provider, externalId, planId
   }
 }
 
+// Devolve true quando havia receita daquele pagamento para marcar - ou seja,
+// ele tinha sido pago.
 async function marcarEstorno({ provider, externalId }) {
-  if (!externalId) return;
+  if (!externalId) return false;
   try {
-    await pool.query(
+    const { rowCount } = await pool.query(
       `UPDATE revenue_entries SET refunded_at = now()
         WHERE provider = $1 AND external_id = $2 AND refunded_at IS NULL`,
       [provider, String(externalId)]
     );
+    return rowCount > 0;
   } catch (err) {
     logger.error(`Receita: nao consegui marcar o estorno de ${provider}/${externalId}:`, err.message);
+    return false;
   }
 }
 

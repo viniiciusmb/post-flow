@@ -31,16 +31,16 @@ module.exports = {
   },
 
   landing: {
-    tituloPagina: 'Cortes con IA de videos y directos, publicados en 8 redes',
+    tituloPagina: 'Cortes con IA de videos y directos, publicados en 7 redes',
     metaDescricao:
-      'Post Flow sigue tu canal de YouTube y los directos de Twitch y Kick, elige los mejores momentos con IA, los corta en vertical con subtítulos y los publica en TikTok, Instagram, YouTube Shorts y 5 redes más, solo.',
+      'Post Flow sigue tu canal de YouTube y los directos de Twitch y Kick, elige los mejores momentos con IA, los corta en vertical con subtítulos y los publica en TikTok, Instagram, Facebook y 4 redes más, solo.',
 
     seloNovo: 'Nuevo',
-    seloTexto: 'Cortes de directos y publicación en 8 redes sociales',
+    seloTexto: 'Cortes de directos y publicación en 7 redes sociales',
     h1a: 'Del video largo al corte publicado',
     h1Prep: 'en',
-    h1Redes: ['TikTok', 'Instagram', 'YouTube Shorts', 'Facebook', 'Threads', 'LinkedIn', 'Pinterest', 'Bluesky'],
-    h1Leitor: 'Del video largo al corte publicado en TikTok, Instagram, YouTube Shorts, Facebook, Threads, LinkedIn, Pinterest y Bluesky.',
+    h1Redes: ['TikTok', 'Instagram', 'Facebook', 'Threads', 'LinkedIn', 'Pinterest', 'Bluesky'],
+    h1Leitor: 'Del video largo al corte publicado en TikTok, Instagram, Facebook, Threads, LinkedIn, Pinterest y Bluesky.',
     lead:
       'Post Flow sigue tu canal de YouTube y los directos de Twitch y Kick, encuentra los mejores momentos con IA, los corta en vertical con subtítulos y los publica en tus redes a la hora que elijas.',
     leadForte: 'Sin abrir un editor. Sin subir videos uno por uno.',
@@ -61,7 +61,7 @@ module.exports = {
     painelPublicado: 'Publicado',
 
     fatos: [
-      { v: '8', r: 'redes sociales con publicación automática' },
+      { v: '7', r: 'redes sociales con publicación automática' },
       { v: '3', r: 'fuentes: YouTube, Twitch y Kick' },
       { v: '27', r: 'estilos de subtítulo y 12 de título' },
       { v: '24h', r: 'al día, incluso con la computadora apagada' },
@@ -121,8 +121,8 @@ module.exports = {
         p: 'Sigue canales de Twitch y Kick. La IA mira la transmisión y los cortes están listos mientras el directo sigue al aire. ¿Viste un buen momento? Toca “Cortar este momento”.',
       },
       {
-        h: '8 redes, una cola por cuenta',
-        p: 'TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest y Bluesky. Horarios fijos o repartidos solos, y la misma configuración aplicada a todas las cuentas a la vez.',
+        h: '7 redes, una cola por cuenta',
+        p: 'TikTok, Instagram, Facebook, Threads, LinkedIn, Pinterest y Bluesky. Horarios fijos o repartidos solos, y la misma configuración aplicada a todas las cuentas a la vez.',
       },
       {
         h: 'La IA elige los momentos',
@@ -219,8 +219,8 @@ module.exports = {
     contasTiktok: '{n} cuentas de TikTok',
     contaTiktok: '{n} cuenta de TikTok',
     contasIlimitadas: 'Cuentas de TikTok ilimitadas',
-    contasPorRede: '{n} cuentas en cada una de las otras 7 redes',
-    contaPorRede: '{n} cuenta en cada una de las otras 7 redes',
+    contasPorRede: '{n} cuentas en cada una de las otras 6 redes',
+    contaPorRede: '{n} cuenta en cada una de las otras 6 redes',
     canaisLive: '{n} canales de directo (Twitch o Kick)',
     canalLive: '{n} canal de directo (Twitch o Kick)',
     contaExtraRede: 'Cuenta extra en TikTok y en 6 redes más por R$ {valor}/mes',
@@ -271,7 +271,7 @@ module.exports = {
   perguntas: [
     {
       p: '¿En qué redes publica Post Flow?',
-      r: 'TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest y Bluesky. Conectas cada cuenta con el inicio de sesión oficial de la red y eliges qué cuentas reciben los cortes de cada canal. En Instagram y Facebook el corte debe durar hasta 90 segundos.',
+      r: 'TikTok, Instagram, Facebook, Threads, LinkedIn, Pinterest y Bluesky. Conectas cada cuenta con el inicio de sesión oficial de la red y eliges qué cuentas reciben los cortes de cada canal. En Instagram y Facebook el corte debe durar hasta 90 segundos.',
     },
     {
       p: '¿Post Flow publica solo?',

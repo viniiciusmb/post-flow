@@ -30,14 +30,23 @@ async function landing(lang = 'pt') {
   return r.text();
 }
 
-test('as 8 redes e as 3 fontes aparecem na página', async () => {
+test('as 7 redes e as 3 fontes aparecem na página', async () => {
   const html = await landing();
-  for (const rede of ['TikTok', 'Instagram', 'YouTube Shorts', 'Facebook', 'Threads', 'LinkedIn', 'Pinterest', 'Bluesky']) {
+  for (const rede of ['TikTok', 'Instagram', 'Facebook', 'Threads', 'LinkedIn', 'Pinterest', 'Bluesky']) {
     assert.ok(html.includes(rede), `${rede} sumiu da landing`);
   }
   for (const fonte of ['Twitch', 'Kick']) {
     assert.ok(html.includes(fonte), `${fonte} sumiu da landing`);
   }
+});
+
+test('a landing não anuncia o YouTube Shorts, que ainda não está no sistema', async () => {
+  for (const lang of ['pt', 'en', 'es']) {
+    const html = await landing(lang);
+    assert.ok(!/shorts/i.test(html), `a landing (${lang}) ainda fala do YouTube Shorts`);
+  }
+  const r = await fetch(`${url}/llms.txt`);
+  assert.ok(!/shorts/i.test(await r.text()), 'o llms.txt ainda fala do YouTube Shorts');
 });
 
 test('o grupo do WhatsApp saiu da página', async () => {
@@ -54,8 +63,8 @@ test('os limites de rede e de live de cada plano saem do banco', async () => {
   for (const plano of rows) {
     if (plano.max_contas_por_rede) {
       const texto = plano.max_contas_por_rede > 1
-        ? `${plano.max_contas_por_rede} contas em cada uma das outras 7 redes`
-        : `${plano.max_contas_por_rede} conta em cada uma das outras 7 redes`;
+        ? `${plano.max_contas_por_rede} contas em cada uma das outras 6 redes`
+        : `${plano.max_contas_por_rede} conta em cada uma das outras 6 redes`;
       assert.ok(html.includes(texto), `${plano.name}: faltou "${texto}"`);
     }
     if (plano.max_canais_de_live) {
@@ -78,8 +87,8 @@ test('a regra de crédito das lives é a mesma do sistema', async () => {
 
 test('o título tem a frase inteira pra leitor de tela, não só a palavra que troca', async () => {
   const html = await landing();
-  assert.match(html, /class="sr-only">Do vídeo longo ao corte publicado no TikTok, Instagram, YouTube Shorts/);
-  assert.match(html, /data-rotativo="TikTok\|Instagram\|YouTube Shorts\|/);
+  assert.match(html, /class="sr-only">Do vídeo longo ao corte publicado no TikTok, Instagram, Facebook/);
+  assert.match(html, /data-rotativo="TikTok\|Instagram\|Facebook\|/);
 });
 
 test('os dados estruturados listam os recursos novos', async () => {
@@ -90,7 +99,7 @@ test('os dados estruturados listam os recursos novos', async () => {
   assert.ok(bloco, 'sumiu o SoftwareApplication');
   const produto = bloco['@graph'].find((n) => n['@type'] === 'SoftwareApplication');
   assert.ok(produto.featureList.some((f) => /live/i.test(f)), 'a lista de recursos não cita as lives');
-  assert.ok(produto.featureList.some((f) => /8 redes/.test(f)), 'a lista de recursos não cita as 8 redes');
+  assert.ok(produto.featureList.some((f) => /7 redes/.test(f)), 'a lista de recursos não cita as 7 redes');
 });
 
 test('a seção do Feed de cortes substituiu a de números, nos três idiomas', async () => {
