@@ -9,6 +9,28 @@ const exibicaoDoTunel = require('../../lib/exibicaoDoTunel');
 const subscriptionPlansRepository = require('../../repositories/subscriptionPlansRepository');
 const logger = require('../../lib/logger');
 const { CONTACT, COMPANY } = require('../../config/constants');
+const { icone } = require('../lib/iconesDaLanding');
+
+// Redes que a landing mostra, na ordem e com a cor de cada uma (as mesmas do
+// painel, web-client/src/lib/redes.ts). Nome de marca não se traduz.
+const REDES_DA_LANDING = [
+  { icone: 'brand-tiktok', nome: 'TikTok', fundo: 'linear-gradient(135deg, #111 0%, #111 55%, #25F4EE 140%)' },
+  { icone: 'brand-instagram', nome: 'Instagram', fundo: 'linear-gradient(45deg, #F58529 0%, #DD2A7B 45%, #8134AF 75%, #515BD4 100%)' },
+  { icone: 'brand-youtube', nome: 'YouTube Shorts', fundo: '#FF0033' },
+  { icone: 'brand-facebook', nome: 'Facebook', fundo: '#1877F2' },
+  { icone: 'brand-threads', nome: 'Threads', fundo: '#111111' },
+  { icone: 'brand-linkedin', nome: 'LinkedIn', fundo: '#0A66C2' },
+  { icone: 'brand-pinterest', nome: 'Pinterest', fundo: '#E60023' },
+  { icone: 'brand-bluesky', nome: 'Bluesky', fundo: '#0085FF' },
+];
+
+// De onde vêm os cortes - na mesma ordem de landing.fontes nos dicionários.
+const FONTES_DA_LANDING = [
+  { icone: 'brand-youtube', cor: '#FF0033' },
+  { icone: 'brand-twitch', cor: '#9146FF' },
+  { icone: 'brand-kick', cor: '#22b84a' },
+  { icone: 'upload', cor: '#4f46e5' },
+];
 
 // Data em que os documentos legais foram revisados pela ultima vez. Precisa
 // ser atualizada A MAO sempre que o texto de termos/privacidade mudar - e o
@@ -140,6 +162,12 @@ async function landing(req, res) {
 
   res.render('public/landing', {
     title: t('landing.tituloPagina'),
+    cssExtra: '/css/landing.css',
+    bodyClass: 'pagina-landing',
+    themeColor: '#07080c',
+    icone,
+    redes: REDES_DA_LANDING,
+    fontes: FONTES_DA_LANDING,
     metaDescription: t('landing.metaDescricao'),
     canonical: CONTACT.siteUrl,
     structuredData: `<script type="application/ld+json">${JSON.stringify(dadosEstruturados)}</script>`,

@@ -56,21 +56,21 @@ test('a landing realmente troca de texto, não só de rótulo', async () => {
   const en = await (await buscar('/', 'en')).text();
   const es = await (await buscar('/', 'es')).text();
 
-  assert.ok(pt.includes('Vídeo novo no canal monitorado'), 'português perdeu o título');
-  assert.ok(en.includes('New video on the monitored channel'), 'inglês não chegou na página');
-  assert.ok(es.includes('Vídeo nuevo en el canal monitoreado'), 'espanhol não chegou na página');
+  assert.ok(pt.includes('Do vídeo longo ao corte publicado no'), 'português perdeu o título');
+  assert.ok(en.includes('From long video to a clip posted on'), 'inglês não chegou na página');
+  assert.ok(es.includes('Del video largo al corte publicado en'), 'espanhol não chegou na página');
 
   // O caso que dói: sobrar português no meio do inglês.
-  assert.ok(!en.includes('Vídeo novo no canal monitorado'), 'sobrou português na página em inglês');
-  assert.ok(!es.includes('Vídeo novo no canal monitorado'), 'sobrou português na página em espanhol');
+  assert.ok(!en.includes('Do vídeo longo ao corte publicado no'), 'sobrou português na página em inglês');
+  assert.ok(!es.includes('Do vídeo longo ao corte publicado no'), 'sobrou português na página em espanhol');
 });
 
 test('sem cookie, o idioma do navegador decide', async () => {
   const r = await fetch(baseUrl + '/', { headers: { 'accept-language': 'en-US,en;q=0.9' } });
-  assert.ok((await r.text()).includes('New video on the monitored channel'));
+  assert.ok((await r.text()).includes('From long video to a clip posted on'));
 
   const semNada = await fetch(baseUrl + '/');
-  assert.ok((await semNada.text()).includes('Vídeo novo no canal monitorado'), 'o padrão deixou de ser português');
+  assert.ok((await semNada.text()).includes('Do vídeo longo ao corte publicado no'), 'o padrão deixou de ser português');
 });
 
 test('os documentos legais têm as MESMAS seções nos três idiomas', () => {
@@ -221,20 +221,17 @@ test('o erro da API chega no idioma de quem pediu', async () => {
   assert.match(corpo.error, /Invalid email or password|CSRF|Too many/i);
 });
 
-test('o vídeo da hero e o poster dele existem no disco', async () => {
-  // A hero troca o print estático do painel por um vídeo (prints reais em
-  // loop, gerado com Remotion - ver marketing-video/). Ele é o mesmo nos três
-  // idiomas (só em português), mas o arquivo tem que existir de verdade: se
-  // não existir, a página abre com um retângulo vazio no lugar do produto -
-  // e é a primeira coisa que um visitante vê.
+test('todo arquivo local que a landing carrega existe no disco', async () => {
+  // Imagem, vídeo, CSS ou script que a página pede e não existe vira um
+  // buraco na primeira coisa que o visitante vê - e não dá erro em lugar
+  // nenhum, só um retângulo vazio.
   for (const lang of IDIOMAS) {
     const html = await (await buscar('/', lang)).text();
-    for (const [attr, ext] of [['src', 'mp4'], ['poster', 'jpg']]) {
-      const achado = html.match(new RegExp(`${attr}="(/video/tutorial-passo-a-passo[\\w-]*\\.${ext})"`));
-      assert.ok(achado, `${attr} do vídeo da hero não aparece na landing em ${lang}`);
-
-      const arquivo = path.join(RAIZ_PROJETO, 'src/web/public', achado[1]);
-      assert.ok(fs.existsSync(arquivo), `${achado[1]} está na página mas não existe no disco`);
+    const locais = [...html.matchAll(/(?:src|href|poster)="(\/[^"#?]+\.(?:jpg|jpeg|png|webp|svg|mp4|css|js|woff2))"/g)].map((m) => m[1]);
+    assert.ok(locais.length > 3, `esperava vários arquivos na landing em ${lang}, achei ${locais.length}`);
+    for (const caminho of new Set(locais)) {
+      const arquivo = path.join(RAIZ_PROJETO, 'src/web/public', caminho);
+      assert.ok(fs.existsSync(arquivo), `${caminho} está na landing (${lang}) mas não existe no disco`);
     }
   }
 });

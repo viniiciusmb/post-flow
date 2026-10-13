@@ -2,7 +2,6 @@
 
 // Español. Las claves reflejan pt.js; si falta una, cae al portugués.
 
-const { CONTACT } = require('../config/constants');
 const legal = require('./legal-es');
 
 module.exports = {
@@ -32,158 +31,214 @@ module.exports = {
   },
 
   landing: {
-    tituloPagina: 'Clips automáticos de YouTube para TikTok',
+    tituloPagina: 'Cortes con IA de videos y directos, publicados en 8 redes',
     metaDescricao:
-      'Post Flow sigue tu canal de YouTube, corta los mejores fragmentos con IA y los publica en tu TikTok automáticamente.',
+      'Post Flow sigue tu canal de YouTube y los directos de Twitch y Kick, elige los mejores momentos con IA, los corta en vertical con subtítulos y los publica en TikTok, Instagram, YouTube Shorts y 5 redes más, solo.',
 
-    selo: '100% automático',
-    h1a: 'Vídeo nuevo en el canal monitoreado.',
-    h1b: 'El resto pasa',
-    h1c: 'solo',
+    seloNovo: 'Nuevo',
+    seloTexto: 'Cortes de directos y publicación en 8 redes sociales',
+    h1a: 'Del video largo al corte publicado',
+    h1Prep: 'en',
+    h1Redes: ['TikTok', 'Instagram', 'YouTube Shorts', 'Facebook', 'Threads', 'LinkedIn', 'Pinterest', 'Bluesky'],
+    h1Leitor: 'Del video largo al corte publicado en TikTok, Instagram, YouTube Shorts, Facebook, Threads, LinkedIn, Pinterest y Bluesky.',
     lead:
-      'Publicas en YouTube y Post Flow lo detecta al instante. Descarga el vídeo, la IA lee la transcripción entera y elige los mejores fragmentos, los corta en vertical con subtítulos incrustados y los publica en tu TikTok.',
-    leadForte: 'Sin abrir un editor, sin abrir TikTok.',
+      'Post Flow sigue tu canal de YouTube y los directos de Twitch y Kick, encuentra los mejores momentos con IA, los corta en vertical con subtítulos y los publica en tus redes a la hora que elijas.',
+    leadForte: 'Sin abrir un editor. Sin subir videos uno por uno.',
+    ctaPrincipal: 'Empezar ahora',
     verComoFunciona: 'Ver cómo funciona',
-    notaHero:
-      'Hecho para quien ya produce su propio contenido y quiere dejar de editar clips a mano.',
-    provaOlho: 'Crecimiento automático',
-    provaTitulo: 'Mira los números crecer todos los días, sin que tengas que hacer nada',
-    provaTexto:
-      'Simulación de una cuenta usando Post Flow desde el primer clip. Seguidores, vídeos y visualizaciones suben solos, directo del trabajo automático.',
-    provaNome: 'Cortes Auto',
-    provaVivo: 'creciendo ahora',
-    provaSeguidores: 'seguidores',
-    provaVideos: 'vídeos',
-    provaViews: 'visualizaciones',
-    altComputador:
-      'Cola de clips listos de Post Flow en el ordenador, con la vista previa de cada clip ya cortado',
-    altCelular: 'La misma cola de clips listos abierta en el móvil',
-    tutorialVideoAlt:
-      'Vídeo tutorial con capturas reales de la plataforma: paso 1, agregar el canal de YouTube; paso 2, configurar el estilo de corte; paso 3, conectar la cuenta de TikTok.',
-    telasOlho: 'Donde lo usas',
-    telasTitulo: 'Disponible en computadora y celular',
-    telasTexto:
-      'El panel funciona completo en los dos — revisa tus clips desde la computadora en la oficina o desde el celular en cualquier lugar.',
+    garantias: ['Sin permanencia', 'Tarjeta o PIX', 'Sin marca de agua', 'Empresa brasileña'],
 
-    whatsOlho: 'Comunidad',
-    whatsTitulo: 'Hay un grupo de WhatsApp solo para quienes usan Post Flow',
-    whatsTexto:
-      'Resuelve dudas, intercambia ideas con otros creadores y entérate primero de las novedades — se desbloquea automáticamente para quienes se suscriben, sin ningún paso extra.',
+    painelTitulo: 'Línea de producción',
+    painelAoVivo: 'en vivo',
+    painelFonteYoutube: 'Video nuevo en el canal',
+    painelFonteYoutubeInfo: '42 min',
+    painelFonteLive: 'Directo en Twitch',
+    painelFonteLiveInfo: 'cortando ahora',
+    painelEtapas: ['Transcripción', 'Momentos encontrados: 7', 'Cortando en 9:16'],
+    painelNota: 'nota',
+    painelLegenda: 'YA NO ME PREOCUPO',
+    painelPublica: 'a las {hora}',
+    painelPublicado: 'Publicado',
 
-    fluxoVideoAlt:
-      'Vídeo mostrando el flujo automático: un vídeo nuevo publicado en YouTube, Post Flow cortándolo en clips verticales, y la publicación automática en TikTok.',
-    fluxo: [
-      {
-        h: 'Vídeo nuevo en el canal monitoreado',
-        p: 'Post Flow lo nota al instante, sin que tengas que avisar.',
-      },
-      {
-        h: 'Post Flow hace el trabajo',
-        p: 'Detecta, transcribe, elige los fragmentos, corta en vertical y subtitula. Sin que nadie haga clic en nada.',
-      },
-      {
-        h: 'Sale en tu TikTok',
-        p: 'Publicado directamente en tu perfil, a la hora que elegiste. Tú solo lo sigues.',
-      },
+    fatos: [
+      { v: '8', r: 'redes sociales con publicación automática' },
+      { v: '3', r: 'fuentes: YouTube, Twitch y Kick' },
+      { v: '27', r: 'estilos de subtítulo y 12 de título' },
+      { v: '24h', r: 'al día, incluso con la computadora apagada' },
     ],
 
-    comoFuncionaTitulo: 'Cuatro etapas. Participas en la primera.',
+    redesOlho: 'Publicación automática',
+    redesTitulo: 'Un corte, todas tus redes',
+    redesTexto:
+      'Conecta tus cuentas con el inicio de sesión oficial de cada red. Cada cuenta tiene su propia cola, con horario y texto, y los cortes salen solos.',
+    fontesRotulo: 'De dónde vienen los cortes',
+    fontes: [
+      { h: 'YouTube', p: 'Canal monitoreado o enlace de un video' },
+      { h: 'Twitch', p: 'Directos cortados mientras están al aire' },
+      { h: 'Kick', p: 'Directos cortados mientras están al aire' },
+      { h: 'Tu archivo', p: 'Sube un video desde tu computadora' },
+    ],
+    destinosRotulo: 'A dónde van',
+
+    comoFuncionaTitulo: 'Tres pasos. Dos de ellos son de la máquina.',
+    comoFuncionaTexto: 'Lo configuras una vez. Desde entonces, cada video nuevo y cada directo se convierten en cortes publicados.',
     passos: [
       {
-        h: 'Conecta el canal',
-        p: 'Pega la dirección de tu canal de YouTube. A partir de ahí Post Flow detecta solo cuándo publicas un vídeo nuevo. También puedes subir un archivo del ordenador o pegar el enlace de un vídeo concreto.',
+        h: 'Conecta las fuentes',
+        p: 'Pega la dirección de tu canal de YouTube o agrega un canal de Twitch o Kick. También puedes subir un archivo o pegar el enlace de un video específico.',
       },
       {
-        h: 'La IA elige los fragmentos',
-        p: 'El audio se transcribe y una inteligencia artificial lee la transcripción entera buscando los fragmentos que funcionan solos: inicio, gancho y cierre. Tú decides entre los mejores momentos, el vídeo entero o una cantidad fija de clips.',
+        h: 'La IA encuentra los momentos',
+        p: 'Transcribe el audio, lo lee todo, le pone nota a cada fragmento y lo corta en vertical 9:16 con subtítulos, título y portada. En los directos, los cortes salen mientras la transmisión sigue al aire.',
       },
       {
-        h: 'Corte, subtítulos y portada',
-        p: 'Cada fragmento se convierte en un vídeo vertical 9:16 con subtítulos incrustados, título opcional y portada. En modo manual ajustas el encuadre arrastrando y eliges el estilo en una galería visual.',
-      },
-      {
-        h: 'Publicación a tu horario',
-        p: 'Los clips terminados entran en una cola con texto editable. Tú defines las horas del día, o dejas que el sistema las reparta solo, y publica. Si prefieres revisar antes, envía todo a una carpeta de tu Google Drive.',
+        h: 'Publica solo',
+        p: 'Cada corte entra en la cola de las cuentas que elegiste y sale a la hora correcta. O queda en el Feed de cortes para que elijas uno por uno.',
       },
     ],
+    passoVoce: 'Tú',
+    passoMaquina: 'La máquina',
 
-    recursosOlho: 'Lo que puedes hacer',
-    recursosTitulo: 'Tú mandas en el resultado, sin abrir un editor',
-    recursosTexto:
-      'El clip automático sale listo para publicar. Pero si tienes una forma propia de presentar, puedes ajustar cada parte.',
-    recursosAnterior: 'Función anterior',
-    recursosProximo: 'Función siguiente',
-    recursosParte1: 'Parte 1',
-    recursosCanal: 'Canal {letra}',
-    recursosLegenda: 'Subtítulo',
+    linhaOlho: 'Por dentro',
+    linhaTitulo: 'Una línea de producción que ves funcionando',
+    linhaTexto:
+      'En el panel, cada video aparece en la etapa en la que está, en tiempo real. Cuando un corte está listo, va directo a la cola de la red correcta.',
+    linhaEtapas: [
+      { h: 'Vigilante', p: 'Detecta el video nuevo o el directo que empezó' },
+      { h: 'Descarga', p: 'Descarga el video o graba el directo' },
+      { h: 'Transcripción', p: 'Cada palabra con el tiempo exacto' },
+      { h: 'Selección con IA', p: 'Nota para gancho, emoción y desenlace' },
+      { h: 'Corte y subtítulos', p: 'Vertical 9:16, subtítulos, título y portada' },
+      { h: 'Publicación', p: 'Una cola por cuenta, a tu horario' },
+    ],
+
+    recursosOlho: 'Funciones',
+    recursosTitulo: 'No es solo un cortador. Es la máquina entera.',
+    recursosTexto: 'Todo lo que hay entre la grabación y el post publicado, en un solo lugar.',
     recursos: [
       {
-        h: 'Estilo visual del clip',
-        p: 'Elige el estilo de los subtítulos en una galería: clásico, en negrita, discreto o en globo de color. Lo mismo vale para el título que aparece en los primeros segundos.',
+        h: 'Cortes de directos, en vivo',
+        p: 'Sigue canales de Twitch y Kick. La IA mira la transmisión y los cortes están listos mientras el directo sigue al aire. ¿Viste un buen momento? Toca “Cortar este momento”.',
       },
       {
-        h: 'Encuadre a mano',
-        p: 'En modo manual arrastras el vídeo dentro del marco vertical y decides cuánto acercar. Lo que ves en la pantalla es exactamente lo que sale en el clip.',
+        h: '8 redes, una cola por cuenta',
+        p: 'TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest y Bluesky. Horarios fijos o repartidos solos, y la misma configuración aplicada a todas las cuentas a la vez.',
       },
       {
-        h: 'Imagen de fondo',
-        p: 'Sube una plantilla de fondo con tu marca y coloca el vídeo encima. Todos los clips de ese canal salen con la misma identidad.',
+        h: 'La IA elige los momentos',
+        p: 'Lee la transcripción entera y le pone nota a cada fragmento. Tú eliges: solo los mejores momentos, el video entero en partes o una cantidad fija de cortes.',
       },
       {
-        h: 'Numeración de serie',
-        p: 'Activa el sello "Parte 1, Parte 2" y elige en qué esquina de la pantalla aparece. Sirve para convertir un vídeo largo en una secuencia que engancha.',
+        h: 'Subtítulos y títulos con tu estilo',
+        p: '27 estilos de subtítulo, 12 de título, encuadre arrastrando, imagen de fondo con tu marca y numeración “Parte 1, Parte 2”. Guárdalo como plantilla y úsalo en cualquier canal.',
       },
       {
-        h: 'Configuración por canal',
-        p: 'Cada canal puede tener su propio estilo, o defines un valor por defecto y lo aplicas a todos de una vez. La cantidad de clips, la duración y la calidad también.',
+        h: 'Encuadre de la webcam',
+        p: 'En los cortes de directos, la IA arma el formato: cámara arriba y juego abajo, o pantalla dividida. Y pone el título donde no tapa a nadie.',
       },
       {
-        h: 'Descripción automática',
-        p: 'El texto de cada clip lo escribe la IA a partir de lo que se dijo en el fragmento. Puedes editarlo antes de publicar, o fijar un texto propio.',
+        h: 'Feed de cortes',
+        p: 'Todos tus cortes en un feed vertical, como en el celular. Mira, dale me gusta y envíalos a la cola de cualquier red con un toque.',
       },
       {
-        h: 'Un canal, varias cuentas',
-        p: 'Varios canales de YouTube y varias cuentas de TikTok a la vez. Cada canal publica en la cuenta que le vinculaste.',
+        h: 'Canal extranjero, corte en tu idioma',
+        p: 'Cuando el video tiene audio doblado, el corte sale en el idioma que elijas, con los subtítulos en el mismo idioma.',
       },
       {
-        h: 'Horarios que tú eliges',
-        p: 'Define las horas fijas del día o deja que el sistema las reparta solo. La cola muestra cuándo va a salir cada clip.',
+        h: 'Soporte con IA',
+        p: 'Flora, nuestra asistente, revisa tu cuenta y lo resuelve al instante. Si un video falló por culpa nuestra, ella misma devuelve los minutos.',
       },
-      {
-        h: 'Copia en Google Drive',
-        p: 'Si prefieres revisar antes, cada clip terminado puede ir automáticamente a una carpeta de tu Drive, separada por canal.',
-      },
+    ],
+    recursosLegendaExemplo: 'ESTO LO CAMBIÓ TODO',
+    recursosTituloExemplo: 'El secreto que nadie cuenta',
+    recursosClipar: 'Cortar este momento',
+    recursosAoVivo: 'EN VIVO',
+    recursosFlora: 'El video de ayer falló, así que devolví los 32 minutos a tu cuenta.',
+    recursosDublagem: 'Audio: Español',
+    extrasTitulo: 'Y además',
+    extras: [
+      'Sin marca de agua de Post Flow',
+      'Descripción de cada corte escrita por la IA',
+      'Copia automática en Google Drive',
+      'Varios canales y varias cuentas',
+      'Nunca pedimos tu contraseña',
+      'Funciona en la computadora y en el celular',
+      'Pausar y reanudar sin perder lo avanzado',
+      'Panel en portugués, inglés y español',
+    ],
+
+    paraQuemOlho: 'Para quién es',
+    paraQuemTitulo: 'Hecho para quien publica todos los días',
+    paraQuem: [
+      { h: 'Creadores de YouTube', p: 'Cada video nuevo del canal se convierte en una semana de cortes en las otras redes.' },
+      { h: 'Podcasts y entrevistas', p: 'Los episodios largos se convierten en fragmentos cortos, con gancho y subtítulos.' },
+      { h: 'Streamers', p: 'Los mejores momentos de tu directo publicados mientras siguen calientes.' },
+      { h: 'Agencias y gestores', p: 'Varios canales y varias cuentas por red, cada uno con su propio estilo y su propia cola.' },
+    ],
+
+    antesOlho: 'Qué cambia',
+    antesTitulo: 'Todo lo que dejas de hacer',
+    antesSem: 'Sin Post Flow',
+    antesCom: 'Con Post Flow',
+    antes: [
+      'Ver el video entero buscando un buen fragmento',
+      'Recortar y encuadrar en el editor, uno por uno',
+      'Subtitular palabra por palabra',
+      'Exportar en el formato de cada red',
+      'Subir el mismo video a cada red, una por una',
+      'Acordarte de la hora de publicar todos los días',
+    ],
+    depois: [
+      'La IA mira y elige los momentos',
+      'Corte vertical listo y encuadrado',
+      'Subtítulos y título automáticos',
+      'Un formato que sirve en todas las redes',
+      'Publicado en todas, solo',
+      'Cola con horario, todos los días',
     ],
 
     planosOlho: 'Planes',
-    planosTitulo: 'Pagas por minuto de vídeo procesado',
+    planosTitulo: 'Un plan para cada ritmo de publicación',
     planosTexto:
-      'Los minutos se renuevan cada semana. Cuando las descargas salen por tu propia conexión a internet, nuestro coste baja, y ese ahorro vuelve a ti en forma de minutos bonus.',
-    // Version usada cuando el tunel esta oculto: sin prometer minutos bonus
-    // que el cliente no tiene como liberar (ver lib/exibicaoDoTunel).
+      'Los minutos se renuevan cada semana y valen para videos y directos. Cuando las descargas salen por tu propia conexión, nuestro costo baja, y ese ahorro vuelve a ti como minutos extra.',
     planosTextoSemTunel:
-      'Los minutos se renuevan cada semana. Pagas por minuto del video original, no por cantidad de cortes: un video de 30 minutos cuesta lo mismo si rinde 3 cortes o 12.',
-    maisEscolhido: 'El más elegido',
+      'Los minutos se renuevan cada semana y valen para videos y directos. Pagas por minuto del video original, no por cantidad de cortes: un video de 30 minutos cuesta lo mismo si da 3 o 12 cortes.',
+    maisEscolhido: 'Más elegido',
     porMes: '/mes',
     noPrimeiroMes: 'el 1.er mes',
-    depoisPorMes: 'luego R$ {valor}/mes',
+    depoisPorMes: 'después R$ {valor}/mes',
     descontoPrimeiroMes: '{n}% de descuento el 1.er mes',
-    conexoesExtras: 'Canal extra por R$ {canal}/mes, cuenta extra por R$ {conta}/mes',
+    conexoesExtras: 'Canal extra por R$ {canal}/mes, cuenta extra de TikTok por R$ {conta}/mes',
     minutosPorSemana: '{n} minutos',
-    minutosPorSemanaResto: 'de vídeo por semana',
+    minutosPorSemanaResto: 'de video por semana',
     minutosBonus: '{n} minutos',
-    minutosBonusResto: 'usando tu internet',
+    minutosBonusResto: 'usando tu conexión',
     canaisYoutube: '{n} canales de YouTube',
     canalYoutube: '{n} canal de YouTube',
     canaisIlimitados: 'Canales de YouTube ilimitados',
     contasTiktok: '{n} cuentas de TikTok',
     contaTiktok: '{n} cuenta de TikTok',
     contasIlimitadas: 'Cuentas de TikTok ilimitadas',
+    contasPorRede: '{n} cuentas en cada una de las otras 7 redes',
+    contaPorRede: '{n} cuenta en cada una de las otras 7 redes',
+    canaisLive: '{n} canales de directo (Twitch o Kick)',
+    canalLive: '{n} canal de directo (Twitch o Kick)',
+    contaExtraRede: 'Cuenta extra en cualquier red por R$ {valor}/mes',
     incluiCorte: 'Corte con IA, subtítulos, portada y programación',
-    incluiDrive: 'Exportación a Google Drive',
+    incluiDrive: 'Feed de cortes y copia en Google Drive',
     comecar: 'Empezar',
+    regraCreditos: '1 minuto de video = 1 crédito · 3 minutos de directo = 1 crédito',
     notaPlanos:
-      '¿Se acabaron los minutos de la semana? Puedes comprar un paquete suelto, que no caduca. No se cobra nada más allá de la suscripción sin que lo autorices.',
+      '¿Se acabaron los minutos de la semana? Puedes comprar un paquete extra, que no vence. No se cobra nada además de la suscripción sin tu autorización.',
+
+    confiancaOlho: 'Confianza',
+    confiancaTitulo: 'Empresa brasileña, pago en reales',
+    confianca: [
+      { h: 'Empresa brasileña', p: 'CNPJ en el pie de esta página y cobro en reales brasileños.' },
+      { h: 'Tarjeta o PIX', p: 'Pago procesado por Asaas, institución autorizada por el Banco Central de Brasil.' },
+      { h: 'Inicio de sesión oficial', p: 'Conectas TikTok, Google y las otras redes en sus propias pantallas. Nunca vemos tu contraseña.' },
+      { h: 'Sin permanencia', p: 'Cancela cuando quieras, desde el panel. El acceso dura hasta el final del período pagado.' },
+    ],
 
     faqOlho: 'Preguntas frecuentes',
     faqTitulo: 'Lo que suelen preguntar',
@@ -193,72 +248,83 @@ module.exports = {
     numerosOlho: 'Números',
     numerosTitulo: 'Post Flow en números',
     numerosTexto:
-      'Toda esta automatización ya publicó miles de clips y ayudó a cuentas a crecer sin que nadie abriera un editor de vídeo.',
+      'Toda esta automatización ya publicó miles de cortes y ayudó a cuentas a crecer sin que nadie tuviera que abrir un editor de video.',
     numerosVideosValor: '+85 mil',
-    numerosVideosRotulo: 'vídeos publicados',
+    numerosVideosRotulo: 'videos publicados',
     numerosContasValor: '+9.400',
     numerosContasRotulo: 'cuentas conectadas',
     numerosViewsValor: '340 millones',
     numerosViewsRotulo: 'visualizaciones generadas',
 
     finalOlho: 'Empieza hoy',
-    finalTitulo: 'Pega el enlace de tu canal y mira salir el primer clip',
+    finalTitulo: 'Conecta tu canal y mira salir el primer corte',
     finalTexto:
-      'La configuración lleva unos minutos. Después de eso, cada vídeo nuevo de tu canal se convierte en un clip publicado sin que toques nada.',
+      'La configuración lleva unos minutos. Después, cada video nuevo y cada directo se convierten en cortes publicados sin que toques nada.',
     falarComAGente: 'Hablar con nosotros',
     semFidelidade: 'Sin permanencia. Cancela cuando quieras.',
   },
 
   perguntas: [
     {
-      p: '¿Post Flow publica solo en TikTok?',
-      r: 'Sí. Eliges entre recibir el clip como borrador en la aplicación de TikTok, para terminarlo allí, o publicarlo directamente en tu perfil sin abrir la aplicación. En la publicación directa defines una vez la privacidad y lo que la gente puede hacer, y eso vale para todos los clips.',
+      p: '¿En qué redes publica Post Flow?',
+      r: 'TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest y Bluesky. Conectas cada cuenta con el inicio de sesión oficial de la red y eliges qué cuentas reciben los cortes de cada canal. En Instagram y Facebook el corte debe durar hasta 90 segundos.',
     },
     {
-      p: '¿Necesito dejar el ordenador encendido?',
-      r: 'No. Todo el procesamiento ocurre en nuestros servidores. Existe un programa opcional que hace que las descargas salgan por tu conexión y te da minutos extra en el plan, pero es opcional y tú eliges si el vídeo espera a tu ordenador o no.',
-      // Sin el tunel, la respuesta no cita el programa opcional.
-      rSemTunel: 'No. Todo el procesamiento ocurre en nuestros servidores. Lo configuras una vez y puedes apagar el ordenador — los cortes siguen saliendo y publicándose en los horarios que elegiste.',
+      p: '¿Post Flow publica solo?',
+      r: 'Sí. Cada cuenta tiene una cola con horarios, y los cortes salen solos a la hora que definiste. Si prefieres elegir uno por uno, desactiva la publicación automática y envía los cortes a la cola desde el Feed de cortes. En TikTok también puedes enviarlos como borrador y terminarlos en la app.',
     },
     {
-      p: '¿Cuántos clips salen de cada vídeo?',
-      r: 'Depende del vídeo y de lo que configures: solo los mejores fragmentos, el vídeo entero troceado, o una cantidad fija. El cobro es por minuto del vídeo original, así que la cantidad de clips no cambia el precio.',
+      p: '¿Se pueden cortar directos?',
+      r: 'Sí, de Twitch y Kick. La IA sigue la transmisión y los cortes están listos mientras el directo sigue al aire. El botón “Cortar este momento” corta los últimos minutos al instante. Los cortes de directos aparecen en el Feed de cortes, desde donde los envías a la cola de cualquier red.',
     },
     {
-      p: '¿En cuánto tiempo está listo el clip?',
-      r: 'Depende del tamaño del vídeo y de la cola. Un vídeo de 30 minutos suele tardar unos minutos entre detectar, transcribir, elegir los fragmentos y renderizar. Sigues el porcentaje de cada clip en la pantalla.',
+      p: '¿Necesito dejar mi computadora encendida?',
+      r: 'No. Todo el procesamiento ocurre en nuestros servidores. Existe un programa opcional que hace que las descargas salgan por tu conexión y te da minutos extra en el plan, pero es opcional y tú decides si el video espera a tu computadora o no.',
+      rSemTunel: 'No. Todo el procesamiento ocurre en nuestros servidores. Lo configuras una vez y puedes apagar la computadora: los cortes siguen saliendo y publicándose a las horas que elegiste.',
     },
     {
-      p: '¿Post Flow pone marca de agua en mis vídeos?',
-      r: 'No. No se añade ningún logotipo nuestro al vídeo. Lo único superpuesto son los subtítulos y el título generados a partir de tu propio audio, y puedes desactivar ambos.',
+      p: '¿Cómo funcionan los créditos?',
+      r: 'El plan te da una cuota de minutos que se renueva cada semana. Cada minuto de video procesado gasta 1 crédito; en los directos, cada 3 minutos cortados gastan 1 crédito, y cada “Cortar este momento” también. La cantidad de cortes no cambia el precio. Si se acaba la cuota, puedes comprar minutos extra que no vencen.',
     },
     {
-      p: '¿Puedo usar más de un canal y más de una cuenta de TikTok?',
-      r: 'Sí. Cada canal de YouTube publica en la cuenta de TikTok que le vincules, y cada cuenta tiene su propia programación. La cantidad depende del plan.',
+      p: '¿Cuántos cortes salen de cada video?',
+      r: 'Depende del video y de lo que configures: solo los mejores fragmentos, el video entero dividido en partes o una cantidad fija. El cobro es por minuto del video original, así que la cantidad de cortes no cambia el precio.',
     },
     {
-      p: '¿Post Flow sirve para cortar el vídeo de otra persona?',
-      r: 'No. La herramienta existe para quien ya produce su propio contenido y quiere automatizar la etapa de recortar y publicar. Al usar el servicio declaras que tienes derecho sobre el material que envías a procesar. No moderamos el contenido antes de la publicación y no nos responsabilizamos del uso indebido de material de terceros.',
+      p: '¿En cuánto tiempo está listo el corte?',
+      r: 'Depende de la duración del video y de la cola. Un video de 30 minutos suele tardar unos minutos entre detectar, transcribir, elegir los fragmentos y renderizar. Sigues cada etapa en vivo en el panel.',
     },
     {
-      p: '¿Tengo que dar mi contraseña de YouTube o de TikTok?',
-      r: 'No. La conexión con TikTok y con Google Drive usa el inicio de sesión oficial de cada plataforma. Autorizas en su pantalla y Post Flow nunca ve tu contraseña. Puedes revocarlo cuando quieras, desde el panel o en los ajustes de tu cuenta.',
+      p: '¿Post Flow pone marca de agua en mis videos?',
+      r: 'No. No se agrega ningún logotipo nuestro al video. Lo único superpuesto son los subtítulos y el título generados a partir de tu propio audio, y puedes desactivar ambos.',
     },
     {
-      p: '¿A qué accedéis exactamente en mi Google Drive?',
-      r: 'Solo a la carpeta que elijas para recibir los clips terminados. Post Flow usa un permiso que alcanza únicamente los archivos que él mismo crea: el resto de tu Drive sigue siendo invisible para nosotros.',
+      p: '¿Puedo usar más de un canal y más de una cuenta en cada red?',
+      r: 'Sí. Cada plan incluye una cantidad de canales de YouTube, de canales de directo y de cuentas en cada red, y cada cuenta tiene su propia programación. Si necesitas una cuenta más en una red, puedes contratar una cuenta extra en cualquier plan.',
     },
     {
-      p: '¿Los clips se guardan para siempre?',
-      r: 'No. Después de publicarse se borran de nuestro servidor automáticamente, en un plazo que tú defines. Si quieres conservarlos, usa la exportación a Google Drive, donde los archivos se quedan contigo.',
+      p: '¿Post Flow sirve para cortar videos de otra persona?',
+      r: 'No. La herramienta existe para quienes ya producen su propio contenido y quieren automatizar la etapa de recortar y publicar. Al usar el servicio declaras que tienes derechos sobre el material que envías a procesar. No moderamos el contenido antes de su publicación y no nos responsabilizamos por el uso indebido de material de terceros.',
+    },
+    {
+      p: '¿Tengo que darles mi contraseña de YouTube, TikTok o de las otras redes?',
+      r: 'No. La conexión con TikTok, Google Drive y las otras redes usa el inicio de sesión oficial de cada plataforma. Autorizas en su pantalla y Post Flow nunca ve tu contraseña. Puedes desconectar cuando quieras, en el panel o en la configuración de la propia red.',
+    },
+    {
+      p: '¿A qué acceden exactamente en mi Google Drive?',
+      r: 'Solo a la carpeta que el propio Post Flow crea para recibir los cortes listos, una por canal. El permiso que usamos solo alcanza los archivos que nosotros mismos creamos: el resto de tu Drive sigue invisible para nosotros.',
+    },
+    {
+      p: '¿Los cortes quedan guardados para siempre?',
+      r: 'No. Después de publicados, los cortes quedan 3 días en nuestro servidor y se borran solos. Para guardarlos, usa la copia automática en Google Drive o descárgalos desde el panel antes.',
     },
     {
       p: '¿Y si quiero revisar antes de publicar?',
-      r: 'Puedes desactivar la publicación automática y publicar manualmente, o enviar cada clip terminado a una carpeta de tu Google Drive, separada por canal.',
+      r: 'Puedes desactivar la publicación automática y elegir los cortes en el Feed de cortes, o enviar cada corte listo a una carpeta de tu Google Drive, separada por canal.',
     },
     {
       p: '¿Puedo cancelar cuando quiera?',
-      r: `Sí, sin penalización y sin hablar con nadie. El acceso continúa hasta el final del período ya pagado. Para borrar la cuenta y todos los datos, basta con escribir a ${CONTACT.supportEmail}.`,
+      r: 'Sí, desde el propio panel, sin penalización y sin hablar con nadie. El acceso continúa hasta el final del período ya pagado. Para borrar la cuenta y todos los datos, ve a Configuración → Eliminar cuenta.',
     },
   ],
 

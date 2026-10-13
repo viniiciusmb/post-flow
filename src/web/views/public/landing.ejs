@@ -1,362 +1,439 @@
 <%- include('../partials/public-header') %>
 
+<%#
+  Landing do Post Flow (reescrita em 12/10/2026).
+
+  O que guia o desenho:
+    - Tudo o que parece "tela do produto" aqui é DESENHO em HTML/CSS, não print.
+      Print de painel envelhece no primeiro ajuste de botão e não traduz; o
+      desenho acompanha o idioma e continua nítido em qualquer tela.
+    - Movimento só onde ele explica alguma coisa (o corte saindo, a fila
+      andando) e nunca para quem pediu menos movimento ao sistema
+      (prefers-reduced-motion: tudo fica parado, no estado final).
+    - Nada é carregado de fora do domínio (há teste) e nenhum script inline (o
+      CSP bloquearia): o comportamento mora em /js/public.js.
+    - Preço e limite de plano vêm do banco; nenhum número de plano é escrito
+      à mão nesta página.
+%>
+
 <% if (typeof contaExcluida !== 'undefined' && contaExcluida) { %>
 <div class="wrap">
   <p class="aviso-conta-excluida" role="status">Sua conta foi excluída. Os seus dados e cortes foram apagados e a assinatura foi cancelada.</p>
 </div>
 <% } %>
 
-<section class="hero">
-  <div class="wrap">
-    <p class="selo-hero">
-      <%- include('../partials/logo-youtube') %>
-      YouTube
-      <span class="selo-seta" aria-hidden="true">→</span>
-      <%- include('../partials/logo-tiktok') %>
-      TikTok
-      <span class="selo-texto"><%= t('landing.selo') %></span>
-    </p>
+<%
+  var reais = function (centavos) { return (centavos / 100).toFixed(2).replace('.', ','); };
+%>
 
-    <h1><%= t('landing.h1a') %><br><%= t('landing.h1b') %> <em><%= t('landing.h1c') %></em>.</h1>
-    <p class="lead">
-      <%= t('landing.lead') %> <strong><%= t('landing.leadForte') %></strong>
-    </p>
-    <div class="cta-linha">
-      <a class="btn btn-primary btn-lg" href="/register"><%= t('nav.criarConta') %></a>
-      <a class="btn btn-ghost btn-lg" href="#como-funciona"><%= t('landing.verComoFunciona') %></a>
-    </div>
-    <p class="nota"><%= t('landing.notaHero') %></p>
+<!-- ============================================================ TOPO -->
+<section class="lp-hero lp-escuro">
+  <div class="lp-grade-fundo" aria-hidden="true"></div>
+  <div class="lp-brilho lp-brilho-a" aria-hidden="true"></div>
+  <div class="lp-brilho lp-brilho-b" aria-hidden="true"></div>
 
-    <%# Video mudo em loop com prints REAIS da plataforma (canal sendo
-        adicionado, estilo de corte, TikTok conectado) - substituiu o duo
-        macbook+iphone estático: explica em segundos o que antes exigia ler os
-        cartões de "como funciona" mais abaixo. Só em português (mesma
-        limitação já aceita no video de fluxo da seção seguinte - re-gravar
-        por idioma é trabalho grande pra um ganho pequeno). Gerado com
-        Remotion, fonte em /marketing-video. %>
-    <div class="hero-video-envolt">
-      <video
-        class="hero-video"
-        src="/video/tutorial-passo-a-passo.mp4"
-        poster="/video/tutorial-passo-a-passo-poster.jpg"
-        width="1620" height="1000"
-        autoplay muted loop playsinline preload="auto" fetchpriority="high"
-        aria-label="<%= t('landing.tutorialVideoAlt') %>"
-      ></video>
-    </div>
-  </div>
-</section>
+  <div class="wrap lp-hero-grade">
+    <div class="lp-hero-texto">
+      <a class="lp-selo" href="#redes">
+        <span class="lp-selo-novo"><%= t('landing.seloNovo') %></span>
+        <span><%= t('landing.seloTexto') %></span>
+        <%- icone('arrow-right') %>
+      </a>
 
-<section class="secao secao-mist">
-  <div class="wrap">
-    <div class="narrow" style="margin: 0 auto 2.5rem; text-align: center">
-      <p class="eyebrow"><%= t('landing.provaOlho') %></p>
-      <h2><%= t('landing.provaTitulo') %></h2>
-      <p style="color: var(--muted)"><%= t('landing.provaTexto') %></p>
-    </div>
-
-    <%# Cartão "ao vivo" - não é vídeo, é DOM de verdade com os números
-        subindo via JS (public.js, bloco "hero-prova"). Simula uma conta de
-        TikTok crescendo DO ZERO (contagem sempre começa em 0 e sobe em
-        loop) - é a prova visual mais direta do que a página promete.
-        Números e formatação inteiros no JS; aqui só o esqueleto + zero
-        inicial (pro layout não pular antes do JS rodar). %>
-    <div class="hero-prova" aria-hidden="true">
-      <div class="hero-prova-cabeca">
-        <span class="hero-prova-avatar">
-          <%- include('../partials/logo-tiktok') %>
+      <h1>
+        <span class="sr-only"><%= t('landing.h1Leitor') %></span>
+        <span aria-hidden="true">
+          <%= t('landing.h1a') %>
+          <%# A rede no fim troca sozinha (public.js). Começa no TikTok, que é o
+              texto que fica se o script não rodar. A preposição vai junto da
+              rede, na mesma linha: sozinha no fim da linha de cima ela ficava
+              solta ("no" pendurado). %>
+          <span class="lp-linha-rede"><%= t('landing.h1Prep') %> <span class="lp-rotativo" data-rotativo="<%= t('landing.h1Redes').join('|') %>"><%= t('landing.h1Redes')[0] %></span></span>
         </span>
-        <div>
-          <div class="hero-prova-nome"><%= t('landing.provaNome') %></div>
-          <div class="hero-prova-vivo"><span class="hero-prova-ponto"></span><%= t('landing.provaVivo') %></div>
-        </div>
+      </h1>
+
+      <p class="lp-lead"><%= t('landing.lead') %> <strong><%= t('landing.leadForte') %></strong></p>
+
+      <div class="lp-cta">
+        <a class="btn lp-btn-luz btn-lg" href="/register"><%= t('landing.ctaPrincipal') %> <%- icone('arrow-right') %></a>
+        <a class="btn lp-btn-vidro btn-lg" href="#como-funciona"><%- icone('player-play') %> <%= t('landing.verComoFunciona') %></a>
       </div>
-      <div class="hero-prova-stats">
-        <div class="hero-prova-stat">
-          <strong data-prova-seguidores>0</strong>
-          <span><%= t('landing.provaSeguidores') %></span>
-        </div>
-        <div class="hero-prova-stat">
-          <strong data-prova-videos>0</strong>
-          <span><%= t('landing.provaVideos') %></span>
-        </div>
-        <div class="hero-prova-stat">
-          <strong data-prova-views>0</strong>
-          <span><%= t('landing.provaViews') %></span>
-        </div>
+
+      <ul class="lp-garantias">
+        <% t('landing.garantias').forEach(function (g) { %>
+          <li><%- icone('check') %><%= g %></li>
+        <% }); %>
+      </ul>
+    </div>
+
+    <%# Painel de demonstração: uma "linha de produção" em miniatura. É
+        decorativo (aria-hidden) - tudo o que ele mostra está dito em texto na
+        página. %>
+    <div class="lp-painel" aria-hidden="true">
+      <div class="lp-painel-topo">
+        <span class="lp-painel-pontos"><i></i><i></i><i></i></span>
+        <span class="lp-painel-titulo"><%- include('../partials/brand-mark') %> <%= t('landing.painelTitulo') %></span>
+        <span class="lp-vivo"><i></i><%= t('landing.painelAoVivo') %></span>
       </div>
-    </div>
-  </div>
-</section>
 
-<section class="secao" id="como-funciona">
-  <div class="wrap">
-    <div class="narrow" style="margin-bottom: 3.5rem">
-      <p class="eyebrow"><%= t('nav.comoFunciona') %></p>
-      <h2><%= t('landing.comoFuncionaTitulo') %></h2>
-    </div>
-
-    <div class="passos">
-      <% t('landing.passos').forEach(function (passo) { %>
-        <div class="passo">
-          <h3><%= passo.h %></h3>
-          <p><%= passo.p %></p>
-        </div>
-      <% }); %>
-    </div>
-
-    <%# Video mudo, em loop, sem controles - pensado pra parecer parte da
-        propria pagina (nao um player incorporado). Mostra exatamente o que o
-        titulo desta secao ja diz em texto ("voce participa da primeira
-        etapa"): vídeo novo no YouTube, o Post Flow cortando em clipes
-        verticais, publicação automática no TikTok. Gerado com Remotion,
-        fonte em /marketing-video (fora do build do site - so o .mp4
-        renderizado entra aqui).
-
-        data-lazy-src (nao src) + sem autoplay: fica abaixo da dobra, entao so
-        baixa quando chega perto da tela (ver o IntersectionObserver em
-        public.js) - assim ele nao disputa banda com o video da hero logo na
-        abertura da pagina.
-
-        Dois videos, nao um so: no celular, o video horizontal encolhido pra
-        caber na largura da tela deixava o texto desenhado dentro dele
-        ilegível (e rolagem horizontal só nessa faixa da página era uma
-        experiência ruim por si só). Existe uma composição Remotion SEPARADA
-        (FluxoAutomaticoVertical, mesma animação, eixo vertical) pensada pra
-        caber na largura do celular sem encolher o texto. A troca entre os
-        dois é só CSS (media query liga/desliga um dos dois com
-        display:none) - o elemento escondido nunca entra em interseção, entao
-        o IntersectionObserver que já existe nunca baixa o video errado. %>
-    <div class="fluxo-video-envolt">
-      <video
-        class="fluxo-video fluxo-video-horizontal"
-        data-lazy-src="/video/fluxo-automatico.mp4"
-        poster="/video/fluxo-automatico-poster.jpg"
-        width="1550" height="730"
-        muted loop playsinline
-        aria-label="<%= t('landing.fluxoVideoAlt') %>"
-      ></video>
-      <video
-        class="fluxo-video fluxo-video-vertical"
-        data-lazy-src="/video/fluxo-automatico-vertical.mp4"
-        poster="/video/fluxo-automatico-vertical-poster.jpg"
-        width="764" height="1506"
-        muted loop playsinline
-        aria-label="<%= t('landing.fluxoVideoAlt') %>"
-      ></video>
-    </div>
-
-    <div class="narrow" style="margin: clamp(3rem, 6vw, 4.5rem) auto 0; text-align: center">
-      <p class="eyebrow"><%= t('landing.telasOlho') %></p>
-      <h2><%= t('landing.telasTitulo') %></h2>
-      <p style="color: var(--muted)"><%= t('landing.telasTexto') %></p>
-    </div>
-
-    <div class="duo">
-      <div class="macbook">
-        <div class="macbook-tampa">
-          <div class="macbook-tela">
-            <img
-              <%# Print da fila de cortes de verdade (painel autenticado,
-                  tela "Vídeos & Cortes" expandida mostrando os clipes
-                  prontos com preview) - gerado a partir do próprio painel,
-                  por idioma. JPEG (não PNG): esse print tem muita foto de
-                  verdade dentro dos clipes, PNG comprimia mal esse tipo de
-                  conteúdo. %>
-              src="/img/produto/cortes-light<%= lang === 'pt' ? '' : '-' + lang %>.jpg"
-              alt="<%= t('landing.altComputador') %>"
-              width="2880" height="1800" loading="lazy">
+      <div class="lp-painel-corpo">
+        <div class="lp-painel-fontes">
+          <div class="lp-fonte">
+            <span class="lp-fonte-ico" style="--cor:#ff0033"><%- icone('brand-youtube') %></span>
+            <span class="lp-fonte-txt"><b><%= t('landing.painelFonteYoutube') %></b><small><%= t('landing.painelFonteYoutubeInfo') %></small></span>
+          </div>
+          <div class="lp-fonte">
+            <span class="lp-fonte-ico" style="--cor:#9146ff"><%- icone('brand-twitch') %></span>
+            <span class="lp-fonte-txt"><b><%= t('landing.painelFonteLive') %></b><small><i class="lp-rec"></i><%= t('landing.painelFonteLiveInfo') %></small></span>
           </div>
         </div>
-        <div class="macbook-base"></div>
-      </div>
 
-      <div class="iphone">
-        <div class="iphone-tela">
-          <img
-            src="/img/produto/cortes-mobile<%= lang === 'pt' ? '' : '-' + lang %>.jpg"
-            alt="<%= t('landing.altCelular') %>"
-            width="1170" height="2993" loading="lazy">
+        <div class="lp-fluxo" ><i></i></div>
+
+        <div class="lp-ia">
+          <span class="lp-ia-chip"><%- icone('sparkles') %> IA</span>
+          <ol class="lp-ia-etapas">
+            <% t('landing.painelEtapas').forEach(function (e, i) { %>
+              <li class="<%= i < 2 ? 'feito' : 'agora' %>">
+                <%- i < 2 ? icone('check') : '<span class="lp-girando"></span>' %>
+                <span><%= e %></span>
+                <% if (i === 2) { %><span class="lp-barra"><i></i></span><% } %>
+              </li>
+            <% }); %>
+          </ol>
+        </div>
+
+        <div class="lp-fluxo"><i></i></div>
+
+        <div class="lp-cortes">
+          <div class="lp-corte lp-corte-1">
+            <img src="/img/produto/corte-exemplo.jpg" alt="" width="506" height="900" loading="eager">
+            <span class="lp-corte-nota">94 <small><%= t('landing.painelNota') %></small></span>
+          </div>
+          <div class="lp-corte lp-corte-2">
+            <span class="lp-corte-cam"><img src="/img/produto/corte-exemplo.jpg" alt="" width="506" height="900"></span>
+            <span class="lp-corte-jogo"></span>
+            <span class="lp-corte-legenda"><%= t('landing.painelLegenda') %></span>
+            <span class="lp-corte-nota">88 <small><%= t('landing.painelNota') %></small></span>
+          </div>
+          <div class="lp-corte lp-corte-3">
+            <img src="/img/produto/corte-exemplo.jpg" alt="" width="506" height="900">
+            <span class="lp-corte-legenda lp-amarela"><%= t('landing.painelLegenda') %></span>
+            <span class="lp-corte-nota">91 <small><%= t('landing.painelNota') %></small></span>
+          </div>
         </div>
       </div>
+
+      <%# Uma etiqueta por rede de destino: o ícone diz a rede (o nome vai no
+          title, pra quem passa o mouse), o texto diz a situação do corte. %>
+      <div class="lp-painel-saida">
+        <span class="lp-saida" style="--cor:#111" title="TikTok"><%- icone('brand-tiktok') %><em class="ok"><%- icone('check') %><%= t('landing.painelPublicado') %></em></span>
+        <span class="lp-saida" style="--cor:#dd2a7b" title="Instagram"><%- icone('brand-instagram') %><em><%= t('landing.painelPublica', { hora: '18:00' }) %></em></span>
+        <span class="lp-saida" style="--cor:#ff0033" title="YouTube Shorts"><%- icone('brand-youtube') %><em><%= t('landing.painelPublica', { hora: '20:00' }) %></em></span>
+      </div>
     </div>
   </div>
-</section>
 
-<section class="secao secao-mist">
-  <div class="wrap whats-grid">
-    <div class="whats-texto">
-      <p class="eyebrow"><%= t('landing.whatsOlho') %></p>
-      <h2><%= t('landing.whatsTitulo') %></h2>
-      <p style="color: var(--muted)"><%= t('landing.whatsTexto') %></p>
-    </div>
-    <div class="whats-banner">
-      <%- include('../partials/whatsapp-banner') %>
-    </div>
-  </div>
-</section>
-
-<%# Números fictícios (declarado de propósito - não vêm de contagem real do
-    banco, é só prova social estilo "empresa em números"), inflados a pedido
-    do usuário. Seção escura full-bleed, mesmo tratamento visual de
-    .secao-final (var(--ink) + texto branco), reaproveitado aqui como uma
-    seção própria em vez de caixa arredondada. %>
-<section class="secao secao-numeros">
+  <%# Fatos do produto (não estatística de uso): o que ele faz, em números. %>
   <div class="wrap">
-    <div class="narrow" style="margin: 0 auto 3rem; text-align: center">
-      <p class="eyebrow"><%= t('landing.numerosOlho') %></p>
-      <h2><%= t('landing.numerosTitulo') %></h2>
-      <p><%= t('landing.numerosTexto') %></p>
+    <dl class="lp-fatos">
+      <% t('landing.fatos').forEach(function (f) { %>
+        <div class="lp-fato"><dt><%= f.v %></dt><dd><%= f.r %></dd></div>
+      <% }); %>
+    </dl>
+  </div>
+</section>
+
+<!-- ============================================================ REDES -->
+<section class="secao lp-secao" id="redes">
+  <div class="wrap">
+    <div class="lp-cabeca lp-centro" data-revelar>
+      <p class="eyebrow"><%= t('landing.redesOlho') %></p>
+      <h2><%= t('landing.redesTitulo') %></h2>
+      <p class="lp-sub"><%= t('landing.redesTexto') %></p>
     </div>
-    <div class="numeros-grade">
-      <div class="numeros-item">
-        <div class="numeros-valor"><%= t('landing.numerosVideosValor') %></div>
-        <div class="numeros-rotulo"><%= t('landing.numerosVideosRotulo') %></div>
+
+    <div class="lp-hub" data-revelar>
+      <div class="lp-hub-col">
+        <p class="lp-hub-rotulo"><%= t('landing.fontesRotulo') %></p>
+        <ul class="lp-hub-fontes">
+          <% t('landing.fontes').forEach(function (f, i) { var fonte = fontes[i]; %>
+            <li class="lp-no">
+              <span class="lp-no-ico" style="--cor:<%= fonte.cor %>"><%- icone(fonte.icone) %></span>
+              <span><b><%= f.h %></b><small><%= f.p %></small></span>
+            </li>
+          <% }); %>
+        </ul>
       </div>
-      <div class="numeros-item">
-        <div class="numeros-valor"><%= t('landing.numerosContasValor') %></div>
-        <div class="numeros-rotulo"><%= t('landing.numerosContasRotulo') %></div>
+
+      <div class="lp-hub-centro">
+        <div class="lp-nucleo">
+          <span class="lp-orbita" aria-hidden="true"></span>
+          <span class="lp-orbita lp-orbita-2" aria-hidden="true"></span>
+          <span class="lp-nucleo-marca"><%- include('../partials/brand-mark') %></span>
+          <span class="lp-nucleo-nome">Post Flow</span>
+        </div>
       </div>
-      <div class="numeros-item">
-        <div class="numeros-valor"><%= t('landing.numerosViewsValor') %></div>
-        <div class="numeros-rotulo"><%= t('landing.numerosViewsRotulo') %></div>
+
+      <div class="lp-hub-col">
+        <p class="lp-hub-rotulo"><%= t('landing.destinosRotulo') %></p>
+        <ul class="lp-hub-redes">
+          <% redes.forEach(function (r) { %>
+            <li class="lp-rede">
+              <span class="lp-rede-ico" style="--fundo:<%= r.fundo %>"><%- icone(r.icone) %></span>
+              <span><%= r.nome %></span>
+            </li>
+          <% }); %>
+        </ul>
       </div>
     </div>
   </div>
 </section>
 
-<section class="secao secao-mist" id="recursos">
+<!-- ============================================================ COMO FUNCIONA -->
+<section class="secao lp-secao lp-nevoa" id="como-funciona">
   <div class="wrap">
-    <div class="narrow" style="margin-bottom: 3rem">
+    <div class="lp-cabeca" data-revelar>
+      <p class="eyebrow"><%= t('nav.comoFunciona') %></p>
+      <h2><%= t('landing.comoFuncionaTitulo') %></h2>
+      <p class="lp-sub"><%= t('landing.comoFuncionaTexto') %></p>
+    </div>
+
+    <ol class="lp-passos">
+      <% t('landing.passos').forEach(function (passo, i) { %>
+        <li class="lp-passo" data-revelar style="--atraso:<%= i * 90 %>ms">
+          <div class="lp-passo-topo">
+            <span class="lp-passo-num"><%= String(i + 1).padStart(2, '0') %></span>
+            <span class="lp-passo-quem <%= i === 0 ? '' : 'maquina' %>"><%= i === 0 ? t('landing.passoVoce') : t('landing.passoMaquina') %></span>
+          </div>
+          <span class="lp-passo-ico"><%- icone(['cloud-upload', 'brain', 'rocket'][i]) %></span>
+          <h3><%= passo.h %></h3>
+          <p><%= passo.p %></p>
+        </li>
+      <% }); %>
+    </ol>
+  </div>
+</section>
+
+<!-- ============================================================ LINHA DE PRODUÇÃO -->
+<section class="secao lp-escuro lp-linha" id="linha">
+  <div class="lp-grade-fundo" aria-hidden="true"></div>
+  <div class="wrap">
+    <div class="lp-cabeca lp-centro" data-revelar>
+      <p class="eyebrow"><%= t('landing.linhaOlho') %></p>
+      <h2><%= t('landing.linhaTitulo') %></h2>
+      <p class="lp-sub"><%= t('landing.linhaTexto') %></p>
+    </div>
+
+    <ol class="lp-etapas" data-revelar>
+      <% t('landing.linhaEtapas').forEach(function (e, i) { %>
+        <li class="lp-etapa" style="--i:<%= i %>">
+          <span class="lp-etapa-no"><%- icone(['broadcast', 'cloud-upload', 'subtitles-ai', 'sparkles', 'scissors', 'calendar-time'][i]) %></span>
+          <b><%= e.h %></b>
+          <small><%= e.p %></small>
+        </li>
+      <% }); %>
+    </ol>
+  </div>
+</section>
+
+<!-- ============================================================ RECURSOS -->
+<section class="secao lp-secao" id="recursos">
+  <div class="wrap">
+    <div class="lp-cabeca" data-revelar>
       <p class="eyebrow"><%= t('landing.recursosOlho') %></p>
       <h2><%= t('landing.recursosTitulo') %></h2>
-      <p style="color: var(--muted)"><%= t('landing.recursosTexto') %></p>
+      <p class="lp-sub"><%= t('landing.recursosTexto') %></p>
     </div>
 
-    <%# Carrossel, não grade: 9 caixas de texto puro empilhadas viravam uma
-        parede ilegível no celular. Cada cartão ganhou um "print" em
-        miniatura (desenhado em HTML/CSS, não uma captura de tela de
-        verdade - um print real de cada tela encolhido pra ~260px de largura
-        vira texto ilegível, o problema que a seção "grade de recursos"
-        antiga já tinha) que ilustra especificamente aquela funcionalidade,
-        reaproveitando o mesmo cartão-celular (a saída sempre vertical do
-        produto) como base visual comum. Rola por toque/mouse/trackpad + as
-        setas (JS em public.js: recursos-carrossel). %>
-    <%
-      // Cartao-celular reutilizado como base visual de quase todo print -
-      // representa o clipe vertical que o produto gera. innerHtml entra
-      // dentro da "tela" (fundo cinza claro por padrao).
-      function fone(innerHtml, telaFundo) {
-        return '<div style="position:relative;flex:none;width:54px;height:96px;border-radius:11px;background:#0a0a0c;padding:3px;box-shadow:0 8px 16px -8px rgba(8,9,10,.35)">' +
-          '<div style="width:100%;height:100%;border-radius:8px;background:' + (telaFundo || '#eceef1') + ';overflow:hidden;position:relative">' + innerHtml + '</div>' +
-        '</div>';
-      }
-      var recursosPrints = [
-        // 1. Estilo visual do corte: legenda queimada em balao na parte de baixo
-        fone('<div style="position:absolute;left:4px;right:4px;bottom:10px;background:#4f46e5;border-radius:999px;padding:3px 4px;text-align:center;white-space:nowrap;font:700 7px Inter,sans-serif;color:#fff">' + t('landing.recursosLegenda') + '</div>'),
-        // 2. Enquadramento na mao: cantos de crop + moldura interna arrastavel
-        fone('<div style="position:absolute;inset:10px;border:1.5px dashed rgba(79,70,229,.7);border-radius:4px"></div>' +
-          '<span style="position:absolute;left:2px;top:2px;width:9px;height:9px;border-top:2px solid #4f46e5;border-left:2px solid #4f46e5"></span>' +
-          '<span style="position:absolute;right:2px;top:2px;width:9px;height:9px;border-top:2px solid #4f46e5;border-right:2px solid #4f46e5"></span>' +
-          '<span style="position:absolute;left:2px;bottom:2px;width:9px;height:9px;border-bottom:2px solid #4f46e5;border-left:2px solid #4f46e5"></span>' +
-          '<span style="position:absolute;right:2px;bottom:2px;width:9px;height:9px;border-bottom:2px solid #4f46e5;border-right:2px solid #4f46e5"></span>'),
-        // 3. Imagem de fundo: fundo em degrade em vez do cinza padrao
-        fone('', 'linear-gradient(160deg,#25f4ee,#4f46e5 55%,#fe2c55)'),
-        // 4. Numeracao de serie: selo "Parte 1" no canto
-        fone('<div style="position:absolute;left:4px;top:4px;background:rgba(8,9,10,.72);border-radius:999px;padding:2px 6px;white-space:nowrap;font:700 7px Inter,sans-serif;color:#fff">' + t('landing.recursosParte1') + '</div>'),
-        // 5. Configuracao por canal: 3 canais em lista, cada um com engrenagem
-        '<div style="display:flex;flex-direction:column;gap:7px;width:150px">' +
-          [['#ff0000', t('landing.recursosCanal', { letra: 'A' })], ['#4f46e5', t('landing.recursosCanal', { letra: 'B' })], ['#111', t('landing.recursosCanal', { letra: 'C' })]].map(function (c) {
-            return '<div style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e7e7ea;border-radius:8px;padding:5px 8px">' +
-              '<span style="width:14px;height:14px;border-radius:50%;background:' + c[0] + ';flex:none"></span>' +
-              '<span style="font:600 9px Inter,sans-serif;color:#08090a;flex:1">' + c[1] + '</span>' +
-              '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6b7075" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>' +
-            '</div>';
-          }).join('') +
-        '</div>',
-        // 6. Descricao automatica: balao de texto com linhas + estrela de IA
-        '<div style="position:relative;background:#fff;border:1px solid #e7e7ea;border-radius:10px;padding:10px 12px;width:160px">' +
-          '<div style="height:6px;border-radius:3px;background:#e7e7ea;margin-bottom:5px;width:92%"></div>' +
-          '<div style="height:6px;border-radius:3px;background:#e7e7ea;margin-bottom:5px;width:100%"></div>' +
-          '<div style="height:6px;border-radius:3px;background:#e7e7ea;width:65%"></div>' +
-          '<span style="position:absolute;top:-7px;right:-7px;width:22px;height:22px;border-radius:50%;background:#4f46e5;display:flex;align-items:center;justify-content:center">' +
-            '<svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l2 7 7 2-7 2-2 7-2-7-7-2 7-2z"/></svg>' +
-          '</span>' +
-        '</div>',
-        // 7. Um canal, varias contas: youtube conectando a 2 contas de tiktok
-        '<div style="display:flex;align-items:center;gap:14px">' +
-          '<div style="width:34px;height:34px;border-radius:50%;background:#fff;border:1px solid #e7e7ea;display:flex;align-items:center;justify-content:center;flex:none">' +
-            '<svg width="16" height="12" viewBox="0 0 28 20"><path fill="#FF0000" d="M27.4 3.1a3.5 3.5 0 0 0-2.5-2.5C22.7 0 14 0 14 0S5.3 0 3.1.6A3.5 3.5 0 0 0 .6 3.1 36.5 36.5 0 0 0 0 10a36.5 36.5 0 0 0 .6 6.9 3.5 3.5 0 0 0 2.5 2.5C5.3 20 14 20 14 20s8.7 0 10.9-.6a3.5 3.5 0 0 0 2.5-2.5A36.5 36.5 0 0 0 28 10a36.5 36.5 0 0 0-.6-6.9Z"/><path fill="#fff" d="M11.2 14.3 18.5 10l-7.3-4.3v8.6Z"/></svg>' +
-          '</div>' +
-          '<svg width="26" height="30" viewBox="0 0 26 30"><path d="M1 15h16M17 15l-9-9M17 15l-9 9M1 4h20M1 26h20" fill="none" stroke="#c7c9ce" stroke-width="1.6" stroke-linecap="round"/></svg>' +
-          '<div style="display:flex;flex-direction:column;gap:8px">' +
-            '<div style="width:26px;height:26px;border-radius:50%;background:#08090a;display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24"><path fill="#25F4EE" d="M12.53.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" transform="translate(-0.9,-0.6)"/><path fill="#FE2C55" d="M12.53.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" transform="translate(0.9,0.6)"/><path fill="#000" d="M12.53.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></div>' +
-            '<div style="width:26px;height:26px;border-radius:50%;background:#08090a;display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24"><path fill="#fff" fill-rule="evenodd" d="M5.5 4.5h13A4.5 4.5 0 0 1 23 9v6a4.5 4.5 0 0 1-4.5 4.5h-13A4.5 4.5 0 0 1 1 15V9a4.5 4.5 0 0 1 4.5-4.5Zm0 2A2.5 2.5 0 0 0 3 9v6a2.5 2.5 0 0 0 2.5 2.5h13A2.5 2.5 0 0 0 21 15V9a2.5 2.5 0 0 0-2.5-2.5h-13Z"/><rect x="9.5" y="1.5" width="5" height="21" rx="2.5" fill="#fff"/></svg></div>' +
-          '</div>' +
-        '</div>',
-        // 8. Horarios que voce escolhe: 4 horarios fixos em chips
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">' +
-          ['08:00','12:00','16:00','20:00'].map(function (h) {
-            return '<span style="display:flex;align-items:center;gap:4px;background:#fff;border:1px solid #e7e7ea;border-radius:999px;padding:4px 9px;font:700 10px Inter,sans-serif;color:#08090a">' +
-              '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>' + h +
-            '</span>';
-          }).join('') +
-        '</div>',
-        // 9. Copia no Google Drive: clipe indo pra uma pasta com check
-        '<div style="display:flex;align-items:center;gap:12px">' +
-          fone('') +
-          '<svg width="20" height="16" viewBox="0 0 24 16"><path d="M1 8h20M15 1l7 7-7 7" fill="none" stroke="#c7c9ce" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-          '<div style="position:relative">' +
-            '<svg width="38" height="30" viewBox="0 0 24 20"><path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h5l2 2.5h10A1.5 1.5 0 0 1 22 6v10.5A1.5 1.5 0 0 1 20.5 18h-17A1.5 1.5 0 0 1 2 16.5Z" fill="#eef0ff" stroke="#4f46e5" stroke-width="1.3"/></svg>' +
-            '<span style="position:absolute;right:-5px;bottom:-5px;width:16px;height:16px;border-radius:50%;background:#15803d;display:flex;align-items:center;justify-content:center">' +
-              '<svg width="9" height="9" viewBox="0 0 16 16"><path d="M3 8.5 6.3 12 13 4" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-            '</span>' +
-          '</div>' +
-        '</div>',
-      ];
-    %>
-    <div class="recursos-carrossel-envolt">
-      <button type="button" class="recursos-seta recursos-seta-esq" data-direcao="-1" aria-label="<%= t('landing.recursosAnterior') %>">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <div class="recursos-carrossel" id="recursos-carrossel" tabindex="0" role="region" aria-label="<%= t('landing.recursosOlho') %>">
-        <% t('landing.recursos').forEach(function (r, i) { %>
-          <article class="recurso-card">
-            <div class="recurso-print">
-              <div class="recurso-print-chrome">
-                <span></span><span></span><span></span>
-              </div>
-              <div class="recurso-print-conteudo"><%- recursosPrints[i] %></div>
-            </div>
-            <span class="recurso-indice"><%= String(i + 1).padStart(2, '0') %></span>
-            <h3><%= r.h %></h3>
-            <p><%= r.p %></p>
-          </article>
-        <% }); %>
-      </div>
-      <button type="button" class="recursos-seta recursos-seta-dir" data-direcao="1" aria-label="<%= t('landing.recursosProximo') %>">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
+    <% var rec = t('landing.recursos'); %>
+    <div class="lp-bento">
+      <%# 1. Lives: linha do tempo da transmissão com os cortes marcados. %>
+      <article class="lp-cartao lp-c-largo" data-revelar>
+        <div class="lp-cartao-arte lp-arte-live" aria-hidden="true">
+          <div class="lp-live-topo">
+            <span class="lp-live-selo"><i></i><%= t('landing.recursosAoVivo') %></span>
+            <span class="lp-live-plat"><%- icone('brand-twitch') %><%- icone('brand-kick') %></span>
+          </div>
+          <div class="lp-live-trilha">
+            <span class="lp-live-onda"></span>
+            <span class="lp-live-marca" style="--x:18%"></span>
+            <span class="lp-live-marca" style="--x:41%"></span>
+            <span class="lp-live-marca" style="--x:63%"></span>
+            <span class="lp-live-agora"></span>
+          </div>
+          <span class="lp-live-botao"><%- icone('scissors') %><%= t('landing.recursosClipar') %></span>
+        </div>
+        <h3><%= rec[0].h %></h3>
+        <p><%= rec[0].p %></p>
+      </article>
+
+      <%# 2. Redes: grade de ícones, cada um com a cor da rede. %>
+      <article class="lp-cartao lp-c-largo" data-revelar style="--atraso:80ms">
+        <div class="lp-cartao-arte lp-arte-redes" aria-hidden="true">
+          <% redes.forEach(function (r, i) { %>
+            <span class="lp-arte-rede" style="--fundo:<%= r.fundo %>;--i:<%= i %>"><%- icone(r.icone) %></span>
+          <% }); %>
+        </div>
+        <h3><%= rec[1].h %></h3>
+        <p><%= rec[1].p %></p>
+      </article>
+
+      <%# 3. IA: barras de nota de cada trecho. %>
+      <article class="lp-cartao" data-revelar>
+        <div class="lp-cartao-arte lp-arte-notas" aria-hidden="true">
+          <% [[38, 52], [94, 0], [61, 0], [88, 0], [45, 0]].forEach(function (n, i) { %>
+            <span class="lp-nota-barra <%= n[0] > 80 ? 'alta' : '' %>" style="--h:<%= n[0] %>%;--i:<%= i %>"><% if (n[0] > 80) { %><b><%= n[0] %></b><% } %></span>
+          <% }); %>
+        </div>
+        <h3><%= rec[2].h %></h3>
+        <p><%= rec[2].p %></p>
+      </article>
+
+      <%# 4. Estilo: três legendas em estilos diferentes. %>
+      <article class="lp-cartao" data-revelar style="--atraso:80ms">
+        <div class="lp-cartao-arte lp-arte-estilos" aria-hidden="true">
+          <span class="lp-est lp-est-1"><%= t('landing.recursosTituloExemplo') %></span>
+          <span class="lp-est lp-est-2"><%= t('landing.recursosLegendaExemplo') %></span>
+          <span class="lp-est lp-est-3"><%= t('landing.recursosLegendaExemplo') %></span>
+        </div>
+        <h3><%= rec[3].h %></h3>
+        <p><%= rec[3].p %></p>
+      </article>
+
+      <%# 5. Webcam: o corte de live montado (câmera em cima, jogo embaixo). %>
+      <article class="lp-cartao" data-revelar style="--atraso:160ms">
+        <div class="lp-cartao-arte lp-arte-camera" aria-hidden="true">
+          <span class="lp-fone">
+            <span class="lp-fone-cam"><img src="/img/produto/corte-exemplo.jpg" alt="" width="506" height="900" loading="lazy"></span>
+            <span class="lp-fone-jogo"></span>
+          </span>
+          <span class="lp-camera-seta"><%- icone('sparkles') %></span>
+        </div>
+        <h3><%= rec[4].h %></h3>
+        <p><%= rec[4].p %></p>
+      </article>
+
+      <%# 6. Feed: cortes empilhados como no celular. %>
+      <article class="lp-cartao" data-revelar>
+        <div class="lp-cartao-arte lp-arte-feed" aria-hidden="true">
+          <span class="lp-feed-cartao lp-feed-tras"></span>
+          <span class="lp-feed-cartao lp-feed-meio"></span>
+          <span class="lp-feed-cartao lp-feed-frente">
+            <img src="/img/produto/corte-exemplo.jpg" alt="" width="506" height="900" loading="lazy">
+            <span class="lp-feed-acoes"><%- icone('heart') %><%- icone('rocket') %></span>
+          </span>
+        </div>
+        <h3><%= rec[5].h %></h3>
+        <p><%= rec[5].p %></p>
+      </article>
+
+      <%# 7. Dublagem: a trilha de áudio escolhida. %>
+      <article class="lp-cartao" data-revelar style="--atraso:80ms">
+        <div class="lp-cartao-arte lp-arte-audio" aria-hidden="true">
+          <span class="lp-audio-onda"><% for (var k = 0; k < 22; k++) { %><i style="--k:<%= k %>"></i><% } %></span>
+          <span class="lp-audio-chip"><%- icone('language') %><%= t('landing.recursosDublagem') %></span>
+        </div>
+        <h3><%= rec[6].h %></h3>
+        <p><%= rec[6].p %></p>
+      </article>
+
+      <%# 8. Flora: uma resposta da assistente. %>
+      <article class="lp-cartao" data-revelar style="--atraso:160ms">
+        <div class="lp-cartao-arte lp-arte-flora" aria-hidden="true">
+          <span class="lp-flora-avatar"><%- icone('sparkles') %></span>
+          <span class="lp-flora-balao"><%= t('landing.recursosFlora') %></span>
+        </div>
+        <h3><%= rec[7].h %></h3>
+        <p><%= rec[7].p %></p>
+      </article>
     </div>
-    <div class="recursos-pontos" id="recursos-pontos" aria-hidden="true">
-      <% t('landing.recursos').forEach(function (_, i) { %>
-        <span class="recursos-ponto" data-indice="<%= i %>"></span>
-      <% }); %>
+
+    <div class="lp-extras" data-revelar>
+      <p class="lp-extras-titulo"><%= t('landing.extrasTitulo') %></p>
+      <ul>
+        <% t('landing.extras').forEach(function (e) { %>
+          <li><%- icone('check') %><%= e %></li>
+        <% }); %>
+      </ul>
     </div>
   </div>
 </section>
 
-<section class="secao secao-mist" id="planos">
+<!-- ============================================================ PARA QUEM -->
+<section class="secao lp-secao lp-nevoa">
   <div class="wrap">
-    <div class="narrow" style="margin-bottom: 3rem">
+    <div class="lp-cabeca lp-centro" data-revelar>
+      <p class="eyebrow"><%= t('landing.paraQuemOlho') %></p>
+      <h2><%= t('landing.paraQuemTitulo') %></h2>
+    </div>
+    <ul class="lp-perfis">
+      <% t('landing.paraQuem').forEach(function (p, i) { %>
+        <li class="lp-perfil" data-revelar style="--atraso:<%= i * 70 %>ms">
+          <span class="lp-perfil-ico"><%- icone(['brand-youtube', 'microphone', 'broadcast', 'briefcase'][i]) %></span>
+          <h3><%= p.h %></h3>
+          <p><%= p.p %></p>
+        </li>
+      <% }); %>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ ANTES E DEPOIS -->
+<section class="secao lp-secao">
+  <div class="wrap">
+    <div class="lp-cabeca lp-centro" data-revelar>
+      <p class="eyebrow"><%= t('landing.antesOlho') %></p>
+      <h2><%= t('landing.antesTitulo') %></h2>
+    </div>
+    <div class="lp-comparar" data-revelar>
+      <div class="lp-comp lp-comp-sem">
+        <p class="lp-comp-titulo"><%= t('landing.antesSem') %></p>
+        <ul>
+          <% t('landing.antes').forEach(function (a) { %><li><%- icone('x') %><%= a %></li><% }); %>
+        </ul>
+      </div>
+      <div class="lp-comp lp-comp-com">
+        <p class="lp-comp-titulo"><%- include('../partials/brand-mark') %> <%= t('landing.antesCom') %></p>
+        <ul>
+          <% t('landing.depois').forEach(function (d) { %><li><%- icone('check') %><%= d %></li><% }); %>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<%# Números de uso (escritos no dicionário, não contados do banco), mantidos da
+    versão anterior da página. %>
+<section class="secao lp-escuro lp-numeros">
+  <div class="lp-grade-fundo" aria-hidden="true"></div>
+  <div class="wrap">
+    <div class="lp-cabeca lp-centro" data-revelar>
+      <p class="eyebrow"><%= t('landing.numerosOlho') %></p>
+      <h2><%= t('landing.numerosTitulo') %></h2>
+      <p class="lp-sub"><%= t('landing.numerosTexto') %></p>
+    </div>
+    <div class="lp-numeros-grade" data-revelar>
+      <div><b><%= t('landing.numerosVideosValor') %></b><span><%= t('landing.numerosVideosRotulo') %></span></div>
+      <div><b><%= t('landing.numerosContasValor') %></b><span><%= t('landing.numerosContasRotulo') %></span></div>
+      <div><b><%= t('landing.numerosViewsValor') %></b><span><%= t('landing.numerosViewsRotulo') %></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ PLANOS -->
+<section class="secao lp-secao lp-nevoa" id="planos">
+  <div class="wrap">
+    <div class="lp-cabeca lp-centro" data-revelar>
       <p class="eyebrow"><%= t('landing.planosOlho') %></p>
       <h2><%= t('landing.planosTitulo') %></h2>
-      <p style="color: var(--muted)"><%= mostrarTunel ? t('landing.planosTexto') : t('landing.planosTextoSemTunel') %></p>
+      <p class="lp-sub"><%= mostrarTunel ? t('landing.planosTexto') : t('landing.planosTextoSemTunel') %></p>
+      <p class="lp-regra"><%- icone('bolt') %><%= t('landing.regraCreditos') %></p>
     </div>
 
     <div class="planos">
       <% plans.forEach(function (plan, i) { %>
-        <div class="plano <%= i === 1 ? 'destaque' : '' %>">
+        <div class="plano <%= i === 1 ? 'destaque' : '' %>" data-revelar style="--atraso:<%= i * 80 %>ms">
           <% if (i === 1) { %><div class="marcador"><%= t('landing.maisEscolhido') %></div><% } %>
           <h3><%= plan.name %></h3>
           <%#
@@ -366,16 +443,16 @@
           %>
           <% if (plan.first_month_price_cents && plan.first_month_price_cents < plan.price_cents) { %>
             <div class="preco">
-              R$ <%= (plan.first_month_price_cents / 100).toFixed(2).replace('.', ',') %><span><%= t('landing.noPrimeiroMes') %></span>
+              R$ <%= reais(plan.first_month_price_cents) %><span><%= t('landing.noPrimeiroMes') %></span>
             </div>
             <p class="preco-depois">
-              <%= t('landing.depoisPorMes', { valor: (plan.price_cents / 100).toFixed(2).replace('.', ',') }) %>
+              <%= t('landing.depoisPorMes', { valor: reais(plan.price_cents) }) %>
               ·
               <strong><%= t('landing.descontoPrimeiroMes', { n: Math.round((1 - plan.first_month_price_cents / plan.price_cents) * 100) }) %></strong>
             </p>
           <% } else { %>
             <div class="preco">
-              R$ <%= (plan.price_cents / 100).toFixed(2).replace('.', ',') %><span><%= t('landing.porMes') %></span>
+              R$ <%= reais(plan.price_cents) %><span><%= t('landing.porMes') %></span>
             </div>
           <% } %>
           <%# O plano viaja junto: quem clica aqui ja escolheu, e depois de
@@ -385,60 +462,98 @@
              href="/register?plano=<%= encodeURIComponent(plan.key) %>"><%= t('landing.comecar') %></a>
           <ul>
             <li>
-              <span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /><path d="M12 7v5l3 3" /></svg></span>
+              <span class="icone"><%- icone('clock') %></span>
               <span><strong><%= t('landing.minutosPorSemana', { n: plan.weekly_minutes_normal }) %></strong> <%= t('landing.minutosPorSemanaResto') %></span>
             </li>
 <% if (mostrarTunel) { %>
             <li class="bonus">
-              <span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2l0 -4" /><path d="M17 17l0 .01" /><path d="M13 17l0 .01" /><path d="M15 13l0 -2" /><path d="M11.75 8.75a4 4 0 0 1 6.5 0" /><path d="M8.5 6.5a8 8 0 0 1 13 0" /></svg></span>
+              <span class="icone"><%- icone('bolt') %></span>
               <span><strong><%= t('landing.minutosBonus', { n: plan.weekly_minutes_bonus }) %></strong> <%= t('landing.minutosBonusResto') %></span>
             </li>
             <% } %>
             <li>
-              <span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8a4 4 0 0 1 4 -4h12a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-12a4 4 0 0 1 -4 -4v-8" /><path d="M10 9l5 3l-5 3l0 -6" /></svg></span>
+              <span class="icone"><%- icone('brand-youtube') %></span>
               <span><%= plan.max_youtube_channels
                     ? t(plan.max_youtube_channels > 1 ? 'landing.canaisYoutube' : 'landing.canalYoutube', { n: plan.max_youtube_channels })
                     : t('landing.canaisIlimitados') %></span>
             </li>
             <li>
-              <span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 7.917v4.034a9.948 9.948 0 0 1 -5 -1.951v4.5a6.5 6.5 0 1 1 -8 -6.326v4.326a2.5 2.5 0 1 0 4 2v-11.5h4.083a6.005 6.005 0 0 0 4.917 4.917" /></svg></span>
+              <span class="icone"><%- icone('brand-tiktok') %></span>
               <span><%= plan.max_tiktok_accounts
                     ? t(plan.max_tiktok_accounts > 1 ? 'landing.contasTiktok' : 'landing.contaTiktok', { n: plan.max_tiktok_accounts })
                     : t('landing.contasIlimitadas') %></span>
             </li>
-            <% if (plan.extra_channel_price_cents) { %>
+            <% if (plan.max_contas_por_rede) { %>
             <li>
-              <span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg></span>
-              <span><%= t('landing.conexoesExtras', {
-                    canal: (plan.extra_channel_price_cents / 100).toFixed(2).replace('.', ','),
-                    conta: (plan.extra_tiktok_price_cents / 100).toFixed(2).replace('.', ',')
-                  }) %></span>
+              <span class="icone"><%- icone('stack-2') %></span>
+              <span><%= t(plan.max_contas_por_rede > 1 ? 'landing.contasPorRede' : 'landing.contaPorRede', { n: plan.max_contas_por_rede }) %></span>
+            </li>
+            <% } %>
+            <% if (plan.max_canais_de_live) { %>
+            <li>
+              <span class="icone"><%- icone('broadcast') %></span>
+              <span><%= t(plan.max_canais_de_live > 1 ? 'landing.canaisLive' : 'landing.canalLive', { n: plan.max_canais_de_live }) %></span>
             </li>
             <% } %>
             <li>
-              <span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 21l15 -15l-3 -3l-15 15l3 3" /><path d="M15 6l3 3" /><path d="M9 3a2 2 0 0 0 2 2a2 2 0 0 0 -2 2a2 2 0 0 0 -2 -2a2 2 0 0 0 2 -2" /><path d="M19 13a2 2 0 0 0 2 2a2 2 0 0 0 -2 2a2 2 0 0 0 -2 -2a2 2 0 0 0 2 -2" /></svg></span>
+              <span class="icone"><%- icone('wand') %></span>
               <span><%= t('landing.incluiCorte') %></span>
             </li>
             <li>
-              <span class="icone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4.6 4.4 0 0 1 0 -9a5 4.5 0 0 1 11 2h1a3.5 3.5 0 0 1 0 7h-1" /><path d="M9 15l3 -3l3 3" /><path d="M12 12l0 9" /></svg></span>
+              <span class="icone"><%- icone('layout-board-split') %></span>
               <span><%= t('landing.incluiDrive') %></span>
             </li>
+            <% if (plan.extra_rede_price_cents) { %>
+            <li class="extra">
+              <span class="icone"><%- icone('stack-2') %></span>
+              <span><%= t('landing.contaExtraRede', { valor: reais(plan.extra_rede_price_cents) }) %></span>
+            </li>
+            <% } %>
+            <% if (plan.extra_channel_price_cents) { %>
+            <li class="extra">
+              <span class="icone"><%- icone('stack-2') %></span>
+              <span><%= t('landing.conexoesExtras', { canal: reais(plan.extra_channel_price_cents), conta: reais(plan.extra_tiktok_price_cents) }) %></span>
+            </li>
+            <% } %>
           </ul>
         </div>
       <% }); %>
     </div>
 
-    <p style="text-align:center; color:var(--muted); font-size:0.9375rem; margin-top:2rem">
-      <%= t('landing.notaPlanos') %>
-    </p>
+    <p class="lp-nota-planos"><%= t('landing.notaPlanos') %></p>
   </div>
 </section>
 
-<section class="secao" id="perguntas">
+<!-- ============================================================ CONFIANÇA -->
+<section class="secao lp-secao lp-confianca">
   <div class="wrap">
-    <div class="narrow" style="margin-bottom: 2.5rem">
+    <div class="lp-cabeca lp-centro" data-revelar>
+      <p class="eyebrow"><%= t('landing.confiancaOlho') %></p>
+      <h2><%= t('landing.confiancaTitulo') %></h2>
+    </div>
+    <ul class="lp-selos">
+      <% t('landing.confianca').forEach(function (c, i) { %>
+        <li data-revelar style="--atraso:<%= i * 70 %>ms">
+          <span class="lp-selo-ico"><%- icone(['building-bank', 'credit-card', 'lock', 'refresh'][i]) %></span>
+          <h3><%= c.h %></h3>
+          <p><%= c.p %></p>
+        </li>
+      <% }); %>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ PERGUNTAS -->
+<section class="secao lp-secao lp-nevoa" id="perguntas">
+  <div class="wrap lp-faq-grade">
+    <div class="lp-faq-cabeca">
       <p class="eyebrow"><%= t('landing.faqOlho') %></p>
       <h2><%= t('landing.faqTitulo') %></h2>
+      <p class="faq-rodape">
+        <%= t('landing.faqRodapeA') %>
+        <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a> —
+        <%= t('landing.faqRodapeB') %> <%= contact.responseTime %>.
+      </p>
     </div>
 
     <%#
@@ -458,27 +573,22 @@
         </details>
       <% }); %>
     </div>
-
-    <p class="faq-rodape">
-      <%= t('landing.faqRodapeA') %>
-      <a href="mailto:<%= contact.supportEmail %>"><%= contact.supportEmail %></a> —
-      <%= t('landing.faqRodapeB') %> <%= contact.responseTime %>.
-    </p>
   </div>
 </section>
 
-<section class="secao secao-final">
-  <div class="wrap">
-    <div class="final-caixa">
-      <p class="eyebrow" style="color:rgba(255,255,255,.6)"><%= t('landing.finalOlho') %></p>
-      <h2><%= t('landing.finalTitulo') %></h2>
-      <p><%= t('landing.finalTexto') %></p>
-      <div class="cta-linha" style="justify-content:center">
-        <a class="btn btn-invertido btn-lg" href="/register"><%= t('nav.criarConta') %></a>
-        <a class="btn btn-fantasma-claro btn-lg" href="/contato"><%= t('landing.falarComAGente') %></a>
-      </div>
-      <p class="final-nota"><%= t('landing.semFidelidade') %></p>
+<!-- ============================================================ FINAL -->
+<section class="secao lp-escuro lp-final">
+  <div class="lp-grade-fundo" aria-hidden="true"></div>
+  <div class="lp-brilho lp-brilho-c" aria-hidden="true"></div>
+  <div class="wrap lp-centro" data-revelar>
+    <p class="eyebrow"><%= t('landing.finalOlho') %></p>
+    <h2><%= t('landing.finalTitulo') %></h2>
+    <p class="lp-sub"><%= t('landing.finalTexto') %></p>
+    <div class="lp-cta lp-cta-centro">
+      <a class="btn lp-btn-luz btn-lg" href="/register"><%= t('landing.ctaPrincipal') %> <%- icone('arrow-right') %></a>
+      <a class="btn lp-btn-vidro btn-lg" href="/contato"><%= t('landing.falarComAGente') %></a>
     </div>
+    <p class="lp-final-nota"><%= t('landing.semFidelidade') %></p>
   </div>
 </section>
 

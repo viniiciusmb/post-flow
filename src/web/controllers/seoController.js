@@ -91,53 +91,67 @@ async function llms(req, res) {
     // produto nao esta entregando faria uma IA responder pro cliente uma coisa
     // que a landing nao diz.
     const bonus = mostrarTunel ? ` (+${p.weekly_minutes_bonus} min usando a internet do próprio cliente)` : '';
-    return `- ${p.name}: ${preco}/mês. ${p.weekly_minutes_normal} min de vídeo por semana${bonus}. ${canais} do YouTube, ${contas} do TikTok.`;
+    const redes = p.max_contas_por_rede ? ` ${p.max_contas_por_rede} conta(s) em cada uma das outras 7 redes.` : '';
+    const lives = p.max_canais_de_live ? ` ${p.max_canais_de_live} canal(is) de live.` : '';
+    const promo =
+      p.first_month_price_cents && p.first_month_price_cents < p.price_cents
+        ? ` Primeiro mês por ${(p.first_month_price_cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`
+        : '';
+    return `- ${p.name}: ${preco}/mês.${promo} ${p.weekly_minutes_normal} min por semana${bonus}. ${canais} do YouTube, ${contas} do TikTok.${redes}${lives}`;
   });
 
   res.type('text/plain').send(
     `# Post Flow
 
-> O Post Flow acompanha o canal do YouTube de um criador, corta os melhores trechos de cada vídeo novo com inteligência artificial, gera vídeos verticais com legenda queimada e publica no TikTok do próprio criador. O criador configura uma vez e não precisa mais abrir editor.
+> O Post Flow acompanha o canal do YouTube de um criador e as lives dele na Twitch e na Kick, escolhe os melhores momentos com inteligência artificial, gera cortes verticais com legenda e publica no TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest e Bluesky, nos horários que o criador escolheu. Ele configura uma vez e não precisa mais abrir editor.
 
 ## O que é
 
 Post Flow é um SaaS brasileiro de reaproveitamento de vídeo (video repurposing).
 Ele resolve um problema específico: quem grava vídeo longo (podcast, live, aula, entrevista) precisa de cortes verticais para redes sociais, e editar isso à mão consome horas por vídeo.
 
-## Como funciona, em quatro etapas
+## Como funciona
 
-1. O criador cola o endereço do canal do YouTube dele. O sistema passa a detectar sozinho quando um vídeo novo é publicado.
-2. O áudio é transcrito (Whisper) e uma IA (Claude) lê a transcrição inteira procurando os trechos que funcionam sozinhos: gancho, desenvolvimento e fecho.
-3. Cada trecho vira um vídeo vertical 9:16 com legenda queimada, título opcional e capa. O corte é feito com ffmpeg.
-4. Os cortes prontos entram numa fila e são publicados na conta de TikTok do criador, nos horários que ele escolheu.
+1. O criador conecta as fontes: o canal do YouTube (o sistema detecta sozinho cada vídeo novo), canais de live da Twitch ou da Kick, um arquivo enviado do computador ou o link de um vídeo.
+2. O áudio é transcrito e uma IA lê a transcrição inteira, dá nota para cada trecho (gancho, emoção, desfecho) e escolhe os melhores. Nas lives isso acontece enquanto a transmissão ainda está no ar.
+3. Cada trecho vira um vídeo vertical 9:16 com legenda, título opcional e capa. Nos cortes de live, a IA monta o formato com a webcam em destaque.
+4. Os cortes prontos entram na fila de cada conta conectada e são publicados nos horários escolhidos. Também ficam num Feed de cortes, de onde o criador manda para qualquer rede com um toque.
 
-Também aceita vídeo enviado do computador e link de vídeo avulso do YouTube.
+## Redes onde publica
+
+TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest e Bluesky, conectados pelo login oficial de cada rede. No Instagram e no Facebook o corte precisa ter até 90 segundos.
 
 ## Para quem é
 
+- Criadores do YouTube que querem cada vídeo novo virando cortes nas outras redes.
 - Podcasters que gravam episódios longos e querem cortes diários.
-- Criadores de live e de aula que já têm acervo de vídeo longo parado.
-- Agências e editores que cuidam de vários canais ao mesmo tempo.
+- Streamers da Twitch e da Kick que querem os melhores momentos publicados enquanto a live acontece.
+- Agências e gestores que cuidam de vários canais e várias contas ao mesmo tempo.
 
 ## O que o criador controla
 
-- Estilo da legenda e do título, escolhidos numa galeria visual.
+- Estilo da legenda (27 modelos) e do título (12 modelos), escolhidos numa galeria visual e salvos como modelo.
 - Enquadramento manual: arrastar o vídeo dentro da moldura vertical.
 - Imagem de fundo própria (modelo com a marca do criador).
 - Numeração "Parte 1, Parte 2" e em que canto da tela ela aparece.
 - Quantidade de cortes, duração e qualidade, por canal ou para todos.
-- Horários de publicação, ou distribuição automática.
+- Horários de publicação de cada conta, ou distribuição automática, com a mesma configuração aplicada a todas.
+- Idioma do áudio em vídeos com dublagem: o corte sai no idioma escolhido.
 - Cópia automática de cada corte pronto numa pasta do Google Drive.
 
 ## Planos e preço
 
 ${linhasDePlano.length ? linhasDePlano.join('\n') : `- Consulte os planos em ${BASE}/#planos`}
 
+A cota de minutos renova toda semana e vale para vídeos e lives: 1 minuto de vídeo processado = 1 crédito; 3 minutos de live clipada = 1 crédito. Dá para contratar conta extra em qualquer rede por mês, em qualquer plano.
+
 Quem passa da cota pode comprar minutos avulsos ou cadastrar cartão para cobrança automática por vídeo processado. A cobrança é por minuto do vídeo ORIGINAL, não por quantidade de cortes: um vídeo de 30 minutos custa o mesmo se render 3 ou 12 cortes.
 
 ## Perguntas frequentes
 
-**O Post Flow publica sozinho no TikTok?** Sim. O criador escolhe entre receber o corte como rascunho no aplicativo do TikTok ou publicar direto no perfil. Na publicação direta, ele define privacidade e interações antes de cada corte sair.
+**O Post Flow publica sozinho?** Sim, nas 8 redes, cada conta com a própria fila e horários. No TikTok o criador também pode receber o corte como rascunho no aplicativo.
+
+**Dá para cortar lives?** Sim, da Twitch e da Kick. Os cortes ficam prontos enquanto a live ainda está no ar, e o botão "Clipar este momento" corta os últimos minutos na hora.
 
 **Precisa deixar o computador ligado?** Não. O processamento roda inteiro nos servidores do Post Flow.${
       mostrarTunel
@@ -149,7 +163,7 @@ Quem passa da cota pode comprar minutos avulsos ou cadastrar cartão para cobran
 
 **O sistema coloca marca d'água?** Não. Nenhum logotipo do Post Flow é adicionado ao vídeo. As únicas sobreposições são a legenda e o título gerados a partir do áudio do próprio criador, e dá pra desligar as duas.
 
-**Em que idioma funciona?** Interface e suporte em português do Brasil. A transcrição funciona em vários idiomas.
+**Em que idioma funciona?** Painel em português, inglês e espanhol. A transcrição funciona em vários idiomas.
 
 ## Empresa
 

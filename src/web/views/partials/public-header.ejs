@@ -53,13 +53,17 @@
   <meta name="google-site-verification" content="<%= googleSiteVerification %>">
   <% } %>
 
-  <%# Páginas públicas são só no tema claro - ver o comentário no topo de public.css. %>
-  <meta name="theme-color" content="#ffffff">
+  <%# Páginas públicas são só no tema claro - ver o comentário no topo de
+      public.css. A landing abre num topo escuro e pede a cor dele aqui, senão a
+      barra do navegador no celular fica branca em cima de uma faixa preta. %>
+  <meta name="theme-color" content="<%= locals.themeColor || '#ffffff' %>">
   <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/img/marca/post-flow-logo-256.png">
   <link rel="preload" href="/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/inter-600.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/css/public.css">
+  <%# CSS só da landing (o resto das páginas públicas não precisa dele). %>
+  <% if (locals.cssExtra) { %><link rel="stylesheet" href="<%= cssExtra %>"><% } %>
 
   <%#
     Dados estruturados. É o que permite a uma IA (e ao Google) responder "o que
@@ -109,7 +113,7 @@
 
   <%- locals.structuredData || '' %>
 </head>
-<body>
+<body class="<%= locals.bodyClass || '' %>">
   <header class="topbar" id="topbar">
     <div class="wrap">
       <a class="brand" href="/" aria-label="<%= t('nav.inicio') %>">

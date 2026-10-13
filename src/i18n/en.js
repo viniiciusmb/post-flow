@@ -2,7 +2,6 @@
 
 // English. Keys mirror pt.js; a missing one falls back to Portuguese.
 
-const { CONTACT } = require('../config/constants');
 const legal = require('./legal-en');
 
 module.exports = {
@@ -32,159 +31,216 @@ module.exports = {
   },
 
   landing: {
-    tituloPagina: 'Automatic YouTube-to-TikTok clips',
+    tituloPagina: 'AI clips from videos and live streams, posted to 8 networks',
     metaDescricao:
-      'Post Flow watches your YouTube channel, cuts the best moments with AI and publishes them to your TikTok automatically.',
+      'Post Flow watches your YouTube channel and Twitch and Kick live streams, picks the best moments with AI, cuts them vertically with captions and posts them to TikTok, Instagram, YouTube Shorts and 5 more networks, on its own.',
 
-    selo: '100% automatic',
-    h1a: 'New video on the monitored channel.',
-    h1b: 'The rest happens',
-    h1c: 'on its own',
+    seloNovo: 'New',
+    seloTexto: 'Live stream clips and posting to 8 social networks',
+    h1a: 'From long video to a clip posted',
+    h1Prep: 'on',
+    h1Redes: ['TikTok', 'Instagram', 'YouTube Shorts', 'Facebook', 'Threads', 'LinkedIn', 'Pinterest', 'Bluesky'],
+    h1Leitor: 'From long video to a clip posted on TikTok, Instagram, YouTube Shorts, Facebook, Threads, LinkedIn, Pinterest and Bluesky.',
     lead:
-      'You publish on YouTube and Post Flow notices right away. It downloads the video, the AI reads the whole transcript and picks the best moments, renders them vertically with burned-in captions, and publishes to your TikTok.',
-    leadForte: 'No editor to open, no TikTok to open.',
+      'Post Flow watches your YouTube channel and Twitch and Kick live streams, finds the best moments with AI, cuts them vertically with captions and posts them to your networks at the times you choose.',
+    leadForte: 'No editor. No uploading videos one by one.',
+    ctaPrincipal: 'Get started',
     verComoFunciona: 'See how it works',
-    notaHero: 'Built for people who already make their own content and want to stop cutting clips by hand.',
-    provaOlho: 'Automatic growth',
-    provaTitulo: "See the numbers grow every day, without you doing a thing",
-    provaTexto:
-      'Simulation of an account using Post Flow since its very first clip. Followers, videos and views climb on their own, straight from the automatic work.',
-    provaNome: 'Auto Clips',
-    provaVivo: 'growing right now',
-    provaSeguidores: 'followers',
-    provaVideos: 'videos',
-    provaViews: 'views',
-    altComputador:
-      'Post Flow\'s queue of ready clips on a computer, with a preview of each finished clip',
-    altCelular: 'The same queue of ready clips open on a phone',
-    tutorialVideoAlt:
-      'Tutorial video with real platform screenshots: step 1, add the YouTube channel; step 2, configure the clip style; step 3, connect the TikTok account.',
-    telasOlho: 'Where you use it',
-    telasTitulo: 'Works fully on computer and phone',
-    telasTexto:
-      'The panel works fully on both — check your clips from your laptop at the office or from your phone on the go.',
+    garantias: ['No lock-in', 'Card or PIX', 'No watermark', 'Brazilian company'],
 
-    whatsOlho: 'Community',
-    whatsTitulo: 'There\'s a WhatsApp group just for Post Flow users',
-    whatsTexto:
-      'Ask questions, swap ideas with other creators, and be the first to know about new features — unlocked automatically for subscribers, no extra step needed.',
+    painelTitulo: 'Production line',
+    painelAoVivo: 'live',
+    painelFonteYoutube: 'New video on the channel',
+    painelFonteYoutubeInfo: '42 min',
+    painelFonteLive: 'Twitch live stream',
+    painelFonteLiveInfo: 'clipping now',
+    painelEtapas: ['Transcription', 'Moments found: 7', 'Cutting to 9:16'],
+    painelNota: 'score',
+    painelLegenda: 'I DON’T WORRY ANYMORE',
+    painelPublica: 'at {hora}',
+    painelPublicado: 'Posted',
 
-    fluxoVideoAlt:
-      'Video showing the automatic flow: a new video published on YouTube, Post Flow cutting it into vertical clips, and automatic posting to TikTok.',
-    fluxo: [
-      {
-        h: 'New video on the monitored channel',
-        p: 'Post Flow notices right away, no need to tell it.',
-      },
-      {
-        h: 'Post Flow does the work',
-        p: 'Detects, transcribes, picks the segments, cuts vertically and captions. Nobody clicks anything.',
-      },
-      {
-        h: 'It goes out on your TikTok',
-        p: 'Published straight to your profile, at the time you chose. You just watch.',
-      },
+    fatos: [
+      { v: '8', r: 'social networks with automatic posting' },
+      { v: '3', r: 'sources: YouTube, Twitch and Kick' },
+      { v: '27', r: 'caption styles and 12 title styles' },
+      { v: '24h', r: 'a day, even with your computer off' },
     ],
 
-    comoFuncionaTitulo: 'Four steps. You take part in the first one.',
+    redesOlho: 'Automatic posting',
+    redesTitulo: 'One clip, all your networks',
+    redesTexto:
+      'Connect your accounts through each network’s official login. Every account has its own queue, with times and captions, and the clips go out on their own.',
+    fontesRotulo: 'Where clips come from',
+    fontes: [
+      { h: 'YouTube', p: 'A monitored channel or a video link' },
+      { h: 'Twitch', p: 'Live streams clipped while on air' },
+      { h: 'Kick', p: 'Live streams clipped while on air' },
+      { h: 'Your file', p: 'Upload a video from your computer' },
+    ],
+    destinosRotulo: 'Where they go',
+
+    comoFuncionaTitulo: 'Three steps. Two of them belong to the machine.',
+    comoFuncionaTexto: 'You set it up once. From then on, every new video and every live stream becomes posted clips.',
     passos: [
       {
-        h: 'Connect the channel',
-        p: 'Paste your YouTube channel address. From then on Post Flow notices on its own when you publish a new video. You can also upload a file from your computer or paste the link to a specific video.',
+        h: 'Connect your sources',
+        p: 'Paste your YouTube channel address or add a Twitch or Kick channel. You can also upload a file or paste the link to a specific video.',
       },
       {
-        h: 'The AI picks the segments',
-        p: 'The audio is transcribed and an artificial intelligence reads the whole transcript looking for segments that stand on their own: opening, hook and close. You decide between best moments, the whole video, or a fixed number of clips.',
+        h: 'AI finds the moments',
+        p: 'It transcribes the audio, reads everything, scores each segment and cuts it to vertical 9:16 with captions, a title and a cover. On live streams, clips are ready while the broadcast is still on air.',
       },
       {
-        h: 'Cut, captions and cover',
-        p: 'Each segment becomes a vertical 9:16 video with burned-in captions, an optional title and a cover. In manual mode you adjust the framing by dragging and pick the style from a visual gallery.',
-      },
-      {
-        h: 'Publishing on your schedule',
-        p: 'Finished clips go into a queue with an editable caption. You set the times of day, or let the system spread them out, and it publishes. If you would rather review first, send everything to a folder in your Google Drive.',
+        h: 'Posts on its own',
+        p: 'Each clip joins the queue of the accounts you chose and goes out at the right time. Or it waits in the Clip feed for you to pick one by one.',
       },
     ],
+    passoVoce: 'You',
+    passoMaquina: 'The machine',
 
-    recursosOlho: 'What you can do',
-    recursosAnterior: 'Previous feature',
-    recursosProximo: 'Next feature',
-    recursosParte1: 'Part 1',
-    recursosCanal: 'Channel {letra}',
-    recursosLegenda: 'Caption',
-    recursosTitulo: 'You control the result, without opening an editor',
-    recursosTexto:
-      'The automatic clip comes out ready to publish. But if you have your own way of presenting, you can adjust every part of it.',
+    linhaOlho: 'Under the hood',
+    linhaTitulo: 'A production line you can watch working',
+    linhaTexto:
+      'In the dashboard, each video shows up at the stage it is in, in real time. When a clip is ready, it goes straight to the right network’s queue.',
+    linhaEtapas: [
+      { h: 'Watcher', p: 'Spots the new video or the live stream that started' },
+      { h: 'Download', p: 'Downloads the video or records the stream' },
+      { h: 'Transcription', p: 'Every word with its exact timing' },
+      { h: 'AI selection', p: 'Scores hook, emotion and payoff' },
+      { h: 'Cut and captions', p: 'Vertical 9:16, captions, title and cover' },
+      { h: 'Posting', p: 'One queue per account, on your schedule' },
+    ],
+
+    recursosOlho: 'Features',
+    recursosTitulo: 'Not just a clipper. The whole machine.',
+    recursosTexto: 'Everything between recording and the published post, in one place.',
     recursos: [
       {
-        h: 'Clip visual style',
-        p: 'Pick the caption style from a gallery: classic, bold, subtle or in a coloured bubble. The same goes for the title that appears in the first few seconds.',
+        h: 'Live stream clips, live',
+        p: 'Follow Twitch and Kick channels. The AI watches the broadcast and clips are ready while the stream is still on air. Saw a great moment? Hit “Clip this moment”.',
       },
       {
-        h: 'Framing by hand',
-        p: 'In manual mode you drag the video inside the vertical frame and decide how far to zoom. What you see on screen is exactly what comes out in the clip.',
+        h: '8 networks, one queue per account',
+        p: 'TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest and Bluesky. Fixed times or spread out automatically, and the same settings applied to every account at once.',
       },
       {
-        h: 'Background image',
-        p: 'Upload a background template with your branding and place the video on top of it. Every clip from that channel comes out with the same identity.',
+        h: 'AI picks the moments',
+        p: 'It reads the whole transcript and scores every segment. You choose: only the best moments, the whole video in parts, or a fixed number of clips.',
       },
       {
-        h: 'Series numbering',
-        p: 'Turn on the "Part 1, Part 2" badge and choose which corner of the screen it appears in. Useful for turning a long video into a sequence that keeps people watching.',
+        h: 'Captions and titles in your style',
+        p: '27 caption styles, 12 title styles, drag-to-frame, a branded background image and “Part 1, Part 2” numbering. Save it as a template and use it on any channel.',
       },
       {
-        h: 'Settings per channel',
-        p: 'Each channel can have its own style, or you set a default and apply it to all of them at once. Number of clips, length and quality too.',
+        h: 'Webcam framing',
+        p: 'On live stream clips, the AI builds the layout: camera on top and gameplay below, or split screen. And it places the title where it doesn’t cover anyone.',
       },
       {
-        h: 'Automatic description',
-        p: 'The caption for each clip is written by the AI from what was actually said in the segment. You can edit it before publishing, or pin your own standard text.',
+        h: 'Clip feed',
+        p: 'All your clips in a vertical feed, like on your phone. Watch, like and send them to any network’s queue with one tap.',
       },
       {
-        h: 'One channel, several accounts',
-        p: 'Several YouTube channels and several TikTok accounts at the same time. Each channel publishes to the account you linked it to.',
+        h: 'Foreign channel, clips in your language',
+        p: 'When the video has dubbed audio, the clip comes out in the language you choose, with captions in the same language.',
       },
       {
-        h: 'Times you choose',
-        p: 'Set fixed times of day or let the system spread them out on its own. The queue shows when each clip will go out.',
-      },
-      {
-        h: 'Copy in Google Drive',
-        p: 'If you would rather review first, every finished clip can go automatically to a folder in your Drive, separated by channel.',
+        h: 'AI support',
+        p: 'Flora, our assistant, checks your account and solves it on the spot. If a video failed because of us, she refunds the minutes herself.',
       },
     ],
+    recursosLegendaExemplo: 'THIS CHANGED EVERYTHING',
+    recursosTituloExemplo: 'The secret nobody tells you',
+    recursosClipar: 'Clip this moment',
+    recursosAoVivo: 'LIVE',
+    recursosFlora: 'Yesterday’s video failed, so I refunded the 32 minutes to your account.',
+    recursosDublagem: 'Audio: English',
+    extrasTitulo: 'And also',
+    extras: [
+      'No Post Flow watermark',
+      'Each clip’s description written by AI',
+      'Automatic copy to Google Drive',
+      'Several channels and several accounts',
+      'We never ask for your password',
+      'Works on desktop and mobile',
+      'Pause and resume without losing progress',
+      'Dashboard in Portuguese, English and Spanish',
+    ],
 
-    planosOlho: 'Pricing',
-    planosTitulo: 'You pay per minute of video processed',
+    paraQuemOlho: 'Who it’s for',
+    paraQuemTitulo: 'Built for people who post every day',
+    paraQuem: [
+      { h: 'YouTube creators', p: 'Each new video on the channel becomes a week of clips on the other networks.' },
+      { h: 'Podcasts and interviews', p: 'Long episodes become short segments, with a hook and captions.' },
+      { h: 'Streamers', p: 'The best moments of your stream, posted while they’re still hot.' },
+      { h: 'Agencies and managers', p: 'Several channels and several accounts per network, each with its own style and queue.' },
+    ],
+
+    antesOlho: 'What changes',
+    antesTitulo: 'Everything you stop doing',
+    antesSem: 'Without Post Flow',
+    antesCom: 'With Post Flow',
+    antes: [
+      'Watching the whole video looking for good bits',
+      'Cutting and framing in the editor, one by one',
+      'Captioning word by word',
+      'Exporting in each network’s format',
+      'Uploading the same video to each network, one by one',
+      'Remembering when to post every day',
+    ],
+    depois: [
+      'The AI watches and picks the moments',
+      'A vertical clip, ready and framed',
+      'Automatic captions and titles',
+      'One format that works on every network',
+      'Posted everywhere, on its own',
+      'A scheduled queue, every day',
+    ],
+
+    planosOlho: 'Plans',
+    planosTitulo: 'A plan for every posting pace',
     planosTexto:
-      'Minutes renew every week. When downloads go out through your own internet connection, our cost drops, and that saving comes back to you as bonus minutes.',
-    // Versao usada quando o tunel esta escondido: sem prometer minutos bonus
-    // que o cliente nao tem como liberar (ver lib/exibicaoDoTunel).
+      'Minutes renew every week and work for videos and live streams. When downloads go through your own internet connection, our cost drops, and those savings come back to you as bonus minutes.',
     planosTextoSemTunel:
-      'Minutes renew every week. You pay per minute of the original video, not per number of clips: a 30-minute video costs the same whether it yields 3 clips or 12.',
+      'Minutes renew every week and work for videos and live streams. You pay per minute of the original video, not per clip: a 30-minute video costs the same whether it yields 3 or 12 clips.',
     maisEscolhido: 'Most popular',
     porMes: '/month',
     noPrimeiroMes: 'first month',
     depoisPorMes: 'then R$ {valor}/month',
     descontoPrimeiroMes: '{n}% off the first month',
-    conexoesExtras: 'Extra channel for R$ {canal}/mo, extra account for R$ {conta}/mo',
+    conexoesExtras: 'Extra channel for R$ {canal}/month, extra TikTok account for R$ {conta}/month',
     minutosPorSemana: '{n} minutes',
     minutosPorSemanaResto: 'of video per week',
     minutosBonus: '{n} minutes',
-    minutosBonusResto: 'using your own internet',
+    minutosBonusResto: 'using your internet',
     canaisYoutube: '{n} YouTube channels',
     canalYoutube: '{n} YouTube channel',
     canaisIlimitados: 'Unlimited YouTube channels',
     contasTiktok: '{n} TikTok accounts',
     contaTiktok: '{n} TikTok account',
     contasIlimitadas: 'Unlimited TikTok accounts',
+    contasPorRede: '{n} accounts on each of the other 7 networks',
+    contaPorRede: '{n} account on each of the other 7 networks',
+    canaisLive: '{n} live channels (Twitch or Kick)',
+    canalLive: '{n} live channel (Twitch or Kick)',
+    contaExtraRede: 'Extra account on any network for R$ {valor}/month',
     incluiCorte: 'AI clipping, captions, cover and scheduling',
-    incluiDrive: 'Export to Google Drive',
+    incluiDrive: 'Clip feed and Google Drive copy',
     comecar: 'Get started',
+    regraCreditos: '1 minute of video = 1 credit · 3 minutes of live stream = 1 credit',
     notaPlanos:
-      'Run out of minutes for the week? You can buy a one-off pack, which does not expire. Nothing is charged beyond the subscription without your authorisation.',
+      'Ran out of minutes this week? You can buy an extra pack that never expires. Nothing beyond the subscription is charged without your approval.',
 
-    faqOlho: 'Frequently asked questions',
+    confiancaOlho: 'Trust',
+    confiancaTitulo: 'A Brazilian company, billing in reais',
+    confianca: [
+      { h: 'Brazilian company', p: 'Company registration (CNPJ) in this page’s footer, and billing in Brazilian reais.' },
+      { h: 'Card or PIX', p: 'Payments processed by Asaas, an institution authorized by Brazil’s Central Bank.' },
+      { h: 'Official login', p: 'You connect TikTok, Google and the other networks on their own screens. We never see your password.' },
+      { h: 'No lock-in', p: 'Cancel anytime from the dashboard. Access lasts until the end of the paid period.' },
+    ],
+
+    faqOlho: 'FAQ',
     faqTitulo: 'What people usually ask',
     faqRodapeA: 'Still have a question? Write to',
     faqRodapeB: 'we reply',
@@ -192,72 +248,83 @@ module.exports = {
     numerosOlho: 'Numbers',
     numerosTitulo: 'Post Flow in numbers',
     numerosTexto:
-      'All this automation has already published thousands of clips and helped accounts grow without anyone opening a video editor.',
-    numerosVideosValor: '+85K',
-    numerosVideosRotulo: 'videos published',
-    numerosContasValor: '+9,400',
+      'All this automation has already posted thousands of clips and helped accounts grow without anyone opening a video editor.',
+    numerosVideosValor: '85K+',
+    numerosVideosRotulo: 'videos posted',
+    numerosContasValor: '9,400+',
     numerosContasRotulo: 'connected accounts',
     numerosViewsValor: '340 million',
     numerosViewsRotulo: 'views generated',
 
     finalOlho: 'Start today',
-    finalTitulo: 'Paste your channel link and watch the first clip come out',
+    finalTitulo: 'Connect your channel and watch the first clip go out',
     finalTexto:
-      'Setup takes a few minutes. After that, every new video on your channel becomes a published clip without you touching anything.',
+      'Setup takes a few minutes. After that, every new video and every live stream becomes posted clips without you touching anything.',
     falarComAGente: 'Talk to us',
-    semFidelidade: 'No lock-in. Cancel whenever you want.',
+    semFidelidade: 'No lock-in. Cancel anytime.',
   },
 
   perguntas: [
     {
-      p: 'Does Post Flow publish to TikTok on its own?',
-      r: 'Yes. You choose between receiving the clip as a draft in the TikTok app, to finish it there, or publishing straight to your profile without opening the app. With direct publishing you set privacy and what people can do once, and it applies to every clip.',
+      p: 'Which networks does Post Flow post to?',
+      r: 'TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest and Bluesky. You connect each account through the network’s official login and choose which accounts receive each channel’s clips. On Instagram and Facebook, clips must be 90 seconds or shorter.',
+    },
+    {
+      p: 'Does Post Flow post on its own?',
+      r: 'Yes. Each account has a queue with posting times, and clips go out on their own at the times you set. If you’d rather pick them one by one, turn off automatic posting and send clips to the queue from the Clip feed. On TikTok you can also send them as drafts and finish in the app.',
+    },
+    {
+      p: 'Can it clip live streams?',
+      r: 'Yes, from Twitch and Kick. The AI follows the broadcast and clips are ready while the stream is still on air. The “Clip this moment” button clips the last few minutes right away. Live stream clips show up in the Clip feed, where you can send them to any network’s queue.',
     },
     {
       p: 'Do I need to leave my computer on?',
-      r: 'No. All the processing happens on our servers. There is an optional program that routes downloads through your internet connection and earns you extra minutes on your plan, but it is optional and you choose whether the video waits for your computer or not.',
-      // Sem o tunel, a resposta nao cita o programa opcional.
-      rSemTunel: 'No. All processing happens on our servers. You set it up once and can turn your computer off — clips keep coming out and being published at the times you chose.',
+      r: 'No. All processing happens on our servers. There is an optional program that routes downloads through your own internet connection and gives you extra minutes on your plan, but it is optional and you choose whether a video waits for your computer or not.',
+      rSemTunel: 'No. All processing happens on our servers. Set it up once and you can turn your computer off — clips keep being made and posted at the times you chose.',
+    },
+    {
+      p: 'How do credits work?',
+      r: 'Your plan gives you a quota of minutes that renews every week. Each minute of processed video uses 1 credit; on live streams, every 3 minutes clipped use 1 credit, and so does each “Clip this moment”. The number of clips doesn’t change the price. If you run out, you can buy extra minutes that never expire.',
     },
     {
       p: 'How many clips come out of each video?',
-      r: 'It depends on the video and on what you configure: only the best moments, the whole video sliced up, or a fixed number. Billing is per minute of the source video, so the number of clips does not change the price.',
+      r: 'It depends on the video and your settings: only the best moments, the whole video sliced into parts, or a fixed number. Billing is per minute of the original video, so the number of clips doesn’t change the price.',
     },
     {
-      p: 'How long does a clip take to be ready?',
-      r: 'It depends on the size of the video and on the queue. A 30-minute video usually takes a few minutes across detecting, transcribing, picking segments and rendering. You follow the percentage of each clip on screen.',
+      p: 'How long until a clip is ready?',
+      r: 'It depends on the video’s length and the queue. A 30-minute video usually takes a few minutes between detection, transcription, picking the moments and rendering. You follow each stage live in the dashboard.',
     },
     {
-      p: 'Does Post Flow put a watermark on my videos?',
-      r: 'No. No logo of ours is added to the video. The only things overlaid are the caption and the title generated from your own audio, and you can turn both off.',
+      p: 'Does Post Flow add a watermark to my videos?',
+      r: 'No. No logo of ours is added to the video. The only overlays are the captions and title generated from your own audio, and you can turn both off.',
     },
     {
-      p: 'Can I use more than one channel and more than one TikTok account?',
-      r: 'You can. Each YouTube channel publishes to the TikTok account you link it to, and each account has its own schedule. How many depends on the plan.',
+      p: 'Can I use more than one channel and more than one account per network?',
+      r: 'Yes. Each plan includes a number of YouTube channels, live channels and accounts on each network, and each account has its own schedule. If you need one more account on a network, you can add an extra account on any plan.',
     },
     {
-      p: 'Is Post Flow for clipping someone else\'s video?',
-      r: 'No. The tool exists for people who already produce their own content and want to automate the cutting and publishing step. By using the service you declare that you have the rights to the material you submit for processing. We do not moderate content before publication and we are not responsible for misuse of third-party material.',
+      p: 'Can Post Flow be used to clip someone else’s videos?',
+      r: 'No. The tool exists for people who already produce their own content and want to automate the clipping and posting step. By using the service you declare that you hold the rights to the material you send for processing. We don’t moderate content before it is published and are not responsible for misuse of third-party material.',
     },
     {
-      p: 'Do I have to give you my YouTube or TikTok password?',
-      r: 'No. Connecting TikTok and Google Drive uses each platform\'s official login. You authorise on their screen and Post Flow never sees your password. You can revoke it whenever you want, from the dashboard or in your account settings.',
+      p: 'Do I need to give you my YouTube, TikTok or other network password?',
+      r: 'No. The connection to TikTok, Google Drive and the other networks uses each platform’s official login. You authorize on their screen and Post Flow never sees your password. You can disconnect anytime, in the dashboard or in the network’s own settings.',
     },
     {
       p: 'What exactly do you access in my Google Drive?',
-      r: 'Only the folder you choose to receive the finished clips. Post Flow uses a permission that reaches only the files it creates itself: the rest of your Drive stays invisible to us.',
+      r: 'Only the folder Post Flow itself creates to receive finished clips, one per channel. The permission we use only reaches files we created ourselves: the rest of your Drive stays invisible to us.',
     },
     {
       p: 'Are clips stored forever?',
-      r: 'No. Once published they are deleted from our server automatically, after a period you set. If you want to keep them, use the export to Google Drive, where the files stay with you.',
+      r: 'No. After they’re posted, clips stay on our server for 3 days and are deleted automatically. To keep them, use the automatic Google Drive copy or download them from the dashboard before then.',
     },
     {
-      p: 'What if I want to review before publishing?',
-      r: 'You can turn off automatic posting and publish manually, or send every finished clip to a folder in your Google Drive, separated by channel.',
+      p: 'What if I want to review before posting?',
+      r: 'You can turn off automatic posting and pick clips from the Clip feed, or send each finished clip to a Google Drive folder, separated by channel.',
     },
     {
-      p: 'Can I cancel whenever I want?',
-      r: `You can, with no penalty and without talking to anyone. Access continues until the end of the period already paid for. To delete the account and all data, just write to ${CONTACT.supportEmail}.`,
+      p: 'Can I cancel anytime?',
+      r: 'Yes, from the dashboard, with no penalty and without talking to anyone. Access continues until the end of the period already paid for. To delete your account and all data, go to Settings → Delete account.',
     },
   ],
 
