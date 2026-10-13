@@ -314,15 +314,16 @@
         <p><%= rec[4].p %></p>
       </article>
 
-      <%# 6. Feed: cortes empilhados como no celular. %>
+      <%# 6. Fila: os horários do dia com o corte que sai em cada um. %>
       <article class="lp-cartao" data-revelar>
-        <div class="lp-cartao-arte lp-arte-feed" aria-hidden="true">
-          <span class="lp-feed-cartao lp-feed-tras"></span>
-          <span class="lp-feed-cartao lp-feed-meio"></span>
-          <span class="lp-feed-cartao lp-feed-frente">
-            <img src="/img/produto/corte-exemplo.jpg" alt="" width="506" height="900" loading="lazy">
-            <span class="lp-feed-acoes"><%- icone('heart') %><%- icone('rocket') %></span>
-          </span>
+        <div class="lp-cartao-arte lp-arte-fila" aria-hidden="true">
+          <% ['08:00', '12:00', '16:00', '20:00'].forEach(function (h, i) { %>
+            <span class="lp-fila-item <%= i === 1 ? 'agora' : '' %>" style="--i:<%= i %>">
+              <span class="lp-fila-hora"><%= h %></span>
+              <span class="lp-fila-mini"><img src="/img/produto/corte-exemplo.jpg" alt="" width="506" height="900" loading="lazy"></span>
+              <span class="lp-fila-linhas"><i></i><i></i></span>
+            </span>
+          <% }); %>
         </div>
         <h3><%= rec[5].h %></h3>
         <p><%= rec[5].p %></p>
@@ -403,20 +404,73 @@
   </div>
 </section>
 
-<%# Números de uso (escritos no dicionário, não contados do banco), mantidos da
-    versão anterior da página. %>
-<section class="secao lp-escuro lp-numeros">
+<!-- ============================================================ FEED DE CORTES -->
+<section class="secao lp-escuro lp-feed" id="feed">
   <div class="lp-grade-fundo" aria-hidden="true"></div>
-  <div class="wrap">
-    <div class="lp-cabeca lp-centro" data-revelar>
-      <p class="eyebrow"><%= t('landing.numerosOlho') %></p>
-      <h2><%= t('landing.numerosTitulo') %></h2>
-      <p class="lp-sub"><%= t('landing.numerosTexto') %></p>
+  <div class="lp-brilho lp-brilho-d" aria-hidden="true"></div>
+  <div class="wrap lp-feed-grade">
+    <div class="lp-feed-texto" data-revelar>
+      <p class="eyebrow"><%= t('landing.feedOlho') %></p>
+      <h2><%= t('landing.feedTitulo') %></h2>
+      <p class="lp-sub"><%= t('landing.feedTexto') %></p>
+      <ul class="lp-feed-pontos">
+        <% t('landing.feedPontos').forEach(function (f, i) { %>
+          <li>
+            <span class="lp-feed-ponto-ico"><%- icone(['layout-board-split', 'rocket', 'refresh'][i]) %></span>
+            <span><b><%= f.h %></b><%= f.p %></span>
+          </li>
+        <% }); %>
+      </ul>
+      <a class="btn lp-btn-luz btn-lg" href="/register"><%= t('landing.feedCta') %> <%- icone('arrow-right') %></a>
     </div>
-    <div class="lp-numeros-grade" data-revelar>
-      <div><b><%= t('landing.numerosVideosValor') %></b><span><%= t('landing.numerosVideosRotulo') %></span></div>
-      <div><b><%= t('landing.numerosContasValor') %></b><span><%= t('landing.numerosContasRotulo') %></span></div>
-      <div><b><%= t('landing.numerosViewsValor') %></b><span><%= t('landing.numerosViewsRotulo') %></span></div>
+
+    <%# Desenho do feed: o celular rola de um corte para o outro sozinho, e o
+        painel "Postar em" mostra o que acontece com um toque. Decorativo -
+        tudo o que ele mostra está dito no texto ao lado. %>
+    <div class="lp-feed-palco" aria-hidden="true" data-revelar style="--atraso:120ms">
+      <div class="lp-cel">
+        <div class="lp-cel-tela">
+          <div class="lp-cel-trilho">
+            <div class="lp-cel-quadro">
+              <img src="/img/produto/corte-exemplo.jpg" alt="" width="506" height="900" loading="lazy">
+            </div>
+            <div class="lp-cel-quadro lp-cel-live">
+              <span class="lp-cel-cam"><img src="/img/produto/corte-exemplo.jpg" alt="" width="506" height="900" loading="lazy"></span>
+              <span class="lp-cel-jogo"></span>
+              <span class="lp-cel-legenda"><%= t('landing.recursosLegendaExemplo') %></span>
+            </div>
+            <div class="lp-cel-quadro lp-cel-zoom">
+              <img src="/img/produto/corte-exemplo.jpg" alt="" width="506" height="900" loading="lazy">
+              <span class="lp-cel-legenda lp-amarela"><%= t('landing.painelLegenda') %></span>
+            </div>
+            <%# Repete o primeiro, para a volta do loop não dar um pulo. %>
+            <div class="lp-cel-quadro">
+              <img src="/img/produto/corte-exemplo.jpg" alt="" width="506" height="900" loading="lazy">
+            </div>
+          </div>
+          <div class="lp-cel-topo"><span>3 / 34</span></div>
+          <div class="lp-cel-lado">
+            <span class="lp-cel-acao lp-cel-curtir"><%- icone('heart') %></span>
+            <span class="lp-cel-acao lp-cel-postar"><%- icone('rocket') %></span>
+          </div>
+          <div class="lp-cel-rodape"><%= t('landing.feedLegenda') %></div>
+        </div>
+      </div>
+
+      <div class="lp-postar">
+        <p class="lp-postar-titulo"><%= t('landing.feedPostarEm') %></p>
+        <ul>
+          <% [redes[0], redes[1], redes[2], redes[3]].forEach(function (r, i) { %>
+            <li class="<%= i < 3 ? 'marcada' : '' %>">
+              <span class="lp-rede-ico" style="--fundo:<%= r.fundo %>"><%- icone(r.icone) %></span>
+              <span class="lp-postar-nome"><%= r.nome %></span>
+              <span class="lp-postar-caixa"><%- icone('check') %></span>
+            </li>
+          <% }); %>
+        </ul>
+        <span class="lp-postar-botao"><%= t('landing.feedNaFila') %></span>
+        <span class="lp-postar-quando"><%- icone('clock') %><%= t('landing.feedProximo') %></span>
+      </div>
     </div>
   </div>
 </section>

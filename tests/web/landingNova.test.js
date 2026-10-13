@@ -92,3 +92,14 @@ test('os dados estruturados listam os recursos novos', async () => {
   assert.ok(produto.featureList.some((f) => /live/i.test(f)), 'a lista de recursos não cita as lives');
   assert.ok(produto.featureList.some((f) => /8 redes/.test(f)), 'a lista de recursos não cita as 8 redes');
 });
+
+test('a seção do Feed de cortes substituiu a de números, nos três idiomas', async () => {
+  // Os números de uso eram escritos à mão (não vinham do banco). A faixa
+  // passou a vender o Feed de cortes, que é o produto de verdade.
+  for (const [lang, titulo] of [['pt', 'Rolou, curtiu, postou.'], ['en', 'Scroll, like, post.'], ['es', 'Desliza, dale like, publica.']]) {
+    const html = await landing(lang);
+    assert.ok(html.includes('id="feed"'), `sumiu a seção do feed em ${lang}`);
+    assert.ok(html.includes(titulo), `título do feed errado em ${lang}`);
+    assert.ok(!/340 milh|85 mil|85K/.test(html), `os números de uso voltaram em ${lang}`);
+  }
+});

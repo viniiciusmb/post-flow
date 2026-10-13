@@ -155,8 +155,8 @@ module.exports = {
         p: 'Nos cortes de live, a IA monta o formato: câmera em cima e jogo embaixo, ou tela dividida. E coloca o título onde ele não cobre ninguém.',
       },
       {
-        h: 'Feed de cortes',
-        p: 'Todos os seus cortes num feed vertical, como no celular. Assista, curta e mande para a fila de qualquer rede com um toque.',
+        h: 'Fila com horário em cada conta',
+        p: 'Cada conta publica nos próprios horários, ou no padrão de hora cheia. Postar agora, pausar, reordenar e editar a legenda: a fila é sua.',
       },
       {
         h: 'Canal gringo, corte em português',
@@ -269,16 +269,20 @@ module.exports = {
     faqRodapeA: 'Ficou alguma dúvida? Escreva para',
     faqRodapeB: 'respondemos',
 
-    numerosOlho: 'Números',
-    numerosTitulo: 'Post Flow em números',
-    numerosTexto:
-      'Toda essa automação já publicou milhares de cortes e ajudou contas a crescer sem que ninguém precisasse abrir um editor de vídeo.',
-    numerosVideosValor: '+85 mil',
-    numerosVideosRotulo: 'vídeos publicados',
-    numerosContasValor: '+9.400',
-    numerosContasRotulo: 'contas conectadas',
-    numerosViewsValor: '340 milhões',
-    numerosViewsRotulo: 'visualizações geradas',
+    feedOlho: 'Feed de cortes',
+    feedTitulo: 'Rolou, curtiu, postou.',
+    feedTexto:
+      'Tudo o que a máquina produziu (cortes dos seus vídeos e os melhores momentos das lives) chega num feed vertical, igual ao que você já usa todo dia. Você assiste como espectador e decide como editor: o que vale vai para a fila de qualquer rede com um toque. O que não vale, você só passa.',
+    feedPontos: [
+      { h: 'Tudo num lugar só', p: 'Vídeos do YouTube e momentos das lives, do mais novo para o mais antigo, com filtro por canal.' },
+      { h: 'Um toque para publicar', p: 'Toque em Postar, marque as contas e o corte entra na fila de cada rede no próximo horário livre.' },
+      { h: 'Nada se repete', p: 'O que você já assistiu sai do feed. Os favoritos ficam guardados na aba Gostei.' },
+    ],
+    feedCta: 'Quero meu feed de cortes',
+    feedPostarEm: 'Postar em',
+    feedNaFila: 'Colocar na fila',
+    feedProximo: 'Sai hoje às 18:00',
+    feedLegenda: 'Parte 2 · o segredo que ninguém conta',
 
     finalOlho: 'Comece hoje',
     finalTitulo: 'Conecte seu canal e veja o primeiro corte sair',

@@ -137,8 +137,8 @@ module.exports = {
         p: 'En los cortes de directos, la IA arma el formato: cámara arriba y juego abajo, o pantalla dividida. Y pone el título donde no tapa a nadie.',
       },
       {
-        h: 'Feed de cortes',
-        p: 'Todos tus cortes en un feed vertical, como en el celular. Mira, dale me gusta y envíalos a la cola de cualquier red con un toque.',
+        h: 'Cola con horario en cada cuenta',
+        p: 'Cada cuenta publica en sus propios horarios, o en el horario estándar a la hora en punto. Publicar ahora, pausar, reordenar y editar el texto: la cola es tuya.',
       },
       {
         h: 'Canal extranjero, corte en tu idioma',
@@ -245,16 +245,20 @@ module.exports = {
     faqRodapeA: '¿Te quedó alguna duda? Escribe a',
     faqRodapeB: 'respondemos',
 
-    numerosOlho: 'Números',
-    numerosTitulo: 'Post Flow en números',
-    numerosTexto:
-      'Toda esta automatización ya publicó miles de cortes y ayudó a cuentas a crecer sin que nadie tuviera que abrir un editor de video.',
-    numerosVideosValor: '+85 mil',
-    numerosVideosRotulo: 'videos publicados',
-    numerosContasValor: '+9.400',
-    numerosContasRotulo: 'cuentas conectadas',
-    numerosViewsValor: '340 millones',
-    numerosViewsRotulo: 'visualizaciones generadas',
+    feedOlho: 'Feed de cortes',
+    feedTitulo: 'Desliza, dale like, publica.',
+    feedTexto:
+      'Todo lo que la máquina produjo (cortes de tus videos y los mejores momentos de los directos) llega a un feed vertical, igual al que ya usas todos los días. Miras como espectador y decides como editor: lo que vale va a la cola de cualquier red con un toque. Lo que no, solo lo pasas.',
+    feedPontos: [
+      { h: 'Todo en un solo lugar', p: 'Videos de YouTube y momentos de los directos, del más nuevo al más antiguo, con filtro por canal.' },
+      { h: 'Un toque para publicar', p: 'Toca Publicar, marca las cuentas y el corte entra en la cola de cada red en el próximo horario libre.' },
+      { h: 'Nada se repite', p: 'Lo que ya viste sale del feed. Tus favoritos quedan en la pestaña Me gusta.' },
+    ],
+    feedCta: 'Quiero mi feed de cortes',
+    feedPostarEm: 'Publicar en',
+    feedNaFila: 'Poner en la cola',
+    feedProximo: 'Sale hoy a las 18:00',
+    feedLegenda: 'Parte 2 · el secreto que nadie cuenta',
 
     finalOlho: 'Empieza hoy',
     finalTitulo: 'Conecta tu canal y mira salir el primer corte',

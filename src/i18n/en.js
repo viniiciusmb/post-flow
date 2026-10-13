@@ -137,8 +137,8 @@ module.exports = {
         p: 'On live stream clips, the AI builds the layout: camera on top and gameplay below, or split screen. And it places the title where it doesn’t cover anyone.',
       },
       {
-        h: 'Clip feed',
-        p: 'All your clips in a vertical feed, like on your phone. Watch, like and send them to any network’s queue with one tap.',
+        h: 'A scheduled queue per account',
+        p: 'Each account posts at its own times, or on the default on-the-hour schedule. Post now, pause, reorder and edit the caption: the queue is yours.',
       },
       {
         h: 'Foreign channel, clips in your language',
@@ -245,16 +245,20 @@ module.exports = {
     faqRodapeA: 'Still have a question? Write to',
     faqRodapeB: 'we reply',
 
-    numerosOlho: 'Numbers',
-    numerosTitulo: 'Post Flow in numbers',
-    numerosTexto:
-      'All this automation has already posted thousands of clips and helped accounts grow without anyone opening a video editor.',
-    numerosVideosValor: '85K+',
-    numerosVideosRotulo: 'videos posted',
-    numerosContasValor: '9,400+',
-    numerosContasRotulo: 'connected accounts',
-    numerosViewsValor: '340 million',
-    numerosViewsRotulo: 'views generated',
+    feedOlho: 'Clip feed',
+    feedTitulo: 'Scroll, like, post.',
+    feedTexto:
+      'Everything the machine produced (clips from your videos and the best moments of live streams) lands in a vertical feed, just like the one you already use every day. You watch like a viewer and decide like an editor: what’s good goes to any network’s queue with one tap. What isn’t, you just swipe past.',
+    feedPontos: [
+      { h: 'All in one place', p: 'YouTube videos and live stream moments, newest first, with a filter by channel.' },
+      { h: 'One tap to post', p: 'Tap Post, pick the accounts and the clip joins each network’s queue at the next free slot.' },
+      { h: 'Nothing repeats', p: 'What you’ve already watched leaves the feed. Your favorites stay in the Liked tab.' },
+    ],
+    feedCta: 'I want my clip feed',
+    feedPostarEm: 'Post to',
+    feedNaFila: 'Add to queue',
+    feedProximo: 'Goes out today at 18:00',
+    feedLegenda: 'Part 2 · the secret nobody tells you',
 
     finalOlho: 'Start today',
     finalTitulo: 'Connect your channel and watch the first clip go out',
