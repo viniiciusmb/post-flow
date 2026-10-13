@@ -97,7 +97,7 @@ Dá para colar o link de um vídeo do YouTube ou enviar um arquivo de vídeo. No
 
 - Pagamento por cartão (dentro do próprio site, processado pelo Asaas) ou PIX Automático.
 - O preço de primeiro mês é promoção de estreia, só para quem nunca teve plano. Depois vale a mensalidade cheia.
-- Conexões extras (mais canais ou contas do TikTok) só no plano maior.
+- Conexões extras, em qualquer plano, na aba Comprar de Plano e uso: canal extra do YouTube e conta extra no TikTok, Instagram, Facebook, Threads, LinkedIn, Pinterest e Bluesky (o preço aparece na tela). O YouTube Shorts não vende conta extra. Cada extra é pago na hora e depois cobrado junto com a mensalidade; "Devolver 1" para a cobrança a partir do mês seguinte.
 - Cancelar: link "Cancelar plano" no fim da tela Plano e uso (para assinatura no cartão); o acesso continua até o fim do período já pago. PIX Automático se cancela no app do banco.
 - Reembolso em dinheiro, troca de cartão com problema, cobrança contestada: só a equipe resolve.
 

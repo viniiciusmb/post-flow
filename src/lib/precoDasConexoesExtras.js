@@ -2,11 +2,9 @@
 //
 // Até 01/09/2026 "conexão extra" era um pacote fechado: 1 canal do YouTube + 1
 // conta do TikTok, indivisível. Quem queria só mais um canal pagava pelos dois.
-// Agora são dois produtos, com desconto para quem leva o par:
-//
-//   canal do YouTube ....... R$ 14,90
-//   conta do TikTok ........ R$ 29,90
-//   os dois juntos ......... R$ 39,90   (R$ 4,90 mais barato que separado)
+// Viraram dois produtos, com desconto para quem levava o par (01/09/2026:
+// canal R$ 14,90, conta R$ 29,90, os dois R$ 39,90). Preços de hoje, desde
+// 12/10/2026: canal R$ 14,90, conta R$ 9,90, sem par - ver abaixo.
 //
 // O desconto do par vale POR PAR, não uma vez só: quem leva 2 canais e 2 contas
 // paga dois combos. Cobrar o combo uma vez e o resto cheio seria uma conta que
@@ -14,12 +12,25 @@
 // preço estar "errado" numa tela de pagamento — o pior lugar para isso.
 //
 // Desde 12/10/2026 também existe a conta extra nas REDES SOCIAIS (Instagram,
-// Facebook, Threads, LinkedIn, Pinterest, Bluesky, YouTube): R$ 9,90 por conta
-// por mês, a rede escolhida na compra, em TODOS os planos. Sem desconto de
-// combo - é um preço por conta.
+// Facebook, Threads, LinkedIn, Pinterest, Bluesky): R$ 9,90 por conta por mês,
+// a rede escolhida na compra, em TODOS os planos. Sem desconto de combo - é um
+// preço por conta.
+//
+// Ajuste do mesmo dia (migration 116): a conta do TikTok passou a R$ 9,90 e o
+// canal do YouTube ficou em R$ 14,90, os dois em todos os planos, e o combo
+// acabou (extra_both_price_cents NULL). Com `ambos` vazio, canal e conta são
+// cobrados cada um pelo seu preço - o código do par continua aqui para o caso
+// de um combo voltar a existir.
+//
+// O YouTube (Shorts) NÃO vende conta extra: a publicação nele passa por uma cota
+// diária compartilhada por todos os clientes (ver socialPostingService), e mais
+// contas só disputariam a mesma vaga.
 'use strict';
 
 const redesSociais = require('./redesSociais');
+
+const REDES_SEM_CONTA_EXTRA = ['youtube'];
+const REDES_COM_CONTA_EXTRA = redesSociais.LISTA.filter((r) => !REDES_SEM_CONTA_EXTRA.includes(r));
 
 // {instagram: 2, lixo: 5, facebook: -1} -> {instagram: 2}. Só redes que existem
 // e quantidades inteiras positivas: o pedido vem do navegador.
@@ -47,7 +58,8 @@ function precoDosExtras({ canais = 0, contas = 0, redes = {} }, precos) {
   const t = Math.max(0, Math.trunc(Number(contas) || 0));
   const r = totalDeRedes(redes);
 
-  const combos = Math.min(c, t);
+  // Sem preço de par, não há par: cada um sai pelo seu preço.
+  const combos = precos.ambos ? Math.min(c, t) : 0;
   const canaisSozinhos = c - combos;
   const contasSozinhas = t - combos;
 
@@ -79,8 +91,9 @@ function mensalidadeDosExtras(subscription, precos) {
 // Devolve null quando o plano não vende conexão extra — quem chama trata isso
 // como "não dá para comprar", em vez de cair num preço zero e liberar de graça.
 //
-// Canal/conta do TikTok só no plano maior (`canal` null nos outros); conta nas
-// redes em todos (`rede`). Quem chama confere o que o pedido usa.
+// Desde a migration 116 os três planos vendem canal, conta do TikTok e conta
+// nas redes; um plano sem preço (null) continua significando "não vende".
+// Quem chama confere o que o pedido usa.
 function precosDoPlano(subscription) {
   if (!subscription || !subscription.plan_id) return null;
   const n = (v) => (v === null || v === undefined ? null : Number(v));
@@ -94,4 +107,12 @@ function precosDoPlano(subscription) {
   return precos;
 }
 
-module.exports = { precoDosExtras, mensalidadeDosExtras, precosDoPlano, normalizarRedes, totalDeRedes };
+module.exports = {
+  precoDosExtras,
+  mensalidadeDosExtras,
+  precosDoPlano,
+  normalizarRedes,
+  totalDeRedes,
+  REDES_COM_CONTA_EXTRA,
+  REDES_SEM_CONTA_EXTRA,
+};

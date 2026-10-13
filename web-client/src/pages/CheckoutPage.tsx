@@ -338,7 +338,8 @@ export function CheckoutPage() {
       // decide quanto cobrar é o servidor, que recalcula tudo de novo.
       const p = ctx.subscription.precosExtras
       if (!p) return { hojeCents: 0, depoisCents: null, promo: false }
-      const pares = Math.min(item.canais, item.contas)
+      // Sem preço de par (desde 12/10/2026), cada um sai pelo seu preço.
+      const pares = p.ambos ? Math.min(item.canais, item.contas) : 0
       const nasRedes = Object.values(item.redes ?? {}).reduce((a, b) => a + b, 0)
       const total =
         (pares ? pares * (p.ambos ?? 0) : 0) +

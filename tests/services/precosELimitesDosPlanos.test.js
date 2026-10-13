@@ -12,7 +12,8 @@
 //   - conexões e minutos crescem junto com o plano;
 //   - o minuto excedente fica MAIS BARATO quanto maior o plano — se isso
 //     inverter, o plano caro passa a punir quem o comprou;
-//   - só o plano maior vende conexões extras.
+//   - os três planos vendem conexão extra pelo mesmo preço (12/10/2026):
+//     canal do YouTube R$ 14,90, conta do TikTok R$ 9,90, sem desconto de par.
 'use strict';
 
 const test = require('node:test');
@@ -37,7 +38,8 @@ const COMBINADO = {
     bonus: 120,
     excedente: 25,
     excedenteBonus: 15,
-    slotExtra: null,
+    extraCanal: 1490,
+    extraConta: 990,
   },
   pro: {
     primeiroMes: 9990,
@@ -48,7 +50,8 @@ const COMBINADO = {
     bonus: 240,
     excedente: 20,
     excedenteBonus: 12,
-    slotExtra: null,
+    extraCanal: 1490,
+    extraConta: 990,
   },
   max: {
     primeiroMes: 13990,
@@ -60,8 +63,7 @@ const COMBINADO = {
     excedente: 18,
     excedenteBonus: 11,
     extraCanal: 1490,
-    extraConta: 2990,
-    extraAmbos: 3990,
+    extraConta: 990,
   },
 };
 
@@ -145,7 +147,10 @@ test('nenhum plano é "ilimitado" — o limite existe para poder ser vendido', a
     assert.ok(p.max_youtube_channels !== null, `${p.key} sem limite de canais`);
     assert.ok(p.max_tiktok_accounts !== null, `${p.key} sem limite de contas`);
   }
-  const vendemExtras = planos.filter((p) => p.extra_channel_price_cents);
-  assert.equal(vendemExtras.length, 1, 'só o plano maior vende conexões extras');
-  assert.equal(vendemExtras[0].key, planos[planos.length - 1].key);
+  // Desde 12/10/2026 todos vendem, pelo mesmo preço: a conta do TikTok custa o
+  // mesmo que a das outras redes, e o canal do YouTube um pouco mais.
+  for (const p of planos) {
+    assert.equal(p.extra_tiktok_price_cents, p.extra_rede_price_cents, `${p.key}: TikTok tem que custar o mesmo que as outras redes`);
+    assert.ok(p.extra_channel_price_cents > p.extra_tiktok_price_cents, `${p.key}: o canal do YouTube é o extra mais caro`);
+  }
 });

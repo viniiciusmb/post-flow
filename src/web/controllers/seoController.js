@@ -143,7 +143,7 @@ TikTok, Instagram, Facebook, YouTube Shorts, Threads, LinkedIn, Pinterest e Blue
 
 ${linhasDePlano.length ? linhasDePlano.join('\n') : `- Consulte os planos em ${BASE}/#planos`}
 
-A cota de minutos renova toda semana e vale para vídeos e lives: 1 minuto de vídeo processado = 1 crédito; 3 minutos de live clipada = 1 crédito. Dá para contratar conta extra em qualquer rede por mês, em qualquer plano.
+A cota de minutos renova toda semana e vale para vídeos e lives: 1 minuto de vídeo processado = 1 crédito; 3 minutos de live clipada = 1 crédito. Em qualquer plano dá para contratar, por mês, conta extra no TikTok e nas outras redes (menos o YouTube Shorts) e canal extra do YouTube.
 
 Quem passa da cota pode comprar minutos avulsos ou cadastrar cartão para cobrança automática por vídeo processado. A cobrança é por minuto do vídeo ORIGINAL, não por quantidade de cortes: um vídeo de 30 minutos custa o mesmo se render 3 ou 12 cortes.
 

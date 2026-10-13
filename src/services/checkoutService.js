@@ -608,10 +608,19 @@ async function comprarExtras({ clientUserId, canais = 0, contas = 0, redes = {},
   if (pedido.canais + pedido.contas + contasNasRedes === 0) {
     throw new DadosInvalidosError('Escolha pelo menos uma conexão para adicionar.');
   }
-  // Canal do YouTube e conta do TikTok extras: só no plano maior. Conta nas
-  // redes: em todos (decisão de 12/10/2026).
-  if ((pedido.canais || pedido.contas) && !(precos && precos.canal)) {
-    throw new DadosInvalidosError('Canal do YouTube e conta do TikTok extras só existem no plano Max — troque de plano para adicionar.');
+  // Cada produto só é vendido se o plano tem preço para ele (null = não vende).
+  // Desde a migration 116 os três planos vendem os três.
+  if (pedido.canais && !(precos && precos.canal)) {
+    throw new DadosInvalidosError('Seu plano não vende canal extra do YouTube — troque de plano para adicionar.');
+  }
+  if (pedido.contas && !(precos && precos.conta)) {
+    throw new DadosInvalidosError('Seu plano não vende conta extra do TikTok — troque de plano para adicionar.');
+  }
+  // YouTube Shorts não vende conta extra (cota diária compartilhada). Conferido
+  // no pedido CRU: a normalização aceitaria a rede, porque ela existe.
+  const pedidoBruto = redes && typeof redes === 'object' ? redes : {};
+  if (precosDasConexoes.REDES_SEM_CONTA_EXTRA.some((r) => Math.trunc(Number(pedidoBruto[r]) || 0) > 0)) {
+    throw new DadosInvalidosError('A conta extra do YouTube Shorts não está à venda.');
   }
   if (contasNasRedes && !(precos && precos.rede)) {
     throw new DadosInvalidosError('Seu plano não vende contas extras nas redes sociais.');

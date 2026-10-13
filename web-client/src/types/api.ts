@@ -976,7 +976,7 @@ export interface ClientBillingOverviewResponse {
   uso?: {
     canaisYoutube: { usados: number; limite: number | null }
     contasTiktok: { usados: number; limite: number | null }
-    redes: { rede: string; nome: string; usadas: number; limite: number | null; extras: number }[]
+    redes: { rede: string; nome: string; usadas: number; limite: number | null; extras: number; vendeExtra: boolean }[]
     canaisDeLive: { usados: number; limite: number | null }
     livesAoMesmoTempo: number | null
   }

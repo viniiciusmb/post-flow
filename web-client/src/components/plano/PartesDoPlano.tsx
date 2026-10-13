@@ -148,7 +148,7 @@ function LinhaDeUso({
   )
 }
 
-function SeloDaRede({ rede }: { rede: Rede }) {
+export function SeloDaRede({ rede }: { rede: Rede }) {
   const info = REDES[rede]
   return (
     <span className="flex size-6 shrink-0 items-center justify-center rounded-md text-white" style={{ background: info.fundo }}>
@@ -217,71 +217,107 @@ export function UsoDoPlano({ uso, onComprarExtra }: { uso: Uso; onComprarExtra: 
   )
 }
 
+/** Uma linha da compra de conexões extras (canal do YouTube, TikTok ou outra rede). */
+export type LinhaDeExtra = {
+  /** "canal" (canal do YouTube), "tiktok" ou o nome da rede (instagram, facebook...). */
+  chave: string
+  nome: string
+  icone: React.ReactNode
+  usadas: number
+  limite: number | null
+  extras: number
+  precoCents: number
+}
+
+/** O que vai no endereço do checkout para cada linha. */
+function parteDoPedido(chave: string, n: number) {
+  if (chave === "canal") return `canais=${n}`
+  if (chave === "tiktok") return `contas=${n}`
+  return null
+}
+
 /**
- * Compra de contas extras nas redes sociais: o cliente escolhe quantas em cada
- * rede e vai pro checkout com tudo de uma vez. O preço mostrado aqui é só pra
- * conta: quem decide quanto cobrar é o servidor.
+ * Compra de conexões extras: mais um canal do YouTube para monitorar, mais uma
+ * conta do TikTok ou de outra rede para publicar. O cliente escolhe quantas em
+ * cada linha e vai pro checkout com tudo de uma vez. O preço mostrado aqui é só
+ * pra conta: quem decide quanto cobrar é o servidor.
  */
-export function ExtrasNasRedes({
-  uso,
-  precoCents,
+export function ConexoesExtras({
+  linhas,
   ocupado,
   onRemover,
 }: {
-  uso: Uso
-  precoCents: number
+  linhas: LinhaDeExtra[]
   ocupado: boolean
-  onRemover: (rede: string) => void
+  onRemover: (chave: string) => void
 }) {
   const [qtd, setQtd] = useState<Record<string, number>>({})
   const [confirmando, setConfirmando] = useState<string | null>(null)
   const total = Object.values(qtd).reduce((a, b) => a + b, 0)
-  const pedido = Object.entries(qtd)
-    .filter(([, n]) => n > 0)
-    .map(([rede, n]) => `${rede}:${n}`)
-    .join(",")
+  const totalCents = linhas.reduce((soma, l) => soma + (qtd[l.chave] || 0) * l.precoCents, 0)
 
-  function mudar(rede: string, delta: number) {
-    setQtd((q) => ({ ...q, [rede]: Math.max(0, Math.min(10, (q[rede] || 0) + delta)) }))
+  const partes: string[] = []
+  const redes: string[] = []
+  for (const l of linhas) {
+    const n = qtd[l.chave] || 0
+    if (!n) continue
+    const parte = parteDoPedido(l.chave, n)
+    if (parte) partes.push(parte)
+    else redes.push(`${l.chave}:${n}`)
   }
+  if (redes.length) partes.push(`redes=${redes.join(",")}`)
+  const endereco = `/client/checkout?extras=1&${partes.join("&")}`
+
+  function mudar(chave: string, delta: number) {
+    setQtd((q) => ({ ...q, [chave]: Math.max(0, Math.min(10, (q[chave] || 0) + delta)) }))
+  }
+
+  // Os preços mudam por linha (o canal do YouTube custa mais); o texto do topo
+  // cita os dois valores que existem, sem escrever número à mão.
+  const precos = [...new Set(linhas.map((l) => l.precoCents))].sort((a, b) => a - b)
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Contas extras nas redes sociais</CardTitle>
+        <CardTitle className="text-base">Conexões extras</CardTitle>
         <CardDescription>
-          {reais(precoCents)} por mês por conta, em qualquer plano. Escolha a rede e quantas contas a mais você quer. Você
-          paga agora e, a partir do mês seguinte, a cobrança vem junto com a sua mensalidade.
+          Precisa de mais um canal ou de mais uma conta? Em qualquer plano:{" "}
+          {precos.length > 1
+            ? `contas por ${reais(precos[0])}/mês e canal do YouTube por ${reais(precos[precos.length - 1])}/mês.`
+            : `${reais(precos[0] ?? 0)} por mês cada.`}{" "}
+          Você paga agora e, a partir do mês seguinte, a cobrança vem junto com a sua mensalidade.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <ul className="divide-y divide-border/70">
-          {uso.redes.map((r) => {
-            const n = qtd[r.rede] || 0
+          {linhas.map((l) => {
+            const n = qtd[l.chave] || 0
             return (
-              <li key={r.rede} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2.5">
+              <li key={l.chave} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2.5">
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
-                  {r.rede in REDES && <SeloDaRede rede={r.rede as Rede} />}
+                  {l.icone}
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium">{r.nome}</span>
+                    <span className="block text-sm font-medium">
+                      {l.nome} <span className="font-normal text-muted-foreground">· {reais(l.precoCents)}/mês</span>
+                    </span>
                     <span className="block text-xs text-muted-foreground">
-                      {r.usadas} de {r.limite ?? "∞"} em uso
-                      {r.extras > 0 && ` · ${r.extras} extra${r.extras > 1 ? "s" : ""} comprada${r.extras > 1 ? "s" : ""}`}
+                      {l.usadas} de {l.limite ?? "∞"} em uso
+                      {l.extras > 0 && ` · ${l.extras} extra${l.extras > 1 ? "s" : ""} comprada${l.extras > 1 ? "s" : ""}`}
                     </span>
                   </span>
                 </span>
-                {r.extras > 0 && (
+                {l.extras > 0 && (
                   <button
                     type="button"
                     disabled={ocupado}
                     className="text-xs text-muted-foreground underline-offset-4 hover:underline"
                     onClick={() => {
-                      if (confirmando !== r.rede) return setConfirmando(r.rede)
+                      if (confirmando !== l.chave) return setConfirmando(l.chave)
                       setConfirmando(null)
-                      onRemover(r.rede)
+                      onRemover(l.chave)
                     }}
                   >
-                    {confirmando === r.rede ? "Confirmar: devolver 1" : "Devolver 1"}
+                    {confirmando === l.chave ? "Confirmar: devolver 1" : "Devolver 1"}
                   </button>
                 )}
                 <span className="flex items-center gap-1.5">
@@ -290,9 +326,9 @@ export function ExtrasNasRedes({
                     size="icon"
                     variant="outline"
                     className="size-8"
-                    aria-label={`Menos uma conta do ${r.nome}`}
+                    aria-label={`Menos um: ${l.nome}`}
                     disabled={n === 0}
-                    onClick={() => mudar(r.rede, -1)}
+                    onClick={() => mudar(l.chave, -1)}
                   >
                     <IconMinus className="size-3.5" />
                   </Button>
@@ -302,8 +338,8 @@ export function ExtrasNasRedes({
                     size="icon"
                     variant="outline"
                     className="size-8"
-                    aria-label={`Mais uma conta do ${r.nome}`}
-                    onClick={() => mudar(r.rede, 1)}
+                    aria-label={`Mais um: ${l.nome}`}
+                    onClick={() => mudar(l.chave, 1)}
                   >
                     <IconPlus className="size-3.5" />
                   </Button>
@@ -318,16 +354,16 @@ export function ExtrasNasRedes({
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <span className="text-sm">
             {total === 0 ? (
-              <span className="text-muted-foreground">Escolha pelo menos uma conta.</span>
+              <span className="text-muted-foreground">Escolha pelo menos uma conexão.</span>
             ) : (
               <>
-                {total} conta{total > 1 ? "s" : ""} a mais ·{" "}
-                <strong className="tabular-nums">{reais(total * precoCents)}</strong>/mês
+                {total} {total > 1 ? "conexões" : "conexão"} a mais ·{" "}
+                <strong className="tabular-nums">{reais(totalCents)}</strong>/mês
               </>
             )}
           </span>
           <Button asChild={total > 0} disabled={total === 0}>
-            {total > 0 ? <a href={`/client/checkout?extras=1&redes=${pedido}`}>Comprar</a> : <span>Comprar</span>}
+            {total > 0 ? <a href={endereco}>Comprar</a> : <span>Comprar</span>}
           </Button>
         </div>
       </CardContent>

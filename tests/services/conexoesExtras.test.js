@@ -98,21 +98,21 @@ test('canal e conta são contadores independentes', async () => {
   });
 });
 
-test('o par sai mais barato que os dois separados, e o preço vem do plano', async () => {
+test('canal e conta saem cada um pelo seu preço (não há mais par), e o preço vem do plano', async () => {
   await comAsaasFalso(respostasPadrao(), async (chamadas) => {
     const { cliente, plano } = await clientePronto('max', chamadas);
+    // Desde 12/10/2026 o par não existe: com conta a R$ 9,90 ele sairia mais
+    // caro que comprar separado.
+    assert.equal(plano.extra_both_price_cents, null);
+    const soma = plano.extra_channel_price_cents + plano.extra_tiktok_price_cents;
 
     await checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 1, contas: 1, remoteIp: '1.2.3.4' });
 
     const cobranca = chamadas.find((c) => c.metodo === 'POST' && c.caminho === '/payments');
-    assert.equal(cobranca.corpo.value, plano.extra_both_price_cents / 100, 'o par tem que sair pelo preço do par');
-    assert.ok(
-      plano.extra_both_price_cents < plano.extra_channel_price_cents + plano.extra_tiktok_price_cents,
-      'o par precisa ser mais barato que comprar separado, senão o desconto não existe'
-    );
+    assert.equal(Math.round(cobranca.corpo.value * 100), soma, 'canal + conta = soma dos dois preços');
 
     const assinatura = chamadas.find((c) => c.metodo === 'POST' && c.caminho === '/subscriptions');
-    assert.equal(assinatura.corpo.value, plano.extra_both_price_cents / 100, 'a mensalidade segue a mesma conta da compra');
+    assert.equal(Math.round(assinatura.corpo.value * 100), soma, 'a mensalidade segue a mesma conta da compra');
 
     // Comprando mais um canal: a recorrência passa a valer o TOTAL.
     chamadas.length = 0;
@@ -123,8 +123,8 @@ test('o par sai mais barato que os dois separados, e o preço vem do plano', asy
 
     const ajuste = chamadas.find((c) => c.metodo === 'POST' && c.caminho.startsWith('/subscriptions/'));
     assert.ok(ajuste, 'a assinatura existente tem que ser ajustada, não duplicada');
-    // 2 canais + 1 conta = 1 par + 1 canal solto.
-    assert.equal(ajuste.corpo.value, (plano.extra_both_price_cents + plano.extra_channel_price_cents) / 100);
+    // 2 canais + 1 conta, cada um pelo seu preço.
+    assert.equal(Math.round(ajuste.corpo.value * 100), 2 * plano.extra_channel_price_cents + plano.extra_tiktok_price_cents);
     assert.equal(ajuste.corpo.updatePendingPayments, true);
 
     assert.ok(
@@ -155,19 +155,29 @@ test('devolver a última conexão cancela a assinatura de extras', async () => {
   });
 });
 
-test('plano que não vende conexão extra recusa a compra', async () => {
+test('plano sem preço de canal ou de conta recusa a compra (preço null = não vende)', async () => {
+  // Hoje os três planos vendem; o caminho do "não vende" continua existindo
+  // para o dia em que um plano novo nascer sem preço de extra.
   await comAsaasFalso(respostasPadrao(), async (chamadas) => {
-    const { cliente } = await clientePronto('starter', chamadas);
-
-    await assert.rejects(
-      () => checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 1, remoteIp: '1.2.3.4' }),
-      (err) => {
-        assert.equal(err.name, 'DadosInvalidosError');
-        assert.match(err.message, /só existem no plano Max/);
-        return true;
-      }
-    );
-    assert.equal(chamadas.length, 0, 'nada pode ser cobrado numa compra que o plano não permite');
+    const { cliente, plano } = await clientePronto('starter', chamadas);
+    await pool.query('UPDATE subscription_plans SET extra_channel_price_cents = NULL, extra_tiktok_price_cents = NULL WHERE id = $1', [plano.id]);
+    try {
+      await assert.rejects(
+        () => checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 1, remoteIp: '1.2.3.4' }),
+        /não vende canal extra/
+      );
+      await assert.rejects(
+        () => checkoutService.comprarExtras({ clientUserId: cliente.id, contas: 1, remoteIp: '1.2.3.4' }),
+        /não vende conta extra do TikTok/
+      );
+      assert.equal(chamadas.length, 0, 'nada pode ser cobrado numa compra que o plano não permite');
+    } finally {
+      await pool.query('UPDATE subscription_plans SET extra_channel_price_cents = $2, extra_tiktok_price_cents = $3 WHERE id = $1', [
+        plano.id,
+        plano.extra_channel_price_cents,
+        plano.extra_tiktok_price_cents,
+      ]);
+    }
   });
 });
 

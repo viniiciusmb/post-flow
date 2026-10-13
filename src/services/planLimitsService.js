@@ -56,10 +56,8 @@ function limitesDe(subscription) {
 
 // Pode comprar conexao extra? So nos planos que trazem preco.
 //
-// Continua sendo so o plano maior, como antes desta mudanca: quem esta no
-// Starter ou no Pro sobe de plano, que sai mais barato pra ele do que comprar
-// avulso. Liberar extras em todos os planos seria outra decisao de negocio, e
-// nao foi o que foi pedido - o pedido foi separar canal de conta.
+// Desde a migration 116 (12/10/2026, decisao do fundador) os tres planos
+// trazem preco de canal e de conta do TikTok, entao todos podem comprar.
 function podeComprarExtras(subscription) {
   return Boolean(subscription && subscription.plan_id && subscription.extra_channel_price_cents);
 }

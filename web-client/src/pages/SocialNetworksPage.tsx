@@ -920,7 +920,11 @@ function ConectarRedeDialog({
           <p className="mx-6 mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
             {limites?.semPlano
               ? `Assine um plano para conectar o ${info.nome}.`
-              : `Seu plano${limites?.plano ? ` ${limites.plano}` : ""} permite ${limiteDaRede(rede, limites)} ${limiteDaRede(rede, limites) === 1 ? "conta" : "contas"} do ${info.nome}, e você já ${jaTem === 1 ? "tem 1" : `tem ${jaTem}`}. Para conectar mais, compre uma conta extra por R$ 9,90/mês ou troque de plano.`}
+              : `Seu plano${limites?.plano ? ` ${limites.plano}` : ""} permite ${limiteDaRede(rede, limites)} ${limiteDaRede(rede, limites) === 1 ? "conta" : "contas"} do ${info.nome}, e você já ${jaTem === 1 ? "tem 1" : `tem ${jaTem}`}. ${
+                  rede === "youtube"
+                    ? "Para conectar mais, troque de plano (o YouTube não vende conta extra)."
+                    : "Para conectar mais, compre uma conta extra por R$ 9,90/mês ou troque de plano."
+                }`}
           </p>
         )}
         <DialogFooter className="px-6 pb-6 pt-4">
@@ -937,9 +941,13 @@ function ConectarRedeDialog({
                 <Button variant="outline" asChild>
                   <a href="/client/billing">Ver planos</a>
                 </Button>
-                <Button asChild>
-                  <a href={`/client/checkout?extras=1&redes=${rede}:1`}>Comprar conta extra · R$ 9,90/mês</a>
-                </Button>
+                {/* O YouTube (Shorts) não vende conta extra: a cota de envios é
+                    compartilhada por todos os clientes. */}
+                {rede !== "youtube" && (
+                  <Button asChild>
+                    <a href={`/client/checkout?extras=1&redes=${rede}:1`}>Comprar conta extra · R$ 9,90/mês</a>
+                  </Button>
+                )}
               </>
             )
           ) : (

@@ -101,10 +101,33 @@ test('Max mistura canal do YouTube com contas nas redes: cada uma pelo seu preç
   });
 });
 
-test('Starter não compra canal do YouTube extra; rede inventada não vira compra; nada é cobrado', async () => {
+test('Starter compra conta do TikTok por R$ 9,90 e canal do YouTube pelo preço do canal', async () => {
   await comAsaasFalso(respostasPadrao(), async (chamadas) => {
-    const { cliente } = await clientePronto('starter', chamadas);
-    await assert.rejects(() => checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 1, remoteIp: '1.2.3.4' }), /só existem no plano Max/);
+    const { cliente, plano } = await clientePronto('starter', chamadas);
+    await checkoutService.comprarExtras({ clientUserId: cliente.id, contas: 1, remoteIp: '1.2.3.4' });
+    let cobranca = chamadas.filter((c) => c.metodo === 'POST' && c.caminho === '/payments').at(-1);
+    assert.equal(Math.round(cobranca.corpo.value * 100), 990);
+    await checkoutService.comprarExtras({ clientUserId: cliente.id, canais: 1, remoteIp: '1.2.3.4' });
+    cobranca = chamadas.filter((c) => c.metodo === 'POST' && c.caminho === '/payments').at(-1);
+    assert.equal(Math.round(cobranca.corpo.value * 100), Number(plano.extra_channel_price_cents));
+    const limites = planLimitsService.limitesDe(await clientSubscriptionsRepository.getOrCreate(cliente.id));
+    assert.equal(limites.contas, plano.max_tiktok_accounts + 1);
+    assert.equal(limites.canais, plano.max_youtube_channels + 1);
+  });
+});
+
+test('YouTube Shorts não vende conta extra; rede inventada não vira compra; nada é cobrado', async () => {
+  await comAsaasFalso(respostasPadrao(), async (chamadas) => {
+    const { cliente } = await clientePronto('max', chamadas);
+    await assert.rejects(
+      () => checkoutService.comprarExtras({ clientUserId: cliente.id, redes: { youtube: 1 }, remoteIp: '1.2.3.4' }),
+      /YouTube Shorts não está à venda/
+    );
+    await assert.rejects(
+      () => checkoutService.comprarExtras({ clientUserId: cliente.id, redes: { youtube: 1, instagram: 1 }, remoteIp: '1.2.3.4' }),
+      /YouTube Shorts não está à venda/,
+      'misturar o YouTube com outra rede não pode passar'
+    );
     await assert.rejects(() => checkoutService.comprarExtras({ clientUserId: cliente.id, redes: { orkut: 3 }, remoteIp: '1.2.3.4' }), /pelo menos uma conexão/);
     assert.equal(chamadas.filter((c) => c.metodo === 'POST' && c.caminho === '/payments').length, 0);
   });
@@ -131,8 +154,10 @@ test('estorno e devolução tiram só o que foi comprado, e a mensalidade acompa
   });
 });
 
-test('preço: contas nas redes somam ao par do YouTube/TikTok sem mexer no desconto do par', () => {
-  const precos = { canal: 1490, conta: 2990, ambos: 3990, rede: 990 };
-  assert.equal(precoDosExtras({ canais: 1, contas: 1, redes: { instagram: 1, bluesky: 2 } }, precos).totalCents, 3990 + 3 * 990);
+test('preço: sem par, cada item sai pelo seu preço; com par (se um dia voltar), o desconto vale por par', () => {
+  const hoje = { canal: 1490, conta: 990, ambos: null, rede: 990 };
+  assert.equal(precoDosExtras({ canais: 1, contas: 1, redes: { instagram: 1, bluesky: 2 } }, hoje).totalCents, 1490 + 990 + 3 * 990);
+  const comPar = { canal: 1490, conta: 2990, ambos: 3990, rede: 990 };
+  assert.equal(precoDosExtras({ canais: 1, contas: 1, redes: { instagram: 1, bluesky: 2 } }, comPar).totalCents, 3990 + 3 * 990);
   assert.equal(precoDosExtras({ redes: { instagram: 1 } }, { canal: null, conta: null, ambos: null, rede: 990 }).totalCents, 990);
 });

@@ -188,6 +188,8 @@ async function overview(req, res) {
         usadas: usoPorRede[rede] || 0,
         limite: planLimitsService.limiteNaRede(novidades, rede),
         extras: (novidades.extrasPorRede || {})[rede] || 0,
+        // YouTube Shorts não vende conta extra (ver precoDasConexoesExtras).
+        vendeExtra: precosDasConexoes.REDES_COM_CONTA_EXTRA.includes(rede),
       })),
       canaisDeLive: { usados: canaisDeLive, limite: novidades.canaisDeLive },
       livesAoMesmoTempo: novidades.livesAoMesmoTempo,

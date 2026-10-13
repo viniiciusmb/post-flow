@@ -1,7 +1,7 @@
 import { Rico } from "@/components/dashboard/Rico"
 import { useT, type ChaveDeTraducao } from "@/i18n"
 import { useEffect, useState } from "react"
-import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter, IconClock, IconBrandYoutube, IconBrandTiktok, IconReceipt, IconPlus, IconShare, IconBroadcast } from "@tabler/icons-react"
+import { IconCreditCard, IconCircleCheck, IconCoins, IconChevronDown, IconRouter, IconClock, IconBrandYoutube, IconBrandTiktok, IconReceipt, IconShare, IconBroadcast } from "@tabler/icons-react"
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout"
 import { PageHeader } from "@/components/dashboard/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -9,12 +9,13 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ExtrasNasRedes, QuantoGasta, UsoDoPlano } from "@/components/plano/PartesDoPlano"
+import { ConexoesExtras, QuantoGasta, SeloDaRede, UsoDoPlano, type LinhaDeExtra } from "@/components/plano/PartesDoPlano"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TonePill } from "@/components/ui/tone-pill"
 import { useAuth } from "@/hooks/useAuth"
 import { api, ApiError } from "@/lib/api"
 import { Bandeira, bandeiraDoAsaas } from "@/components/checkout/BandeirasDeCartao"
+import { REDES, type Rede } from "@/lib/redes"
 import { data as dataCurta, dataHora, hora } from "@/lib/formatoLocal"
 import type {
   ClientBillingOverviewResponse,
@@ -278,6 +279,57 @@ function CartaoLinha({ card }: { card: { brand: string; last4: string } }) {
   )
 }
 
+// As linhas de "Conexões extras": canal do YouTube, conta do TikTok e as
+// outras redes que vendem conta extra. Só entra o que o plano tem preço - um
+// preço null quer dizer que o plano não vende aquilo.
+function linhasDeExtra(data: ClientBillingOverviewResponse): LinhaDeExtra[] {
+  const p = data.subscription.precosExtras
+  const uso = data.uso
+  if (!p || !uso) return []
+  const linhas: LinhaDeExtra[] = []
+  if (p.canal) {
+    linhas.push({
+      chave: "canal",
+      nome: "Canal do YouTube",
+      icone: (
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-[#FF0000] text-white">
+          <IconBrandYoutube className="size-3.5" />
+        </span>
+      ),
+      usadas: uso.canaisYoutube.usados,
+      limite: uso.canaisYoutube.limite,
+      extras: data.subscription.extraChannels,
+      precoCents: p.canal,
+    })
+  }
+  if (p.conta) {
+    linhas.push({
+      chave: "tiktok",
+      nome: "TikTok",
+      icone: <SeloDaRede rede="tiktok" />,
+      usadas: uso.contasTiktok.usados,
+      limite: uso.contasTiktok.limite,
+      extras: data.subscription.extraTiktokAccounts,
+      precoCents: p.conta,
+    })
+  }
+  if (p.rede) {
+    for (const r of uso.redes) {
+      if (!r.vendeExtra || !(r.rede in REDES)) continue
+      linhas.push({
+        chave: r.rede,
+        nome: r.nome,
+        icone: <SeloDaRede rede={r.rede as Rede} />,
+        usadas: r.usadas,
+        limite: r.limite,
+        extras: r.extras,
+        precoCents: p.rede,
+      })
+    }
+  }
+  return linhas
+}
+
 function formatarData(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
 }
@@ -290,7 +342,6 @@ export function ClientBillingPage() {
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [minutosAvulsos, setMinutosAvulsos] = useState<number | null>(null)
   const [payments, setPayments] = useState<ClientPaymentsResponse | null>(null)
-  const [removerPedido, setRemoverPedido] = useState<"canais" | "contas" | null>(null)
   const [cancelarPedido, setCancelarPedido] = useState(false)
   // Aba aberta, guardada na URL (?aba=comprar) pra os links de outras telas
   // ("comprar conta extra", "ver planos") abrirem direto no lugar certo.
@@ -456,23 +507,6 @@ export function ClientBillingPage() {
     } finally {
       setBusyKey(null)
     }
-  }
-
-  // Remoção em dois cliques, sem popup nativo: o mesmo padrão já usado na
-  // exclusão de vídeos. O primeiro clique só arma, o segundo executa.
-  // Dois cliques: o primeiro pede confirmação no próprio botão, o segundo
-  // executa. `removerPedido` guarda QUAL dos dois está sendo confirmado — com
-  // um booleano, pedir para remover um canal deixaria o botão de conta também
-  // dizendo "confirmar", e o cliente removeria o que não queria.
-  async function removerConexaoExtra(oQue: "canais" | "contas") {
-    if (removerPedido !== oQue) {
-      setRemoverPedido(oQue)
-      return
-    }
-    setRemoverPedido(null)
-    await runAction("extras-remover", () =>
-      api.post("/api/client/checkout/extras/remover", { [oQue]: 1 })
-    )
   }
 
   // Cancelar o plano. Discreto por decisão do fundador, mas com confirmação na
@@ -913,120 +947,24 @@ export function ClientBillingPage() {
               </div>
 
 
-              {data.uso && data.subscription.precosExtras?.rede ? (
-                <ExtrasNasRedes
-                  uso={data.uso}
-                  precoCents={data.subscription.precosExtras.rede}
+              {/* Conexões extras numa lista só (12/10/2026): canal do YouTube,
+                  conta do TikTok e conta nas outras redes, cada linha com o seu
+                  preço. Só entra o que o plano vende (preço null = não vende),
+                  e o YouTube Shorts não vende conta extra (vendeExtra=false). */}
+              {data.uso && data.subscription.precosExtras ? (
+                <ConexoesExtras
+                  linhas={linhasDeExtra(data)}
                   ocupado={busyKey === "extras-remover"}
-                  onRemover={(rede) =>
-                    runAction("extras-remover", () => api.post("/api/client/checkout/extras/remover", { redes: { [rede]: 1 } }))
+                  onRemover={(chave) =>
+                    runAction("extras-remover", () =>
+                      api.post(
+                        "/api/client/checkout/extras/remover",
+                        chave === "canal" ? { canais: 1 } : chave === "tiktok" ? { contas: 1 } : { redes: { [chave]: 1 } }
+                      )
+                    )
                   }
                 />
               ) : null}
-              {/* Conexões extras. Desde 01/09/2026 são dois produtos separados —
-                  canal do YouTube e conta do TikTok — em vez de um pacote fechado
-                  que valia os dois. Quem leva o par paga menos que os dois avulsos.
-
-                  Só aparece nos planos que vendem: nos outros a saída é trocar de
-                  plano, e um card vazio aqui ensinaria a ignorar esta parte da tela. */}
-              {data.subscription.precosExtras?.canal ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <IconPlus className="size-4 text-muted-foreground" />
-                      Canais do YouTube e contas do TikTok extras
-                    </CardTitle>
-                    <CardDescription>
-                      Adicione só o que faltar: mais um canal para monitorar, mais uma conta para publicar, ou os
-                      dois. O par sai por {formatCents(data.subscription.precosExtras.ambos!)} — mais barato que
-                      comprar separado.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-4">
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <RateBox
-                        titulo="Canais do YouTube"
-                        valor={`${data.subscription.limiteCanais ?? "∞"}`}
-                        detalhe={
-                          data.subscription.extraChannels > 0
-                            ? `${data.subscription.extraChannels} extra(s) que você comprou`
-                            : "Total que você pode monitorar"
-                        }
-                      />
-                      <RateBox
-                        titulo="Contas do TikTok"
-                        valor={`${data.subscription.limiteContas ?? "∞"}`}
-                        detalhe={
-                          data.subscription.extraTiktokAccounts > 0
-                            ? `${data.subscription.extraTiktokAccounts} extra(s) que você comprou`
-                            : "Total em que você pode publicar"
-                        }
-                      />
-                    </div>
-
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <Button asChild variant="outline" className="h-auto flex-col items-start gap-0.5 py-2.5">
-                        <a href="/client/checkout?extras=1&canais=1">
-                          <span className="text-xs font-normal text-muted-foreground">+1 canal do YouTube</span>
-                          <span className="font-semibold">{formatCents(data.subscription.precosExtras.canal!)}/mês</span>
-                        </a>
-                      </Button>
-                      <Button asChild variant="outline" className="h-auto flex-col items-start gap-0.5 py-2.5">
-                        <a href="/client/checkout?extras=1&contas=1">
-                          <span className="text-xs font-normal text-muted-foreground">+1 conta do TikTok</span>
-                          <span className="font-semibold">{formatCents(data.subscription.precosExtras.conta!)}/mês</span>
-                        </a>
-                      </Button>
-                      <Button asChild className="h-auto flex-col items-start gap-0.5 py-2.5">
-                        <a href="/client/checkout?extras=1&canais=1&contas=1">
-                          <span className="text-xs font-normal opacity-80">+1 canal e +1 conta</span>
-                          <span className="font-semibold">{formatCents(data.subscription.precosExtras.ambos!)}/mês</span>
-                        </a>
-                      </Button>
-                    </div>
-
-                    {/* A primeira cobrança sai agora; a partir do ciclo seguinte ela
-                        cai no mesmo dia da mensalidade. Dizer isso aqui evita a
-                        dúvida de "por que fui cobrado duas vezes esse mês". */}
-                    <p className="text-xs text-muted-foreground">
-                      Você paga a conexão agora e, a partir do mês seguinte, ela é cobrada junto com a sua
-                      mensalidade, numa data só.
-                    </p>
-
-                    {(data.subscription.extraChannels > 0 || data.subscription.extraTiktokAccounts > 0) && (
-                      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-                        {data.subscription.extraChannels > 0 && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={busyKey === "extras-remover"}
-                            onClick={() => removerConexaoExtra("canais")}
-                          >
-                            {removerPedido === "canais" ? "Confirmar remoção" : "Remover 1 canal"}
-                          </Button>
-                        )}
-                        {data.subscription.extraTiktokAccounts > 0 && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={busyKey === "extras-remover"}
-                            onClick={() => removerConexaoExtra("contas")}
-                          >
-                            {removerPedido === "contas" ? "Confirmar remoção" : "Remover 1 conta"}
-                          </Button>
-                        )}
-                        {removerPedido && (
-                          <p className="w-full text-xs text-muted-foreground">
-                            O mês já pago não é devolvido — a cobrança some a partir do próximo.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ) : null}
-
-
             </TabsContent>
 
             <TabsContent value="planos" className="flex min-w-0 flex-col gap-4">
