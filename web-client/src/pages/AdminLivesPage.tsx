@@ -468,16 +468,19 @@ export function AdminLivesPage() {
               <div className="flex flex-col gap-2">
                 <Label>Enquadramento</Label>
                 <div className="flex flex-wrap items-center gap-3">
-                  <ToggleGroup
-                    type="single"
-                    variant="outline"
-                    value={estado.opcoes.cameraModo}
-                    onValueChange={(v) => v && void salvarOpcoes({ cameraModo: v as Opcoes["cameraModo"] })}
-                  >
-                    <ToggleGroupItem value="ia">A IA escolhe o formato</ToggleGroupItem>
-                    <ToggleGroupItem value="auto">Destacar a câmera</ToggleGroupItem>
-                    <ToggleGroupItem value="desligado">Estilo normal</ToggleGroupItem>
-                  </ToggleGroup>
+                  {/* No celular os 3 botões não cabem: a faixa rola em vez da página. */}
+                  <div className="-mx-1 min-w-0 max-w-full overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
+                    <ToggleGroup
+                      type="single"
+                      variant="outline"
+                      value={estado.opcoes.cameraModo}
+                      onValueChange={(v) => v && void salvarOpcoes({ cameraModo: v as Opcoes["cameraModo"] })}
+                    >
+                      <ToggleGroupItem value="ia">A IA escolhe o formato</ToggleGroupItem>
+                      <ToggleGroupItem value="auto">Destacar a câmera</ToggleGroupItem>
+                      <ToggleGroupItem value="desligado">Estilo normal</ToggleGroupItem>
+                    </ToggleGroup>
+                  </div>
                   {estado.opcoes.cameraModo === "auto" && (
                     <>
                       <ToggleGroup

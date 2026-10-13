@@ -47,7 +47,7 @@ export function AdminPostingsPage() {
     <DashboardLayout user={user} onLogout={logout} title={t("menu.postagens")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{t("adm.publicacoesDescricao")}</p>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
           <DateRangeFilter value={range} onChange={setRange} />
           <Input
             placeholder="Buscar postagem..."

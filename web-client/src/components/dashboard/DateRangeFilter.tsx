@@ -42,7 +42,9 @@ export function DateRangeFilter({
     // começava a segunda linha aparecia com o canto reto, solto, parecendo
     // defeito. Rolar dentro da própria faixa mantém o controle inteiro - e a
     // página continua sem rolagem lateral.
-    <div className="-mx-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    // min-w-0 + max-w-full: dentro de uma linha flex (a barra de filtros), sem
+    // isso a faixa cresce até o tamanho dos botões em vez de rolar.
+    <div className="-mx-1 min-w-0 max-w-full overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <ToggleGroup
         type="single"
         variant="outline"
