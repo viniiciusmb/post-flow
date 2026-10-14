@@ -3,6 +3,7 @@
 'use strict';
 
 const youtubeChannelsRepository = require('../../repositories/youtubeChannelsRepository');
+const assinaturaEmDiaService = require('../../services/assinaturaEmDiaService');
 const { passaDoLimite } = require('../../lib/limiteDeDuracao');
 const sourceVideosRepository = require('../../repositories/sourceVideosRepository');
 const ytDlpService = require('../../services/ytDlpService');
@@ -215,6 +216,10 @@ async function run(boss) {
   const channels = await youtubeChannelsRepository.listActive();
 
   for (const channel of channels) {
+    // Mensalidade vencida: o canal não busca vídeo novo (não cadastra nem
+    // gasta nada). O marco d'água fica onde estava, então ao voltar ele pega
+    // o vídeo mais recente, como já faz o freio de fila.
+    if (!(await assinaturaEmDiaService.emDia(channel.client_user_id))) continue;
     try {
       // A pagina /videos do canal sempre vem do mais novo pro mais velho -
       // usamos isso como marco d'agua por ID em vez de data (a listagem

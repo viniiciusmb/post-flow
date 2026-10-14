@@ -25,6 +25,8 @@ router.put('/estilo', asyncHandler(livesApiController.salvarEstilo));
 router.post('/canais', asyncHandler(livesApiController.adicionarCanal));
 router.delete('/canais/:id', asyncHandler(livesApiController.removerCanal));
 router.put('/canais/:id/automatico', asyncHandler(livesApiController.definirAutomatico));
+router.put('/canais/:id/limites', asyncHandler(livesApiController.definirLimites));
+router.post('/canais/:id/continuar', asyncHandler(livesApiController.continuarMesmoAssim));
 router.post('/canais/:id/clipar-esta-live', asyncHandler(livesApiController.cliparEstaLive));
 router.delete('/canais/:id/clipar-esta-live', asyncHandler(livesApiController.pararEstaLive));
 router.post('/canais/:id/clipar-agora', asyncHandler(livesApiController.cliparAgora));

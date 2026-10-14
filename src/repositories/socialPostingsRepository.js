@@ -1,6 +1,7 @@
 'use strict';
 
 const pool = require('../db/pool');
+const { sqlEmDia } = require('../lib/assinaturaEmDia');
 const { dentroDoPlanoSql } = require('./socialAccountsRepository');
 const logger = require('../lib/logger');
 const socialPostingSettingsRepository = require('./socialPostingSettingsRepository');
@@ -179,7 +180,7 @@ async function contasQuePublicamSozinhas() {
        FROM social_accounts sa
        LEFT JOIN social_posting_settings s ON s.social_account_id = sa.id
       WHERE sa.disconnected_at IS NULL AND sa.precisa_reconectar_em IS NULL
-        AND ${dentroDoPlanoSql('sa')}
+        AND ${dentroDoPlanoSql('sa')} AND ${sqlEmDia('sa.client_user_id')}
         AND COALESCE(s.auto_post_enabled, true) AND NOT COALESCE(s.paused, false)
         AND EXISTS (SELECT 1 FROM social_postings sp WHERE sp.social_account_id = sa.id AND sp.status = 'pending')`
   );
@@ -193,7 +194,7 @@ async function contasComPostarAgora() {
     `SELECT DISTINCT sa.id, sa.network, sa.client_user_id
        FROM social_postings sp JOIN social_accounts sa ON sa.id = sp.social_account_id
       WHERE sp.status = 'pending' AND sp.ignora_limite_diario AND sa.disconnected_at IS NULL
-        AND sa.precisa_reconectar_em IS NULL AND ${dentroDoPlanoSql('sa')}`
+        AND sa.precisa_reconectar_em IS NULL AND ${dentroDoPlanoSql('sa')} AND ${sqlEmDia('sa.client_user_id')}`
   );
   return rows;
 }

@@ -43,7 +43,35 @@ function canalDoUsuario(c, usoDaLive) {
     // credito acabou nela (a pessoa parou de receber cortes desta live).
     creditosNestaLive: usoDaLive ? Number(usoDaLive.credits_charged) : 0,
     semCredito: Boolean(usoDaLive?.out_of_credit_at),
+    // Limites de segurança escolhidos pra este canal (null = sem aquele limite).
+    limites: {
+      horas: c.limite_horas === null || c.limite_horas === undefined ? null : Number(c.limite_horas),
+      cortes: c.limite_cortes === null || c.limite_cortes === undefined ? null : Number(c.limite_cortes),
+      pctCota: c.limite_pct_cota === null || c.limite_pct_cota === undefined ? null : Number(c.limite_pct_cota),
+    },
+    // A live em andamento parou num limite: 'horas' | 'cortes' | 'cota' | null.
+    paradoPorLimite: usoDaLive?.parado_por_limite_at ? usoDaLive.motivo_limite : null,
   };
+}
+
+// Limites de segurança do "Clipar sempre" (ver liveCreditosService.limiteAtingido).
+// Cada um pode vir null (sem aquele limite). Devolve { limites } ou { error }.
+function validarLimites(corpo) {
+  if (!corpo || typeof corpo !== 'object') return { error: 'Informe os limites.' };
+  const faixa = (valor, min, max, nome, inteiro) => {
+    if (valor === null || valor === undefined || valor === '') return { v: null };
+    const n = Number(valor);
+    if (!Number.isFinite(n) || n < min || n > max || (inteiro && !Number.isInteger(n))) {
+      return { error: `${nome} precisa ficar entre ${min} e ${max}.` };
+    }
+    return { v: inteiro ? n : Math.round(n * 2) / 2 };
+  };
+  const horas = faixa(corpo.horas, 0.5, 24, 'O limite de horas', false);
+  const cortes = faixa(corpo.cortes, 1, 500, 'O limite de cortes', true);
+  const pctCota = faixa(corpo.pctCota, 5, 100, 'O limite da cota', true);
+  const erro = horas.error || cortes.error || pctCota.error;
+  if (erro) return { error: erro };
+  return { limites: { horas: horas.v, cortes: cortes.v, pctCota: pctCota.v } };
 }
 
 async function estado(req, res) {
@@ -100,9 +128,16 @@ async function salvarOpcoes(req, res) {
 // Adicionar ja diz se e pra clipar sempre (padrao) ou so quando a pessoa pedir.
 async function adicionarCanal(req, res) {
   const userId = req.session.user.id;
+  let limites = null;
+  if (req.body?.limites !== undefined) {
+    const v = validarLimites(req.body.limites);
+    if (v.error) return res.status(400).json({ error: v.error });
+    limites = v.limites;
+  }
   const r = await admin.seguirCanal(userId, req.body, { admin: ehAdmin(req) });
   if (r.error) return res.status(r.status).json({ error: r.error, ...(r.limite ? { limite: true } : {}) });
   if (req.body?.autoClipar === false) await livesRepository.setPaused(userId, r.canal.id, true);
+  if (limites) await livesRepository.setFollowLimits(userId, r.canal.id, limites);
   return estado(req, res);
 }
 
@@ -121,10 +156,35 @@ async function definirAutomatico(req, res) {
   const userId = req.session.user.id;
   const id = Number(req.params.id);
   if (typeof req.body?.ligado !== 'boolean') return res.status(400).json({ error: 'Informe ligado: true ou false.' });
+  // Ligar pode vir junto com os limites de segurança que a janela perguntou.
+  let limites = null;
+  if (req.body.ligado && req.body.limites !== undefined) {
+    const v = validarLimites(req.body.limites);
+    if (v.error) return res.status(400).json({ error: v.error });
+    limites = v.limites;
+  }
   const ok = await livesRepository.setPaused(userId, id, !req.body.ligado);
   if (!ok) return res.status(404).json({ error: 'Voce nao acompanha esse canal.' });
+  if (limites) await livesRepository.setFollowLimits(userId, id, limites);
   // Ligou o automatico: a marca de "so esta live" fica redundante.
   if (req.body.ligado) await livesRepository.setClipThisLive(userId, id, false);
+  await limitesDasLivesService.recalcular();
+  return estado(req, res);
+}
+
+async function definirLimites(req, res) {
+  const v = validarLimites(req.body);
+  if (v.error) return res.status(400).json({ error: v.error });
+  const ok = await livesRepository.setFollowLimits(req.session.user.id, Number(req.params.id), v.limites);
+  if (!ok) return res.status(404).json({ error: 'Voce nao acompanha esse canal.' });
+  return estado(req, res);
+}
+
+// A live em andamento parou num limite de segurança e o cliente quer seguir:
+// volta a receber cortes dela, e os limites não valem mais nesta live.
+async function continuarMesmoAssim(req, res) {
+  const ok = await livesRepository.continueDespiteLimits(req.session.user.id, Number(req.params.id));
+  if (!ok) return res.status(404).json({ error: 'Esta live não está parada por um limite.' });
   await limitesDasLivesService.recalcular();
   return estado(req, res);
 }
@@ -168,6 +228,9 @@ async function pararEstaLive(req, res) {
 }
 
 module.exports = {
+  validarLimites,
+  definirLimites,
+  continuarMesmoAssim,
   estado,
   salvarOpcoes,
   adicionarCanal,

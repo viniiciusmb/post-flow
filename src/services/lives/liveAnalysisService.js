@@ -464,7 +464,14 @@ async function distribuirSessao(sessao) {
   for (const seguidor of await livesRepository.followersWithQuality(sessao.live_channel_id)) {
     const nivel = livesUserSettings.nivel(seguidor.qualidade);
     const porBloco = new Map();
+    // Limite de segurança "parar depois de N cortes": a distribuição não pode
+    // passar dele numa leva só (a cobrança confere só a cada volta).
+    const limites = await livesRepository.followLimits(seguidor.user_id, sessao.live_channel_id);
+    const uso = await livesRepository.getCreditUsage(sessao.id, seguidor.user_id);
+    const tetoDeCortes = limites && limites.cortes && !(uso && uso.limites_ignorados) ? limites.cortes : Infinity;
+    let jaTem = 0;
     for (const inicio of await livesRepository.userJudgeClipStarts(sessao.id, seguidor.user_id)) {
+      jaTem += 1;
       const b = blocoDe(inicio);
       porBloco.set(b, (porBloco.get(b) || 0) + 1);
     }
@@ -477,6 +484,7 @@ async function distribuirSessao(sessao) {
       fim: Number(r.end_offset),
     }));
     for (const c of emOrdem) {
+      if (jaTem >= tetoDeCortes) break;
       const trecho = { inicio: Number(c.final_start), fim: Number(c.final_end) };
       const bloco = blocoDe(trecho.inicio);
       if ((porBloco.get(bloco) || 0) >= nivel.porHora) continue;
@@ -505,6 +513,7 @@ async function distribuirSessao(sessao) {
       });
       if (corte) {
         porBloco.set(bloco, (porBloco.get(bloco) || 0) + 1);
+        jaTem += 1;
         criados += 1;
         trechosDados.push(trecho);
       }

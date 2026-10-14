@@ -19,6 +19,7 @@ const googleRoutes = require('./routes/googleRoutes');
 const authApiRoutes = require('./routes/api/authApiRoutes');
 const adminApiRoutes = require('./routes/api/adminApiRoutes');
 const clientApiRoutes = require('./routes/api/clientApiRoutes');
+const bloqueioPorPagamento = require('./middleware/bloqueioPorPagamento');
 const youtubeChannelsApiRoutes = require('./routes/api/youtubeChannelsApiRoutes');
 const sourceVideosApiRoutes = require('./routes/api/sourceVideosApiRoutes');
 const clientDriveApiRoutes = require('./routes/api/clientDriveApiRoutes');
@@ -259,6 +260,8 @@ app.use('/auth/tiktok', tiktokRoutes);
 app.use('/auth/google', googleRoutes);
 app.use('/api/auth', authApiRoutes);
 app.use('/api/admin', adminApiRoutes);
+// Mensalidade vencida: nada além de regularizar (ver bloqueioPorPagamento).
+app.use('/api/client', bloqueioPorPagamento);
 app.use('/api/client', clientApiRoutes);
 app.use('/api/client/youtube-channels', youtubeChannelsApiRoutes);
 app.use('/api/client/source-videos', sourceVideosApiRoutes);

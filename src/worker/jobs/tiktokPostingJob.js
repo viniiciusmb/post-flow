@@ -13,6 +13,7 @@ const errorReportService = require('../../services/errorReportService');
 const publishOptions = require('../../lib/publishOptions');
 const erroDePostagem = require('../../lib/erroDePostagem');
 const logger = require('../../lib/logger');
+const assinaturaEmDiaService = require('../../services/assinaturaEmDiaService');
 
 const JANELA_DO_LIMITE_HORAS = 23;
 
@@ -65,6 +66,9 @@ async function run() {
   const accounts = await tiktokAccountsRepository.listActive();
   for (const account of accounts) {
     if (!account.auto_post_enabled) continue;
+    // Mensalidade vencida (ou sem plano): a fila fica parada e volta sozinha
+    // quando o pagamento cair (ver src/lib/assinaturaEmDia.js).
+    if (!(await assinaturaEmDiaService.emDia(account.client_user_id))) continue;
     try {
       await maybePublishNext(account);
     } catch (err) {

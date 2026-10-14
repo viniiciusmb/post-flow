@@ -51,15 +51,55 @@ async function saldo(userId) {
   return Math.max(Number(c.quota_normal) - Number(c.used_normal), 0) + Number(c.extra_normal);
 }
 
+// Limites de segurança do "Clipar sempre" (14/10/2026): um cliente deixou o
+// automático ligado numa live de 9 horas e ela gastou a semana inteira de
+// créditos numa noite. O cliente escolhe ao ligar o automático (ver
+// livesApiController.validarLimites); aqui, a cada volta, a live para de ser
+// clipada pra ele quando passa de algum. Confere ANTES de cobrar o bloco
+// seguinte: quem bate no limite não paga nem um crédito além dele.
+// Devolve { motivo, restante }: motivo ('horas' | 'cortes' | 'cota') quando
+// já chegou; restante = quantos créditos ainda cabem antes de chegar (uma volta
+// atrasada cobra dois blocos de uma vez e passaria um bloco do limite).
+async function limiteAtingido({ sessao, userId, uso, ehIsento }) {
+  const livre = { motivo: null, restante: Infinity };
+  if (uso.limites_ignorados) return livre;
+  const lim = await livesRepository.followLimits(userId, sessao.live_channel_id);
+  if (!lim) return livre;
+  const creditos = Number(uso.credits_charged);
+  let restante = Infinity;
+  if (lim.horas) {
+    const teto = Math.ceil((lim.horas * 3600) / SEGUNDOS_POR_CREDITO);
+    if (creditos >= teto) return { motivo: 'horas', restante: 0 };
+    restante = Math.min(restante, teto - creditos);
+  }
+  if (lim.pctCota && !ehIsento) {
+    const c = await clientCreditsRepository.getOrCreate(userId);
+    const cota = Number(c.quota_normal);
+    if (cota > 0) {
+      const teto = Math.ceil((lim.pctCota / 100) * cota);
+      if (creditos >= teto) return { motivo: 'cota', restante: 0 };
+      restante = Math.min(restante, teto - creditos);
+    }
+  }
+  if (lim.cortes && (await livesRepository.countUserClipsFromJudge(sessao.id, userId)) >= lim.cortes) return { motivo: 'cortes', restante: 0 };
+  return { motivo: null, restante };
+}
+
 async function cobrarUm({ sessao, userId, segundo, ehIsento }) {
   let uso =
     (await livesRepository.getCreditUsage(sessao.id, userId)) ||
     (await livesRepository.startCreditUsage({ sessionId: sessao.id, userId, channelId: sessao.live_channel_id, segundo, isento: ehIsento }));
+  const { motivo, restante } = await limiteAtingido({ sessao, userId, uso, ehIsento });
+  if (motivo) {
+    const parou = await livesRepository.markStoppedByLimit(sessao.id, userId, motivo);
+    if (parou) logger.info(`Lives: usuario ${userId} chegou ao limite de seguranca (${motivo}) na sessao ${sessao.id} - para de receber cortes dela.`);
+    return 0;
+  }
   const pagoAntes = Number(uso.paid_until_seconds);
   let pagoAte = pagoAntes;
   // Nao estava recebendo desde a ultima volta: recomeca a contar de agora.
   if (segundo - Number(uso.last_seen_seconds) > BURACO_S) pagoAte = Math.max(pagoAte, segundo);
-  const devidos = creditosDevidos(pagoAte, segundo);
+  const devidos = Math.min(creditosDevidos(pagoAte, segundo), restante);
   let pagos = devidos;
   let semCredito = false;
   let consumo = null;
@@ -140,4 +180,4 @@ async function cobrarCliparAgora(userId) {
   return { ok: true, creditos: CREDITOS_CLIPAR_AGORA, desfazer: () => clientCreditsRepository.release(userId, 'normal', r) };
 }
 
-module.exports = { cobrarSessoes, cobrarCliparAgora, saldo, isento, creditosDevidos, SEGUNDOS_POR_CREDITO, CREDITOS_CLIPAR_AGORA, BURACO_S };
+module.exports = { limiteAtingido, cobrarSessoes, cobrarCliparAgora, saldo, isento, creditosDevidos, SEGUNDOS_POR_CREDITO, CREDITOS_CLIPAR_AGORA, BURACO_S };

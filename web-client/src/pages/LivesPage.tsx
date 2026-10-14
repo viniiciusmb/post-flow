@@ -73,11 +73,41 @@ type Canal = {
   recebendoCortes: boolean
   creditosNestaLive: number
   semCredito: boolean
+  // Limites de segurança escolhidos ao ligar o "Clipar sempre" (null = sem aquele limite).
+  limites: Limites
+  // A live em andamento parou num limite de segurança.
+  paradoPorLimite: MotivoDoLimite | null
   // Limite do plano: acompanha mais canais do que o plano dá, ou outra live já
   // está sendo clipada (o plano clipa 1 por vez).
   bloqueio?: "fora_do_plano" | "outra_live" | null
   // Ao vivo e sem gravar no servidor: por quê.
   semGravar?: { motivo: "servidor_cheio" | "disco_cheio" | "limite_de_horas"; desde: string } | null
+}
+
+type Limites = { horas: number | null; cortes: number | null; pctCota: number | null }
+type MotivoDoLimite = "horas" | "cortes" | "cota"
+
+// O que a janela sugere ao ligar o "Clipar sempre": uma live de 9 horas gastou
+// a semana inteira de créditos de um cliente numa noite (14/10/2026).
+const LIMITES_SUGERIDOS: Limites = { horas: 4, cortes: null, pctCota: 50 }
+
+function semLimite(l: Limites) {
+  return l.horas === null && l.cortes === null && l.pctCota === null
+}
+
+function resumoDosLimites(l: Limites) {
+  const partes: string[] = []
+  if (l.horas !== null) partes.push(`até ${String(l.horas).replace(".", ",")}h`)
+  if (l.cortes !== null) partes.push(`até ${l.cortes} cortes`)
+  if (l.pctCota !== null) partes.push(`até ${l.pctCota}% da cota`)
+  return partes.join(" · ")
+}
+
+function textoDoLimite(c: Canal) {
+  const l = c.limites
+  if (c.paradoPorLimite === "horas") return `Parou nesta live: chegou ao limite de ${String(l.horas ?? "").replace(".", ",")} horas`
+  if (c.paradoPorLimite === "cortes") return `Parou nesta live: chegou a ${l.cortes ?? ""} cortes`
+  return `Parou nesta live: gastou ${l.pctCota ?? ""}% da sua cota da semana`
 }
 
 type Estado = {
@@ -310,6 +340,7 @@ function situacao(c: Canal, servicoAtivo: boolean): { texto: string; tom: "verme
     return { texto: "Ao vivo · seu plano clipa 1 live por vez e outra já está sendo clipada", tom: "ambar" }
   }
   if (c.aoVivo && c.semCredito) return { texto: "Seus créditos acabaram — esta live parou de ser clipada", tom: "ambar" }
+  if (c.aoVivo && c.paradoPorLimite) return { texto: textoDoLimite(c), tom: "ambar" }
   if (c.aoVivo && c.recebendoCortes && c.gravacao) {
     const gasto = c.creditosNestaLive ? ` · ${c.creditosNestaLive} ${c.creditosNestaLive === 1 ? "crédito" : "créditos"}` : ""
     return {
@@ -478,6 +509,8 @@ function CartaoCanal({
   onParar,
   onRemover,
   onVerCortes,
+  onEditarLimites,
+  onContinuar,
 }: {
   canal: Canal
   servicoAtivo: boolean
@@ -489,12 +522,17 @@ function CartaoCanal({
   onParar: () => void
   onRemover: () => void
   onVerCortes: () => void
+  onEditarLimites: () => void
+  onContinuar: () => void
 }) {
   const [confirmandoRemover, setConfirmandoRemover] = useState(false)
   const sit = situacao(c, servicoAtivo)
   const marca = MARCA[c.plataforma]
-  const clipandoAgora = c.aoVivo && c.recebendoCortes && Boolean(c.gravacao)
-  const preparando = c.aoVivo && c.recebendoCortes && !c.gravacao && !c.semCredito
+  // Parou num limite de segurança nesta live: nada de "clipando" nem
+  // "preparando" (a gravação pode seguir por outro cliente do mesmo canal).
+  const parado = c.aoVivo && Boolean(c.paradoPorLimite)
+  const clipandoAgora = c.aoVivo && c.recebendoCortes && Boolean(c.gravacao) && !parado
+  const preparando = c.aoVivo && c.recebendoCortes && !c.gravacao && !c.semCredito && !parado
   // Carimbo de quando a resposta chegou: a gravação anda enquanto a tela está
   // aberta, e o aviso da janela tem que andar junto.
   const [recebidoEm, setRecebidoEm] = useState(() => Date.now())
@@ -618,9 +656,24 @@ function CartaoCanal({
         </span>
         <Interruptor ligado={c.autoClipar} disabled={salvando} onChange={onAutomatico} rotulo={`Clipar ${c.nome} sempre que estiver ao vivo`} />
       </label>
+      {c.autoClipar && (
+        <div className="mx-4 -mt-1 flex items-center justify-between gap-2 px-1 text-left text-xs text-muted-foreground sm:mx-5">
+          <span className="min-w-0">
+            {semLimite(c.limites) ? "Sem limite por live" : `Para cada live: ${resumoDosLimites(c.limites)}`}
+          </span>
+          <button type="button" className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline" onClick={onEditarLimites}>
+            {semLimite(c.limites) ? "Pôr limite" : "Editar"}
+          </button>
+        </div>
+      )}
 
       <div className="mt-auto flex flex-col gap-2 p-4 pt-3 sm:p-5 sm:pt-3">
-        {clipandoAgora ? (
+        {parado ? (
+          <Button className="w-full" disabled={salvando} onClick={onContinuar} title="Volta a clipar esta live; os limites não valem mais nela">
+            {salvando ? <IconLoader2 className="size-4 animate-spin" /> : <IconScissors className="size-4" />}
+            <span className="truncate">Continuar clipando esta live</span>
+          </Button>
+        ) : clipandoAgora ? (
           <>
             {/* Clipando: a ação principal vira PARAR (pedido de 08/10/2026).
                 Com "Clipar sempre" ligado, parar desliga o automático - não
@@ -871,6 +924,8 @@ export function LivesPage() {
   const [clipando, setClipando] = useState<number | null>(null)
   const [salvandoCanal, setSalvandoCanal] = useState<number | null>(null)
   const [adicionarAberto, setAdicionarAberto] = useState(false)
+  // Janela dos limites de segurança: ao ligar o "Clipar sempre" ou ao editar.
+  const [limitesPara, setLimitesPara] = useState<{ canal: Canal; modo: "ligar" | "editar" } | null>(null)
   const [corteAberto, setCorteAberto] = useState<number | null>(null)
   const secaoCortes = useRef<HTMLDivElement>(null)
 
@@ -1134,7 +1189,13 @@ export function LivesPage() {
                     ocupado={clipando === c.id}
                     salvando={salvandoCanal === c.id}
                     onClipar={() => void clipar(c)}
-                    onAutomatico={(v) => void acaoNoCanal(c.id, () => api.put<Estado>(`${API}/canais/${c.id}/automatico`, { ligado: v }))}
+                    onAutomatico={(v) =>
+                      v
+                        ? setLimitesPara({ canal: c, modo: "ligar" })
+                        : void acaoNoCanal(c.id, () => api.put<Estado>(`${API}/canais/${c.id}/automatico`, { ligado: false }))
+                    }
+                    onEditarLimites={() => setLimitesPara({ canal: c, modo: "editar" })}
+                    onContinuar={() => void acaoNoCanal(c.id, () => api.post<Estado>(`${API}/canais/${c.id}/continuar`))}
                     janelaS={estado.janelaCliparAgoraS ?? 150}
                     onParar={() => void acaoNoCanal(c.id, () => pararDeClipar(c))}
                     onRemover={() => void acaoNoCanal(c.id, () => api.delete<Estado>(`${API}/canais/${c.id}`)).then(() => filtroCanal === c.id && setFiltroCanal(null))}
@@ -1260,6 +1321,23 @@ export function LivesPage() {
         </TabsContent>
       </Tabs>
 
+      <DialogLimites
+        canal={limitesPara?.canal ?? null}
+        modo={limitesPara?.modo ?? "editar"}
+        onFechar={() => setLimitesPara(null)}
+        onConfirmar={(limites) => {
+          const alvo = limitesPara
+          if (!alvo) return Promise.resolve(false)
+          return salvar(
+            () =>
+              alvo.modo === "ligar"
+                ? api.put<Estado>(`${API}/canais/${alvo.canal.id}/automatico`, { ligado: true, limites })
+                : api.put<Estado>(`${API}/canais/${alvo.canal.id}/limites`, limites),
+            "Não consegui salvar os limites.",
+          )
+        }}
+      />
+
       <DialogAdicionar
         aberto={adicionarAberto}
         onFechar={() => setAdicionarAberto(false)}
@@ -1295,6 +1373,104 @@ function LinhaOpcao({ titulo, descricao, controle }: { titulo: string; descricao
   )
 }
 
+// Os três limites de segurança, cada um com sua caixinha. Desmarcado = sem
+// aquele limite.
+function CamposDeLimites({ valor, onChange }: { valor: Limites; onChange: (l: Limites) => void }) {
+  const linhas: { chave: keyof Limites; antes: string; depois: string; padrao: number; min: number; max: number; passo: number }[] = [
+    { chave: "horas", antes: "Parar depois de", depois: "horas de live", padrao: 4, min: 0.5, max: 24, passo: 0.5 },
+    { chave: "cortes", antes: "Parar depois de", depois: "cortes", padrao: 40, min: 1, max: 500, passo: 1 },
+    { chave: "pctCota", antes: "Parar ao gastar", depois: "% da cota da semana", padrao: 50, min: 5, max: 100, passo: 5 },
+  ]
+  return (
+    <div className="flex flex-col gap-2">
+      {linhas.map((l) => {
+        const ligado = valor[l.chave] !== null
+        return (
+          <label key={l.chave} className={cn("flex flex-wrap items-center gap-2 rounded-xl border p-3 text-sm", ligado ? "border-foreground/40" : "text-muted-foreground")}>
+            <input
+              type="checkbox"
+              className="size-4 shrink-0 accent-[var(--foreground)]"
+              checked={ligado}
+              onChange={(e) => onChange({ ...valor, [l.chave]: e.target.checked ? l.padrao : null })}
+            />
+            <span>{l.antes}</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={l.min}
+              max={l.max}
+              step={l.passo}
+              disabled={!ligado}
+              value={valor[l.chave] ?? l.padrao}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                if (Number.isFinite(n)) onChange({ ...valor, [l.chave]: n })
+              }}
+              className="h-8 w-16 rounded-md border bg-background px-2 text-center tabular-nums disabled:opacity-50"
+              aria-label={`${l.antes} quantos ${l.depois}`}
+            />
+            <span>{l.depois}</span>
+          </label>
+        )
+      })}
+      <p className="text-xs text-muted-foreground">
+        {semLimite(valor)
+          ? "Sem nenhum limite, cada live é clipada até acabar ou até seus créditos acabarem."
+          : "Vale para cada live: a seguinte começa do zero. Se uma live parar no limite, dá pra continuar por ela no cartão do canal."}
+      </p>
+    </div>
+  )
+}
+
+function DialogLimites({
+  canal,
+  modo,
+  onFechar,
+  onConfirmar,
+}: {
+  canal: Canal | null
+  modo: "ligar" | "editar"
+  onFechar: () => void
+  onConfirmar: (l: Limites) => Promise<boolean>
+}) {
+  const [valor, setValor] = useState<Limites>(LIMITES_SUGERIDOS)
+  const [enviando, setEnviando] = useState(false)
+  useEffect(() => {
+    if (!canal) return
+    // Ao ligar: os limites que já estavam escolhidos, ou a sugestão.
+    setValor(modo === "ligar" && semLimite(canal.limites) ? LIMITES_SUGERIDOS : canal.limites)
+  }, [canal, modo])
+  if (!canal) return null
+  return (
+    <Dialog open onOpenChange={(v) => !v && onFechar()}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-2xl sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{modo === "ligar" ? `Clipar ${canal.nome} sempre que estiver ao vivo` : "Limites de segurança"}</DialogTitle>
+          <DialogDescription>
+            Uma live pode durar horas, e cada 3 minutos clipados usam 1 crédito. Escolha quando cada live de {canal.nome} para de ser clipada.
+          </DialogDescription>
+        </DialogHeader>
+        <CamposDeLimites valor={valor} onChange={setValor} />
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="ghost" onClick={onFechar}>Cancelar</Button>
+          <Button
+            disabled={enviando}
+            onClick={async () => {
+              setEnviando(true)
+              const ok = await onConfirmar(valor)
+              setEnviando(false)
+              if (ok) onFechar()
+            }}
+          >
+            {enviando && <IconLoader2 className="size-4 animate-spin" />}
+            {modo === "ligar" ? "Ligar clipagem automática" : "Salvar limites"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function DialogAdicionar({
   aberto,
   onFechar,
@@ -1309,6 +1485,7 @@ function DialogAdicionar({
   const [plataforma, setPlataforma] = useState<Plataforma>("twitch")
   const [canal, setCanal] = useState("")
   const [auto, setAuto] = useState(true)
+  const [limites, setLimites] = useState<Limites>(LIMITES_SUGERIDOS)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
@@ -1318,6 +1495,7 @@ function DialogAdicionar({
       setCanal("")
       setErro(null)
       setAuto(true)
+      setLimites(LIMITES_SUGERIDOS)
     }
   }, [aberto])
 
@@ -1331,7 +1509,7 @@ function DialogAdicionar({
     setEnviando(true)
     setErro(null)
     try {
-      const e = await api.post<Estado>(`${API}/canais`, { canal, plataforma, autoClipar: auto })
+      const e = await api.post<Estado>(`${API}/canais`, { canal, plataforma, autoClipar: auto, ...(auto ? { limites } : {}) })
       // O nome de verdade vem da plataforma ("xQc"), não do que foi digitado.
       const login = canal.trim().replace(/\/+$/, "").replace(/^.*\//, "").toLowerCase()
       const novo = e.canais.find((c) => c.login.toLowerCase() === login)
@@ -1398,6 +1576,12 @@ function DialogAdicionar({
             descricao="Toda live deste canal é cortada sozinha. Desligado, você clipa só quando apertar Clipar. Cada 3 minutos de live clipada usam 1 crédito."
             controle={<Interruptor ligado={auto} onChange={setAuto} rotulo="Clipar sempre que estiver ao vivo" />}
           />
+          {auto && (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium">Quando parar cada live</p>
+              <CamposDeLimites valor={limites} onChange={setLimites} />
+            </div>
+          )}
           {erro && <p className="text-sm text-destructive">{erro}</p>}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="ghost" onClick={onFechar}>Cancelar</Button>

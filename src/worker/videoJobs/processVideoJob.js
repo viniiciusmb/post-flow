@@ -5,6 +5,7 @@
 'use strict';
 
 const path = require('path');
+const assinaturaEmDiaService = require('../../services/assinaturaEmDiaService');
 const fs = require('fs');
 const config = require('../../config');
 const errorReportService = require('../../services/errorReportService');
@@ -308,6 +309,12 @@ async function run(sourceVideoId) {
   const heartbeat = startProcessingHeartbeat(sourceVideo.id);
 
   try {
+    // Mensalidade vencida: o vídeo espera em "aguardando crédito", e a
+    // renovação paga destrava sozinha (handlePaymentReceived chama o
+    // creditsUnlockService). Antes de qualquer etapa, pra não gastar nada.
+    if (!(await assinaturaEmDiaService.emDia(clientUserId))) {
+      throw new AwaitingCreditsError('Assinatura sem pagamento em dia.');
+    }
     await sourceVideosRepository.markProcessingStarted(sourceVideo.id);
 
     // Cria a pasta de trabalho deste video ANTES de qualquer etapa. Antes,

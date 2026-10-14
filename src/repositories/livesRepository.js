@@ -3,6 +3,7 @@
 'use strict';
 
 const pool = require('../db/pool');
+const { sqlEmDia } = require('../lib/assinaturaEmDia');
 
 // Quem RECEBE cortes de um canal (e por isso faz ele ser gravado): segue o
 // canal, com o "clipar sempre" ligado ou o "clipar esta live" pedido, e nao
@@ -16,7 +17,8 @@ const RECEBE_CORTES = `f.is_active AND f.bloqueio IS NULL AND (f.paused_at IS NU
   AND NOT EXISTS (
     SELECT 1 FROM live_credit_usage u JOIN live_sessions s ON s.id = u.session_id
      WHERE u.user_id = f.user_id AND s.live_channel_id = f.live_channel_id
-       AND s.status = 'gravando' AND u.out_of_credit_at IS NOT NULL)`;
+       AND s.status = 'gravando' AND (u.out_of_credit_at IS NOT NULL OR u.parado_por_limite_at IS NOT NULL))
+  AND ${sqlEmDia('f.user_id')}`;
 
 // ---------------------------------------------------------------- canais
 
@@ -204,6 +206,7 @@ async function listChannelsForUser(userId) {
             (SELECT count(*) FROM live_clips k WHERE k.live_channel_id = c.id AND k.user_id = $1 AND k.status IN ('na_fila','renderizando')) AS clips_em_andamento,
             (SELECT max(started_at) FROM live_sessions x WHERE x.live_channel_id = c.id) AS ultima_gravacao,
             f.paused_at, f.clip_this_live_at, f.bloqueio,
+            f.limite_horas, f.limite_cortes, f.limite_pct_cota,
             f.created_at AS followed_at
        FROM live_channel_follows f
        JOIN live_channels c ON c.id = f.live_channel_id
@@ -366,9 +369,16 @@ async function videoSegmentsBetween(sessionId, inicio, fim) {
 
 async function segmentsOlderThan(horas, limite = 500) {
   const { rows } = await pool.query(
-    `SELECT * FROM live_segments
-      WHERE deleted_at IS NULL AND created_at < now() - make_interval(hours => $1)
-      ORDER BY created_at LIMIT $2`,
+    // A gravação de uma sessão com corte ainda na fila espera: apagar por
+    // idade fazia o corte falhar sem arquivo (14/10/2026: 49 cortes de uma live
+    // de 9h foram redistribuídos com a regra nova, e as primeiras horas da
+    // gravação venciam no meio da renderização).
+    `SELECT * FROM live_segments seg
+      WHERE seg.deleted_at IS NULL AND seg.created_at < now() - make_interval(hours => $1)
+        AND NOT EXISTS (
+          SELECT 1 FROM live_clips k WHERE k.session_id = seg.session_id AND k.status IN ('na_fila', 'renderizando')
+        )
+      ORDER BY seg.created_at LIMIT $2`,
     [horas, limite]
   );
   return rows;
@@ -838,12 +848,62 @@ async function clearOutOfCredit(sessionId, userId, segundo) {
 // O que a tela mostra: creditos desta live (gravacao em andamento) por canal.
 async function creditUsageForUser(userId) {
   const { rows } = await pool.query(
-    `SELECT u.live_channel_id, u.credits_charged, u.isento, u.out_of_credit_at
+    `SELECT u.live_channel_id, u.credits_charged, u.isento, u.out_of_credit_at,
+            u.parado_por_limite_at, u.motivo_limite, u.limites_ignorados
        FROM live_credit_usage u JOIN live_sessions s ON s.id = u.session_id
       WHERE u.user_id = $1 AND s.status = 'gravando'`,
     [userId]
   );
   return rows;
+}
+
+// ---------------------------------------------------------------- limites de segurança
+
+async function followLimits(userId, channelId) {
+  const { rows } = await pool.query(
+    'SELECT limite_horas, limite_cortes, limite_pct_cota FROM live_channel_follows WHERE user_id = $1 AND live_channel_id = $2',
+    [userId, channelId]
+  );
+  if (!rows[0]) return null;
+  const r = rows[0];
+  return {
+    horas: r.limite_horas === null ? null : Number(r.limite_horas),
+    cortes: r.limite_cortes === null ? null : Number(r.limite_cortes),
+    pctCota: r.limite_pct_cota === null ? null : Number(r.limite_pct_cota),
+  };
+}
+
+async function setFollowLimits(userId, channelId, { horas, cortes, pctCota }) {
+  const { rowCount } = await pool.query(
+    `UPDATE live_channel_follows SET limite_horas = $3, limite_cortes = $4, limite_pct_cota = $5
+      WHERE user_id = $1 AND live_channel_id = $2 AND is_active`,
+    [userId, channelId, horas, cortes, pctCota]
+  );
+  return rowCount > 0;
+}
+
+// Só marca uma vez, e nunca quem mandou continuar mesmo assim.
+async function markStoppedByLimit(sessionId, userId, motivo) {
+  const { rows } = await pool.query(
+    `UPDATE live_credit_usage SET parado_por_limite_at = now(), motivo_limite = $3, updated_at = now()
+      WHERE session_id = $1 AND user_id = $2 AND parado_por_limite_at IS NULL AND NOT limites_ignorados
+      RETURNING *`,
+    [sessionId, userId, motivo]
+  );
+  return rows[0] || null;
+}
+
+// "Continuar clipando esta live": só a gravação em andamento, e os limites
+// deixam de valer pra ela (senão ela pararia de novo na volta seguinte).
+async function continueDespiteLimits(userId, channelId) {
+  const { rowCount } = await pool.query(
+    `UPDATE live_credit_usage u SET parado_por_limite_at = NULL, limites_ignorados = true, updated_at = now()
+       FROM live_sessions s
+      WHERE s.id = u.session_id AND s.status = 'gravando' AND s.live_channel_id = $2 AND u.user_id = $1
+        AND u.parado_por_limite_at IS NOT NULL`,
+    [userId, channelId]
+  );
+  return rowCount > 0;
 }
 
 async function setClipCredits(clipId, creditos) {
@@ -978,6 +1038,10 @@ module.exports = {
   countUserClipsFromJudge,
   userClipRanges,
   userJudgeClipStarts,
+  followLimits,
+  setFollowLimits,
+  markStoppedByLimit,
+  continueDespiteLimits,
   getClipSettings,
   upsertClipSettings,
   insertClipOnce,

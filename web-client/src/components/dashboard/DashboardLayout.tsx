@@ -4,6 +4,7 @@ import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { GuidedTour } from "@/components/tour/GuidedTour"
 import { ClientNoticeDialog } from "@/components/dashboard/ClientNoticeDialog"
+import { PagamentoPendenteDialog } from "@/components/dashboard/PagamentoPendenteDialog"
 import { useAuth } from "@/hooks/useAuth"
 import { instalarRelatorioDeErros } from "@/lib/reportarErroDeTela"
 import type { SessionUser } from "@/types/api"
@@ -24,7 +25,12 @@ export function DashboardLayout({
 }) {
   // O layout monta o menu, então é ele que precisa saber se "Sua conexão"
   // aparece. Reaproveita a MESMA requisição que a página já fez (ver useAuth).
-  const { mostrarTunel, painelNovo } = useAuth()
+  const { mostrarTunel, painelNovo, plano } = useAuth()
+  // Mensalidade vencida: tudo fica atrás do aviso, menos onde ela se paga.
+  const pagamentoPendente =
+    user.role === "client" &&
+    plano?.situacao === "inadimplente" &&
+    !/^\/client\/(billing|checkout)/.test(typeof window === "undefined" ? "" : window.location.pathname)
   // Erro de JavaScript de qualquer tela vai pro painel de erros do admin.
   useEffect(() => {
     instalarRelatorioDeErros()
@@ -53,10 +59,12 @@ export function DashboardLayout({
       </SidebarInset>
       {/* Montado no layout, e não em cada página: o tour atravessa telas, e
           precisa existir na tela de destino pra retomar depois da navegação. */}
-      <GuidedTour autoIniciar={autoIniciarTour} />
+      {/* Com a mensalidade em aberto o tour não abre: ele cobria o aviso de pagamento. */}
+      {!pagamentoPendente && <GuidedTour autoIniciar={autoIniciarTour} />}
       {/* Admin não recebe aviso de cliente: a rota é de cliente, e o painel
           dele não tem nada para mostrar aqui. */}
-      {user.role === "client" && <ClientNoticeDialog />}
+      {user.role === "client" && !pagamentoPendente && <ClientNoticeDialog />}
+      {pagamentoPendente && <PagamentoPendenteDialog onLogout={onLogout} />}
     </SidebarProvider>
   )
 }
