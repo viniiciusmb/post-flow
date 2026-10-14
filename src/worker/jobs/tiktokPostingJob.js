@@ -16,6 +16,14 @@ const logger = require('../../lib/logger');
 
 const JANELA_DO_LIMITE_HORAS = 23;
 
+// O job roda de minuto em minuto (antes era de 10 em 10, e o corte marcado
+// pras 12:00 saía às 12:10 - o cliente via o horário passar e achava que a
+// publicação automática tinha quebrado). Rodar mais vezes não pode virar
+// rajada: uma fila atrasada soltaria um corte por minuto, que é o que faz o
+// TikTok marcar a conta como spam. Este é o espaçamento que os 10 minutos
+// davam de graça.
+const ESPACO_MINIMO_ENTRE_POSTS_MIN = 10;
+
 function tamanhoDoArquivo(caminho) {
   try {
     return caminho ? fs.statSync(caminho).size : null;
@@ -101,6 +109,7 @@ async function maybePublishNext(account, { publicar = publish } = {}) {
   // não 24, pra não empurrar o horário fixo de cada dia 10 minutos pra frente.
   const recentes = await postingsRepository.countRecentForAccount(account.id, JANELA_DO_LIMITE_HORAS);
   if (recentes >= settings.videos_per_day) return;
+  if (await postingsRepository.publicouNosUltimosMinutos(account.id, ESPACO_MINIMO_ENTRE_POSTS_MIN)) return;
 
   const posting = await postingsRepository.findOldestDuePendingForAccount(account.id);
   if (!posting) return;

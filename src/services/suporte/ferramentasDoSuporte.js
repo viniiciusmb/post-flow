@@ -27,7 +27,10 @@ const QUEUE_VIDEO_PROCESSING = 'video-processing';
 
 // Os unicos lugares para onde um atalho pode levar. A tela traduz cada um num
 // endereco fixo; a IA nunca escreve um link.
-const DESTINOS_DE_ATALHO = new Set(['tour_guiado', 'tutorial', 'cortes', 'canais', 'publicacao', 'plano_e_uso', 'configuracoes', 'comissoes']);
+// "cortes", "canais" e "publicacao" eram as telas antigas (até 12/10/2026) e
+// saíram da lista: a IA mandava o cliente para fora do menu atual.
+const DESTINOS = ['tour_guiado', 'tutorial', 'videos_youtube', 'lives', 'feed', 'redes_sociais', 'plano_e_uso', 'configuracoes', 'comissoes'];
+const DESTINOS_DE_ATALHO = new Set(DESTINOS);
 
 // Texto que veio de fora (titulo do YouTube, nome de canal) entra na conversa
 // como DADO. Corta o tamanho e tira quebras de linha pra ninguem montar um
@@ -101,7 +104,7 @@ const DEFINICOES = [
       properties: {
         destino: {
           type: 'string',
-          enum: ['tour_guiado', 'tutorial', 'cortes', 'canais', 'publicacao', 'plano_e_uso', 'configuracoes', 'comissoes'],
+          enum: DESTINOS,
         },
       },
       required: ['destino'],

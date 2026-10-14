@@ -155,3 +155,64 @@ test('conexões extras: recorrência cancelada junto, mas valem até o fim do pe
   assert.equal(fim.extra_channels, 0, 'sem plano, conexão extra não existe');
   assert.equal(fim.extra_tiktok_accounts, 0);
 });
+
+// PIX Automático (14/10/2026): o link não aparecia para quem paga por PIX, e o
+// cliente tinha que achar a autorização no app do banco. O primeiro que tentou
+// não achou e pediu ajuda à Flora.
+async function assinantePixLogado() {
+  const cliente = await createLoginableClient();
+  const [plano] = await subscriptionPlansRepository.listActive();
+  await clientSubscriptionsRepository.setPlan(cliente.id, plano.id);
+  const autorizacao = idUnico('auth_pix');
+  const subId = idUnico('sub_pix');
+  await clientSubscriptionsRepository.setAsaasPixAuthorization(cliente.id, {
+    customerId: 'cus_pix',
+    authorizationId: autorizacao,
+    subscriptionId: subId,
+  });
+  await pool.query(
+    `INSERT INTO revenue_entries (client_user_id, kind, provider, external_id, plan_id, amount_cents, paid_at)
+     VALUES ($1, 'primeira_mensalidade', 'asaas', $2, $3, 5990, now() - interval '4 days')`,
+    [cliente.id, idUnico('pay_pix'), plano.id]
+  );
+  const agent = createAgent(baseUrl);
+  await agent.login(cliente.email, cliente.password);
+  return { cliente, agent, autorizacao };
+}
+
+test('PIX Automático: cancelar pelo painel encerra a autorização e mantém o acesso até o fim do mês pago', async () => {
+  const { cliente, agent, autorizacao } = await assinantePixLogado();
+
+  const antes = await agent.get('/api/client/billing/overview');
+  assert.equal(antes.body.subscription.podeCancelar, true, 'quem paga por PIX Automático também vê o link');
+
+  const rotas = { ...respostasPadrao(), 'DELETE /pix/automatic/authorizations/:id': () => ({ body: { id: autorizacao, status: 'CANCELLED' } }) };
+  await comAsaasFalso(rotas, async (chamadas) => {
+    const r = await agent.post('/api/client/billing/cancel');
+    assert.equal(r.status, 200, r.text);
+    assert.equal(r.body.status, 'ativo');
+    assert.ok(r.body.cancelaEm);
+    assert.ok(
+      chamadas.some((c) => c.metodo === 'DELETE' && c.caminho.endsWith(`/pix/automatic/authorizations/${autorizacao}`)),
+      'sem encerrar a autorização, o banco continuaria debitando todo mês'
+    );
+  });
+
+  const linha = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+  assert.equal(linha.status, 'ativo');
+  assert.ok(new Date(linha.cancel_at) > new Date(), 'o mês pago continua valendo');
+});
+
+test('PIX Automático: se o Asaas recusar o cancelamento, nada muda', async () => {
+  const { cliente, agent } = await assinantePixLogado();
+  const rotas = {
+    ...respostasPadrao(),
+    'DELETE /pix/automatic/authorizations/:id': () => ({ status: 500, body: { errors: [{ code: 'erro', description: 'fora do ar' }] } }),
+  };
+  await comAsaasFalso(rotas, async () => {
+    const r = await agent.post('/api/client/billing/cancel');
+    assert.equal(r.status, 502);
+  });
+  const linha = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+  assert.equal(linha.cancel_at, null);
+});

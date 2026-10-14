@@ -212,7 +212,7 @@ async function handlePixAuthorizationActivated(autorizacao) {
   // consulta já diz que a autorização caiu, o mês pago vale e acaba sozinho -
   // sem isto, `setPlan` acima deixaria o plano ativo para sempre de graça.
   if (detalhes.status === 'CANCELLED') {
-    await encerrarPixNoFimDoMesPago({ ...ativada, client_user_id: clientUserId }, 'autorizacao ja cancelada ao ativar');
+    await cancelamentoDeAssinaturaService.encerrarPixNoFimDoMesPago({ ...ativada, client_user_id: clientUserId }, 'autorizacao ja cancelada ao ativar');
   }
 }
 
@@ -314,36 +314,7 @@ async function handlePixAuthorizationCancelada(authorizationId) {
   const perdida = await asaasPixAuthorizationsRepository.markFinalIfPending(authorizationId, 'cancelada');
   if (perdida) await avisarUtmifyDoPixPerdido(perdida);
   if (registro.status !== 'ativa') return;
-  await encerrarPixNoFimDoMesPago(registro, 'autorizacao cancelada');
-}
-
-// Fim do período pago: o maior entre o livro de receita (última mensalidade +
-// 1 mês) e a própria ativação + 1 mês. A ativação entra porque ela SÓ acontece
-// com o QR imediato pago, e porque a receita da primeira mensalidade pode não
-// ter sido gravada (consulta ao Asaas que falhou).
-async function encerrarPixNoFimDoMesPago(registro, origem) {
-  const clientUserId = Number(registro.client_user_id);
-  const pelaReceita = await cancelamentoDeAssinaturaService.fimDoPeriodoPago(clientUserId);
-  const pelaAtivacao = registro.activated_at ? new Date(registro.activated_at) : null;
-  if (pelaAtivacao) pelaAtivacao.setMonth(pelaAtivacao.getMonth() + 1);
-  const candidatos = [pelaReceita, pelaAtivacao].filter(Boolean);
-  const fim = candidatos.length ? new Date(Math.max(...candidatos.map((d) => d.getTime()))) : null;
-
-  if (fim && fim > new Date()) {
-    const agendado = await clientSubscriptionsRepository.agendarFimDoPix(
-      clientUserId,
-      registro.asaas_authorization_id,
-      fim
-    );
-    if (agendado) {
-      logger.warn(
-        `Asaas: PIX Automatico do cliente ${clientUserId} encerrado (${origem}) - acesso mantido ate ${new Date(agendado.cancel_at).toISOString()}.`
-      );
-      return;
-    }
-  }
-  await clientSubscriptionsRepository.setStatus(clientUserId, 'inadimplente');
-  logger.warn(`Asaas: PIX Automatico do cliente ${clientUserId} encerrado (${origem}) - sem mes pago em aberto, inadimplente.`);
+  await cancelamentoDeAssinaturaService.encerrarPixNoFimDoMesPago(registro, 'autorizacao cancelada');
 }
 
 // Os avisos de uma mesma autorização chegam colados (ativação e cancelamento

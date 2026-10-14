@@ -24,6 +24,7 @@
 const pool = require('../db/pool');
 const asaasService = require('./asaasService');
 const clientSubscriptionsRepository = require('../repositories/clientSubscriptionsRepository');
+const asaasPixAuthorizationsRepository = require('../repositories/asaasPixAuthorizationsRepository');
 const logger = require('../lib/logger');
 
 const MENSALIDADE = ['primeira_mensalidade', 'recorrencia'];
@@ -160,6 +161,35 @@ async function desfazerAssinaturaNaoPaga(registro) {
   return true;
 }
 
+// Fim do período pago: o maior entre o livro de receita (última mensalidade +
+// 1 mês) e a própria ativação + 1 mês. A ativação entra porque ela SÓ acontece
+// com o QR imediato pago, e porque a receita da primeira mensalidade pode não
+// ter sido gravada (consulta ao Asaas que falhou).
+async function encerrarPixNoFimDoMesPago(registro, origem) {
+  const clientUserId = Number(registro.client_user_id);
+  const pelaReceita = await fimDoPeriodoPago(clientUserId);
+  const pelaAtivacao = registro.activated_at ? new Date(registro.activated_at) : null;
+  if (pelaAtivacao) pelaAtivacao.setMonth(pelaAtivacao.getMonth() + 1);
+  const candidatos = [pelaReceita, pelaAtivacao].filter(Boolean);
+  const fim = candidatos.length ? new Date(Math.max(...candidatos.map((d) => d.getTime()))) : null;
+
+  if (fim && fim > new Date()) {
+    const agendado = await clientSubscriptionsRepository.agendarFimDoPix(
+      clientUserId,
+      registro.asaas_authorization_id,
+      fim
+    );
+    if (agendado) {
+      logger.warn(
+        `Asaas: PIX Automatico do cliente ${clientUserId} encerrado (${origem}) - acesso mantido ate ${new Date(agendado.cancel_at).toISOString()}.`
+      );
+      return;
+    }
+  }
+  await clientSubscriptionsRepository.setStatus(clientUserId, 'inadimplente');
+  logger.warn(`Asaas: PIX Automatico do cliente ${clientUserId} encerrado (${origem}) - sem mes pago em aberto, inadimplente.`);
+}
+
 // O próprio cliente pediu para cancelar (link "Cancelar plano" em Plano e uso).
 //
 // Ordem: cancela no Asaas PRIMEIRO. Se o Asaas falhar, nada muda do nosso lado
@@ -174,6 +204,9 @@ async function cancelarPeloCliente(clientUserId) {
   // Clique repetido, ou aviso do Asaas que chegou antes: já está feito.
   if (sub.status === 'cancelado' || sub.cancel_at) {
     return { status: sub.status, cancelaEm: sub.cancel_at || null, jaEstava: true };
+  }
+  if (sub.subscription_provider === 'asaas_pix' && sub.asaas_pix_authorization_id) {
+    return cancelarPixPeloCliente(clientUserId, sub);
   }
   if (!sub.asaas_subscription_id) {
     const err = new Error('sem assinatura recorrente para cancelar');
@@ -201,6 +234,39 @@ async function cancelarPeloCliente(clientUserId) {
   return { status: depois.status, cancelaEm: depois.cancel_at || null, jaEstava: false };
 }
 
+// PIX Automático cancelado pelo painel (14/10/2026). Antes o cliente tinha que
+// achar a autorização no app do banco, e o primeiro que tentou não achou
+// (Tiago, #241, pela Flora em 13/10). Mesma ordem do cartão: o Asaas PRIMEIRO
+// - se ele recusar, nada muda aqui e a tela mostra o erro. Depois, a mesma
+// regra do aviso de autorização cancelada: acesso até o fim do mês pago.
+// O aviso PIX_AUTOMATIC_RECURRING_AUTHORIZATION_CANCELLED que o Asaas manda em
+// seguida passa pela mesma função e não muda nada (o agendamento usa COALESCE).
+async function cancelarPixPeloCliente(clientUserId, sub) {
+  const autorizacaoId = sub.asaas_pix_authorization_id;
+  await asaasService.cancelPixAutomaticAuthorization(autorizacaoId);
+
+  if (sub.asaas_extra_slots_subscription_id) {
+    const idExtras = sub.asaas_extra_slots_subscription_id;
+    await clientSubscriptionsRepository.soltarAssinaturaDeExtras(clientUserId, idExtras);
+    try {
+      await asaasService.cancelSubscription(idExtras);
+    } catch (err) {
+      logger.error(
+        `ATENCAO: cliente ${clientUserId} cancelou o PIX Automatico mas a recorrencia de extras ${idExtras} nao foi cancelada - pode cobrar mes que vem:`,
+        err.message
+      );
+    }
+  }
+
+  const registro = await asaasPixAuthorizationsRepository.findByAsaasId(autorizacaoId);
+  await encerrarPixNoFimDoMesPago(
+    registro || { client_user_id: clientUserId, asaas_authorization_id: autorizacaoId },
+    'cancelado pelo cliente'
+  );
+  const depois = await clientSubscriptionsRepository.getOrCreate(clientUserId);
+  return { status: depois.status, cancelaEm: depois.cancel_at || null, jaEstava: false };
+}
+
 module.exports = {
   cancelarPeloCliente,
   registrarEncerramento,
@@ -208,4 +274,5 @@ module.exports = {
   finalizarVencidos,
   desfazerAssinaturaNaoPaga,
   fimDoPeriodoPago,
+  encerrarPixNoFimDoMesPago,
 };

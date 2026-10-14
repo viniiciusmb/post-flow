@@ -225,7 +225,7 @@ async function enviarUma(p) {
     // uma URL de mídia nova mudaria o corpo.
     let midiaUrl = d.outstand_media_url;
     if (!midiaUrl) {
-      const arquivo = await videoParaRedeService.caberEm(d.caminho, r.bytesMax, d.duracao);
+      const arquivo = await videoParaRedeService.prepararParaRede(d.caminho, r.bytesMax, d.duracao);
       if (arquivo.temporario) temporario = arquivo.caminho;
       arquivoEnviadoBytes = tamanhoDoArquivo(arquivo.caminho);
       etapa = 'enviar_midia';
@@ -256,7 +256,7 @@ async function enviarUma(p) {
     const extra = {
       etapa: etapaDoErro,
       arquivoEnviadoBytes,
-      reduzidoPraCaber: Boolean(temporario),
+      copiaPreparadaPraRede: Boolean(temporario),
       limiteDeBytesDaRede: r.bytesMax || null,
       configuracaoEnviada: configDaRede(d),
       chaveDeIdempotencia: chaveDeIdempotencia(d),

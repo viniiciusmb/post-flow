@@ -99,6 +99,28 @@ function nomeDoProduto(f) {
   return 'Compra';
 }
 
+// A mensalidade que venceu sem pagamento (cartão recusado na renovação).
+// Até 14/10/2026 a tela só dizia "atualize o cartão" e não havia onde fazer
+// isso - o primeiro cliente pagante ficou inadimplente sem nenhum caminho para
+// pagar. A fatura do Asaas aceita outro cartão ou PIX, e o aviso de pagamento
+// recebido já reativa o plano sozinho (handlePaymentReceived). Falha ao
+// consultar o Asaas não pode derrubar a tela inteira: sem fatura, fica só o aviso.
+async function faturaEmAberto(subscription) {
+  if (subscription.status !== 'inadimplente' || !subscription.asaas_subscription_id || !asaasService.isConfigured()) return null;
+  try {
+    const r = await asaasService.listOverduePaymentsOfSubscription(subscription.asaas_subscription_id);
+    const vencidas = (r && r.data) || [];
+    const fatura = vencidas
+      .filter((p) => p && p.invoiceUrl && !p.deleted)
+      .sort((x, y) => String(y.dueDate || '').localeCompare(String(x.dueDate || '')))[0];
+    if (!fatura) return null;
+    return { valorCents: Math.round(Number(fatura.value) * 100), vencimento: fatura.dueDate || null, url: fatura.invoiceUrl };
+  } catch (err) {
+    logger.warn(`Nao consegui buscar a fatura em aberto da assinatura ${subscription.asaas_subscription_id}: ${err.message}`);
+    return null;
+  }
+}
+
 async function overview(req, res) {
   const clientUserId = req.session.user.id;
   const [subscription, credits, plans, pendingOverage, purchases, recentTransactions, faturas] = await Promise.all([
@@ -122,6 +144,7 @@ async function overview(req, res) {
     youtubeChannelsRepository.countByClientId(clientUserId),
     tiktokAccountsRepository.listActiveByClientId(clientUserId),
   ]);
+  const faturaVencida = await faturaEmAberto(subscription);
   const usoPorRede = {};
   for (const c of contasSociais) usoPorRede[c.network] = (usoPorRede[c.network] || 0) + 1;
 
@@ -152,12 +175,15 @@ async function overview(req, res) {
       status: subscription.status,
       // Assinatura cancelada que ainda vale até o fim do período pago.
       cancelaEm: subscription.cancel_at || null,
-      // Só quem tem recorrência de cartão no Asaas cancela por aqui. Plano dado
-      // pelo admin não cobra nada (não há o que cancelar), e o PIX Automático
-      // se cancela no app do banco - onde a autorização foi dada.
+      // Mensalidade vencida que o cliente pode pagar agora (só inadimplente).
+      faturaEmAberto: faturaVencida,
+      // Quem tem cobrança recorrente no Asaas (cartão ou PIX Automático)
+      // cancela por aqui. Plano dado pelo admin não cobra nada (não há o que
+      // cancelar).
       podeCancelar:
-        Boolean(subscription.asaas_subscription_id) &&
-        subscription.subscription_provider !== 'asaas_pix' &&
+        (subscription.subscription_provider === 'asaas_pix'
+          ? Boolean(subscription.asaas_pix_authorization_id)
+          : Boolean(subscription.asaas_subscription_id)) &&
         subscription.status !== 'cancelado' &&
         !subscription.cancel_at,
       overageCardEnabled: subscription.overage_card_enabled,

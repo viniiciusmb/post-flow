@@ -227,6 +227,11 @@ async function getPayment(paymentId) {
   return request('GET', `/payments/${encodeURIComponent(paymentId)}`);
 }
 
+// Cobranças vencidas de uma assinatura - a mensalidade que o cartão recusou.
+async function listOverduePaymentsOfSubscription(subscriptionId, { limit = 5 } = {}) {
+  return request('GET', '/payments', { query: { subscription: subscriptionId, status: 'OVERDUE', limit } });
+}
+
 async function listPaymentsByCustomer(customerId, { limit = 50, offset = 0 } = {}) {
   return request('GET', '/payments', { query: { customer: customerId, limit, offset } });
 }
@@ -279,6 +284,12 @@ async function createPixAutomaticAuthorization({
       },
     },
   });
+}
+
+// Encerra uma autorização de PIX Automático ativa: ela não gera mais
+// cobranças, e o Asaas manda PIX_AUTOMATIC_RECURRING_AUTHORIZATION_CANCELLED.
+async function cancelPixAutomaticAuthorization(authorizationId) {
+  return request('DELETE', `/pix/automatic/authorizations/${encodeURIComponent(authorizationId)}`);
 }
 
 async function getPixAutomaticAuthorization(authorizationId) {
@@ -471,6 +482,7 @@ module.exports = {
   listSubscriptionsByCustomer,
   createPixAutomaticAuthorization,
   getPixAutomaticAuthorization,
+  cancelPixAutomaticAuthorization,
   listPixKeys,
   criarChavePixAleatoria,
   listWebhooks,
@@ -481,5 +493,6 @@ module.exports = {
   cancelSubscription,
   getPayment,
   listPaymentsByCustomer,
+  listOverduePaymentsOfSubscription,
   webhookTokenValido,
 };

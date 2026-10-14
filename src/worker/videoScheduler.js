@@ -97,8 +97,10 @@ async function start(boss) {
   // Publicacao no TikTok e exportacao pro Drive precisam ler o arquivo do
   // corte em disco - por isso rodam aqui (video-worker ja tem acesso ao
   // volume compartilhado), nao no worker leve (Drive de origem/metricas).
-  await boss.schedule(QUEUE_TIKTOK_POSTING, '*/10 * * * *');
-  logger.info('Fila de postagem no TikTok agendada a cada 10 minutos.');
+  // De minuto em minuto: de 10 em 10 o corte das 12:00 saia as 12:10 (o
+  // espacamento entre posts de uma conta fica no proprio job).
+  await boss.schedule(QUEUE_TIKTOK_POSTING, '* * * * *');
+  logger.info('Fila de postagem no TikTok agendada a cada minuto.');
 
   // Instagram/Facebook publicam na hora (o cliente manda pelo feed e o envio
   // tambem dispara este job na hora); o agendamento de minuto em minuto e a

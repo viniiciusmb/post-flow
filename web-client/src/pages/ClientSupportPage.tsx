@@ -58,9 +58,15 @@ const ROTULO_DA_FERRAMENTA: Record<string, ChaveDeTraducao> = {
 const ATALHOS: Record<SupportShortcut, { rotulo: ChaveDeTraducao; url?: string }> = {
   tour_guiado: { rotulo: "flora.atalhoTour" },
   tutorial: { rotulo: "flora.atalhoTutorial", url: "/client/tutorial" },
-  cortes: { rotulo: "flora.atalhoCortes", url: "/client/videos-clips" },
-  canais: { rotulo: "flora.atalhoCanais", url: "/client/youtube-channels" },
-  publicacao: { rotulo: "flora.atalhoPublicacao", url: "/client/tiktok-account" },
+  videos_youtube: { rotulo: "flora.atalhoVideosYoutube", url: "/client/youtube" },
+  lives: { rotulo: "flora.atalhoLives", url: "/client/lives" },
+  feed: { rotulo: "flora.atalhoFeed", url: "/client/feed" },
+  redes_sociais: { rotulo: "flora.atalhoRedesSociais", url: "/client/social" },
+  // Atalhos das telas antigas, em conversas de antes de 14/10/2026: levam
+  // para a tela nova equivalente.
+  cortes: { rotulo: "flora.atalhoVideosYoutube", url: "/client/youtube" },
+  canais: { rotulo: "flora.atalhoVideosYoutube", url: "/client/youtube" },
+  publicacao: { rotulo: "flora.atalhoRedesSociais", url: "/client/social" },
   plano_e_uso: { rotulo: "flora.atalhoPlano", url: "/client/billing" },
   configuracoes: { rotulo: "flora.atalhoConfiguracoes", url: "/client/settings" },
   comissoes: { rotulo: "flora.atalhoComissoes", url: "/client/commissions" },

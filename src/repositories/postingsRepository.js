@@ -324,7 +324,13 @@ async function findOldestDuePendingForAccount(tiktokAccountId) {
   // job publicava assim que tivesse "folga" no dia, e um corte marcado pras
   // 00:00 saia as 23:40. scheduled_for nulo (linha anterior a migration 032)
   // conta como vencido, senao ficaria parado pra sempre.
-  if (primeiro.scheduled_for && new Date(primeiro.scheduled_for) > new Date()) return null;
+  // Compara pelo MINUTO: o horário gravado guarda os segundos do instante em
+  // que foi calculado (12:00:49), e o job roda no segundo 0 - sem isto o corte
+  // "das 12:00" só sairia na rodada das 12:01.
+  if (primeiro.scheduled_for) {
+    const minutoMarcado = Math.floor(new Date(primeiro.scheduled_for).getTime() / 60000) * 60000;
+    if (minutoMarcado > Date.now()) return null;
+  }
   return primeiro;
 }
 
@@ -371,6 +377,22 @@ async function countRecentForAccount(tiktokAccountId, horas) {
     [tiktokAccountId, horas]
   );
   return rows[0].count;
+}
+
+// Alguma publicação desta conta começou a sair nos últimos N minutos?
+// (Inclui o "Postar agora": um corte manual seguido de um agendado 1 minuto
+// depois é a mesma rajada.)
+async function publicouNosUltimosMinutos(tiktokAccountId, minutos) {
+  const { rows } = await pool.query(
+    `SELECT EXISTS (
+       SELECT 1 FROM postings
+        WHERE tiktok_account_id = $1
+          AND status IN ('queued', 'processing', 'posted')
+          AND queued_at > now() - make_interval(mins => $2::int)
+     ) AS recente`,
+    [tiktokAccountId, minutos]
+  );
+  return rows[0].recente;
 }
 
 // Quantos itens estao esperando na fila agora (independente de cliente) -
@@ -767,6 +789,7 @@ async function findById(id) {
 
 module.exports = {
   countRecentForAccount,
+  publicouNosUltimosMinutos,
   statusByClipIds,
   createIfNotExists,
   listForClient,

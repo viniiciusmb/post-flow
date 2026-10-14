@@ -589,7 +589,19 @@ export function ClientBillingPage() {
             <TonePill tone="danger">{t("plano.semPlanoAtivo")}</TonePill>
           )}
           {data.subscription.status === "inadimplente" && (
-            <TonePill tone="danger">{t("plano.ultimaCobrancaFalhou")}</TonePill>
+            <div className="flex flex-wrap items-center gap-2">
+              <TonePill tone="danger">{t("plano.ultimaCobrancaFalhou")}</TonePill>
+              {/* Sem isto o cliente lia "a cobrança falhou" e não tinha onde
+                  pagar: a fatura do Asaas aceita outro cartão ou PIX, e o
+                  pagamento reativa o plano sozinho. */}
+              {data.subscription.faturaEmAberto && (
+                <Button asChild size="sm">
+                  <a href={data.subscription.faturaEmAberto.url} target="_blank" rel="noopener noreferrer">
+                    {t("plano.pagarFaturaEmAberto", { valor: formatCents(data.subscription.faturaEmAberto.valorCents) })}
+                  </a>
+                </Button>
+              )}
+            </div>
           )}
           {data.subscription.status === "cancelado" && (
             <TonePill tone="danger">{t("plano.assinaturaCancelada")}</TonePill>

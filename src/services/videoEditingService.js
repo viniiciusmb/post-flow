@@ -1423,6 +1423,10 @@ async function renderClip({
       '-crf', String(crf),
       '-c:a', 'aac',
       '-b:a', '128k',
+      // Índice no começo e sem "edit list": o Instagram pede os dois (ver
+      // videoParaRedeService.SAIDA_PARA_REDE), e não custa nada pro TikTok.
+      '-movflags', '+faststart',
+      '-use_editlist', '0',
       outputPath,
     ];
 

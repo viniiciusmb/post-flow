@@ -958,7 +958,9 @@ export interface ClientBillingOverviewResponse {
     status: SubscriptionStatus
     /** Assinatura cancelada que ainda vale até esta data (fim do período pago). */
     cancelaEm: string | null
-    /** Mostra o link "Cancelar plano": só com recorrência de cartão ainda valendo. */
+    /** Mensalidade vencida (cartão recusado na renovação), com a fatura do Asaas para pagar. */
+    faturaEmAberto: { valorCents: number; vencimento: string | null; url: string } | null
+    /** Mostra o link "Cancelar plano": cobrança recorrente (cartão ou PIX Automático) ainda valendo. */
     podeCancelar: boolean
     overageCardEnabled: boolean
     promoDisponivel: boolean
@@ -1312,6 +1314,11 @@ export interface SupportCurrentResponse {
 export type SupportShortcut =
   | "tour_guiado"
   | "tutorial"
+  | "videos_youtube"
+  | "lives"
+  | "feed"
+  | "redes_sociais"
+  // Telas antigas: só aparecem em conversas anteriores a 14/10/2026.
   | "cortes"
   | "canais"
   | "publicacao"
