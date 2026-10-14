@@ -21,12 +21,21 @@ const clientVideoSettingsRepository = require('../../repositories/clientVideoSet
 // 04/10/2026, segundo pedido: mesmo no "so os melhores" a IA pode entregar
 // ATE 15 por hora se achar tantos momentos bons - o teto e um limite, nao uma
 // meta: o filtro de nota e reacao continua decidindo quantos passam.
+//
+// 14/10/2026: o teto de 15/h nunca era alcançado. O juiz compara cada momento
+// com os melhores já aprovados NA MESMA LIVE (pra o 9 continuar raro), então
+// as notas caem ao longo da live: numa live de 9h do jonvlogs, 8 das 9 notas
+// 8+ saíram nas 3 primeiras horas, e o nível 5 (nota 8 fixa) deu 7 cortes em
+// 9 horas, com a IA aprovando 10 a 19 momentos por hora. Agora a nota mínima
+// é baixa e quem decide é a ORDEM: em cada hora da live entram os melhores
+// daquela hora, até o teto (ver distribuirSessao). Nessa live: nível 5 = 57,
+// nível 4 = 88, nível 3 = 121 cortes.
 const NIVEIS = Object.freeze({
   1: { notaMinima: 5, porHora: 30, reacaoMinima: 0, nome: 'Máximo de cortes' },
-  2: { notaMinima: 6, porHora: 20, reacaoMinima: 0, nome: 'Muitos cortes' },
-  3: { notaMinima: 7, porHora: 15, reacaoMinima: 0, nome: 'Equilibrado' },
-  4: { notaMinima: 7, porHora: 15, reacaoMinima: 0.5, nome: 'Seletivo' },
-  5: { notaMinima: 8, porHora: 15, reacaoMinima: 0.5, nome: 'Só os melhores' },
+  2: { notaMinima: 5, porHora: 20, reacaoMinima: 0, nome: 'Muitos cortes' },
+  3: { notaMinima: 5, porHora: 15, reacaoMinima: 0, nome: 'Equilibrado' },
+  4: { notaMinima: 6, porHora: 15, reacaoMinima: 0, nome: 'Seletivo' },
+  5: { notaMinima: 6, porHora: 15, reacaoMinima: 0.5, nome: 'Só os melhores' },
 });
 
 const PADRAO = Object.freeze({

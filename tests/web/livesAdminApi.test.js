@@ -166,9 +166,9 @@ test('opcoes de live: qualidade fora de 1 a 5 e recusada, dentro e salva', async
   assert.equal((await agent.put('/api/admin/lives/opcoes', { cameraModo: 'qualquer' })).status, 400);
   const r2 = await agent.put('/api/admin/lives/opcoes', { cameraModo: 'desligado' });
   assert.equal(r2.body.opcoes.qualidade, 4);
-  // 04/10/2026: o nivel maximo passou de nota 9 / 2 por hora pra nota 8 / 6
-  // por hora - com 2 por hora quase nada saia.
-  assert.equal(r2.body.niveis['5'].notaMinima, 8);
+  // 14/10/2026: nota 8 fixa dava 7 cortes numa live de 9 horas (as notas do
+  // juiz caem ao longo da live). Agora a ordem pela nota decide, por hora.
+  assert.equal(r2.body.niveis['5'].notaMinima, 6);
   assert.equal(r2.body.niveis['5'].porHora, 15, 'mesmo no "so os melhores" a IA pode entregar ate 15 por hora');
 });
 

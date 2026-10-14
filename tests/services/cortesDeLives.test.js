@@ -459,7 +459,7 @@ test('cada usuario recebe so o que passa no nivel de qualidade dele, sem duplica
   await liveAnalysisService.distribuirSessao(sessao); // segunda volta nao duplica
   const notas = async (u) =>
     (await pool.query('SELECT score FROM live_clips WHERE session_id = $1 AND user_id = $2 ORDER BY score DESC', [sessao.id, u.id])).rows.map((r) => r.score);
-  assert.deepEqual(await notas(exigente), [9], 'nivel 5: so nota 9+');
+  assert.deepEqual(await notas(exigente), [9, 7], 'nivel 5: nota 6+ (a ordem pela nota decide quem entra)');
   assert.deepEqual(await notas(tolerante), [9, 7, 5], 'nivel 1: nota 5+');
 });
 
@@ -492,6 +492,49 @@ test('o teto por hora do nivel vale mesmo com muitos aprovados', async () => {
   const { rows } = await pool.query('SELECT count(*)::int AS n, min(source) AS origem FROM live_clips WHERE session_id = $1', [sessao.id]);
   assert.equal(rows[0].n, 15);
   assert.equal(rows[0].origem, 'sinal');
+});
+
+// 14/10/2026: live de 9h do jonvlogs, nível 5, 7 cortes. O juiz compara com
+// os melhores já aprovados na live e as notas CAEM ao longo dela; com nota 8
+// fixa e teto da sessão inteira, as primeiras horas levavam tudo e o resto da
+// live não virava corte nenhum.
+test('cada hora da live tem os próprios melhores, mesmo com as notas caindo', async () => {
+  const canal = await novoCanal();
+  const u = await createClient();
+  await livesRepository.follow(u.id, canal.id);
+  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 5 }); // até 15/h
+  const sessao = await novaSessao(canal, { recorded: 3 * 3600 });
+  const momentos = [];
+  // 1ª hora: 20 aprovados com nota 9. 2ª e 3ª: 10 com nota 6 cada.
+  for (let i = 0; i < 20; i += 1) momentos.push([i * 170, 9]);
+  for (let h = 1; h <= 2; h += 1) for (let i = 0; i < 10; i += 1) momentos.push([h * 3600 + i * 300, 6]);
+  for (const [ini, nota] of momentos) {
+    const c = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: ini, fim: ini + 40 });
+    await livesRepository.judgeCandidate(c.id, { status: 'escolhido', nota, inicio: ini, fim: ini + 40, titulo: 'x', gancho: '', porque: '' });
+  }
+  await liveAnalysisService.distribuirSessao(sessao);
+  const { rows } = await pool.query(
+    'SELECT floor(start_offset / 3600)::int AS hora, count(*)::int AS n FROM live_clips WHERE session_id = $1 GROUP BY 1 ORDER BY 1',
+    [sessao.id]
+  );
+  assert.deepEqual(rows, [{ hora: 0, n: 15 }, { hora: 1, n: 10 }, { hora: 2, n: 10 }], 'até 15 na 1ª hora, e as horas seguintes não ficam vazias');
+});
+
+test('dentro da hora entram os de nota mais alta, não os que chegaram primeiro', async () => {
+  const canal = await novoCanal();
+  const u = await createClient();
+  await livesRepository.follow(u.id, canal.id);
+  await livesRepository.upsertClipSettings(u.id, { ...livesUserSettings.PADRAO, qualidade: 3 }); // até 15/h
+  const sessao = await novaSessao(canal, { recorded: 3000 });
+  // 10 fracos no começo da hora, 15 bons depois.
+  for (let i = 0; i < 25; i += 1) {
+    const nota = i < 10 ? 5 : 8;
+    const c = await livesRepository.insertCandidate({ sessionId: sessao.id, source: 'triagem', inicio: i * 110, fim: i * 110 + 40 });
+    await livesRepository.judgeCandidate(c.id, { status: 'escolhido', nota, inicio: i * 110, fim: i * 110 + 40, titulo: 'x', gancho: '', porque: '' });
+  }
+  await liveAnalysisService.distribuirSessao(sessao);
+  const { rows } = await pool.query('SELECT min(score)::int AS menor, count(*)::int AS n FROM live_clips WHERE session_id = $1', [sessao.id]);
+  assert.deepEqual(rows[0], { menor: 8, n: 15 });
 });
 
 // ------------------------------------------------------------------ tipos de momento

@@ -62,7 +62,7 @@ export function BarraDeQualidade({
           <span className="size-3 shrink-0 rounded-full" style={{ background: cor }} />
           <span>
             <strong>{nivel.nome}</strong>
-            <span className="text-muted-foreground"> · até {nivel.porHora} cortes por hora de live, só momentos com nota {nivel.notaMinima}+</span>
+            <span className="text-muted-foreground"> · até {nivel.porHora} cortes por hora de live: os melhores de cada hora, com nota {nivel.notaMinima}+</span>
           </span>
         </div>
       )}

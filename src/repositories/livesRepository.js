@@ -598,6 +598,17 @@ async function countUserClipsFromJudge(sessionId, userId) {
   return Number(rows[0].n);
 }
 
+// Onde começam os cortes do juiz já dados a esta pessoa nesta sessão - pra
+// contar quantos cada hora da live já tem (o teto do nível é por hora).
+// Descartado pela revisão final e "Clipar este momento" não ocupam vaga.
+async function userJudgeClipStarts(sessionId, userId) {
+  const { rows } = await pool.query(
+    "SELECT start_offset FROM live_clips WHERE session_id = $1 AND user_id = $2 AND source <> 'clipar_agora' AND status <> 'descartado'",
+    [sessionId, userId]
+  );
+  return rows.map((r) => Number(r.start_offset));
+}
+
 async function userClipRanges(sessionId, userId) {
   const { rows } = await pool.query(
     'SELECT start_offset, end_offset FROM live_clips WHERE session_id = $1 AND user_id = $2',
@@ -966,6 +977,7 @@ module.exports = {
   followersWithQuality,
   countUserClipsFromJudge,
   userClipRanges,
+  userJudgeClipStarts,
   getClipSettings,
   upsertClipSettings,
   insertClipOnce,

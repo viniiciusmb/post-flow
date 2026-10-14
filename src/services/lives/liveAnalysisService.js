@@ -430,9 +430,11 @@ async function julgarSessao(sessao, { agora = Date.now() } = {}) {
 
 // ------------------------------------------------------------------ distribuicao
 
-// Cada usuario recebe os aprovados que passam no nivel de qualidade dele,
-// respeitando o teto por hora do nivel (proporcional ao tempo gravado; a
-// primeira hora conta inteira).
+// Cada usuario recebe os aprovados que passam no nivel de qualidade dele, os
+// MELHORES de cada hora da live primeiro, ate o teto por hora do nivel. Por
+// hora e nao pela sessao inteira: as notas do juiz caem ao longo da live (ele
+// compara com os melhores ja aprovados), e um teto da sessao inteira deixava
+// as primeiras horas ocuparem tudo.
 // Onde o momento esta entre as reacoes do PUBLICO daquela live (0 a 1): a
 // fracao das janelas de 10s com reacao menor que a dele. Relativo a propria
 // live, entao funciona igual em live de 500 e de 50 mil pessoas.
@@ -443,17 +445,29 @@ function percentilDeReacao(linha, inicio, fim) {
   return forcas.filter((f) => f < doMomento).length / forcas.length;
 }
 
+const SEGUNDOS_POR_BLOCO = 3600;
+const blocoDe = (segundo) => Math.floor(Number(segundo) / SEGUNDOS_POR_BLOCO);
+
 async function distribuirSessao(sessao) {
   const aprovados = await livesRepository.approvedCandidates(sessao.id);
   if (!aprovados.length) return 0;
-  const horas = Math.max(1, Number(sessao.recorded_seconds) / 3600);
   const linha = await liveSignalsService.linhaDaSessao(sessao.id, Math.max(1, Number(sessao.recorded_seconds)));
   const percentis = new Map(aprovados.map((c) => [c.id, percentilDeReacao(linha, Number(c.final_start), Number(c.final_end))]));
+  // Melhor primeiro: nota, depois reação do público, depois o mais antigo.
+  const emOrdem = [...aprovados].sort(
+    (a, b) =>
+      Number(b.final_score) - Number(a.final_score) ||
+      (percentis.get(b.id) ?? 0) - (percentis.get(a.id) ?? 0) ||
+      Number(a.final_start) - Number(b.final_start)
+  );
   let criados = 0;
   for (const seguidor of await livesRepository.followersWithQuality(sessao.live_channel_id)) {
     const nivel = livesUserSettings.nivel(seguidor.qualidade);
-    const teto = Math.floor(nivel.porHora * horas);
-    let jaTem = await livesRepository.countUserClipsFromJudge(sessao.id, seguidor.user_id);
+    const porBloco = new Map();
+    for (const inicio of await livesRepository.userJudgeClipStarts(sessao.id, seguidor.user_id)) {
+      const b = blocoDe(inicio);
+      porBloco.set(b, (porBloco.get(b) || 0) + 1);
+    }
     // O mesmo momento pode chegar por dois caminhos (triagem e pico do
     // publico) e virar dois candidatos quase iguais - visto no rejulgamento
     // do thimagroo: "50 mil numa noite" e "Cinquenta mil numa noite". Momento
@@ -462,11 +476,12 @@ async function distribuirSessao(sessao) {
       inicio: Number(r.start_offset),
       fim: Number(r.end_offset),
     }));
-    for (const c of aprovados) {
-      if (jaTem >= teto) break;
+    for (const c of emOrdem) {
       const trecho = { inicio: Number(c.final_start), fim: Number(c.final_end) };
-      if (trechosDados.some((t) => sobreposicao(t, trecho) > 0.4)) continue;
+      const bloco = blocoDe(trecho.inicio);
+      if ((porBloco.get(bloco) || 0) >= nivel.porHora) continue;
       if (Number(c.final_score) < nivel.notaMinima) continue;
+      if (trechosDados.some((t) => sobreposicao(t, trecho) > 0.4)) continue;
       // So os tipos de corte que a pessoa escolheu (nenhum escolhido = todos).
       if (!tiposDeMomento.aceitaTipo(seguidor.categorias, c.moment_type)) continue;
       // Niveis altos exigem tambem que o PUBLICO tenha reagido forte (no teste
@@ -489,7 +504,7 @@ async function distribuirSessao(sessao) {
         nota: Number(c.final_score),
       });
       if (corte) {
-        jaTem += 1;
+        porBloco.set(bloco, (porBloco.get(bloco) || 0) + 1);
         criados += 1;
         trechosDados.push(trecho);
       }
