@@ -20,8 +20,30 @@ const FFPROBE_PATH = process.env.FFPROBE_PATH || 'ffprobe';
 const SAIDA = { w: 1080, h: 1920 };
 
 // Um preset de render so, pelo mesmo motivo: a escolha "alta/media" saiu da
-// tela (migration 070). CRF 20 com preset 'medium' era o padrao de sempre.
-const RENDER = { crf: 20, preset: 'medium' };
+// tela (migration 070).
+//
+// 'veryfast' e nao 'medium' (o padrao ate 16/10/2026): medido na VPS com
+// cortes reais de clientes, nos dois estilos mais usados (video em tela cheia;
+// video menor sobre a capa com titulo em cartao), o corte gasta metade da CPU
+// (316 -> 143 s num corte de 110 s; 132 -> 71 s num de 50 s), o arquivo sai
+// igual ou MENOR, e a qualidade medida contra uma referencia quase sem perda
+// ficou igual (SSIM 0,9677 -> 0,9678 e 0,9576 -> 0,9552) - quadros lado a
+// lado sao indistinguiveis. A origem e baixada em 480p e ampliada: nao ha
+// detalhe fino pra um preset mais lento preservar. Corte era o gargalo da VPS.
+// Mais rapido que isso ('superfast') o arquivo cresce ~60%; 720p perde
+// nitidez visivel na capa e no titulo (SSIM 0,920).
+const RENDER = { crf: 20, preset: 'veryfast' };
+
+// Fundo desfocado: borrar a imagem em 1/4 do tamanho e ampliar depois. Borrar
+// direto em 1080x1920 gastava ~1 s de CPU por segundo de video SO no fundo
+// (56 s pra 60 s de video, um nucleo inteiro), contra 7,7 s assim - e o
+// resultado e o mesmo borrao (conferido lado a lado em 16/10/2026). Usado nos
+// fundos desfocados do YouTube e no "quadro inteiro" das lives.
+function fundoDesfocado(w, h) {
+  const pw = Math.round(w / 8) * 2;
+  const ph = Math.round(h / 8) * 2;
+  return `scale=${pw}:${ph}:force_original_aspect_ratio=increase,crop=${pw}:${ph},boxblur=5:4,scale=${w}:${h}`;
+}
 
 // Um estilo de legenda/titulo e um punhado de numeros do formato ASS. Em vez
 // de guardar a linha inteira pronta (como era antes), guardamos so o que MUDA
@@ -405,11 +427,24 @@ const PART_LABEL_ALIGNMENT = {
   bottom_right: 3,
 };
 
+// O ffmpeg pode repetir o MESMO erro sem parar: com uma imagem de entrada
+// quebrada em loop (-loop 1) ele escreve "No JPEG data found in image" a ~3 MB
+// por segundo, visto num teste na VPS em 16/10/2026. Guardar tudo estourava o
+// limite de texto do Node em poucos minutos ("RangeError: Invalid string
+// length") - e o erro sai de dentro de um evento, entao derruba o processo
+// inteiro, com todos os videos em andamento junto. So o final e usado (na
+// mensagem de erro), entao so o final e guardado.
+const MAX_MENSAGENS_DO_FFMPEG = 64 * 1024;
+function guardarFinal(atual, pedaco) {
+  const junto = atual + pedaco;
+  return junto.length > MAX_MENSAGENS_DO_FFMPEG ? junto.slice(-MAX_MENSAGENS_DO_FFMPEG) : junto;
+}
+
 function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
     const child = spawn(FFMPEG_PATH, ['-y', '-hide_banner', '-loglevel', 'error', ...args]);
     let stderr = '';
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.stderr.on('data', (chunk) => { stderr = guardarFinal(stderr, chunk); });
     child.on('error', reject);
     child.on('close', (code) => {
       if (code !== 0) {
@@ -470,7 +505,7 @@ function runFfmpegWithProgress(args, totalDurationSeconds, onProgress, checkCanc
       }
     }
     let stderr = '';
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.stderr.on('data', (chunk) => { stderr = guardarFinal(stderr, chunk); });
 
     let closed = false;
     let cancelling = false;
@@ -843,7 +878,7 @@ function buildBackgroundFilter({ w, h, subtitlesFilter, style, heightPercent, of
       // vezes - uma pro fundo, outra pro video em cima.
       chain.push(`[0:v]split=2[paraFundo][paraVideo]`);
       chain.push(
-        `[paraFundo]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=18:4,setsar=1[fundo]`
+        `[paraFundo]${fundoDesfocado(w, h)},setsar=1[fundo]`
       );
       entradaDoVideo = '[paraVideo]';
     } else {
@@ -1029,7 +1064,7 @@ function buildPaineisFilter({ w, h, subtitlesFilter, formato }) {
   if (formato.tipo === 'quadro_inteiro') {
     const chain = [
       `[0:v]split=2[paraFundo][paraVideo]`,
-      `[paraFundo]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=18:4,setsar=1[fundo]`,
+      `[paraFundo]${fundoDesfocado(w, h)},setsar=1[fundo]`,
       `[paraVideo]scale=${w}:-2,setsar=1[video]`,
       `[fundo][video]overlay=(W-w)/2:(H-h)/2${legenda}[outv]`,
     ];
@@ -1116,7 +1151,7 @@ function buildFilter({ w, h, subtitlesFilter, cropZoomPercent, fundo }) {
     const cropWidthExpr = `iw-(iw-ih*${w}/${h})*${zoom}`;
     const chain = [
       `[0:v]split=2[bg][fg]`,
-      `[bg]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=18:4[bgblur]`,
+      `[bg]${fundoDesfocado(w, h)}[bgblur]`,
       `[fg]crop=${cropWidthExpr}:ih,scale=${w}:${h}:force_original_aspect_ratio=decrease[fgscaled]`,
       `[bgblur][fgscaled]overlay=(W-w)/2:(H-h)/2,setsar=1${subtitlesFilter ? `,${subtitlesFilter}` : ''}[outv]`,
     ];
