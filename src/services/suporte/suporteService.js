@@ -209,6 +209,7 @@ async function processarMensagem({ clientUserId, conversationId = null, texto, a
   const acoes = [];
   const contexto = { clientUserId, conversationId: conversa.id, acoes };
   let resposta = '';
+  const partesVisiveis = [];
   // Progresso pra tela ("estudando o que aconteceu...", "devolvendo seus
   // creditos..."). Falha ao avisar nunca derruba a conversa.
   const avisar = (evento) => {
@@ -268,15 +269,21 @@ async function processarMensagem({ clientUserId, conversationId = null, texto, a
         content = [{ type: 'text', text: 'Não consigo ajudar com esse pedido por aqui. Se for um problema com seus vídeos, créditos ou postagens, me conte o que aconteceu.' }];
       }
 
+      // O texto escrito junto de uma chamada de ferramenta também é resposta:
+      // a Flora costuma explicar e, na mesma volta, mostrar o atalho. Antes
+      // ele era descartado e o cliente só via a frase da volta final (visto em
+      // 13/10/2026: "como deixo 100% automático?" ganhou a explicação inteira,
+      // e na tela apareceu só "Deixei o botão do tour guiado aí embaixo").
+      const usouFerramenta = r.stop_reason === 'tool_use';
       let visivel = textoVisivel(content);
-      if (!visivel && r.stop_reason !== 'tool_use') {
+      if (!visivel && !usouFerramenta && partesVisiveis.length === 0) {
         visivel = 'Desculpe, não consegui concluir a resposta agora. Pode repetir a pergunta?';
       }
-      const usouFerramenta = r.stop_reason === 'tool_use';
+      if (visivel) partesVisiveis.push(visivel);
       await supportRepository.addMessage(conversa.id, {
         role: 'assistant',
         content,
-        visibleText: usouFerramenta ? null : visivel,
+        visibleText: visivel || null,
         inputTokens: Number(r.usage?.input_tokens || 0),
         outputTokens: Number(r.usage?.output_tokens || 0),
         costUsd: custoUsd(r.usage, dadosDoNivel(nivel).preco),
@@ -286,7 +293,7 @@ async function processarMensagem({ clientUserId, conversationId = null, texto, a
       messages.push({ role: 'assistant', content });
 
       if (!usouFerramenta) {
-        resposta = visivel;
+        resposta = partesVisiveis.join('\n\n');
         break;
       }
 
@@ -327,7 +334,7 @@ async function processarMensagem({ clientUserId, conversationId = null, texto, a
     // colada numa mensagem sem resposta (duas do cliente seguidas).
     const content = [{ type: 'text', text: RESPOSTA_DE_FALHA }];
     await supportRepository.addMessage(conversa.id, { role: 'assistant', content, visibleText: RESPOSTA_DE_FALHA });
-    resposta = RESPOSTA_DE_FALHA;
+    resposta = [...partesVisiveis, RESPOSTA_DE_FALHA].join('\n\n');
   }
 
   const atual = await supportRepository.findConversationForClient(conversa.id, clientUserId);

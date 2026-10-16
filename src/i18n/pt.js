@@ -464,6 +464,7 @@ module.exports = {
     posicaoVideoInvalida: "Posição do vídeo no template inválida (0 a 100).",
     postagemNaoNaFila: "Postagem não encontrada ou já saiu da fila de espera.",
     limiteDoTiktok24h: 'Esta conta já publicou {n} vezes nas últimas 24 horas. O TikTok bloqueia mais do que isso como spam: o corte continua na fila e sai no próximo horário.',
+    esperarEntrePosts: 'Esta conta acabou de publicar. Para o TikTok não marcar a conta como spam, espere {espaco} minutos entre uma publicação e outra: dá pra postar este corte daqui a {faltam} min. Ele continua na fila.',
     postagemSemErro: "Postagem não encontrada ou não está com erro.",
     programaNaoConectado: "Você ainda não conectou o programa.",
     publicKeyInvalida: "publicKey inválida.",

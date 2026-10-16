@@ -196,6 +196,21 @@ test('TikTok: "Postar agora" recusa quando a conta já publicou 10 vezes em 24 h
   assert.equal(rows[0].status, 'pending', 'continua na fila');
 });
 
+// 15/10/2026: 10 cliques em "Postar agora" em 2 minutos viraram 6 vídeos em 1
+// minuto numa conta só.
+test('TikTok: "Postar agora" respeita 10 minutos entre uma publicação e outra da mesma conta', async () => {
+  const { u, agent } = await logado();
+  const conta = await contaTiktok(u.id, 10);
+  await postagem(u.id, conta.id, { status: 'posted', queuedAt: new Date(Date.now() - 3 * 60e3) });
+  const p = await postagem(u.id, conta.id, { scheduledFor: new Date(Date.now() + 3600e3) });
+  const r = await agent.post(`/api/client/postings/${p.id}/post-now`, {});
+  assert.equal(r.status, 429);
+  assert.match(r.body.error, /spam/);
+  assert.match(r.body.error, /daqui a 7 min/);
+  const { rows } = await pool.query('SELECT status FROM postings WHERE id = $1', [p.id]);
+  assert.equal(rows[0].status, 'pending', 'continua na fila');
+});
+
 // ---------------------------------------------------------------------------
 // Contas das redes: pedir reconexão ANTES de um corte falhar
 

@@ -11,7 +11,7 @@ const router = express.Router();
 
 router.use(requireAuth, requireRole([ROLES.CLIENT, ROLES.ADMIN]));
 
-router.get('/connect', tiktokController.connect);
+router.get('/connect', asyncHandler(tiktokController.connect));
 router.get('/callback', asyncHandler(tiktokController.callback));
 
 module.exports = router;

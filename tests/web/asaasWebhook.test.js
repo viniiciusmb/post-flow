@@ -512,3 +512,45 @@ test('PIX Automático ativado guarda a assinatura, registra a 1ª mensalidade e 
     }
   );
 });
+
+// Cliente #463, 14/10/2026: o Asaas registrou a cobrança do QR imediato em
+// nome de OUTRO cliente dele (gerado a partir de quem pagou). Procurando só
+// pelo nosso cliente, a 1ª mensalidade ficou com o id sintético, e um estorno
+// futuro não a encontraria.
+test('PIX Automático: 1ª mensalidade é achada pelo QR mesmo quando o Asaas a põe em outro cliente', async () => {
+  const cliente = await createLoginableClient();
+  const plano = (await subscriptionPlansRepository.listActive())[0];
+  const id = await autorizacaoPendente(cliente.id, plano);
+  const sufixo = `${process.pid}_${Date.now()}_qr`;
+  const pay = `pay_outrocli_${sufixo}`;
+  const conciliacao = `CONC_${sufixo}`;
+
+  await comAsaasFalso(
+    {
+      'GET /pix/automatic/authorizations/:id': () => ({
+        body: { id, status: 'ACTIVE', subscriptionId: `sub_${sufixo}`, immediateQrCode: { conciliationIdentifier: conciliacao } },
+      }),
+      // Pelo cliente: nada (a cobrança está em outro). Pelo QR: ela.
+      'GET /payments': (_corpo, _chamadas, query) => ({
+        body: {
+          data:
+            query.pixQrCodeId === conciliacao
+              ? [{ id: pay, customer: 'cus_do_pagador', pixQrCodeId: conciliacao, status: 'RECEIVED', value: 59.9, paymentDate: '2026-10-14' }]
+              : [],
+        },
+      }),
+    },
+    async () => {
+      const r = await enviarWebhook({
+        event: 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED',
+        authorization: { id, status: 'ACTIVE', customerId: 'cus_x', frequency: 'MONTHLY', value: 99.9 },
+      });
+      assert.equal(r.status, 200);
+      const { rows } = await pool.query(
+        "SELECT external_id FROM revenue_entries WHERE client_user_id = $1 AND kind = 'primeira_mensalidade'",
+        [cliente.id]
+      );
+      assert.deepEqual(rows.map((x) => x.external_id), [pay]);
+    }
+  );
+});

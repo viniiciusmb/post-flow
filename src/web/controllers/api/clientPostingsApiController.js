@@ -221,6 +221,17 @@ async function postNow(req, res) {
     return res.status(429).json({ error: res.locals.t('erros.limiteDoTiktok24h', { n: recentes }) });
   }
 
+  // Nem em rajada: o mesmo espaçamento que a fila automática respeita. Em
+  // 15/10/2026 um cliente clicou "Postar agora" em 10 cortes em 2 minutos e
+  // saíram 6 vídeos em 1 minuto numa conta só - o padrão que já tinha feito o
+  // TikTok marcar outra conta como spam.
+  const espaco = tiktokPostingJob.ESPACO_MINIMO_ENTRE_POSTS_MIN;
+  const ultima = await postingsRepository.ultimaPublicacaoNosUltimosMinutos(account.id, espaco);
+  if (ultima) {
+    const faltam = Math.max(1, Math.ceil((new Date(ultima).getTime() + espaco * 60e3 - Date.now()) / 60e3));
+    return res.status(429).json({ error: res.locals.t('erros.esperarEntrePosts', { espaco, faltam }) });
+  }
+
   await tiktokPostingJob.publish(account, posting);
 
   const updated = await postingsRepository.findByIdOwnedByClient(posting.id, req.session.user.id);

@@ -60,12 +60,18 @@ async function saldo(userId) {
 // Devolve { motivo, restante }: motivo ('horas' | 'cortes' | 'cota') quando
 // já chegou; restante = quantos créditos ainda cabem antes de chegar (uma volta
 // atrasada cobra dois blocos de uma vez e passaria um bloco do limite).
+//
+// Conta a LIVE inteira, não a gravação: quando a pessoa para, a gravação pode
+// ser encerrada e outra nascer minutos depois na mesma live - com o contador
+// da gravação, o limite recomeçava do zero (ver DA_LIVE_ATUAL no livesRepository).
 async function limiteAtingido({ sessao, userId, uso, ehIsento }) {
   const livre = { motivo: null, restante: Infinity };
   if (uso.limites_ignorados) return livre;
   const lim = await livesRepository.followLimits(userId, sessao.live_channel_id);
   if (!lim) return livre;
-  const creditos = Number(uso.credits_charged);
+  const daLive = await livesRepository.liveUsageTotals(userId, sessao.live_channel_id);
+  if (daLive.ignorados) return livre;
+  const creditos = Math.max(Number(daLive.creditos), Number(uso.credits_charged));
   let restante = Infinity;
   if (lim.horas) {
     const teto = Math.ceil((lim.horas * 3600) / SEGUNDOS_POR_CREDITO);
@@ -81,7 +87,7 @@ async function limiteAtingido({ sessao, userId, uso, ehIsento }) {
       restante = Math.min(restante, teto - creditos);
     }
   }
-  if (lim.cortes && (await livesRepository.countUserClipsFromJudge(sessao.id, userId)) >= lim.cortes) return { motivo: 'cortes', restante: 0 };
+  if (lim.cortes && Number(daLive.cortes) >= lim.cortes) return { motivo: 'cortes', restante: 0 };
   return { motivo: null, restante };
 }
 

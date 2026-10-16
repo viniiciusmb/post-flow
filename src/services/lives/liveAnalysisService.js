@@ -468,8 +468,12 @@ async function distribuirSessao(sessao) {
     // passar dele numa leva só (a cobrança confere só a cada volta).
     const limites = await livesRepository.followLimits(seguidor.user_id, sessao.live_channel_id);
     const uso = await livesRepository.getCreditUsage(sessao.id, seguidor.user_id);
-    const tetoDeCortes = limites && limites.cortes && !(uso && uso.limites_ignorados) ? limites.cortes : Infinity;
-    let jaTem = 0;
+    // O teto vale pela live inteira: cortes dados em gravações anteriores
+    // desta mesma live já ocupam vaga (ver DA_LIVE_ATUAL no livesRepository).
+    const daLive = await livesRepository.liveUsageTotals(seguidor.user_id, sessao.live_channel_id);
+    const ignorados = (uso && uso.limites_ignorados) || daLive.ignorados;
+    const tetoDeCortes = limites && limites.cortes && !ignorados ? limites.cortes : Infinity;
+    let jaTem = Math.max(Number(daLive.cortes) - (await livesRepository.countUserClipsFromJudge(sessao.id, seguidor.user_id)), 0);
     for (const inicio of await livesRepository.userJudgeClipStarts(sessao.id, seguidor.user_id)) {
       jaTem += 1;
       const b = blocoDe(inicio);

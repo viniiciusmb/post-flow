@@ -45,12 +45,35 @@ function destinoDeRetorno(valor) {
   return RETORNOS_PERMITIDOS.has(valor) ? valor : '/client';
 }
 
-function connect(req, res) {
+async function connect(req, res) {
+  const voltarPara = destinoDeRetorno(req.query.from);
+
+  // Sem plano, a conexão seria recusada na volta (ver concluirConexao) - mas
+  // só depois de a pessoa passar pela tela inteira de autorização do TikTok.
+  // Entre 14 e 15/10/2026, 31 pessoas fizeram esse caminho à toa (49 vezes).
+  // Quem já tem conta conectada pode estar só reconectando, e isso continua
+  // liberado: não dá pra saber qual conta é antes da volta.
+  const limite = await planLimitsService.checkTiktokAccountLimit(req.session.user.id, 0);
+  if (!limite.allowed) {
+    const conectadas = await tiktokAccountsRepository.listActiveByClientId(req.session.user.id);
+    if (conectadas.length === 0) {
+      errorReportService.report({
+        operation: errorReportService.OPERACOES.LIMITE_DO_PLANO,
+        entityType: 'tiktok_conexao',
+        clientUserId: req.session.user.id,
+        error: new Error(limite.reason),
+        message: 'Tentou conectar uma conta do TikTok sem plano ativo',
+        contexto: { etapa: 'antes_de_ir_pro_tiktok' },
+      });
+      return res.redirect(`${voltarPara}?tiktok_error=${encodeURIComponent(limite.reason)}`);
+    }
+  }
+
   const state = crypto.randomBytes(16).toString('hex');
   req.session.tiktokOAuthState = state;
   // Guardado na sessao, nao carregado pela TikTok: o que volta do OAuth e so o
   // `state`, entao a origem tem que estar do nosso lado.
-  req.session.tiktokRetorno = destinoDeRetorno(req.query.from);
+  req.session.tiktokRetorno = voltarPara;
   res.redirect(tiktokService.buildAuthorizeUrl(state));
 }
 

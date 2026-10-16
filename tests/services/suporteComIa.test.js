@@ -335,6 +335,27 @@ test('atalho so leva a destinos da lista fechada', async () => {
   assert.deepEqual(r.acoes, [{ tipo: 'atalho', destino: 'tour_guiado' }]);
 });
 
+// 13/10/2026: a explicação inteira veio na mesma volta do atalho e foi
+// descartada; o cliente só viu "Deixei o botão do tour guiado aí embaixo".
+test('texto escrito junto de uma ferramenta chega ao cliente (na hora e ao reabrir)', async () => {
+  const user = await createClient();
+  const comTexto = {
+    content: [
+      { type: 'text', text: 'Para deixar 100% automático, ligue a postagem automática.' },
+      { type: 'tool_use', id: 'x1', name: 'mostrar_atalho', input: { destino: 'tour_guiado' } },
+    ],
+    stop_reason: 'tool_use',
+    usage: {},
+  };
+  suporteService._definirClienteParaTeste(claudeFalso([comTexto, responde('Deixei o botão do tour aí embaixo.')]));
+  const r = await suporteService.enviarMensagem({ clientUserId: user.id, texto: 'como deixo 100% automatico?' });
+  assert.match(r.resposta, /ligue a postagem automática/);
+  assert.match(r.resposta, /botão do tour/);
+  const conversa = await suporteService.conversaAtual(user.id, r.conversationId);
+  const daFlora = conversa.mensagens.filter((m) => m.autor === 'suporte').map((m) => m.texto);
+  assert.deepEqual(daFlora, ['Para deixar 100% automático, ligue a postagem automática.', 'Deixei o botão do tour aí embaixo.']);
+});
+
 test('o progresso avisa cada etapa, na ordem', async () => {
   const user = await createClient();
   const eventos = [];

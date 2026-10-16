@@ -281,9 +281,6 @@ async function assinarComCartaoSalvo({ clientUserId, plan, remoteIp }) {
 
   const preco = precoDaAssinatura(plan, subscription);
 
-  // Trocar de plano não pode deixar a assinatura antiga cobrando junto.
-  await cancelarAssinaturaAnterior(clientUserId, subscription);
-
   const assinatura = await asaasService.createSubscription({
     customerId,
     billingType: 'CREDIT_CARD',
@@ -316,6 +313,14 @@ async function assinarComCartaoSalvo({ clientUserId, plan, remoteIp }) {
       .catch((e) => logger.error(`Nao consegui cancelar a assinatura ${assinatura.id} apos falha na 1a cobranca:`, e.message));
     throw err;
   }
+
+  // Trocar de plano não pode deixar a assinatura antiga cobrando junto - mas
+  // ela só sai DEPOIS que a cobrança do plano novo passou. Cancelando antes,
+  // um cartão recusado na troca deixava o cliente com o plano antigo ativo e
+  // nenhuma mensalidade dele dali pra frente (cliente #400, 15/10/2026: tentou
+  // subir de Starter pra Pro, o cartão foi recusado por limite e a assinatura
+  // Starter já tinha sido cancelada no Asaas).
+  await cancelarAssinaturaAnterior(clientUserId, subscription);
 
   const registroDaVenda = await asaasPaymentsRepository.create({
     asaasPaymentId: cobranca.id,

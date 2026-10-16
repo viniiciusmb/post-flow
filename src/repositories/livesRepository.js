@@ -13,11 +13,34 @@ const { sqlEmDia } = require('../lib/assinaturaEmDia');
 // sem credito continuaria recebendo corte (ou mantendo a gravacao ligada).
 // `f.bloqueio IS NULL`: limite do plano (canais acompanhados e lives ao mesmo
 // tempo), calculado pelo limitesDasLivesService a cada volta do supervisor.
+//
+// Gravações da MESMA live na plataforma (alias da live_sessions em `s`). Uma
+// live pode ter várias gravações nossas: quando quem recebia para (limite de
+// segurança, crédito), a gravação é encerrada, e se alguém volta a receber
+// nasce outra. Tudo que vale "por live" tem que olhar todas elas. Olhando só a
+// que está gravando, a gravação nova começava com o contador zerado - em
+// 15/10/2026 o limite de 50% da cota parou uma live em 45 créditos e a
+// gravação seguinte, um minuto depois, cobrou mais 40 do mesmo cliente.
+// Sem o início da live na plataforma, vale só a gravação em andamento (era a
+// regra antiga). A folga de 2 min cobre relógio da plataforma adiantado.
+const DA_LIVE_ATUAL = (s) => `(${s}.status = 'gravando' OR EXISTS (
+    SELECT 1 FROM live_channels lc WHERE lc.id = ${s}.live_channel_id AND lc.is_live
+       AND lc.live_started_at IS NOT NULL AND ${s}.started_at >= lc.live_started_at - interval '2 minutes'))`;
+
+// Ainda tem crédito pra gastar (mesma conta do liveCreditosService.saldo).
+const TEM_SALDO = (userCol) => `EXISTS (SELECT 1 FROM client_credits cc WHERE cc.client_user_id = ${userCol}
+    AND GREATEST(cc.quota_normal - cc.used_normal, 0) + cc.extra_normal >= 1)`;
+
+// Parado por limite em qualquer gravação desta live = não recebe mais nela.
+// Sem crédito: na gravação em andamento vale a marca (quem tira é o
+// clearOutOfCredit); numa gravação já encerrada, vale enquanto o saldo não
+// voltar - senão quem comprou crédito depois nunca mais receberia desta live.
 const RECEBE_CORTES = `f.is_active AND f.bloqueio IS NULL AND (f.paused_at IS NULL OR f.clip_this_live_at IS NOT NULL)
   AND NOT EXISTS (
     SELECT 1 FROM live_credit_usage u JOIN live_sessions s ON s.id = u.session_id
-     WHERE u.user_id = f.user_id AND s.live_channel_id = f.live_channel_id
-       AND s.status = 'gravando' AND (u.out_of_credit_at IS NOT NULL OR u.parado_por_limite_at IS NOT NULL))
+     WHERE u.user_id = f.user_id AND s.live_channel_id = f.live_channel_id AND ${DA_LIVE_ATUAL('s')}
+       AND (u.parado_por_limite_at IS NOT NULL
+            OR (u.out_of_credit_at IS NOT NULL AND (s.status = 'gravando' OR NOT ${TEM_SALDO('u.user_id')}))))
   AND ${sqlEmDia('f.user_id')}`;
 
 // ---------------------------------------------------------------- canais
@@ -845,16 +868,44 @@ async function clearOutOfCredit(sessionId, userId, segundo) {
   );
 }
 
-// O que a tela mostra: creditos desta live (gravacao em andamento) por canal.
+// O que a tela mostra: creditos desta live por canal, somando todas as
+// gravacoes dela (ver DA_LIVE_ATUAL). "Sem credito" vem da gravacao mais
+// recente: a marca de uma gravacao antiga nao diz nada de quem ja comprou.
 async function creditUsageForUser(userId) {
   const { rows } = await pool.query(
-    `SELECT u.live_channel_id, u.credits_charged, u.isento, u.out_of_credit_at,
-            u.parado_por_limite_at, u.motivo_limite, u.limites_ignorados
+    `SELECT u.live_channel_id,
+            sum(u.credits_charged)::int AS credits_charged,
+            bool_or(u.isento) AS isento,
+            (array_agg(u.out_of_credit_at ORDER BY s.started_at DESC))[1] AS out_of_credit_at,
+            max(u.parado_por_limite_at) AS parado_por_limite_at,
+            (array_agg(u.motivo_limite ORDER BY u.parado_por_limite_at DESC NULLS LAST))[1] AS motivo_limite,
+            bool_or(u.limites_ignorados) AS limites_ignorados
        FROM live_credit_usage u JOIN live_sessions s ON s.id = u.session_id
-      WHERE u.user_id = $1 AND s.status = 'gravando'`,
+      WHERE u.user_id = $1 AND ${DA_LIVE_ATUAL('s')}
+      GROUP BY u.live_channel_id`,
     [userId]
   );
   return rows;
+}
+
+// O que esta pessoa ja usou da live em andamento neste canal, somando as
+// gravacoes dela - e o que os limites de seguranca conferem.
+async function liveUsageTotals(userId, channelId) {
+  const { rows } = await pool.query(
+    `SELECT
+       (SELECT COALESCE(sum(u.credits_charged), 0)::int
+          FROM live_credit_usage u JOIN live_sessions s ON s.id = u.session_id
+         WHERE u.user_id = $1 AND s.live_channel_id = $2 AND ${DA_LIVE_ATUAL('s')}) AS creditos,
+       (SELECT COALESCE(bool_or(u.limites_ignorados), false)
+          FROM live_credit_usage u JOIN live_sessions s ON s.id = u.session_id
+         WHERE u.user_id = $1 AND s.live_channel_id = $2 AND ${DA_LIVE_ATUAL('s')}) AS ignorados,
+       (SELECT count(*)::int
+          FROM live_clips c JOIN live_sessions s ON s.id = c.session_id
+         WHERE c.user_id = $1 AND s.live_channel_id = $2 AND ${DA_LIVE_ATUAL('s')}
+           AND c.source <> 'clipar_agora' AND c.status <> 'descartado') AS cortes`,
+    [userId, channelId]
+  );
+  return rows[0];
 }
 
 // ---------------------------------------------------------------- limites de segurança
@@ -893,13 +944,15 @@ async function markStoppedByLimit(sessionId, userId, motivo) {
   return rows[0] || null;
 }
 
-// "Continuar clipando esta live": só a gravação em andamento, e os limites
-// deixam de valer pra ela (senão ela pararia de novo na volta seguinte).
+// "Continuar clipando esta live": todas as gravações desta live, e os limites
+// deixam de valer pra ela (senão ela pararia de novo na volta seguinte). Se a
+// pessoa era a única recebendo, a gravação já foi encerrada quando ela parou -
+// por isso não dá pra olhar só a que está gravando.
 async function continueDespiteLimits(userId, channelId) {
   const { rowCount } = await pool.query(
     `UPDATE live_credit_usage u SET parado_por_limite_at = NULL, limites_ignorados = true, updated_at = now()
        FROM live_sessions s
-      WHERE s.id = u.session_id AND s.status = 'gravando' AND s.live_channel_id = $2 AND u.user_id = $1
+      WHERE s.id = u.session_id AND s.live_channel_id = $2 AND u.user_id = $1 AND ${DA_LIVE_ATUAL('s')}
         AND u.parado_por_limite_at IS NOT NULL`,
     [userId, channelId]
   );
@@ -998,6 +1051,7 @@ module.exports = {
   outOfCreditInRecordingSessions,
   clearOutOfCredit,
   creditUsageForUser,
+  liveUsageTotals,
   setClipCredits,
   deleteClipsOlderThan,
   listChannelsForUser,

@@ -239,6 +239,38 @@ test('trocar de plano cancela a assinatura anterior no Asaas', async () => {
   });
 });
 
+// Cliente #400, 15/10/2026: tentou subir de Starter pra Pro, o cartão foi
+// recusado por limite, e a assinatura Starter já tinha sido cancelada antes da
+// cobrança - ficou com o plano ativo e sem nenhuma mensalidade dali pra frente.
+test('troca de plano com cartão recusado mantém a assinatura antiga de pé', async () => {
+  const rotas = respostasPadrao();
+  await comAsaasFalso(rotas, async (chamadas) => {
+    const cliente = await clienteComCartao(chamadas);
+    const starter = await subscriptionPlansRepository.findByKey('starter');
+    const pro = await subscriptionPlansRepository.findByKey('pro');
+
+    await checkoutService.assinarComCartaoSalvo({ clientUserId: cliente.id, plan: starter, remoteIp: '1.2.3.4' });
+    const antes = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+    assert.ok(antes.asaas_subscription_id);
+
+    rotas['POST /payments'] = () => ({
+      status: 400,
+      body: { errors: [{ code: 'invalid_creditCard', description: 'Transação não autorizada, verifique o limite disponível no cartão.' }] },
+    });
+    chamadas.length = 0;
+    await assert.rejects(() => checkoutService.assinarComCartaoSalvo({ clientUserId: cliente.id, plan: pro, remoteIp: '1.2.3.4' }));
+
+    assert.ok(
+      !chamadas.some((c) => c.metodo === 'DELETE' && c.caminho === `/subscriptions/${antes.asaas_subscription_id}`),
+      'a assinatura antiga não pode ser cancelada quando o plano novo não foi pago'
+    );
+    const depois = await clientSubscriptionsRepository.getOrCreate(cliente.id);
+    assert.equal(depois.asaas_subscription_id, antes.asaas_subscription_id, 'continua ligado à mensalidade de antes');
+    assert.equal(depois.plan_key, 'starter');
+    assert.equal(depois.status, 'ativo');
+  });
+});
+
 test('cartão em análise NÃO ativa o plano; o aviso do Asaas é quem ativa depois', async () => {
   await comAsaasFalso(respostasPadrao({ paymentStatus: 'PENDING' }), async (chamadas) => {
     const cliente = await clienteComCartao(chamadas);

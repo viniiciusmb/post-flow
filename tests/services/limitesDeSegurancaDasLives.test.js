@@ -107,6 +107,72 @@ test('"Continuar clipando esta live": volta a receber e o limite não vale mais 
   assert.equal(linha.parado_por_limite_at, null);
 });
 
+// Caso real de 15/10/2026: o limite de 50% da cota parou a live em 45
+// créditos; como o cliente era o único recebendo, a gravação foi encerrada, e
+// um minuto depois nasceu outra gravação da MESMA live com o contador zerado -
+// mais 40 créditos cobrados até alguém perceber.
+async function liveComInicio(canalId) {
+  await pool.query("UPDATE live_channels SET live_started_at = now() - interval '1 hour' WHERE id = $1", [canalId]);
+}
+const encerrar = (sessaoId) => livesRepository.endSession(sessaoId, { status: 'encerrada', motivo: 'canal pausado ou removido' });
+
+test('limite vale pela live inteira: encerrar a gravação e começar outra não zera o contador', async () => {
+  const { u, canalId, sessaoId } = await cenario({ cota: 90, limites: { pctCota: 50 } });
+  await liveComInicio(canalId);
+  await gravarAte(sessaoId, 4 * 3600);
+  assert.equal((await uso(sessaoId, u.id)).credits_charged, 45);
+  await encerrar(sessaoId);
+
+  // Ninguém mais recebe: o canal não pode voltar a ser gravado por causa dele.
+  assert.ok(!(await livesRepository.activeFollowerIds(canalId)).includes(Number(u.id)));
+  assert.ok(!(await livesRepository.listWatchedChannels()).some((c) => Number(c.id) === canalId));
+
+  // Mesmo que outra gravação da mesma live comece (alguém mais pediu), ela não cobra dele.
+  const nova = await livesRepository.createSession({ channelId: canalId, dirPath: '/tmp' });
+  await gravarAte(Number(nova.id), 3600);
+  assert.equal(await uso(Number(nova.id), u.id), null, 'nenhuma cobrança na gravação nova');
+  const { rows } = await pool.query('SELECT used_normal FROM client_credits WHERE client_user_id = $1', [u.id]);
+  assert.equal(rows[0].used_normal, 45, 'continua nos 45 do limite');
+
+  // A tela segue mostrando por que parou.
+  const tela = (await livesRepository.creditUsageForUser(u.id)).find((x) => Number(x.live_channel_id) === canalId);
+  assert.equal(tela.motivo_limite, 'cota');
+  assert.equal(tela.credits_charged, 45);
+});
+
+test('"Continuar clipando" funciona mesmo com a gravação já encerrada, e a live seguinte começa do zero', async () => {
+  const { u, canalId, sessaoId } = await cenario({ cota: 90, limites: { pctCota: 50 } });
+  await liveComInicio(canalId);
+  await gravarAte(sessaoId, 4 * 3600);
+  await encerrar(sessaoId);
+  assert.ok(await livesRepository.continueDespiteLimits(u.id, canalId));
+  assert.ok((await livesRepository.activeFollowerIds(canalId)).includes(Number(u.id)));
+  const nova = await livesRepository.createSession({ channelId: canalId, dirPath: '/tmp' });
+  await gravarAte(Number(nova.id), 1800);
+  assert.ok((await uso(Number(nova.id), u.id)).credits_charged > 0, 'segue clipando depois de pedir pra continuar');
+
+  // A live acabou (a plataforma apaga o início) e outra começou: limites valem de novo, do zero.
+  await encerrar(Number(nova.id));
+  // (5 min à frente: as gravações do teste nasceram há segundos, e a folga de
+  // 2 min do DA_LIVE_ATUAL as contaria como desta live.)
+  await pool.query("UPDATE live_channels SET live_started_at = now() + interval '5 minutes' WHERE id = $1", [canalId]);
+  assert.ok((await livesRepository.activeFollowerIds(canalId)).includes(Number(u.id)));
+  const totais = await livesRepository.liveUsageTotals(u.id, canalId);
+  assert.equal(totais.creditos, 0);
+  assert.equal(totais.ignorados, false);
+});
+
+test('sem crédito numa gravação encerrada: não recebe até comprar, e volta a receber quando compra', async () => {
+  const { u, canalId, sessaoId } = await cenario({ cota: 5 });
+  await liveComInicio(canalId);
+  await gravarAte(sessaoId, 3600);
+  assert.ok((await uso(sessaoId, u.id)).out_of_credit_at);
+  await encerrar(sessaoId);
+  assert.ok(!(await livesRepository.activeFollowerIds(canalId)).includes(Number(u.id)), 'sem saldo, não reabre a gravação');
+  await pool.query('UPDATE client_credits SET extra_normal = 10 WHERE client_user_id = $1', [u.id]);
+  assert.ok((await livesRepository.activeFollowerIds(canalId)).includes(Number(u.id)), 'comprou: volta a receber');
+});
+
 test('API: ligar o automático com limites grava os limites; valores fora da faixa são recusados', async () => {
   const u = await createLoginableClient();
   await darPlano(u.id, 'max');

@@ -226,15 +226,27 @@ async function handlePixAuthorizationActivated(autorizacao) {
 async function registrarPrimeiraMensalidadePix({ registro, detalhes, clientUserId, plan }) {
   const conciliacao = detalhes.immediateQrCode && detalhes.immediateQrCode.conciliationIdentifier;
   let pagamento = null;
-  if (conciliacao && registro.asaas_customer_id) {
-    try {
-      const lista = await asaasService.listPaymentsByCustomer(registro.asaas_customer_id);
-      pagamento =
-        ((lista && lista.data) || []).find(
-          (p) => p.pixQrCodeId === conciliacao && ['RECEIVED', 'CONFIRMED'].includes(p.status)
-        ) || null;
-    } catch (err) {
-      logger.error(`Asaas: nao consegui listar as cobrancas do cliente ${registro.asaas_customer_id}:`, err.message);
+  if (conciliacao) {
+    // Pelo QR primeiro: o Asaas pode criar a cobrança do PIX recebido em nome
+    // de OUTRO cliente (gerado a partir de quem pagou), e aí procurar pelo
+    // nosso cliente não acha nada - a receita ficava com o id sintético e um
+    // estorno futuro não a encontraria (cliente #463, 14/10/2026). A busca
+    // pelo cliente fica de reserva.
+    const buscas = [['QR', () => asaasService.listPaymentsByPixQrCodeId(conciliacao)]];
+    if (registro.asaas_customer_id) {
+      buscas.push([`cliente ${registro.asaas_customer_id}`, () => asaasService.listPaymentsByCustomer(registro.asaas_customer_id)]);
+    }
+    for (const [onde, buscar] of buscas) {
+      try {
+        const lista = await buscar();
+        pagamento =
+          ((lista && lista.data) || []).find(
+            (p) => p.pixQrCodeId === conciliacao && ['RECEIVED', 'CONFIRMED'].includes(p.status)
+          ) || null;
+      } catch (err) {
+        logger.error(`Asaas: nao consegui listar as cobrancas (${onde}) da 1a mensalidade Pix:`, err.message);
+      }
+      if (pagamento) break;
     }
   }
 

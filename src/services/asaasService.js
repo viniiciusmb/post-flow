@@ -236,6 +236,13 @@ async function listPaymentsByCustomer(customerId, { limit = 50, offset = 0 } = {
   return request('GET', '/payments', { query: { customer: customerId, limit, offset } });
 }
 
+// Cobranças pagas com um QR Code PIX (identificador de conciliação). Existe
+// porque o Asaas pode registrar o PIX recebido em nome de outro cliente - ver
+// asaasWebhookApiController.registrarPrimeiraMensalidadePix.
+async function listPaymentsByPixQrCodeId(pixQrCodeId) {
+  return request('GET', '/payments', { query: { pixQrCodeId, limit: 10 } });
+}
+
 // ---------- PIX Automático ----------
 
 // Cria a autorização de débito recorrente. A resposta traz o QR Code que o
@@ -493,6 +500,7 @@ module.exports = {
   cancelSubscription,
   getPayment,
   listPaymentsByCustomer,
+  listPaymentsByPixQrCodeId,
   listOverduePaymentsOfSubscription,
   webhookTokenValido,
 };

@@ -14,13 +14,17 @@ const test = require('node:test');
 const { after } = test;
 const assert = require('node:assert/strict');
 const { startServer, stopServer, createAgent, createLoginableClient } = require('../helpers/http');
+const { darPlano } = require('../helpers/plano');
+const pool = require('../../src/db/pool');
 
 after(() => stopServer());
 
-async function agenteLogado(url) {
+async function agenteLogado(url, { plano = 'starter' } = {}) {
   const cliente = await createLoginableClient();
+  if (plano) await darPlano(cliente.id, plano);
   const agente = createAgent(url);
   await agente.login(cliente.email, cliente.password);
+  agente.cliente = cliente;
   return agente;
 }
 
@@ -77,4 +81,27 @@ test('endereço de fora NUNCA vira destino', async () => {
       `"${tentativa}" vazou pro destino "${destino}"`
     );
   }
+});
+
+// 14-15/10/2026: 31 pessoas sem plano passaram pela tela inteira de
+// autorização do TikTok e só na volta souberam que precisavam de um plano.
+test('sem plano, nem sai pro TikTok: volta na hora com o aviso', async () => {
+  const url = await startServer();
+  const agente = await agenteLogado(url, { plano: null });
+  const r = await agente.get('/auth/tiktok/connect?from=%2Fclient%2Fsocial');
+  const destino = r.headers.get('location');
+  assert.ok(destino.startsWith('/client/social?tiktok_error='), `foi pra "${destino}"`);
+  assert.match(decodeURIComponent(destino), /plano/);
+});
+
+test('sem plano mas com conta já conectada: pode reconectar (vai pro TikTok)', async () => {
+  const url = await startServer();
+  const agente = await agenteLogado(url, { plano: null });
+  await pool.query(
+    `INSERT INTO tiktok_accounts (client_user_id, tiktok_open_id, access_token_encrypted, refresh_token_encrypted, token_expires_at)
+     VALUES ($1, $2, 'x', 'x', now() + interval '1 day')`,
+    [agente.cliente.id, `open_${Date.now()}`]
+  );
+  const r = await agente.get('/auth/tiktok/connect');
+  assert.match(r.headers.get('location'), /tiktok\.com/);
 });

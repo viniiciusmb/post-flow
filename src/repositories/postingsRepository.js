@@ -395,6 +395,20 @@ async function publicouNosUltimosMinutos(tiktokAccountId, minutos) {
   return rows[0].recente;
 }
 
+// Quando a última publicação desta conta começou a sair, se foi nos últimos N
+// minutos (null se não houve) - o "Postar agora" usa pra dizer quanto falta.
+async function ultimaPublicacaoNosUltimosMinutos(tiktokAccountId, minutos) {
+  const { rows } = await pool.query(
+    `SELECT max(queued_at) AS ultima
+       FROM postings
+      WHERE tiktok_account_id = $1
+        AND status IN ('queued', 'processing', 'posted')
+        AND queued_at > now() - make_interval(mins => $2::int)`,
+    [tiktokAccountId, minutos]
+  );
+  return rows[0].ultima || null;
+}
+
 // Quantos itens estao esperando na fila agora (independente de cliente) -
 // usado pra encaixar o proximo slot livre ao criar uma postagem nova.
 async function countPendingForAccount(tiktokAccountId) {
@@ -790,6 +804,7 @@ async function findById(id) {
 module.exports = {
   countRecentForAccount,
   publicouNosUltimosMinutos,
+  ultimaPublicacaoNosUltimosMinutos,
   statusByClipIds,
   createIfNotExists,
   listForClient,

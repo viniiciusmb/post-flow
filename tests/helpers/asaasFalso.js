@@ -30,8 +30,9 @@ async function comAsaasFalso(rotas, fn) {
     req.on('end', () => {
       // O prefixo /v3 é do baseUrl; as rotas são declaradas sem ele.
       const caminho = req.url.replace(/^\/v3/, '').split('?')[0];
+      const query = Object.fromEntries(new URL(req.url, 'http://x').searchParams);
       const corpo = bruto ? JSON.parse(bruto) : null;
-      chamadas.push({ metodo: req.method, caminho, corpo });
+      chamadas.push({ metodo: req.method, caminho, corpo, query });
 
       const chave = Object.keys(rotas).find((k) => {
         const [metodo, padrao] = k.split(' ');
@@ -46,7 +47,7 @@ async function comAsaasFalso(rotas, fn) {
 
       // A resposta pode ser uma promessa: é assim que um teste simula o Asaas
       // demorando (e reproduz a corrida entre dois avisos colados).
-      Promise.resolve(rotas[chave](corpo, chamadas)).then((resposta) => {
+      Promise.resolve(rotas[chave](corpo, chamadas, query)).then((resposta) => {
         res.writeHead(resposta.status || 200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(resposta.body || {}));
       });
